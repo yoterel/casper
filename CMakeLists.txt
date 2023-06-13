@@ -19,6 +19,7 @@ add_executable(ahand
     src/camera.h
     src/SerialPort.cpp
     src/SerialPort.h
+    third-party/glad/src/glad.c
 )
 target_link_libraries(ahand PRIVATE pylon::pylon )
 target_link_libraries(ahand PRIVATE ${OpenCV_LIBS})
@@ -28,6 +29,8 @@ target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash
 # GLFW
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
 target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib-vc2019/glfw3.lib")
+# GLAD
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad/include")
 
 if (MSVC)
     file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/x64/vc15/bin/*.dll")
