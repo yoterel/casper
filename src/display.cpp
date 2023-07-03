@@ -87,14 +87,14 @@ void DynaFlashProjector::print_led_values()
 
 void DynaFlashProjector::set_led_values()
 {
-	double green_current = 0.25f;
+	double green_current = 0.1f;
 	double Vadj = (10 * 0.075*green_current);
 	unsigned long write_value = (int)(Vadj / (5.0 / 1024.0));
 	pDynaFlash->WriteDACRegister(0x00, write_value);
 	pDynaFlash->WriteDACRegister(0x01, write_value);
 	pDynaFlash->WriteDACRegister(0x02, write_value);
 	pDynaFlash->WriteDACRegister(0x03, write_value);
-	double red_current = 0.25f;
+	double red_current = 0.1f;
 	Vadj = (10 * 0.075*red_current);
 	write_value = (int)(Vadj / (5.0 / 1024.0));
 	pDynaFlash->WriteDACRegister(0x04, write_value);
