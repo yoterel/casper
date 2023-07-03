@@ -55,4 +55,7 @@ if (MSVC)
                     $<TARGET_FILE_DIR:ahand>)
 endif (MSVC)
 
-add_library(AHUnityPlugin SHARED src/UnityPlugin.cpp)
+add_library(AHUnityPlugin SHARED 
+src/UnityPlugin.cpp
+src/UnityPlugin.h
+)
