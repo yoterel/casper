@@ -23,9 +23,11 @@ public:
     void show(cv::Mat frame);
     void gracefully_close();
     void print_version();
+    bool is_initialized(){return initialized;};
     int width;
     int height;
 private:
+    bool initialized = false;
     int board_index=0;
     float frame_rate=946.0f; //max: 946.0f
     int bit_depth=8;

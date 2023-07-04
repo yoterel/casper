@@ -31,7 +31,18 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw
 target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
 # GLAD
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad/include")
-
+####################################### unity plugin
+add_library(AHUnityPlugin SHARED 
+    src/UnityPlugin.cpp
+    src/UnityPlugin.h
+    src/display.cpp
+    src/display.h
+)
+target_compile_definitions(AHUnityPlugin PRIVATE NATIVECPPLIBRARY_EXPORTS DLL_BUILD)
+target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
+#########################################
 if (MSVC)
     file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/x64/vc15/bin/*.dll")
     add_custom_command(TARGET ahand 
@@ -40,12 +51,24 @@ if (MSVC)
                      ${OPENCV_DLLS}
                      $<TARGET_FILE_DIR:ahand>)
 
+    add_custom_command(TARGET AHUnityPlugin 
+                     POST_BUILD
+                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                     ${OPENCV_DLLS}
+                     $<TARGET_FILE_DIR:AHUnityPlugin>)
+
     file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/bin/*.dll")
     add_custom_command(TARGET ahand 
                      POST_BUILD
                      COMMAND ${CMAKE_COMMAND} -E copy_if_different
                      ${OPENCV_DLLS}
                      $<TARGET_FILE_DIR:ahand>)
+    
+    add_custom_command(TARGET AHUnityPlugin 
+                     POST_BUILD
+                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                     ${OPENCV_DLLS}
+                     $<TARGET_FILE_DIR:AHUnityPlugin>)
 
     file(GLOB DYNAFLASH_DLLS "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/*.dll")
     add_custom_command(TARGET ahand 
@@ -53,9 +76,10 @@ if (MSVC)
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${DYNAFLASH_DLLS}
                     $<TARGET_FILE_DIR:ahand>)
+    
+    add_custom_command(TARGET AHUnityPlugin 
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${DYNAFLASH_DLLS}
+                    $<TARGET_FILE_DIR:AHUnityPlugin>)
 endif (MSVC)
-
-add_library(AHUnityPlugin SHARED 
-src/UnityPlugin.cpp
-src/UnityPlugin.h
-)

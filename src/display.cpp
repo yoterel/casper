@@ -62,6 +62,7 @@ bool DynaFlashProjector::init()
 		gracefully_close();
         return false;
 	}
+	initialized = true;
     return true;
 }
 
@@ -109,20 +110,22 @@ void DynaFlashProjector::set_led_values()
 
 void DynaFlashProjector::gracefully_close()
 {
-    /* stop projection */
-	pDynaFlash->Stop();
+	if (initialized) {
+		/* stop projection */
+		pDynaFlash->Stop();
 
-	/* release framebuffer */
-	pDynaFlash->ReleaseFrameBuffer();
+		/* release framebuffer */
+		pDynaFlash->ReleaseFrameBuffer();
 
-	/* Float the mirror device */
-	pDynaFlash->Float(0);
+		/* Float the mirror device */
+		pDynaFlash->Float(0);
 
-	/* disconnect the DynaFlash */
-	pDynaFlash->Disconnect();
+		/* disconnect the DynaFlash */
+		pDynaFlash->Disconnect();
 
-	/* release instance of DynaFlash class */
-	ReleaseDynaFlash(&pDynaFlash);
+		/* release instance of DynaFlash class */
+		ReleaseDynaFlash(&pDynaFlash);
+	}
 }
 
 void DynaFlashProjector::print_version()
