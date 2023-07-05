@@ -8,24 +8,24 @@ bool UnityPlugin::initialize_projector()
     return projector.init();
 }
 
-UnityPlugin::~UnityPlugin()
-{
-    if (projector.is_initialized())
-    {
-        projector.gracefully_close();
-    }
-}
 
 int UnityPlugin::debug(int debug_value)
 {
     return debug_value+1;
 }
 
-void UnityPlugin::buffer_to_image(char* buffer, int width, int height)
+void UnityPlugin::buffer_to_image(Color32** buffer, int width, int height)
 {
-    cv::Mat image(height, width, CV_8UC3, buffer);
-    cv::Mat myimage = cv::Mat(height, width, CV_8UC3, buffer);
-    cv::imwrite("test.png", myimage);
+    cv::Mat image(height, width, CV_8UC4, *buffer);
+    cv::cvtColor(image, image, cv::COLOR_RGBA2BGR);
+    if (projector.is_initialized())
+    {
+        projector.show(image);
+    }
+    else
+    {
+        cv::imwrite("test.png", image);
+    }
 }
 
 void UnityPlugin::projector_show_white(int iterations)
@@ -61,7 +61,7 @@ void projector_show_white(UnityPlugin* instance, int iterations)
 {
     instance->projector_show_white(iterations);
 };
-void buffer_to_image(UnityPlugin* instance, char* buffer, int width, int height)
+void buffer_to_image(UnityPlugin* instance, Color32** buffer, int width, int height)
 {
     instance->buffer_to_image(buffer, width, height);
 };
