@@ -31,9 +31,9 @@ public class PluginImport : MonoBehaviour
     {
         // Remember currently active render texture
         RenderTexture currentActiveRT = RenderTexture.active;
-
         // Set the supplied RenderTexture as the active one
         RenderTexture.active = rt;
+        HorizontallyFlipRenderTexture(rt);
 
         // Create a new Texture2D and read the RenderTexture image into it
         // Texture2D tex = new Texture2D(rt.width, rt.height);
@@ -46,6 +46,22 @@ public class PluginImport : MonoBehaviour
         // System.IO.File.WriteAllBytes(path, bytes);
         // Restore previously active render texture
         RenderTexture.active = currentActiveRT;
+    }
+
+    public static void VerticallyFlipRenderTexture(RenderTexture target)
+    {
+        var temp = RenderTexture.GetTemporary(target.descriptor);
+        Graphics.Blit(target, temp, new Vector2(1, -1), new Vector2(0, 1));
+        Graphics.Blit(temp, target);
+        RenderTexture.ReleaseTemporary(temp);
+    }
+
+    public static void HorizontallyFlipRenderTexture(RenderTexture target)
+    {
+        var temp = RenderTexture.GetTemporary(target.descriptor);
+        Graphics.Blit(target, temp, new Vector2(-1, 1), new Vector2(1, 0));
+        Graphics.Blit(temp, target);
+        RenderTexture.ReleaseTemporary(temp);
     }
 
     void Start()
