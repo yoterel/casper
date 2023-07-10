@@ -21,6 +21,7 @@ public:
     void print_led_values();
     void set_led_values();
     void show(cv::Mat frame);
+    void show(char* frame);
     void gracefully_close();
     void print_version();
     bool is_initialized(){return initialized;};

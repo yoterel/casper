@@ -41,9 +41,9 @@ void UnityPlugin::projector_show_white(int iterations)
     }
 }
 
-UnityPlugin* createUnityPlugin()
+UnityPlugin* createUnityPlugin(int width = 1024, int height = 768)
 {
-    return new UnityPlugin(1024, 768);
+    return new UnityPlugin(width, height);
 };
 void freeUnityPlugin(UnityPlugin* instance)
 {

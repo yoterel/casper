@@ -147,6 +147,21 @@ void DynaFlashProjector::print_version()
 	printf("DLL Ver    : %08x\r\n", nVersion);
 }
 
+void DynaFlashProjector::show(char* frame){
+	pDynaFlash->GetStatus(&stDynaFlashStatus);
+    if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL) 
+    {
+        std::cout << "GetFrameBuffer Error\n";
+        gracefully_close();
+	}
+    if ((pBuf != NULL) && (nGetFrameCnt != 0)) {
+		memcpy(pBuf, (void *)frame, frame_size);
+		if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL) {
+			std::cout << "PostFrameBuffer Error\n";
+			gracefully_close();
+		}
+	}
+}
 void DynaFlashProjector::show(cv::Mat frame){
 	// pFrameData = (char *)malloc(frame_size);
 	// if (pFrameData == NULL){

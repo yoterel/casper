@@ -31,7 +31,7 @@ class UnityPlugin {
 };
 
 extern "C" {
-    NATIVECPPLIBRARY_API UnityPlugin* createUnityPlugin();
+    NATIVECPPLIBRARY_API UnityPlugin* createUnityPlugin(int width, int height);
     NATIVECPPLIBRARY_API void freeUnityPlugin(UnityPlugin* instance);
     NATIVECPPLIBRARY_API int debug(UnityPlugin* instance, int debug_value);
     NATIVECPPLIBRARY_API bool initialize_projector(UnityPlugin* instance);
