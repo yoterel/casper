@@ -19,8 +19,12 @@ add_executable(ahand
     src/camera.h
     src/SerialPort.cpp
     src/SerialPort.h
+    src/shader.h
+    src/stb_image.h
+    src/stb_image_write.h
     third-party/glad/src/glad.c
 )
+target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
 target_link_libraries(ahand PRIVATE pylon::pylon )
 target_link_libraries(ahand PRIVATE ${OpenCV_LIBS})
 # dynaflash
@@ -43,6 +47,14 @@ target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-pa
 target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 #########################################
+######################################### sample program
+add_executable(sample_program 
+    src/sample_program.cpp
+)
+target_link_libraries(sample_program PRIVATE ${OpenCV_LIBS})
+target_include_directories(sample_program PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+target_link_libraries(sample_program PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+#########################################
 if (MSVC)
     file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/x64/vc15/bin/*.dll")
     add_custom_command(TARGET ahand 
@@ -51,24 +63,12 @@ if (MSVC)
                      ${OPENCV_DLLS}
                      $<TARGET_FILE_DIR:ahand>)
 
-    add_custom_command(TARGET AHUnityPlugin 
-                     POST_BUILD
-                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                     ${OPENCV_DLLS}
-                     $<TARGET_FILE_DIR:AHUnityPlugin>)
-
     file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/bin/*.dll")
     add_custom_command(TARGET ahand 
                      POST_BUILD
                      COMMAND ${CMAKE_COMMAND} -E copy_if_different
                      ${OPENCV_DLLS}
                      $<TARGET_FILE_DIR:ahand>)
-    
-    add_custom_command(TARGET AHUnityPlugin 
-                     POST_BUILD
-                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                     ${OPENCV_DLLS}
-                     $<TARGET_FILE_DIR:AHUnityPlugin>)
 
     file(GLOB DYNAFLASH_DLLS "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/*.dll")
     add_custom_command(TARGET ahand 
@@ -76,10 +76,4 @@ if (MSVC)
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${DYNAFLASH_DLLS}
                     $<TARGET_FILE_DIR:ahand>)
-    
-    add_custom_command(TARGET AHUnityPlugin 
-                    POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${DYNAFLASH_DLLS}
-                    $<TARGET_FILE_DIR:AHUnityPlugin>)
 endif (MSVC)

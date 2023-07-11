@@ -13,35 +13,40 @@
 class DynaFlashProjector
 {
 public:
-    DynaFlashProjector(int width, int height) : width(width), height(height){};
+    DynaFlashProjector(int width, int height) :
+     width(width),
+     height(height),
+     white_image(width, height, CV_8UC3, cv::Scalar(255, 255, 255)){};
     ~DynaFlashProjector(){
         gracefully_close();
     };
     bool init();
     void print_led_values();
     void set_led_values();
-    void show(cv::Mat frame);
-    void show(char* frame);
+    void show(const cv::Mat frame);
+    void show();
     void gracefully_close();
     void print_version();
     bool is_initialized(){return initialized;};
     int width;
     int height;
+    // static CDynaFlash *pDynaFlash;
 private:
     bool initialized = false;
     int board_index=0;
     float frame_rate=946.0f; //max: 946.0f
     int bit_depth=8;
-    int alloc_frame_buffer=2;
+    int alloc_frame_buffer=16;
     // int allloc_src_frame_buffer=2000;
-    int high_mode = HIGH_MODE;
+    ILLUMINANCE_MODE mode = HIGH_MODE;
     int frame_mode = FRAME_MODE_RGB;
     int frame_size = FRAME_BUF_SIZE_24BIT;
-    CDynaFlash *pDynaFlash = NULL;
-    char *pFrameData = NULL;
+    // char *pFrameData = NULL;
     // char *pFrameData[2] = { NULL };
     char *pBuf = NULL;
 	unsigned long nFrameCnt = 0;
     unsigned long nGetFrameCnt = 0;
+    CDynaFlash *pDynaFlash = NULL;
     DYNAFLASH_STATUS stDynaFlashStatus;
+    cv::Mat white_image;
 };
