@@ -198,7 +198,18 @@ public:
     }
 };
 
-BaslerCamera::BaslerCamera(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width)
+BaslerCamera::BaslerCamera()
+{
+}
+
+BaslerCamera::~BaslerCamera()
+{
+    // std::cerr << std::endl << "Terminating pylon camera stack...press any key to continue" << std::endl;
+    // while (std::cin.get() != '\n')
+    // PylonTerminate();
+}
+
+void BaslerCamera::init(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width)
 {
     PylonInitialize();
     try
@@ -214,13 +225,6 @@ BaslerCamera::BaslerCamera(blocking_queue<CPylonImage>& camera_queue, bool& clos
     {
         std::cerr << "An exception occurred." << std::endl << e.GetDescription() << std::endl;
     }
-}
-
-BaslerCamera::~BaslerCamera()
-{
-    // std::cerr << std::endl << "Terminating pylon camera stack...press any key to continue" << std::endl;
-    // while (std::cin.get() != '\n')
-    // PylonTerminate();
 }
 
 void BaslerCamera::acquire()

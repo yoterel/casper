@@ -26,8 +26,8 @@ public:
     T pop() {
         std::unique_lock<std::mutex> lock(this->d_mutex);
         this->d_condition.wait(lock, [=]{ return !this->d_queue.empty(); });
-        T rc(std::move(this->d_queue.back()));
-        this->d_queue.pop_back();
+        T rc(std::move(this->d_queue.front()));
+        this->d_queue.pop_front();
         return rc;
     }
     bool pop_with_timeout(int timeout_ms, T& value) {
@@ -36,8 +36,8 @@ public:
         if (!status) {
             return false;
         }
-        value = std::move(this->d_queue.back());
-        this->d_queue.pop_back();
+        value = std::move(this->d_queue.front());
+        this->d_queue.pop_front();
         return true;
     }
     size_t size() {

@@ -166,20 +166,30 @@ int main( int /*argc*/, char* /*argv*/[] )
     // }
     /* end setup trigger */
     blocking_queue<CPylonImage> camera_queue;
-    /* camera producer */
-    BaslerCamera camera(camera_queue, close_signal, cam_height, cam_width);
-    camera.acquire();
-    /* fake producer */
-    // cam_height = 540;
-    // cam_width = 724;
-    // auto producer = std::thread([&camera_queue, &close_signal, &projector]() {  //, &projector
-    //     cv::Mat white_image(projector.width, projector.height, CV_8UC3, cv::Scalar(255, 255, 255));
-    //     while (!close_signal) {
-    //         camera_queue.push(white_image.data);
-    //         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    //     }
-    //     std::cout << "Producer finish" << std::endl;
-    // });
+    bool producer_is_fake = false;
+    BaslerCamera camera;
+    std::thread producer;
+    if (producer_is_fake) {
+        /* fake producer */
+        cam_height = 540;
+        cam_width = 720;
+        producer = std::thread([&camera_queue, &close_signal, &projector, &cam_height, &cam_width]() {  //, &projector
+            CPylonImage image = CPylonImage::Create( PixelType_RGB8packed, cam_width, cam_height);
+            // cv::Mat white_image(projector.width, projector.height, CV_8UC3, cv::Scalar(255, 255, 255));
+            while (!close_signal) {
+                camera_queue.push(image);
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            std::cout << "Producer finish" << std::endl;
+        });
+    }
+    else
+    {
+        /* camera producer */
+        camera.init(camera_queue, close_signal, cam_height, cam_width);
+        camera.acquire();
+    }
+    
     /* consumer */
     auto consumer = std::thread([&camera_queue, &close_signal, &projector, &cam_height, &cam_width]() {  //, &projector
         bool flag = false;
@@ -198,21 +208,25 @@ int main( int /*argc*/, char* /*argv*/[] )
                 // << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
                 // << "\n";
             }else{
-                // auto start = std::chrono::system_clock::now();
+                auto start = std::chrono::system_clock::now();
                 // std::cout << "queue size: " << camera_queue.size() << "\n";
                 CPylonImage pylonImage = camera_queue.pop();
-                uint8_t* buffer = (uint8_t*) pylonImage.GetBuffer();
+                uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
                 // std::cout << "Image popped !!! " << std::endl;
                 cv::Mat myimage = cv::Mat(cam_height, cam_width, CV_8UC3, buffer);
                 // std::cout << myimage.empty() << std::endl;
                 // cv::imwrite("test1.png", myimage);
+                cv::cvtColor(myimage, myimage, cv::COLOR_RGB2GRAY);
+                cv::threshold(myimage, myimage, 50, 255, cv::THRESH_BINARY);
+                cv::cvtColor(myimage, myimage, cv::COLOR_GRAY2RGB);
                 cv::resize(myimage, myimage, cv::Size(projector.width, projector.height));
                 projector.show_buffer(myimage.data);
+                // projector.show();
                 // free(buffer);
-                // auto runtime = std::chrono::system_clock::now() - start;
-                // std::cout << "ms: "
-                // << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
-                // << "\n";
+                auto runtime = std::chrono::system_clock::now() - start;
+                std::cout << "ms: "
+                << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
+                << "\n";
             }
             //     continue;
             // }
@@ -251,7 +265,10 @@ int main( int /*argc*/, char* /*argv*/[] )
         }
     }
     consumer.join();
-    // producer.join();
+    if (producer_is_fake)
+    {
+        producer.join();
+    }
     return 0;
 }
 
