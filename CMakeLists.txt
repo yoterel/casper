@@ -1,6 +1,7 @@
 # Root CMakeLists.txt for the overall Pylon project
 cmake_minimum_required(VERSION 3.14)
 set(CMAKE_CXX_STANDARD 17)
+set(GLAD_VER 4.3)
 cmake_policy(SET CMP0074 NEW)    # respect <PACKAGE>_ROOT variables in "find_package"
 include(CMakePrintHelpers)
 
@@ -22,10 +23,10 @@ add_executable(ahand
     src/shader.h
     src/stb_image.h
     src/stb_image_write.h
-    third-party/glad/src/glad.c
+    third-party/glad${GLAD_VER}/src/glad.c
 )
 target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
-target_link_libraries(ahand PRIVATE pylon::pylon )
+target_link_libraries(ahand PRIVATE pylon::pylon)
 target_link_libraries(ahand PRIVATE ${OpenCV_LIBS})
 # dynaflash
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
@@ -34,7 +35,7 @@ target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
 target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
 # GLAD
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad/include")
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp

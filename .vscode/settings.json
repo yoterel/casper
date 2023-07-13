@@ -79,6 +79,7 @@
         "span": "cpp",
         "stop_token": "cpp",
         "xlocbuf": "cpp",
-        "xlocmes": "cpp"
+        "xlocmes": "cpp",
+        "fstream": "cpp"
     }
 }

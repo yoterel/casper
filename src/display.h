@@ -21,17 +21,18 @@ public:
         gracefully_close();
     };
     bool init();
-    void print_led_values();
-    void set_led_values();
     void show(const cv::Mat frame);
+    void show_buffer(const uint8_t* buffer);
     void show();
     void gracefully_close();
-    void print_version();
     bool is_initialized(){return initialized;};
     int width;
     int height;
     // static CDynaFlash *pDynaFlash;
 private:
+    void print_version();
+    void print_led_values();
+    void set_led_values();
     bool initialized = false;
     int board_index=0;
     float frame_rate=946.0f; //max: 946.0f

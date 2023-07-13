@@ -15,7 +15,7 @@ using namespace Pylon;
 class BaslerCamera
 {
 public:
-    BaslerCamera(blocking_queue<cv::Mat>& camera_queue, bool& close_signal);
+    BaslerCamera(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width);
     ~BaslerCamera();
     void acquire();
 private:

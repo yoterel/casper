@@ -22,26 +22,13 @@ void keycallback(GLFWwindow *window, int key, int scancode, int action, int mods
 unsigned int setup_buffers();
 void saveImage(char* filepath, GLFWwindow* w);
 
-// const char *vertexShaderSource = "#version 330 core\n"
-//     "layout (location = 0) in vec3 aPos;\n"
-//     "void main()\n"
-//     "{\n"
-//     "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-//     "}\0";
-// const char *fragmentShaderSource = "#version 330 core\n"
-//     "out vec4 FragColor;\n"
-//     "void main()\n"
-//     "{\n"
-//     "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-//     "}\n\0";
-
 int main( int /*argc*/, char* /*argv*/[] )
 {
     int proj_width = 1024;
     int proj_height = 768;
     // render output window
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     int num_of_monitors;
@@ -65,13 +52,20 @@ int main( int /*argc*/, char* /*argv*/[] )
     std::cout << "  GL Renderer  : " << glGetString(GL_RENDERER) << std::endl;
     std::cout << "  GLSL Version : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << std::endl;
-    Shader ourShader("../../src/texture.vs", "../../src/texture.fs");
+    Shader ourShader("C:/src/augmented_hands/src/texture.vs", "C:/src/augmented_hands/src/texture.fs");
+    // int params;
+    // glGetInternalformativ(GL_TEXTURE_2D, GL_RGB, GL_INTERNALFORMAT_PREFERRED, 1, &params);
+    // std::cout << "  Preffered Internal Format : " << std::hex << params << std::endl;
+    // glGetInternalformativ(GL_TEXTURE_2D, GL_RGB, GL_READ_PIXELS_FORMAT, 1, &params);
+    // std::cout << "  Preffered Read Pixels Format : " << std::hex << params << std::endl;
+    // glGetInternalformativ(GL_TEXTURE_2D, GL_RGB, GL_TEXTURE_IMAGE_FORMAT, 1, &params);
+    // std::cout << "  Preffered Texture Image Format : " << std::hex << params << std::endl;
     // unsigned int shaderProgram = compile_shaders();
     unsigned int VAO = setup_buffers();
 
     // load and create a texture 
     // -------------------------
-    unsigned int texture1, texture2;
+    unsigned int texture1;
     // texture 1
     // ---------
     glGenTextures(1, &texture1);
@@ -85,47 +79,23 @@ int main( int /*argc*/, char* /*argv*/[] )
     // load image, create texture and generate mipmaps
     int width, height, nrChannels;
     stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
-    // The FileSystem::getPath(...) is part of the GitHub repository so we can find files on any IDE/platform; replace it with your own image path.
-    unsigned char *data = stbi_load("../../resource/container.jpg", &width, &height, &nrChannels, 0);
+    unsigned char *data = stbi_load("C:/src/augmented_hands/resource/container.jpg", &width, &height, &nrChannels, 0);
     if (data)
     {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        // glGenerateMipmap(GL_TEXTURE_2D);
     }
     else
     {
         std::cout << "Failed to load texture" << std::endl;
     }
-    stbi_image_free(data);
-    // texture 2
-    // ---------
-    glGenTextures(1, &texture2);
-    glBindTexture(GL_TEXTURE_2D, texture2);
-    // set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    // set texture filtering parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // load image, create texture and generate mipmaps
-    data = stbi_load("../../resource/awesomeface.png", &width, &height, &nrChannels, 0);
-    if (data)
-    {
-        // note that the awesomeface.png has transparency and thus an alpha channel, so make sure to tell OpenGL the data type is of GL_RGBA
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else
-    {
-        std::cout << "Failed to load texture" << std::endl;
-    }
-    stbi_image_free(data);
+    
 
     // tell opengl for each sampler to which texture unit it belongs to (only has to be done once)
     // -------------------------------------------------------------------------------------------
     ourShader.use(); // don't forget to activate/use the shader before setting uniforms!
     ourShader.setInt("texture1", 0);
-    ourShader.setInt("texture2", 1);
+    ourShader.setFloat("threshold", 0.5f);
 
     glfwSwapInterval(0);  // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height);
@@ -144,7 +114,7 @@ int main( int /*argc*/, char* /*argv*/[] )
         if ( currentTime - previousTime >= 1.0 )
         {
             // Display the frame count here any way you want.
-            std::cout << "FPS: " << frameCount << std::endl;;
+            std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;;
 
             frameCount = 0;
             previousTime = currentTime;
@@ -152,11 +122,13 @@ int main( int /*argc*/, char* /*argv*/[] )
         // render
         // ------
         glClear(GL_COLOR_BUFFER_BIT);
+        // load texture to GPU (large overhead)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
         // bind textures on corresponding texture units
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture1);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, texture2);
+        // glActiveTexture(GL_TEXTURE1);
+        // glBindTexture(GL_TEXTURE_2D, texture2);
         ourShader.use();
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -169,13 +141,9 @@ int main( int /*argc*/, char* /*argv*/[] )
             save_flag = false;
         }
     }
+    stbi_image_free(data);
     glfwTerminate();
-    // auto start = std::chrono::system_clock::now();
-    // main1();
-    // auto runtime = std::chrono::system_clock::now() - start;
-    // std::cout << "consumer producer took "
-    //    << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()
-    //    << " usec\n";
+    /* setup projector */
     DynaFlashProjector projector(proj_width, proj_height);
     bool success = projector.init();
     if (!success) {
@@ -185,6 +153,8 @@ int main( int /*argc*/, char* /*argv*/[] )
     /* setup trigger */
     // char* portName = "\\\\.\\COM4";
     bool close_signal = false;
+    uint32_t cam_height = 0;
+    uint32_t cam_width = 0;
     // #define DATA_LENGTH 255
     // SerialPort *arduino = new SerialPort(portName);
     // std::cout << "Arduino is connected: " << arduino->isConnected() << std::endl;
@@ -195,10 +165,26 @@ int main( int /*argc*/, char* /*argv*/[] )
     //     else std::cerr << "Data was not written" << std::endl;
     // }
     /* end setup trigger */
-    blocking_queue<cv::Mat> camera_queue;
+    blocking_queue<CPylonImage> camera_queue;
+    /* camera producer */
+    BaslerCamera camera(camera_queue, close_signal, cam_height, cam_width);
+    camera.acquire();
+    /* fake producer */
+    // cam_height = 540;
+    // cam_width = 724;
+    // auto producer = std::thread([&camera_queue, &close_signal, &projector]() {  //, &projector
+    //     cv::Mat white_image(projector.width, projector.height, CV_8UC3, cv::Scalar(255, 255, 255));
+    //     while (!close_signal) {
+    //         camera_queue.push(white_image.data);
+    //         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    //     }
+    //     std::cout << "Producer finish" << std::endl;
+    // });
     /* consumer */
-    auto consumer = std::thread([&camera_queue, &close_signal, &projector]() {  //, &projector
+    auto consumer = std::thread([&camera_queue, &close_signal, &projector, &cam_height, &cam_width]() {  //, &projector
         bool flag = false;
+        // uint8_t cam_height = projector.height;
+        // uint8_t cam_width = projector.width;
         // projector.show(white_image);
         while (!close_signal) {
             // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -212,15 +198,21 @@ int main( int /*argc*/, char* /*argv*/[] )
                 // << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
                 // << "\n";
             }else{
-                auto start = std::chrono::system_clock::now();
+                // auto start = std::chrono::system_clock::now();
                 // std::cout << "queue size: " << camera_queue.size() << "\n";
-                cv::Mat image = camera_queue.pop();
-                // cv::resize(image, image, cv::Size(projector.width, projector.height));
-                projector.show(image);
-                auto runtime = std::chrono::system_clock::now() - start;
-                std::cout << "ms: "
-                << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
-                << "\n";
+                CPylonImage pylonImage = camera_queue.pop();
+                uint8_t* buffer = (uint8_t*) pylonImage.GetBuffer();
+                // std::cout << "Image popped !!! " << std::endl;
+                cv::Mat myimage = cv::Mat(cam_height, cam_width, CV_8UC3, buffer);
+                // std::cout << myimage.empty() << std::endl;
+                // cv::imwrite("test1.png", myimage);
+                cv::resize(myimage, myimage, cv::Size(projector.width, projector.height));
+                projector.show_buffer(myimage.data);
+                // free(buffer);
+                // auto runtime = std::chrono::system_clock::now() - start;
+                // std::cout << "ms: "
+                // << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
+                // << "\n";
             }
             //     continue;
             // }
@@ -243,18 +235,6 @@ int main( int /*argc*/, char* /*argv*/[] )
         }
         std::cout << "Consumer finish" << std::endl;
     });
-    /* camera producer */
-    // BaslerCamera camera(camera_queue, close_signal);
-    // camera.acquire();
-    /* fake producer */
-    auto producer = std::thread([&camera_queue, &close_signal, &projector]() {  //, &projector
-        cv::Mat white_image(projector.width, projector.height, CV_8UC3, cv::Scalar(255, 255, 255));
-        while (!close_signal) {
-            camera_queue.push(white_image);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        std::cout << "Producer finish" << std::endl;
-    });
     /* main thread */
     while (!close_signal)
     {
@@ -271,50 +251,9 @@ int main( int /*argc*/, char* /*argv*/[] )
         }
     }
     consumer.join();
-    producer.join();
+    // producer.join();
     return 0;
 }
-// unsigned int compile_shaders()
-// {
-//     // vertex shader
-//     unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-//     glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-//     glCompileShader(vertexShader);
-//     // check for shader compile errors
-//     int success;
-//     char infoLog[512];
-//     glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-//     if (!success)
-//     {
-//         glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-//         std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-//     }
-//     // fragment shader
-//     unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-//     glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-//     glCompileShader(fragmentShader);
-//     // check for shader compile errors
-//     glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-//     if (!success)
-//     {
-//         glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-//         std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-//     }
-//     // link shaders
-//     unsigned int shaderProgram = glCreateProgram();
-//     glAttachShader(shaderProgram, vertexShader);
-//     glAttachShader(shaderProgram, fragmentShader);
-//     glLinkProgram(shaderProgram);
-//     // check for linking errors
-//     glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-//     if (!success) {
-//         glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-//         std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-//     }
-//     glDeleteShader(vertexShader);
-//     glDeleteShader(fragmentShader);
-//     return shaderProgram;
-// }
 
 unsigned int setup_buffers()
 {
@@ -323,10 +262,10 @@ unsigned int setup_buffers()
     // ------------------------------------------------------------------
     float vertices[] = {
         // positions          // colors           // texture coords
-         0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // top right
-         0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // bottom right
-        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // bottom left
-        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // top left 
+         0.75f,  0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 1.0f, // top right
+         0.75f, -0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 0.0f, // bottom right
+        -0.75f, -0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 0.0f, // bottom left
+        -0.75f,  0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 1.0f  // top left 
     };
     unsigned int indices[] = {
         0, 1, 3, // first triangle

@@ -49,26 +49,34 @@ class HardwareTriggerConfiguration : public CConfigurationEventHandler
                 {
                     // Set trigger mode to off.
                     triggerSelector.SetValue( *it );
-                    if (triggerName == *it)
+                    bool trigger = false;
+                    if (trigger)
                     {
-                        // Activate trigger.
-                        triggerMode.SetValue( "On" );
+                        if (triggerName == *it)
+                        {
+                            // Activate trigger.
+                            triggerMode.SetValue( "On" );
 
-                        // The trigger source must be set to 'Software'.
-                        // CEnumParameter( nodemap, "TriggerSource" ).SetValue( "Software" );
+                            // The trigger source must be set to 'Software'.
+                            // CEnumParameter( nodemap, "TriggerSource" ).SetValue( "Software" );
 
-                        //// Alternative hardware trigger configuration:
-                        //// This configuration can be copied and modified to create a hardware trigger configuration.
-                        //// Remove setting the 'TriggerSource' to 'Software' (see above) and
-                        //// use the commented lines as a starting point.
-                        //// The camera user's manual contains more information about available configurations.
-                        //// The Basler pylon Viewer tool can be used to test the selected settings first.
+                            //// Alternative hardware trigger configuration:
+                            //// This configuration can be copied and modified to create a hardware trigger configuration.
+                            //// Remove setting the 'TriggerSource' to 'Software' (see above) and
+                            //// use the commented lines as a starting point.
+                            //// The camera user's manual contains more information about available configurations.
+                            //// The Basler pylon Viewer tool can be used to test the selected settings first.
 
-                        //// The trigger source must be set to the trigger input, e.g. 'Line1'.
-                        CEnumParameter(nodemap, "TriggerSource").SetValue("Line4");
+                            //// The trigger source must be set to the trigger input, e.g. 'Line1'.
+                            CEnumParameter(nodemap, "TriggerSource").SetValue("Line4");
 
-                        ////The trigger activation must be set to e.g. 'RisingEdge'.
-                        CEnumParameter(nodemap, "TriggerActivation").SetValue("RisingEdge");
+                            ////The trigger activation must be set to e.g. 'RisingEdge'.
+                            CEnumParameter(nodemap, "TriggerActivation").SetValue("RisingEdge");
+                        }
+                        else
+                        {
+                            triggerMode.TrySetValue( "Off" );
+                        }
                     }
                     else
                     {
@@ -84,7 +92,7 @@ class HardwareTriggerConfiguration : public CConfigurationEventHandler
             
             //Set acquisition mode to "continuous"
             CEnumParameter( nodemap, "AcquisitionMode" ).SetValue( "Continuous" );
-            CFloatParameter( nodemap, "ExposureTime" ).SetValue(1904.0f);
+            CFloatParameter( nodemap, "ExposureTime" ).SetValue(1850.0f);  // 1850.0=for max fps, 1904.0f = for 500 fps
         }
 
         //Set basic camera settings.
@@ -115,14 +123,18 @@ class HardwareTriggerConfiguration : public CConfigurationEventHandler
 class MyImageEventHandler : public CImageEventHandler
 {
 public:
-    MyImageEventHandler(blocking_queue<cv::Mat>& camera_queue, bool& close_signal) : myqueue(camera_queue), close_signal(close_signal) {}
-    blocking_queue<cv::Mat>& myqueue;
+    MyImageEventHandler(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width) :
+                        myqueue(camera_queue), close_signal(close_signal), height(height), width(width) {}
+    // blocking_queue<cv::Mat>& myqueue;
+    blocking_queue<CPylonImage>& myqueue;
     bool& close_signal;
+    uint32_t& height;
+    uint32_t& width;
     virtual void OnImagesSkipped( CInstantCamera& camera, size_t countOfSkippedImages )
     {
-        std::cout << "OnImagesSkipped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        std::cout << countOfSkippedImages << " images have been skipped." << std::endl;
-        std::cout << std::endl;
+        // std::cout << "OnImagesSkipped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << countOfSkippedImages << " images have been skipped." << std::endl;
+        // std::cout << std::endl;
     }
 
     virtual void OnImageGrabbed( CInstantCamera& camera, const CGrabResultPtr& ptrGrabResult )
@@ -136,23 +148,48 @@ public:
         // Image grabbed successfully?
         if (ptrGrabResult->GrabSucceeded())
         {
-            // std::cout << "SizeX: " << ptrGrabResult->GetWidth() << std::endl;
-            // std::cout << "SizeY: " << ptrGrabResult->GetHeight() << std::endl;
-            // const uint8_t* pImageBuffer = (uint8_t*) ptrGrabResult->GetBuffer();
-            // std::cout << "Gray value of first pixel: " << (uint32_t) pImageBuffer[0] << std::endl;
-            // std::cout << std::endl;
-            // Pylon::DisplayImage( 1, ptrGrabResult );
+            // std::cout << "Image grabbed !!! " << std::endl;
+            /********************** to Mat conversion *************************/
+            // // std::cout << "SizeX: " << ptrGrabResult->GetWidth() << std::endl;
+            // // std::cout << "SizeY: " << ptrGrabResult->GetHeight() << std::endl;
+            // // const uint8_t* pImageBuffer = (uint8_t*) ptrGrabResult->GetBuffer();
+            // // std::cout << "Gray value of first pixel: " << (uint32_t) pImageBuffer[0] << std::endl;
+            // // std::cout << std::endl;
+            // // Pylon::DisplayImage( 1, ptrGrabResult );
+            // CImageFormatConverter formatConverter;
+	        // formatConverter.OutputPixelFormat= PixelType_BGR8packed;
+	        // // CPylonImage* pylonImage = new CPylonImage();
+            // CPylonImage pylonImage;
+            // formatConverter.Convert(pylonImage, ptrGrabResult);
+            // cv::Mat myimage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*) pylonImage.GetBuffer());
+            // // cv::namedWindow("image", cv::WINDOW_AUTOSIZE );
+            // // cv::imshow("image", myimage);
+            // // cv::waitKey(1);
+            // // cv::resize(myimage, myimage, cv::Size(1024, 768));
+            // myqueue.push(myimage.clone());
+            /********************** end to Mat conversion **********************/
+            // auto start = std::chrono::system_clock::now();
+            if (height == 0 || width == 0)
+            {
+                // std::cout << "setting camera height width " << std::endl;
+                height = ptrGrabResult->GetHeight();
+                width = ptrGrabResult->GetWidth();
+            }
             CImageFormatConverter formatConverter;
-	        formatConverter.OutputPixelFormat= PixelType_BGR8packed;
-	        // CPylonImage* pylonImage = new CPylonImage();
+	        formatConverter.OutputPixelFormat= PixelType_RGB8packed;
             CPylonImage pylonImage;
             formatConverter.Convert(pylonImage, ptrGrabResult);
-            cv::Mat myimage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*) pylonImage.GetBuffer());
-            // cv::namedWindow("image", cv::WINDOW_AUTOSIZE );
-            // cv::imshow("image", myimage);
-            // cv::waitKey(1);
-            // cv::resize(myimage, myimage, cv::Size(1024, 768));
-            myqueue.push(myimage.clone());
+            // uint8_t* buffer = (uint8_t*) pylonImage.GetBuffer();
+            // std::cout << "Gray value of first pixel: " << (uint32_t) buffer[0] << std::endl;
+            // std::cout << "SizeX: " << ptrGrabResult->GetWidth() << std::endl;
+            // std::cout << "SizeY: " << ptrGrabResult->GetHeight() << std::endl;
+            // cv::Mat myimage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*) pylonImage.GetBuffer());
+            // cv::imwrite("test1.png", myimage);
+            myqueue.push(pylonImage);
+            // auto runtime = std::chrono::system_clock::now() - start;
+            //     std::cout << "ms: "
+            //     << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
+            //     << "\n";
         }
         else
         {
@@ -161,7 +198,7 @@ public:
     }
 };
 
-BaslerCamera::BaslerCamera(blocking_queue<cv::Mat>& camera_queue, bool& close_signal)
+BaslerCamera::BaslerCamera(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width)
 {
     PylonInitialize();
     try
@@ -169,7 +206,7 @@ BaslerCamera::BaslerCamera(blocking_queue<cv::Mat>& camera_queue, bool& close_si
         camera.Attach(CTlFactory::GetInstance().CreateFirstDevice());
         camera.RegisterConfiguration( new HardwareTriggerConfiguration, RegistrationMode_ReplaceAll, Cleanup_Delete );
         camera.RegisterConfiguration( new CConfigurationEventPrinter, RegistrationMode_Append, Cleanup_Delete );
-        camera.RegisterImageEventHandler( new MyImageEventHandler(camera_queue, close_signal), RegistrationMode_Append, Cleanup_Delete );
+        camera.RegisterImageEventHandler( new MyImageEventHandler(camera_queue, close_signal, height, width), RegistrationMode_Append, Cleanup_Delete );
         camera.Open();
         is_open = true;
     }
@@ -197,7 +234,7 @@ void BaslerCamera::acquire()
             // Start the grabbing using the grab loop thread, by setting the grabLoopType parameter
             // to GrabLoop_ProvidedByInstantCamera. The grab results are delivered to the image event handlers.
             // The GrabStrategy_OneByOne default grab strategy is used.
-            camera.StartGrabbing( GrabStrategy_OneByOne, GrabLoop_ProvidedByInstantCamera );  // GrabStrategy_LatestImageOnly
+            camera.StartGrabbing( GrabStrategy_LatestImageOnly, GrabLoop_ProvidedByInstantCamera );  // GrabStrategy_LatestImageOnly
             // Wait for user input to trigger the camera or exit the program.
             // The grabbing is stopped, the device is closed and destroyed automatically when the camera object goes out of scope.
 

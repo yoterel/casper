@@ -6,10 +6,14 @@ in vec2 TexCoord;
 
 // texture samplers
 uniform sampler2D texture1;
-uniform sampler2D texture2;
+uniform float threshold;
+//uniform sampler2D texture2;
 
 void main()
 {
-	// linearly interpolate between both textures (80% container, 20% awesomeface)
-	FragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);
+	//FragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);
+	vec3 col = texture(texture1, TexCoord).rgb;
+	float avg = (col.r + col.g + col.b) * 0.333333;
+	float b = mix(0.0, 1.0, step(threshold, avg));
+	FragColor = vec4(vec3(b), 1.0);
 }
