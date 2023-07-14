@@ -8,6 +8,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include "timer.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -24,8 +25,10 @@ void saveImage(char* filepath, GLFWwindow* w);
 
 int main( int /*argc*/, char* /*argv*/[] )
 {
-    int proj_width = 1024;
-    int proj_height = 768;
+    const int proj_width = 1024;
+    const int proj_height = 768;
+    const int image_size = proj_width * proj_height * 3;
+    Timer t0, t1, t2, t3, t4;  // t1.start(); t1.stop(); t1.getElapsedTimeInMilliSec();
     // render output window
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -77,105 +80,53 @@ int main( int /*argc*/, char* /*argv*/[] )
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load image, create texture and generate mipmaps
-    int width, height, nrChannels;
-    stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
-    unsigned char *data = stbi_load("C:/src/augmented_hands/resource/container.jpg", &width, &height, &nrChannels, 0);
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        // glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else
-    {
-        std::cout << "Failed to load texture" << std::endl;
-    }
+    // int width, height, nrChannels;
+    // stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
+    // unsigned char *data = stbi_load("C:/src/augmented_hands/resource/container.jpg", &width, &height, &nrChannels, 0);
+    // if (data)
+    // {
+    //     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+    //     // glGenerateMipmap(GL_TEXTURE_2D);
+    // }
+    // else
+    // {
+    //     std::cout << "Failed to load texture" << std::endl;
+    // }
     
 
     // tell opengl for each sampler to which texture unit it belongs to (only has to be done once)
     // -------------------------------------------------------------------------------------------
     ourShader.use(); // don't forget to activate/use the shader before setting uniforms!
     ourShader.setInt("texture1", 0);
-    ourShader.setFloat("threshold", 0.5f);
+    ourShader.setFloat("threshold", 0.15f);
 
     glfwSwapInterval(0);  // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height);
-    glClearColor(0.5, 0.5, 0.5, 0); // glClearColor(0.2f, 0.3f, 0.3f, 1.0f); 
+    glClearColor(0.5f, 0.5f, 0.5f, 1.0f); // glClearColor(0.2f, 0.3f, 0.3f, 1.0f); 
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, keycallback);
     double previousTime = glfwGetTime();
     int frameCount = 0;
-    bool save_flag = true;
-    while(!glfwWindowShouldClose(window))
-    {
-        // Measure speed
-        double currentTime = glfwGetTime();
-        frameCount++;
-        // If a second has passed.
-        if ( currentTime - previousTime >= 1.0 )
-        {
-            // Display the frame count here any way you want.
-            std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;;
-
-            frameCount = 0;
-            previousTime = currentTime;
-        }
-        // render
-        // ------
-        glClear(GL_COLOR_BUFFER_BIT);
-        // load texture to GPU (large overhead)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        // bind textures on corresponding texture units
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture1);
-        // glActiveTexture(GL_TEXTURE1);
-        // glBindTexture(GL_TEXTURE_2D, texture2);
-        ourShader.use();
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-        if (save_flag) {
-            saveImage("test.png", window);
-            save_flag = false;
-        }
-    }
-    stbi_image_free(data);
-    glfwTerminate();
-    /* setup projector */
-    DynaFlashProjector projector(proj_width, proj_height);
-    bool success = projector.init();
-    if (!success) {
-        std::cerr << "Failed to initialize projector\n";
-        return 1;
-    }
-    /* setup trigger */
-    // char* portName = "\\\\.\\COM4";
+    // bool save_flag = true;
     bool close_signal = false;
+    bool use_pbo = false;
+    bool producer_is_fake = false;
+    uint8_t* colorBuffer = new uint8_t[image_size];
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
-    // #define DATA_LENGTH 255
-    // SerialPort *arduino = new SerialPort(portName);
-    // std::cout << "Arduino is connected: " << arduino->isConnected() << std::endl;
-    // const char *sendString = "trigger\n"; 
-    // if (arduino->isConnected()){
-    //     bool hasWritten = arduino->writeSerialPort(sendString, DATA_LENGTH);
-    //     if (hasWritten) std::cout << "Data Written Successfully" << std::endl;
-    //     else std::cerr << "Data was not written" << std::endl;
-    // }
-    /* end setup trigger */
     blocking_queue<CPylonImage> camera_queue;
-    bool producer_is_fake = false;
     BaslerCamera camera;
+    DynaFlashProjector projector(proj_width, proj_height);
+    if (!projector.init()) {
+        std::cerr << "Failed to initialize projector\n";
+    }
     std::thread producer;
     if (producer_is_fake) {
         /* fake producer */
         cam_height = 540;
         cam_width = 720;
-        producer = std::thread([&camera_queue, &close_signal, &projector, &cam_height, &cam_width]() {  //, &projector
+        producer = std::thread([&camera_queue, &close_signal, &cam_height, &cam_width]() {  //, &projector
             CPylonImage image = CPylonImage::Create( PixelType_RGB8packed, cam_width, cam_height);
-            // cv::Mat white_image(projector.width, projector.height, CV_8UC3, cv::Scalar(255, 255, 255));
             while (!close_signal) {
                 camera_queue.push(image);
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -189,86 +140,169 @@ int main( int /*argc*/, char* /*argv*/[] )
         camera.init(camera_queue, close_signal, cam_height, cam_width);
         camera.acquire();
     }
-    
-    /* consumer */
-    auto consumer = std::thread([&camera_queue, &close_signal, &projector, &cam_height, &cam_width]() {  //, &projector
-        bool flag = false;
-        // uint8_t cam_height = projector.height;
-        // uint8_t cam_width = projector.width;
-        // projector.show(white_image);
-        while (!close_signal) {
-            // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            if (flag == true || camera_queue.size() == 0) {
-                // cv::Mat image;
-                // bool success = camera_queue.pop_with_timeout(1, image);
-                // auto start = std::chrono::system_clock::now();
-                // projector.show();
-                // auto runtime = std::chrono::system_clock::now() - start;
-                // std::cout << "ms: "
-                // << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
-                // << "\n";
-            }else{
-                auto start = std::chrono::system_clock::now();
-                // std::cout << "queue size: " << camera_queue.size() << "\n";
-                CPylonImage pylonImage = camera_queue.pop();
-                uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
-                // std::cout << "Image popped !!! " << std::endl;
-                cv::Mat myimage = cv::Mat(cam_height, cam_width, CV_8UC3, buffer);
-                // std::cout << myimage.empty() << std::endl;
-                // cv::imwrite("test1.png", myimage);
-                cv::cvtColor(myimage, myimage, cv::COLOR_RGB2GRAY);
-                cv::threshold(myimage, myimage, 50, 255, cv::THRESH_BINARY);
-                cv::cvtColor(myimage, myimage, cv::COLOR_GRAY2RGB);
-                cv::resize(myimage, myimage, cv::Size(projector.width, projector.height));
-                projector.show_buffer(myimage.data);
-                // projector.show();
-                // free(buffer);
-                auto runtime = std::chrono::system_clock::now() - start;
-                std::cout << "ms: "
-                << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
-                << "\n";
-            }
-            //     continue;
-            // }
-            // else
-            // {
-            //     if (flag == true || camera_queue.size() == 0)
-            //     {
-                    // image = cv::Mat::ones(cv::Size(1024, 768), CV_8UC3);
-                // }
-                // else
-                // {
-                //     image = camera_queue.pop();
-                //     // cv::namedWindow("image", cv::WINDOW_AUTOSIZE );
-                //     // cv::imshow("image", image);
-                //     // cv::waitKey(1);
-                // }
-            // flag = !flag;
-            // }
-            
-        }
-        std::cout << "Consumer finish" << std::endl;
-    });
-    /* main thread */
-    while (!close_signal)
+    while(!glfwWindowShouldClose(window))  // todo: change to PBO http://www.songho.ca/opengl/gl_pbo.html
     {
-        std::string userInput;
-        std::getline(std::cin, userInput);
-        for (size_t i = 0; i < userInput.size(); ++i)
+        // Measure speed
+        double currentTime = glfwGetTime();
+        frameCount++;
+        // If a second has passed.
+        if ( currentTime - previousTime >= 1.0 )
         {
-            char key = userInput[i];
-            if (key == 'q')
-            {
-                close_signal = true;
-                break;
-            }
+            // Display the frame count here any way you want.
+            std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
+            std::cout << "last wait_for_cam time: " << t0.getElapsedTimeInMilliSec() << std::endl;
+            std::cout << "last Cam->GPU time: " << t1.getElapsedTimeInMilliSec() << std::endl;
+            std::cout << "last GPU Process time: " << t2.getElapsedTimeInMilliSec() << std::endl;
+            std::cout << "last GPU->CPU time: " << t3.getElapsedTimeInMilliSec() << std::endl;
+            std::cout << "last project time: " << t4.getElapsedTimeInMilliSec() << std::endl;
+            frameCount = 0;
+            previousTime = currentTime;
         }
+        // render
+        // ------
+        glClear(GL_COLOR_BUFFER_BIT);
+        t0.start();
+        CPylonImage pylonImage = camera_queue.pop();
+        uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
+        t0.stop();
+        t1.start();
+        // load texture to GPU (large overhead)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, cam_width, cam_height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer);
+        t1.stop();
+        t2.start();
+        // bind textures on corresponding texture units
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture1);
+        // glActiveTexture(GL_TEXTURE1);
+        // glBindTexture(GL_TEXTURE_2D, texture2);
+        ourShader.use();
+        glBindVertexArray(VAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        t2.stop();
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        if (use_pbo) {
+            // saveImage("test.png", window);
+            // save_flag = false;
+        }else{
+            t3.start();
+            glReadBuffer(GL_FRONT);
+            glReadPixels(0, 0, proj_width, proj_height, GL_RGB, GL_UNSIGNED_BYTE, colorBuffer);
+            t3.stop();
+            t4.start();
+            projector.show_buffer(colorBuffer);
+            t4.stop();
+            // stbi_flip_vertically_on_write(true);
+            // int stride = 3 * proj_width;
+            // stride += (stride % 4) ? (4 - stride % 4) : 0;
+            // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
+        }
+        glfwSwapBuffers(window);
+        glfwPollEvents();
     }
-    consumer.join();
+    // stbi_image_free(data);
+    glfwTerminate();
+    close_signal = true;
+    delete[] colorBuffer;
     if (producer_is_fake)
     {
         producer.join();
     }
+    /* setup projector */
+    // DynaFlashProjector projector(proj_width, proj_height);
+    // bool success = projector.init();
+    // if (!success) {
+    //     std::cerr << "Failed to initialize projector\n";
+    //     return 1;
+    // }
+    /* setup trigger */
+    // char* portName = "\\\\.\\COM4";
+    // #define DATA_LENGTH 255
+    // SerialPort *arduino = new SerialPort(portName);
+    // std::cout << "Arduino is connected: " << arduino->isConnected() << std::endl;
+    // const char *sendString = "trigger\n"; 
+    // if (arduino->isConnected()){
+    //     bool hasWritten = arduino->writeSerialPort(sendString, DATA_LENGTH);
+    //     if (hasWritten) std::cout << "Data Written Successfully" << std::endl;
+    //     else std::cerr << "Data was not written" << std::endl;
+    // }
+    /* end setup trigger */
+    
+    /* CPU consumer */
+    // auto consumer = std::thread([&camera_queue, &close_signal, &projector, &cam_height, &cam_width]() {  //, &projector
+    //     bool flag = false;
+    //     // uint8_t cam_height = projector.height;
+    //     // uint8_t cam_width = projector.width;
+    //     // projector.show(white_image);
+    //     while (!close_signal) {
+    //         // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    //         if (flag == true || camera_queue.size() == 0) {
+    //             // cv::Mat image;
+    //             // bool success = camera_queue.pop_with_timeout(1, image);
+    //             // auto start = std::chrono::system_clock::now();
+    //             // projector.show();
+    //             // auto runtime = std::chrono::system_clock::now() - start;
+    //             // std::cout << "ms: "
+    //             // << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
+    //             // << "\n";
+    //         }else{
+    //             auto start = std::chrono::system_clock::now();
+    //             // std::cout << "queue size: " << camera_queue.size() << "\n";
+    //             CPylonImage pylonImage = camera_queue.pop();
+    //             uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
+    //             // std::cout << "Image popped !!! " << std::endl;
+    //             cv::Mat myimage = cv::Mat(cam_height, cam_width, CV_8UC3, buffer);
+    //             // std::cout << myimage.empty() << std::endl;
+    //             // cv::imwrite("test1.png", myimage);
+    //             cv::cvtColor(myimage, myimage, cv::COLOR_RGB2GRAY);
+    //             cv::threshold(myimage, myimage, 50, 255, cv::THRESH_BINARY);
+    //             cv::cvtColor(myimage, myimage, cv::COLOR_GRAY2RGB);
+    //             cv::resize(myimage, myimage, cv::Size(projector.width, projector.height));
+    //             projector.show_buffer(myimage.data);
+    //             // projector.show();
+    //             // free(buffer);
+    //             auto runtime = std::chrono::system_clock::now() - start;
+    //             std::cout << "ms: "
+    //             << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
+    //             << "\n";
+    //         }
+    //         //     continue;
+    //         // }
+    //         // else
+    //         // {
+    //         //     if (flag == true || camera_queue.size() == 0)
+    //         //     {
+    //                 // image = cv::Mat::ones(cv::Size(1024, 768), CV_8UC3);
+    //             // }
+    //             // else
+    //             // {
+    //             //     image = camera_queue.pop();
+    //             //     // cv::namedWindow("image", cv::WINDOW_AUTOSIZE );
+    //             //     // cv::imshow("image", image);
+    //             //     // cv::waitKey(1);
+    //             // }
+    //         // flag = !flag;
+    //         // }
+            
+    //     }
+    //     std::cout << "Consumer finish" << std::endl;
+    // });
+    /* main thread */
+    // while (!close_signal)
+    // {
+    //     std::string userInput;
+    //     std::getline(std::cin, userInput);
+    //     for (size_t i = 0; i < userInput.size(); ++i)
+    //     {
+    //         char key = userInput[i];
+    //         if (key == 'q')
+    //         {
+    //             close_signal = true;
+    //             break;
+    //         }
+    //     }
+    // }
+    // consumer.join();
     return 0;
 }
 
@@ -279,10 +313,10 @@ unsigned int setup_buffers()
     // ------------------------------------------------------------------
     float vertices[] = {
         // positions          // colors           // texture coords
-         0.75f,  0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 1.0f, // top right
-         0.75f, -0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 0.0f, // bottom right
-        -0.75f, -0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 0.0f, // bottom left
-        -0.75f,  0.75f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 1.0f  // top left 
+         1.0f,  1.0f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 1.0f, // top right
+         1.0f, -1.0f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 0.0f, // bottom right
+        -1.0f, -1.0f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 0.0f, // bottom left
+        -1.0f,  1.0f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 1.0f  // top left 
     };
     unsigned int indices[] = {
         0, 1, 3, // first triangle
@@ -292,6 +326,7 @@ unsigned int setup_buffers()
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
+    // glGenBuffers(1, &PBO);
 
     glBindVertexArray(VAO);
 
@@ -324,8 +359,8 @@ void saveImage(char* filepath, GLFWwindow* w) {
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
     glReadBuffer(GL_FRONT);
     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer.data());
-    stbi_flip_vertically_on_write(true);
-    stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
+    // stbi_flip_vertically_on_write(true);
+    // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
 }
 
 void processInput(GLFWwindow *window)

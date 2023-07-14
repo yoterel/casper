@@ -12,6 +12,7 @@ uniform float threshold;
 void main()
 {
 	//FragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);
+	// vec2 flippedTexCoord = vec2(1.0 - TexCoord.x, 1.0 - TexCoord.y);
 	vec3 col = texture(texture1, TexCoord).rgb;
 	float avg = (col.r + col.g + col.b) * 0.333333;
 	float b = mix(0.0, 1.0, step(threshold, avg));
