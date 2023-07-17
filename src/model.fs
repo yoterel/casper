@@ -1,7 +1,6 @@
 #version 330 core
 out vec4 FragColor;
 
-in vec3 ourColor;
 in vec2 TexCoord;
 
 // texture samplers
@@ -15,6 +14,6 @@ void main()
 	// vec2 flippedTexCoord = vec2(1.0 - TexCoord.x, 1.0 - TexCoord.y);
 	vec3 col = texture(texture1, TexCoord).rgb;
 	float avg = (col.r + col.g + col.b) * 0.333333;
-	float b = mix(0.0, 1.0, step(threshold, avg));
-	FragColor = vec4(vec3(b), 1.0);
+	float bin = mix(0.0, 1.0, step(threshold, avg));
+	FragColor = vec4(0.0, 0.0, bin, 1.0);
 }

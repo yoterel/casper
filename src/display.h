@@ -32,13 +32,11 @@ public:
     void gracefully_close();
     int get_width(){return width;};
     int get_height(){return height;};
-    // static CDynaFlash *pDynaFlash;
     #ifdef PYTHON_BINDINGS_BUILD
-        #include <nanobind/ndarray.h>
-        void project(nb::ndarray<uint8_t, nb::shape<nb::any, nb::any, 3>,
-                                nb::c_contig, nb::device::cpu> data){
-                                    show_buffer(data.data());
-                                };
+    void project(nb::ndarray<uint8_t, nb::shape<nb::any, nb::any, 3>,
+                            nb::c_contig, nb::device::cpu> data){
+                                show_buffer(data.data());
+                            };
     #endif
 private:
     int width;
