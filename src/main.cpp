@@ -2,39 +2,45 @@
 #include <thread>
 #include "queue.h"
 #include "camera.h"
+#include "gl_camera.h"
 #include "display.h"
 #include "SerialPort.h"
 #include "shader.h"
-// #include "mesh.h"
+#include "model.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include "timer.h"
-#include "stb_image.h"
-#include "stb_image_write.h"
-#include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
-#include <gtc/type_ptr.hpp>
+// #include "stb_image.h"
+// #include "stb_image_write.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 using namespace std::literals::chrono_literals;
 
 /* settings */
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-void keycallback(GLFWwindow *window, int key, int scancode, int action, int mods);
 // unsigned int compile_shaders();
 unsigned int setup_cam_buffers();
 unsigned int setup_model_buffers();
 void saveImage(char* filepath, GLFWwindow* w);
-// camera
-glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  2.41f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
 // settings
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int image_size = proj_width * proj_height * 3;
+// camera
+GLCamera gl_camera(glm::vec3(0.0f, 0.0f, 2.41f));
+float lastX = proj_width / 2.0f;
+float lastY = proj_height / 2.0f;
+bool firstMouse = true;
+// timing
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
 int main( int /*argc*/, char* /*argv*/[] )
 {
@@ -46,7 +52,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
-    GLFWwindow* window = glfwCreateWindow(proj_width, proj_height, "ahands", NULL, NULL);  //monitors[0], NULL for full screen
+    GLFWwindow* window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL);  //monitors[0], NULL for full screen
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -71,23 +77,27 @@ int main( int /*argc*/, char* /*argv*/[] )
     glEnable(GL_DEPTH_TEST);  // enable depth testing
     glClearColor(0.5f, 0.5f, 0.5f, 1.0f); // glClearColor(0.2f, 0.3f, 0.3f, 1.0f); 
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  // callback for resizing
-    glfwSetKeyCallback(window, keycallback);  // callback for key press
-
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    // tell GLFW to capture our mouse
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // setup buffers
+    unsigned int camVAO = setup_cam_buffers();
+    // setup 3d objects
+    Model ourModel("C:/src/augmented_hands/resource/backpack/backpack.obj");
     // setup shaders
     Shader camShader("C:/src/augmented_hands/src/cam.vs", "C:/src/augmented_hands/src/cam.fs");
     Shader modelShader("C:/src/augmented_hands/src/model.vs", "C:/src/augmented_hands/src/model.fs");
-    // setup buffers
-    unsigned int camVAO = setup_cam_buffers();
-    unsigned int modelVAO = setup_model_buffers();
+    // unsigned int modelVAO = setup_model_buffers();
     //setup textures
 
     // create a texture 
     // -------------------------
-    unsigned int texture1;
+    unsigned int camera_texture;
     // texture 1
     // ---------
-    glGenTextures(1, &texture1);
-    glBindTexture(GL_TEXTURE_2D, texture1); 
+    glGenTextures(1, &camera_texture);
+    glBindTexture(GL_TEXTURE_2D, camera_texture); 
      // set the texture wrapping parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -100,33 +110,31 @@ int main( int /*argc*/, char* /*argv*/[] )
     // model_mat = glm::rotate(model_mat, glm::radians(-55.0f), glm::vec3(0.5f, 1.0f, 0.0f));
     mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(0.5f, 0.5f, 0.5f));
     glm::mat4 canvas_model_mat = glm::mat4(1.0f);
-    glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
+    // glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
     // canvas_model_mat = glm::scale(canvas_model_mat, glm::vec3(0.75f, 0.75f, 1.0f));  // 2.0f, 2.0f, 2.0f
     glm::mat4 view_mat = glm::mat4(1.0f);
     // glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  10.0f);
     // glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
     // glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
-    view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
     // view_mat = glm::translate(view_mat, glm::vec3(0.0f, 0.0f, -3.0f));
     glm::mat4 projection_mat = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
     // glm::mat4 projection_mat = glm::frustum(-(float)proj_width*0.5f, (float)proj_width*0.5f, -(float)proj_height*0.5f, (float)proj_height*0.5f, 0.1f, 100.0f);
     // setup shader inputs
     float bg_thresh = 0.08f;
     camShader.use();
-    camShader.setInt("texture1", 0);
+    camShader.setInt("camera_texture", 0);
     camShader.setFloat("threshold", bg_thresh);
     camShader.setMat4("model", canvas_model_mat);
     camShader.setMat4("view", view_mat);
     camShader.setMat4("projection", projection_mat);
     modelShader.use();
-    modelShader.setInt("texture1", 0);
-    modelShader.setFloat("threshold", bg_thresh);
     modelShader.setMat4("model", mesh_model_mat);
     modelShader.setMat4("view", view_mat);
     modelShader.setMat4("projection", projection_mat);
     
     // initialize
-    double previousTime = glfwGetTime();
+    float previousTime = static_cast<float>(glfwGetTime());
     int frameCount = 0;
     // bool save_flag = true;
     bool close_signal = false;
@@ -166,11 +174,14 @@ int main( int /*argc*/, char* /*argv*/[] )
     // main loop
     while(!glfwWindowShouldClose(window))
     {
-        // Measure speed
-        double currentTime = glfwGetTime();
+        // per-frame time logic
+        // --------------------
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
         frameCount++;
         // If a second has passed.
-        if ( currentTime - previousTime >= 1.0 )
+        if ( currentFrame - previousTime >= 1.0 )
         {
             // Display the frame count here any way you want.
             std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
@@ -180,8 +191,10 @@ int main( int /*argc*/, char* /*argv*/[] )
             std::cout << "last GPU->CPU time: " << t3.getElapsedTimeInMilliSec() << std::endl;
             std::cout << "last project time: " << t4.getElapsedTimeInMilliSec() << std::endl;
             frameCount = 0;
-            previousTime = currentTime;
+            previousTime = currentFrame;
         }
+        // input
+        processInput(window);
         // render
         // ------
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -189,25 +202,38 @@ int main( int /*argc*/, char* /*argv*/[] )
         CPylonImage pylonImage = camera_queue.pop();
         uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
         t0.stop();
-        t1.start();
-        // load texture to GPU (large overhead)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, cam_width, cam_height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer);
-        t1.stop();
+        
         t2.start();
         // bind textures on corresponding texture units
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture1);
-        view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        glBindTexture(GL_TEXTURE_2D, camera_texture);
+        // load texture to GPU (large overhead)
+        t1.start();
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, cam_width, cam_height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer);
+        t1.stop();
+        // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        glm::mat4 projection = glm::perspective(glm::radians(gl_camera.Zoom), (float)proj_width / (float)proj_height, 0.1f, 100.0f);
+        glm::mat4 view = gl_camera.GetViewMatrix();
         camShader.use();
-        camShader.setMat4("view", view_mat);
+        camShader.setMat4("projection", projection);
+        camShader.setMat4("view", view);
+        // camShader.setMat4("view", view_mat);
+        // camShader.setInt("camera_texture", 0);
         glBindVertexArray(camVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         modelShader.use();
-        mesh_model_mat = glm::rotate(mesh_model_mat, glm::radians(0.1f), glm::vec3(0.5f, 1.0f, 0.0f));
-        modelShader.setMat4("model", mesh_model_mat);
-        modelShader.setMat4("view", view_mat);
-        glBindVertexArray(modelVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        modelShader.setMat4("projection", projection);
+        modelShader.setMat4("view", view);
+        ourModel.Draw(modelShader);
+        // render the loaded model
+        // glm::mat4 model = glm::mat4(1.0f);
+        // mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
+        // modelShader.setMat4("model", mesh_model_mat);
+        // mesh_model_mat = glm::rotate(mesh_model_mat, glm::radians(0.1f), glm::vec3(0.5f, 1.0f, 0.0f));
+        // modelShader.setMat4("model", mesh_model_mat);
+        // modelShader.setMat4("view", view_mat);
+        // glBindVertexArray(modelVAO);
+        // glDrawArrays(GL_TRIANGLES, 0, 36);
         t2.stop();
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -459,33 +485,58 @@ void saveImage(char* filepath, GLFWwindow* w) {
     // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
 }
 
+// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
-    if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        gl_camera.ProcessKeyboard(FORWARD, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        gl_camera.ProcessKeyboard(BACKWARD, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        gl_camera.ProcessKeyboard(LEFT, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        gl_camera.ProcessKeyboard(RIGHT, deltaTime);
 }
 
-void keycallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-        if (key == GLFW_KEY_ESCAPE) {
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
-        }
-        const float cameraSpeed = 0.01f; // adjust accordingly
-        if (key == GLFW_KEY_W)
-            cameraPos += cameraSpeed * cameraFront;
-            std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
-        if (key == GLFW_KEY_S)
-            cameraPos -= cameraSpeed * cameraFront;
-            std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
-        if (key == GLFW_KEY_A)
-            cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-            std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
-        if (key == GLFW_KEY_D)
-            cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-            std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
-        }
-}
+// glfw: whenever the window size changed (by OS or user resize) this callback function executes
+// ---------------------------------------------------------------------------------------------
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
+    // make sure the viewport matches the new window dimensions; note that width and 
+    // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
+}
+
+// glfw: whenever the mouse moves, this callback is called
+// -------------------------------------------------------
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+{
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+
+    lastX = xpos;
+    lastY = ypos;
+
+    gl_camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+// glfw: whenever the mouse scroll wheel scrolls, this callback is called
+// ----------------------------------------------------------------------
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    gl_camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }

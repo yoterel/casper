@@ -57,6 +57,7 @@ add_executable(ahand
     src/timer.h
     src/stb_image.h
     src/stb_image_write.h
+    src/gl_camera.h
     third-party/glad${GLAD_VER}/src/glad.c
 )
 target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
@@ -130,4 +131,11 @@ add_custom_command(TARGET ahand
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${LEAPC_SHARED_LIB_PATH}
+                $<TARGET_FILE_DIR:ahand>)
+
+file(GLOB ASSIMP_DLLS "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/*.dll") 
+add_custom_command(TARGET ahand
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ASSIMP_DLLS}
                 $<TARGET_FILE_DIR:ahand>)
