@@ -53,11 +53,15 @@ add_executable(ahand
     src/shader.h
     src/mesh.h
     src/model.h
+    src/model.cpp
     src/timer.cpp
     src/timer.h
     src/stb_image.h
     src/stb_image_write.h
     src/gl_camera.h
+    src/assimp_helpers.h
+    src/leap.h
+    src/leap.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
@@ -76,6 +80,8 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assi
 target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
 # glm
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# leap
+target_link_libraries(ahand PRIVATE LeapSDK::LeapC)
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp
@@ -92,7 +98,7 @@ target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 add_executable(leapc_example 
     src/leap_connect.h
     src/leap_connect.cpp
-    src/leap.cpp
+    src/leap_example.cpp
 )
 target_link_libraries(leapc_example PRIVATE LeapSDK::LeapC)
 # add_executable(sample_program 

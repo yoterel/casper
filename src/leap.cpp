@@ -1,83 +1,194 @@
-/* Copyright (C) 2012-2017 Ultraleap Limited. All rights reserved.
- *
- * Use of this code is subject to the terms of the Ultraleap SDK agreement
- * available at https://central.leapmotion.com/agreements/SdkAgreement unless
- * Ultraleap has signed a separate license agreement with you or your
- * organisation.
- *
- */
+#include "leap.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <Windows.h>
-#include <time.h>
-#include "LeapC.h"
-#include "leap_connect.h"
+/** Called by serviceMessageLoop() when a connection event is returned by LeapPollConnection(). */
+void LeapConnect::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event){
+  IsConnected = true;
+  std::cout << "leap connected." << std::endl;
+}
 
-LEAP_CLOCK_REBASER clockSynchronizer;
+/** Called by serviceMessageLoop() when a connection lost event is returned by LeapPollConnection(). */
+void LeapConnect::handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event){
+  IsConnected = false;
+}
 
-int main(int argc, char** argv) {
-  LEAP_CONNECTION* connHandle = OpenConnection();
-
-  while(!IsConnected){
-    millisleep(250);
+void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event){
+  LEAP_DEVICE deviceHandle;
+  //Open device using LEAP_DEVICE_REF from event struct.
+  eLeapRS result = LeapOpenDevice(device_event->device, &deviceHandle);
+  if(result != eLeapRS_Success){
+    printf("Could not open device %s.\n", ResultString(result));
+    return;
   }
 
-  printf("Connected.\n");
-  //Create the clock synchronizer
-  LeapCreateClockRebaser(&clockSynchronizer);
-  clock_t cpuTime;
-  int64_t targetFrameTime = 0;
-  uint64_t targetFrameSize = 0;
-  eLeapRS result;
-  for(;;){
-    //Calculate the application time
-    cpuTime = (clock_t).000001 * clock()/CLOCKS_PER_SEC;//microseconds
-    //Synchronize the clocks
-    LeapUpdateRebase(clockSynchronizer, cpuTime, LeapGetNow());
-
-    //Simulate delay (i.e. processing load, v-sync, etc)
-    // millisleep(10);
-
-    //Now get the updated application time
-    cpuTime = (clock_t) .000001 * clock()/CLOCKS_PER_SEC;
-
-    //Translate application time to Leap time
-    LeapRebaseClock(clockSynchronizer, cpuTime, &targetFrameTime);
-
-    //Get the buffer size needed to hold the tracking data
-    result = LeapGetFrameSize(*connHandle, targetFrameTime, &targetFrameSize);
-    if(result == eLeapRS_Success){
-      //Allocate enough memory
-      LEAP_TRACKING_EVENT* interpolatedFrame = (LEAP_TRACKING_EVENT*)malloc((size_t)targetFrameSize);
-      //Get the frame
-      result = LeapInterpolateFrame(*connHandle, targetFrameTime, interpolatedFrame, targetFrameSize);
-      if(result == eLeapRS_Success){
-        //Use the data...
-        printf("Frame %lli with %i hands with delay of %lli microseconds.\n",
-               (long long int)interpolatedFrame->tracking_frame_id,
-               interpolatedFrame->nHands,
-               (long long int)LeapGetNow() - interpolatedFrame->info.timestamp);
-        for(uint32_t h = 0; h < interpolatedFrame->nHands; h++){
-        LEAP_HAND* hand = &interpolatedFrame->pHands[h];
-        printf("    Hand id %i is a %s hand with position (%f, %f, %f).\n",
-                    hand->id,
-                    (hand->type == eLeapHandType_Left ? "left" : "right"),
-                    hand->palm.position.x,
-                    hand->palm.position.y,
-                    hand->palm.position.z);
-        }
-        //Free the allocated buffer when done.
-        free(interpolatedFrame);
-      }
-      else {
-        printf("LeapInterpolateFrame() result was %s.\n", ResultString(result));
-      }
+  //Create a struct to hold the device properties, we have to provide a buffer for the serial string
+  LEAP_DEVICE_INFO deviceProperties = { sizeof(deviceProperties) };
+  // Start with a length of 1 (pretending we don't know a priori what the length is).
+  // Currently device serial numbers are all the same length, but that could change in the future
+  deviceProperties.serial_length = 1;
+  deviceProperties.serial = (char*)malloc(deviceProperties.serial_length);
+  //This will fail since the serial buffer is only 1 character long
+  // But deviceProperties is updated to contain the required buffer length
+  result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
+  if(result == eLeapRS_InsufficientBuffer){
+    //try again with correct buffer size
+    deviceProperties.serial = (char*)realloc(deviceProperties.serial, deviceProperties.serial_length);
+    result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
+    if(result != eLeapRS_Success){
+      printf("Failed to get device info %s.\n", ResultString(result));
+      free(deviceProperties.serial);
+      return;
     }
-    else {
-      printf("LeapGetFrameSize() result was %s.\n", ResultString(result));
-    }
-  } //ctrl-c to exit
-  return 0;
+  }
+  setDevice(&deviceProperties);
+  free(deviceProperties.serial);
+  LeapCloseDevice(deviceHandle);
 }
-//End-of-Sample
+
+void LeapConnect::serviceMessageLoop(){
+  eLeapRS result;
+  LEAP_CONNECTION_MESSAGE msg;
+  while(_isRunning){
+    unsigned int timeout = 1000;
+    result = LeapPollConnection(connectionHandle, timeout, &msg);
+
+    if(result != eLeapRS_Success){
+      printf("LeapC PollConnection call was %s.\n", ResultString(result));
+      continue;
+    }
+
+    switch (msg.type){
+      case eLeapEventType_Connection:
+        handleConnectionEvent(msg.connection_event);
+        break;
+      case eLeapEventType_ConnectionLost:
+        handleConnectionLostEvent(msg.connection_lost_event);
+        break;
+      case eLeapEventType_Device:
+        handleDeviceEvent(msg.device_event);
+        break;
+      case eLeapEventType_DeviceLost:
+        // handleDeviceLostEvent(msg.device_event);
+        break;
+      case eLeapEventType_DeviceFailure:
+        // handleDeviceFailureEvent(msg.device_failure_event);
+        break;
+      case eLeapEventType_Tracking:
+        // handleTrackingEvent(msg.tracking_event);
+        break;
+      case eLeapEventType_ImageComplete:
+        // Ignore
+        break;
+      case eLeapEventType_ImageRequestError:
+        // Ignore
+        break;
+      case eLeapEventType_LogEvent:
+        // handleLogEvent(msg.log_event);
+        break;
+      case eLeapEventType_Policy:
+        // handlePolicyEvent(msg.policy_event);
+        break;
+      case eLeapEventType_ConfigChange:
+        // handleConfigChangeEvent(msg.config_change_event);
+        break;
+      case eLeapEventType_ConfigResponse:
+        // handleConfigResponseEvent(msg.config_response_event);
+        break;
+      case eLeapEventType_Image:
+        // handleImageEvent(msg.image_event);
+        break;
+      case eLeapEventType_PointMappingChange:
+        // handlePointMappingChangeEvent(msg.point_mapping_change_event);
+        break;
+      case eLeapEventType_TrackingMode:
+        // handleTrackingModeEvent(msg.tracking_mode_event);
+        break;
+      case eLeapEventType_LogEvents:
+        // handleLogEvents(msg.log_events);
+        break;
+      case eLeapEventType_HeadPose:
+        // handleHeadPoseEvent(msg.head_pose_event);
+        break;
+      case eLeapEventType_IMU:
+        // handleImuEvent(msg.imu_event);
+        break;
+      default:
+        //discard unknown message types
+        printf("Unhandled message type %i.\n", msg.type);
+    } //switch on msg.type
+  }
+}
+void LeapConnect::OpenConnection(void){
+  if(_isRunning){
+    return;
+  }
+  if(connectionHandle || LeapCreateConnection(NULL, &connectionHandle) == eLeapRS_Success){
+    eLeapRS result = LeapOpenConnection(connectionHandle);
+    if(result == eLeapRS_Success){
+      _isRunning = true;
+      InitializeCriticalSection(&dataLock);
+      pollingThread = std::thread(&LeapConnect::serviceMessageLoop, this);
+    }
+  }
+}
+
+void LeapConnect::CloseConnection(void){
+  if(!_isRunning){
+    return;
+  }
+  _isRunning = false;
+  LeapCloseConnection(connectionHandle);
+  pollingThread.join();
+}
+
+void LeapConnect::DestroyConnection(void){
+  CloseConnection();
+  LeapDestroyConnection(connectionHandle);
+}
+
+const char* LeapConnect::ResultString(eLeapRS r) {
+  switch(r){
+    case eLeapRS_Success:                  return "eLeapRS_Success";
+    case eLeapRS_UnknownError:             return "eLeapRS_UnknownError";
+    case eLeapRS_InvalidArgument:          return "eLeapRS_InvalidArgument";
+    case eLeapRS_InsufficientResources:    return "eLeapRS_InsufficientResources";
+    case eLeapRS_InsufficientBuffer:       return "eLeapRS_InsufficientBuffer";
+    case eLeapRS_Timeout:                  return "eLeapRS_Timeout";
+    case eLeapRS_NotConnected:             return "eLeapRS_NotConnected";
+    case eLeapRS_HandshakeIncomplete:      return "eLeapRS_HandshakeIncomplete";
+    case eLeapRS_BufferSizeOverflow:       return "eLeapRS_BufferSizeOverflow";
+    case eLeapRS_ProtocolError:            return "eLeapRS_ProtocolError";
+    case eLeapRS_InvalidClientID:          return "eLeapRS_InvalidClientID";
+    case eLeapRS_UnexpectedClosed:         return "eLeapRS_UnexpectedClosed";
+    case eLeapRS_UnknownImageFrameRequest: return "eLeapRS_UnknownImageFrameRequest";
+    case eLeapRS_UnknownTrackingFrameID:   return "eLeapRS_UnknownTrackingFrameID";
+    case eLeapRS_RoutineIsNotSeer:         return "eLeapRS_RoutineIsNotSeer";
+    case eLeapRS_TimestampTooEarly:        return "eLeapRS_TimestampTooEarly";
+    case eLeapRS_ConcurrentPoll:           return "eLeapRS_ConcurrentPoll";
+    case eLeapRS_NotAvailable:             return "eLeapRS_NotAvailable";
+    case eLeapRS_NotStreaming:             return "eLeapRS_NotStreaming";
+    case eLeapRS_CannotOpenDevice:         return "eLeapRS_CannotOpenDevice";
+    default:                               return "unknown result type.";
+  }
+}
+
+void LeapConnect::setDevice(const LEAP_DEVICE_INFO *deviceProps){
+    LockMutex(&dataLock);
+    if(lastDevice){
+        free(lastDevice->serial);
+    } else {
+        lastDevice = (LEAP_DEVICE_INFO*)malloc(sizeof(*deviceProps));
+    }
+    *lastDevice = *deviceProps;
+    lastDevice->serial = (char*)malloc(deviceProps->serial_length);
+    memcpy(lastDevice->serial, deviceProps->serial, deviceProps->serial_length);
+    UnlockMutex(&dataLock);
+}
+
+/** Returns a pointer to the cached device info. */
+LEAP_DEVICE_INFO* LeapConnect::GetDeviceProperties(){
+    LEAP_DEVICE_INFO *currentDevice;
+    LockMutex(&dataLock);
+    currentDevice = lastDevice;
+    UnlockMutex(&dataLock);
+    return currentDevice;
+}

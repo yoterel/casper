@@ -12,7 +12,7 @@
 #include <vector>
 using namespace std;
 
-#define MAX_BONE_INFLUENCE 4
+#define MAX_BONE_WEIGHTS 4
 
 struct Vertex {
     // position
@@ -26,9 +26,9 @@ struct Vertex {
     // bitangent
     glm::vec3 Bitangent;
 	//bone indexes which will influence this vertex
-	int m_BoneIDs[MAX_BONE_INFLUENCE];
+	int m_BoneIDs[MAX_BONE_WEIGHTS];
 	//weights from each bone
-	float m_Weights[MAX_BONE_INFLUENCE];
+	float m_Weights[MAX_BONE_WEIGHTS];
 };
 
 struct Texture {

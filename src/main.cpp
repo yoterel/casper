@@ -16,6 +16,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "leap.h"
 
 using namespace std::literals::chrono_literals;
 
@@ -26,9 +27,10 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 // unsigned int compile_shaders();
-unsigned int setup_cam_buffers();
-unsigned int setup_model_buffers();
-void saveImage(char* filepath, GLFWwindow* w);
+unsigned int setup_canvas_buffers();
+unsigned int setup_cube_buffers();
+void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO);
+// void saveImage(char* filepath, GLFWwindow* w);
 // settings
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
@@ -39,8 +41,8 @@ float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
 // timing
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
+double deltaTime = 0.0;
+double lastFrame = 0.0;
 
 int main( int /*argc*/, char* /*argv*/[] )
 {
@@ -75,19 +77,23 @@ int main( int /*argc*/, char* /*argv*/[] )
     glfwSwapInterval(0);  // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height);  // set viewport
     glEnable(GL_DEPTH_TEST);  // enable depth testing
-    glClearColor(0.5f, 0.5f, 0.5f, 1.0f); // glClearColor(0.2f, 0.3f, 0.3f, 1.0f); 
+    glClearColor(0.5f, 0.5f, 0.5f, 1.0f); // glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glPointSize(10.0f);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  // callback for resizing
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     // tell GLFW to capture our mouse
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     // setup buffers
-    unsigned int camVAO = setup_cam_buffers();
+    unsigned int camVAO = setup_canvas_buffers();
+    unsigned int skeletonVAO, skeletonVBO;
+    setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
     // setup 3d objects
     Model ourModel("C:/src/augmented_hands/resource/backpack/backpack.obj");
     // setup shaders
-    Shader camShader("C:/src/augmented_hands/src/cam.vs", "C:/src/augmented_hands/src/cam.fs");
-    Shader modelShader("C:/src/augmented_hands/src/model.vs", "C:/src/augmented_hands/src/model.fs");
+    Shader canvasShader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
+    Shader modelShader("C:/src/augmented_hands/src/shaders/model.vs", "C:/src/augmented_hands/src/shaders/model.fs");
+    Shader skeletonShader("C:/src/augmented_hands/src/shaders/skeleton.vs", "C:/src/augmented_hands/src/shaders/skeleton.fs");
     // unsigned int modelVAO = setup_model_buffers();
     //setup textures
 
@@ -106,10 +112,11 @@ int main( int /*argc*/, char* /*argv*/[] )
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // create transformation matrices
+    glm::mat4 canvas_model_mat = glm::mat4(1.0f);
+    glm::mat4 skeleton_model_mat = glm::mat4(1.0f);
     glm::mat4 mesh_model_mat = glm::mat4(1.0f);
     // model_mat = glm::rotate(model_mat, glm::radians(-55.0f), glm::vec3(0.5f, 1.0f, 0.0f));
     mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(0.5f, 0.5f, 0.5f));
-    glm::mat4 canvas_model_mat = glm::mat4(1.0f);
     // glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
     // canvas_model_mat = glm::scale(canvas_model_mat, glm::vec3(0.75f, 0.75f, 1.0f));  // 2.0f, 2.0f, 2.0f
     glm::mat4 view_mat = glm::mat4(1.0f);
@@ -122,20 +129,28 @@ int main( int /*argc*/, char* /*argv*/[] )
     // glm::mat4 projection_mat = glm::frustum(-(float)proj_width*0.5f, (float)proj_width*0.5f, -(float)proj_height*0.5f, (float)proj_height*0.5f, 0.1f, 100.0f);
     // setup shader inputs
     float bg_thresh = 0.08f;
-    camShader.use();
-    camShader.setInt("camera_texture", 0);
-    camShader.setFloat("threshold", bg_thresh);
-    camShader.setMat4("model", canvas_model_mat);
-    camShader.setMat4("view", view_mat);
-    camShader.setMat4("projection", projection_mat);
+    canvasShader.use();
+    canvasShader.setInt("camera_texture", 0);
+    canvasShader.setFloat("threshold", bg_thresh);
+    canvasShader.setMat4("model", canvas_model_mat);
+    canvasShader.setMat4("view", view_mat);
+    canvasShader.setMat4("projection", projection_mat);
     modelShader.use();
     modelShader.setMat4("model", mesh_model_mat);
     modelShader.setMat4("view", view_mat);
     modelShader.setMat4("projection", projection_mat);
+    skeletonShader.use();
+    skeletonShader.setMat4("model", skeleton_model_mat);
+    skeletonShader.setMat4("view", view_mat);
+    skeletonShader.setMat4("projection", projection_mat);
     
     // initialize
-    float previousTime = static_cast<float>(glfwGetTime());
+    double previousTime = glfwGetTime();
+    double currentFrame = glfwGetTime();
+    double whole = 0.0;
     int frameCount = 0;
+    int64_t targetFrameTime = 0;
+    uint64_t targetFrameSize = 0;
     // bool save_flag = true;
     bool close_signal = false;
     bool use_pbo = false;
@@ -149,6 +164,11 @@ int main( int /*argc*/, char* /*argv*/[] )
     if (!projector.init()) {
         std::cerr << "Failed to initialize projector\n";
     }
+    LeapConnect leap;
+    // LEAP_DEVICE_INFO* info = leap.GetDeviceProperties();
+    // std::cout << "leap connected with serial: " << info->serial << std::endl;
+    LEAP_CLOCK_REBASER clockSynchronizer;
+    LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer;
 
     // actual thread loops
@@ -176,7 +196,9 @@ int main( int /*argc*/, char* /*argv*/[] )
     {
         // per-frame time logic
         // --------------------
-        float currentFrame = static_cast<float>(glfwGetTime());
+        currentFrame = glfwGetTime();
+        std::modf(currentFrame, &whole);
+        LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), LeapGetNow());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
         frameCount++;
@@ -214,17 +236,70 @@ int main( int /*argc*/, char* /*argv*/[] )
         // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         glm::mat4 projection = glm::perspective(glm::radians(gl_camera.Zoom), (float)proj_width / (float)proj_height, 0.1f, 100.0f);
         glm::mat4 view = gl_camera.GetViewMatrix();
-        camShader.use();
-        camShader.setMat4("projection", projection);
-        camShader.setMat4("view", view);
-        // camShader.setMat4("view", view_mat);
-        // camShader.setInt("camera_texture", 0);
-        glBindVertexArray(camVAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        canvasShader.use();
+        canvasShader.setMat4("projection", projection);
+        canvasShader.setMat4("view", view);
+        // canvasShader.setMat4("view", view_mat);
+        // canvasShader.setInt("camera_texture", 0);
+        // glBindVertexArray(camVAO);
+        // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         modelShader.use();
         modelShader.setMat4("projection", projection);
         modelShader.setMat4("view", view);
-        ourModel.Draw(modelShader);
+        // ourModel.Draw(modelShader);
+        std::modf(glfwGetTime(), &whole);
+        LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+        //Get the buffer size needed to hold the tracking data
+        if(LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime, &targetFrameSize) == eLeapRS_Success)
+        {
+            //Allocate enough memory
+            LEAP_TRACKING_EVENT* interpolatedFrame = (LEAP_TRACKING_EVENT*)malloc((size_t)targetFrameSize);
+            //Get the frame
+            if(LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime, interpolatedFrame, targetFrameSize) == eLeapRS_Success)
+            {
+                //Use the data...
+                // std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
+                // std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
+                // std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
+                std::vector<float> vertices;
+                for(uint32_t h = 0; h < interpolatedFrame->nHands; h++)
+                {
+                    LEAP_HAND* hand = &interpolatedFrame->pHands[h];                    
+                    for(uint32_t f = 0; f < 5; f++)
+                    {
+                        LEAP_DIGIT finger = hand->digits[f];
+                        for(uint32_t b = 0; b < 4; b++)
+                        {
+                            LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
+                            LEAP_VECTOR joint2 = finger.bones[b].next_joint;
+                            vertices.push_back(joint1.x/100.0f);
+                            vertices.push_back(joint1.y/100.0f);
+                            vertices.push_back(joint1.z/100.0f);
+                            vertices.push_back(1.0f);
+                            vertices.push_back(0.0f);
+                            vertices.push_back(0.0f);
+                            vertices.push_back(joint2.x/100.0f);
+                            vertices.push_back(joint2.y/100.0f);
+                            vertices.push_back(joint2.z/100.0f);
+                            vertices.push_back(1.0f);
+                            vertices.push_back(0.0f);
+                            vertices.push_back(0.0f);
+                        }
+                    }
+                    // std::cout << vertices[0] << "," << vertices[1] << "," << vertices[2] <<std::endl;
+                    glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
+                    glBufferData(GL_ARRAY_BUFFER,  sizeof(float)*vertices.size(), vertices.data(), GL_STATIC_DRAW);
+                }
+                
+                //Free the allocated buffer when done.
+                free(interpolatedFrame);
+            }
+        }
+        skeletonShader.use();
+        skeletonShader.setMat4("projection", projection);
+        skeletonShader.setMat4("view", view);
+        glBindVertexArray(skeletonVAO);
+        glDrawArrays(GL_LINES, 0, 40);
         // render the loaded model
         // glm::mat4 model = glm::mat4(1.0f);
         // mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
@@ -362,7 +437,33 @@ int main( int /*argc*/, char* /*argv*/[] )
     return 0;
 }
 
-unsigned int setup_cam_buffers()
+void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO)
+{
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    float vertices[] = {
+    // positions         // colors
+     0.5f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f,   // bottom right
+    -0.5f, -0.5f, 0.0f,  0.0f, 1.0f, 0.0f,   // bottom left
+     0.0f,  0.5f, 0.0f,  0.0f, 0.0f, 1.0f    // top 
+    };
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // color attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+}
+
+unsigned int setup_canvas_buffers()
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
@@ -405,7 +506,7 @@ unsigned int setup_cam_buffers()
     return VAO;
 }
 
-unsigned int setup_model_buffers()
+unsigned int setup_cube_buffers()
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
@@ -470,20 +571,20 @@ unsigned int setup_model_buffers()
     return VAO;
 }
 
-void saveImage(char* filepath, GLFWwindow* w) {
-    int width, height;
-    glfwGetFramebufferSize(w, &width, &height);
-    GLsizei nrChannels = 3;
-    GLsizei stride = nrChannels * width;
-    stride += (stride % 4) ? (4 - stride % 4) : 0;
-    GLsizei bufferSize = stride * height;
-    std::vector<char> buffer(bufferSize);
-    glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    glReadBuffer(GL_FRONT);
-    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer.data());
-    // stbi_flip_vertically_on_write(true);
-    // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
-}
+// void saveImage(char* filepath, GLFWwindow* w) {
+//     int width, height;
+//     glfwGetFramebufferSize(w, &width, &height);
+//     GLsizei nrChannels = 3;
+//     GLsizei stride = nrChannels * width;
+//     stride += (stride % 4) ? (4 - stride % 4) : 0;
+//     GLsizei bufferSize = stride * height;
+//     std::vector<char> buffer(bufferSize);
+//     glPixelStorei(GL_PACK_ALIGNMENT, 4);
+//     glReadBuffer(GL_FRONT);
+//     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer.data());
+//     // stbi_flip_vertically_on_write(true);
+//     // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
+// }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
