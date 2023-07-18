@@ -17,42 +17,42 @@ class CConfigurationEventPrinter : public CConfigurationEventHandler
 
         void OnOpen( CInstantCamera& camera )
         {
-            std::cout << "OnOpen event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnOpen event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnOpened( CInstantCamera& camera )
         {
-            std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnGrabStart( CInstantCamera& camera )
         {
-            std::cout << "OnGrabStart event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnGrabStart event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnGrabStarted( CInstantCamera& camera )
         {
-            std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnGrabStop( CInstantCamera& camera )
         {
-            std::cout << "OnGrabStop event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnGrabStop event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnGrabStopped( CInstantCamera& camera )
         {
-            std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnClose( CInstantCamera& camera )
         {
-            std::cout << "OnClose event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnClose event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnClosed( CInstantCamera& camera )
         {
-            std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnDestroy( CInstantCamera& camera )
@@ -347,6 +347,7 @@ void BaslerCamera::init(blocking_queue<CPylonImage>& camera_queue, bool& close_s
         camera.RegisterImageEventHandler( new MyImageEventHandler(camera_queue, close_signal, height, width), RegistrationMode_Append, Cleanup_Delete );
         camera.Open();
         is_open = true;
+        std::cout << "basler camera initialized." << std::endl;
     }
     catch (const GenericException& e)
     {
@@ -411,6 +412,15 @@ void BaslerCamera::acquire()
         std::cerr << "An exception occurred." << std::endl << e.GetDescription() << std::endl;
     }
 }
+
+void BaslerCamera::kill()
+{
+    if (!is_open)
+        return;
+    camera.Close();
+    PylonTerminate();
+    std::cout << "basler camera killed." << std::endl;
+}
 #ifdef PYTHON_BINDINGS_BUILD
 
 void BaslerCamera::init_single()
@@ -449,11 +459,5 @@ nb::ndarray<nb::numpy, const uint8_t> BaslerCamera::capture_single()
         return nb::ndarray<nb::numpy, const uint8_t>();
     }
     
-}
-
-void BaslerCamera::kill()
-{
-    camera.Close();
-    PylonTerminate(); 
 }
 #endif

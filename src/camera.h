@@ -16,13 +16,15 @@ class BaslerCamera
 {
 public:
     BaslerCamera(){};
-    ~BaslerCamera(){};  /* PylonTerminate(); */ 
+    ~BaslerCamera(){
+        kill();
+    };  /* PylonTerminate(); */ 
     void init(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width);
     void acquire();
+    void kill();
     #ifdef PYTHON_BINDINGS_BUILD
     void init_single();
     nb::ndarray<nb::numpy, const uint8_t> capture_single();
-    void kill();
     #endif
 private:
     CInstantCamera camera;

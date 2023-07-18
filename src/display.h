@@ -28,6 +28,7 @@ public:
     void show(const cv::Mat frame);
     void show_buffer(const uint8_t* buffer);
     void show();
+    void kill(){gracefully_close();};
     bool is_initialized(){return initialized;};
     void gracefully_close();
     int get_width(){return width;};
@@ -69,7 +70,7 @@ private:
             .def(nb::init<const int, const int>(), nb::arg("width"), nb::arg("height"), "a class to control a dynaflash projector")
             .def("init", &DynaFlashProjector::init, "initializes the projector")
             .def("is_initialized", &DynaFlashProjector::is_initialized, "returns true if the projector is initialized")
-            .def("kill", &DynaFlashProjector::gracefully_close, "frees the internal projector resources")
+            .def("kill", &DynaFlashProjector::kill, "frees the internal projector resources")
             .def("project_white", nb::overload_cast<>(&DynaFlashProjector::show), "projects a white image")
             .def("project", &DynaFlashProjector::project, "projects an arbitrary buffer of size width*height*3");
     }

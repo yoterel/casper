@@ -27,7 +27,7 @@ public:
         std::unique_lock<std::mutex> lock(this->d_mutex);
         this->d_condition.wait(lock, [=]{ return !this->d_queue.empty(); });
         T rc(std::move(this->d_queue.front()));
-        this->d_queue.pop_front();
+        this->d_queue.clear();
         return rc;
     }
     bool pop_with_timeout(int timeout_ms, T& value) {

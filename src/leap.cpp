@@ -2,46 +2,74 @@
 
 /** Called by serviceMessageLoop() when a connection event is returned by LeapPollConnection(). */
 void LeapConnect::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event){
-  IsConnected = true;
-  std::cout << "leap connected." << std::endl;
+    IsConnected = true;
+    std::cout << "leap connected." << std::endl;
 }
 
 /** Called by serviceMessageLoop() when a connection lost event is returned by LeapPollConnection(). */
 void LeapConnect::handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event){
-  IsConnected = false;
+    IsConnected = false;
+}
+
+void LeapConnect::handlePolicyEvent(const LEAP_POLICY_EVENT *policy_event)
+{
+    std::cout << "Policy: " << policy_event->current_policy << std::endl;
+}
+
+void LeapConnect::handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config_change_event)
+{
+    if (config_change_event->status)
+    {
+        std::cout << "Setting config request id: " << config_change_event->requestID << " was successfull."<< std::endl;
+    }
+    else
+    {
+        std::cout << "Setting config request id: " << config_change_event->requestID << " failed."<< std::endl;
+    }
+  
+}
+void LeapConnect::handleConfigResponseEvent(const LEAP_CONFIG_RESPONSE_EVENT *config_response_event)
+{
+    std::cout << "The config for request id: " << config_response_event->requestID << " is: " << config_response_event->value.strValue << std::endl;
+}
+
+void LeapConnect::handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent){
+    std::cout << "Received image set for frame "<< (long long int)imageEvent->info.frame_id <<
+              "with size " << (long long int)imageEvent->image[0].properties.width*
+           (long long int)imageEvent->image[0].properties.height*2 << std::endl;
 }
 
 void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event){
-  LEAP_DEVICE deviceHandle;
-  //Open device using LEAP_DEVICE_REF from event struct.
-  eLeapRS result = LeapOpenDevice(device_event->device, &deviceHandle);
-  if(result != eLeapRS_Success){
-    printf("Could not open device %s.\n", ResultString(result));
-    return;
-  }
-
-  //Create a struct to hold the device properties, we have to provide a buffer for the serial string
-  LEAP_DEVICE_INFO deviceProperties = { sizeof(deviceProperties) };
-  // Start with a length of 1 (pretending we don't know a priori what the length is).
-  // Currently device serial numbers are all the same length, but that could change in the future
-  deviceProperties.serial_length = 1;
-  deviceProperties.serial = (char*)malloc(deviceProperties.serial_length);
-  //This will fail since the serial buffer is only 1 character long
-  // But deviceProperties is updated to contain the required buffer length
-  result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
-  if(result == eLeapRS_InsufficientBuffer){
-    //try again with correct buffer size
-    deviceProperties.serial = (char*)realloc(deviceProperties.serial, deviceProperties.serial_length);
-    result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
+    LEAP_DEVICE deviceHandle;
+    //Open device using LEAP_DEVICE_REF from event struct.
+    eLeapRS result = LeapOpenDevice(device_event->device, &deviceHandle);
     if(result != eLeapRS_Success){
-      printf("Failed to get device info %s.\n", ResultString(result));
-      free(deviceProperties.serial);
-      return;
+        printf("Could not open device %s.\n", ResultString(result));
+        return;
     }
-  }
-  setDevice(&deviceProperties);
-  free(deviceProperties.serial);
-  LeapCloseDevice(deviceHandle);
+
+    //Create a struct to hold the device properties, we have to provide a buffer for the serial string
+    LEAP_DEVICE_INFO deviceProperties = { sizeof(deviceProperties) };
+    // Start with a length of 1 (pretending we don't know a priori what the length is).
+    // Currently device serial numbers are all the same length, but that could change in the future
+    deviceProperties.serial_length = 1;
+    deviceProperties.serial = (char*)malloc(deviceProperties.serial_length);
+    //This will fail since the serial buffer is only 1 character long
+    // But deviceProperties is updated to contain the required buffer length
+    result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
+    if(result == eLeapRS_InsufficientBuffer){
+        //try again with correct buffer size
+        deviceProperties.serial = (char*)realloc(deviceProperties.serial, deviceProperties.serial_length);
+        result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
+        if(result != eLeapRS_Success){
+            printf("Failed to get device info %s.\n", ResultString(result));
+            free(deviceProperties.serial);
+            return;
+        }
+    }
+    setDevice(&deviceProperties);
+    free(deviceProperties.serial);
+    LeapCloseDevice(deviceHandle);
 }
 
 void LeapConnect::serviceMessageLoop(){
@@ -52,7 +80,7 @@ void LeapConnect::serviceMessageLoop(){
     result = LeapPollConnection(connectionHandle, timeout, &msg);
 
     if(result != eLeapRS_Success){
-      printf("LeapC PollConnection call was %s.\n", ResultString(result));
+      std::cout << "LeapC PollConnection call was:" << ResultString(result) << std::endl;
       continue;
     }
 
@@ -85,16 +113,16 @@ void LeapConnect::serviceMessageLoop(){
         // handleLogEvent(msg.log_event);
         break;
       case eLeapEventType_Policy:
-        // handlePolicyEvent(msg.policy_event);
+        handlePolicyEvent(msg.policy_event);
         break;
       case eLeapEventType_ConfigChange:
-        // handleConfigChangeEvent(msg.config_change_event);
+        handleConfigChangeEvent(msg.config_change_event);
         break;
       case eLeapEventType_ConfigResponse:
-        // handleConfigResponseEvent(msg.config_response_event);
+        handleConfigResponseEvent(msg.config_response_event);
         break;
       case eLeapEventType_Image:
-        // handleImageEvent(msg.image_event);
+        handleImageEvent(msg.image_event);
         break;
       case eLeapEventType_PointMappingChange:
         // handlePointMappingChangeEvent(msg.point_mapping_change_event);
@@ -113,9 +141,10 @@ void LeapConnect::serviceMessageLoop(){
         break;
       default:
         //discard unknown message types
-        printf("Unhandled message type %i.\n", msg.type);
+        std::cout << "Unhandled message type: " << msg.type << std::endl;
     } //switch on msg.type
   }
+  // std::cout << "leap service loop finished." << std::endl;
 }
 void LeapConnect::OpenConnection(void){
   if(_isRunning){
@@ -140,9 +169,13 @@ void LeapConnect::CloseConnection(void){
   pollingThread.join();
 }
 
-void LeapConnect::DestroyConnection(void){
+void LeapConnect::kill(void){
+  if(!_isRunning){
+    return;
+  }
   CloseConnection();
   LeapDestroyConnection(connectionHandle);
+  std::cout << "leap killed." << std::endl;
 }
 
 const char* LeapConnect::ResultString(eLeapRS r) {

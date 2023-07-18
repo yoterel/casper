@@ -128,6 +128,7 @@ void DynaFlashProjector::gracefully_close()
 		/* release instance of DynaFlash class */
 		ReleaseDynaFlash(&pDynaFlash);
 		initialized = false;
+		std::cout << "dynaflash killed." << std::endl;
 	}
 }
 
