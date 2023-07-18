@@ -95,12 +95,12 @@ target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/d
 target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 
 ######################################### sample program
-add_executable(leapc_example 
-    src/leap_connect.h
-    src/leap_connect.cpp
-    src/leap_example.cpp
-)
-target_link_libraries(leapc_example PRIVATE LeapSDK::LeapC)
+# add_executable(leapc_example 
+#     src/leap_connect.h
+#     src/leap_connect.cpp
+#     src/leap_example.cpp
+# )
+# target_link_libraries(leapc_example PRIVATE LeapSDK::LeapC)
 # add_executable(sample_program 
 #     src/sample_program.cpp
 # )
