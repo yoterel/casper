@@ -527,7 +527,7 @@ void SkinnedModel::CalcInterpolatedScaling(aiVector3D& Out, float AnimationTimeT
 }
 
 
-void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms);
+void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms)
 {
     glm::mat4 iden = glm::mat4(1.0f);
 
@@ -551,7 +551,7 @@ void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::ma
         }
         else 
         {
-            Transforms[leap_bone_map[i]] = leap_bone_transforms[i];
+            Transforms[m_BoneNameToIndexMap[leap_bone_map[i]]] = leap_bone_transforms[i];
         }
             
     }

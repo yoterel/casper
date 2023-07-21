@@ -46,7 +46,7 @@ add_executable(ahand
     src/display.cpp
     src/camera.cpp
     src/SerialPort.cpp
-    src/model.cpp
+    # src/model.cpp
     src/timer.cpp
     src/leap.cpp
     src/texture.cpp
@@ -73,6 +73,8 @@ target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/li
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
 # leap
 target_link_libraries(ahand PRIVATE LeapSDK::LeapC)
+# stb
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp
