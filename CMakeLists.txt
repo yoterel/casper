@@ -24,9 +24,9 @@ find_package(nanobind CONFIG REQUIRED)
 ################ dyna flash python bindings
 nanobind_add_module(dynaflash 
     src/display.cpp
-    src/display.h
 )
 target_compile_definitions(dynaflash PRIVATE PYTHON_BINDINGS_BUILD)
+target_include_directories(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_include_directories(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
 target_link_libraries(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 target_link_libraries(dynaflash PRIVATE ${OpenCV_LIBS})
@@ -34,10 +34,9 @@ target_link_libraries(dynaflash PRIVATE ${OpenCV_LIBS})
 ################ basler camera python bindings
 nanobind_add_module(basler 
     src/camera.cpp
-    src/camera.h
-    src/queue.h
 )
 target_compile_definitions(basler PRIVATE PYTHON_BINDINGS_BUILD)
+target_include_directories(basler PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(basler PRIVATE pylon::pylon)
 target_link_libraries(basler PRIVATE ${OpenCV_LIBS})
 
@@ -45,26 +44,18 @@ target_link_libraries(basler PRIVATE ${OpenCV_LIBS})
 add_executable(ahand 
     src/main.cpp
     src/display.cpp
-    src/display.h
     src/camera.cpp
-    src/camera.h
     src/SerialPort.cpp
-    src/SerialPort.h
-    src/shader.h
-    src/mesh.h
-    src/model.h
     src/model.cpp
     src/timer.cpp
-    src/timer.h
-    src/stb_image.h
-    src/stb_image_write.h
-    src/gl_camera.h
-    src/assimp_helpers.h
-    src/leap.h
     src/leap.cpp
+    src/texture.cpp
+    src/skinned_model.cpp
+    src/skinned_shader.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
-target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
+# target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(ahand PRIVATE pylon::pylon)
 target_link_libraries(ahand PRIVATE ${OpenCV_LIBS})
 # dynaflash
@@ -85,11 +76,10 @@ target_link_libraries(ahand PRIVATE LeapSDK::LeapC)
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp
-    src/UnityPlugin.h
     src/display.cpp
-    src/display.h
 )
 target_compile_definitions(AHUnityPlugin PRIVATE NATIVECPPLIBRARY_EXPORTS DLL_BUILD)
+target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
 target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})

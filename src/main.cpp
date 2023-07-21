@@ -6,13 +6,12 @@
 #include "display.h"
 #include "SerialPort.h"
 #include "shader.h"
-#include "model.h"
+#include "skinned_shader.h"
+#include "skinned_model.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include "timer.h"
-// #include "stb_image.h"
-// #include "stb_image_write.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -91,11 +90,13 @@ int main( int /*argc*/, char* /*argv*/[] )
     unsigned int gizmoVAO, gizmoVBO;
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
     // setup 3d objects
-    Model ourModel("C:/src/augmented_hands/resource/backpack/backpack.obj");
+    // Model ourModel("C:/src/augmented_hands/resource/backpack/backpack.obj");
+    SkinnedModel ourModel("C:/src/augmented_hands/resource/GenericHand.fbx");
     // setup shaders
     Shader canvasShader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
     Shader modelShader("C:/src/augmented_hands/src/shaders/model.vs", "C:/src/augmented_hands/src/shaders/model.fs");
     Shader vcolorShader("C:/src/augmented_hands/src/shaders/color_by_vertex.vs", "C:/src/augmented_hands/src/shaders/color_by_vertex.fs");
+    SkinnedShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
     // unsigned int modelVAO = setup_model_buffers();
     //setup textures
 
