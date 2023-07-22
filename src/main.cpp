@@ -14,6 +14,7 @@
 #include "timer.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "leap.h"
 
@@ -36,7 +37,7 @@ const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int image_size = proj_width * proj_height * 3;
 // camera
-GLCamera gl_camera(glm::vec3(0.0f, 0.0f, 2.41f));
+GLCamera gl_camera(glm::vec3(0.0f, 0.0f, 10.0f));
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
@@ -157,12 +158,14 @@ int main( int /*argc*/, char* /*argv*/[] )
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     std::vector<float> skeleton_vertices;
+    std::vector<glm::mat4> skeleton_bone_transforms;
     size_t n_skeleton_primitives = 0;
     // bool save_flag = true;
     bool close_signal = false;
+    bool hand_in_frame = false;
     bool use_pbo = false;
     int leap_time_delay = 50000;  // us
-    bool producer_is_fake = false;
+    bool producer_is_fake = true;
     uint8_t* colorBuffer = new uint8_t[image_size];
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
@@ -186,9 +189,15 @@ int main( int /*argc*/, char* /*argv*/[] )
         cam_width = 720;
         producer = std::thread([&camera_queue, &close_signal, &cam_height, &cam_width]() {  //, &projector
             CPylonImage image = CPylonImage::Create( PixelType_RGB8packed, cam_width, cam_height);
+            Timer t_block;
+            t_block.start();
             while (!close_signal) {
                 camera_queue.push(image);
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                while (t_block.getElapsedTimeInMicroSec() < 1000.0)
+                {
+                }
+                t_block.stop();
+                t_block.start();
             }
             std::cout << "Producer finish" << std::endl;
         });
@@ -215,13 +224,19 @@ int main( int /*argc*/, char* /*argv*/[] )
         {
             // Display the frame count here any way you want.
             std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
-            std::cout << "last wait_for_cam time: " << t0.getElapsedTimeInMilliSec() << std::endl;
-            std::cout << "last Cam->GPU time: " << t1.getElapsedTimeInMilliSec() << std::endl;
-            std::cout << "last Processing time: " << t2.getElapsedTimeInMilliSec() << std::endl;
-            std::cout << "last GPU->CPU time: " << t3.getElapsedTimeInMilliSec() << std::endl;
-            std::cout << "last project time: " << t4.getElapsedTimeInMilliSec() << std::endl;
+            std::cout << "last wait_for_cam time: " << t0.averageLap() << std::endl;
+            std::cout << "last Cam->GPU time: " << t1.averageLap() << std::endl;
+            std::cout << "last Processing time: " << t2.averageLap() << std::endl;
+            std::cout << "last GPU->CPU time: " << t3.averageLap() << std::endl;
+            std::cout << "last project time: " << t4.averageLap() << std::endl;
+            std::cout << "cam q size: " << camera_queue.size() << std::endl;
             frameCount = 0;
             previousTime = currentFrame;
+            t0.reset();
+            t1.reset();
+            t2.reset();
+            t3.reset();
+            t4.reset();
         }
         // input
         processInput(window);
@@ -241,20 +256,18 @@ int main( int /*argc*/, char* /*argv*/[] )
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, cam_width, cam_height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer);
         t1.stop();
         t2.start();
+
+        /* draw canvas as bg */
         glDisable(GL_DEPTH_TEST);  // enable depth testing
-        canvasShader.use();
-        // canvasShader.setMat4("view", view);
-        // canvasShader.setMat4("projection", projection);
-        // canvasShader.setMat4("view", view);
-        // canvasShader.setMat4("view", view_mat);
-        // canvasShader.setInt("camera_texture", 0);
-        glBindVertexArray(canvasVAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        // canvasShader.use();
+        // glBindVertexArray(canvasVAO);
+        // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         glEnable(GL_DEPTH_TEST);  // enable depth testing
-        // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        /* draw canvas as bg */
+
         glm::mat4 view = gl_camera.GetViewMatrix();
-        modelShader.use();
         glm::mat4 projection = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 0.1f, 100.0f); // (float)proj_width / (float)proj_height
+        modelShader.use();
         modelShader.setMat4("projection", projection);
         modelShader.setMat4("view", view);
         // ourModel.Draw(modelShader);
@@ -262,6 +275,7 @@ int main( int /*argc*/, char* /*argv*/[] )
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         //Get the buffer size needed to hold the tracking data
         skeleton_vertices.clear();
+        skeleton_bone_transforms.clear();
         if(LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime+leap_time_delay, &targetFrameSize) == eLeapRS_Success)
         {
             //Allocate enough memory
@@ -271,17 +285,57 @@ int main( int /*argc*/, char* /*argv*/[] )
             {
                 //Use the data...
                 // std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
-                std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
+                // std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
                 // std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
-                float manual_shift_x = -0.5f;
-                float manual_shift_y = 1.0f;
-                float manual_shift_z = 2.0f;
-                float manual_scale = 0.01f;
+                float manual_shift_x = 0.0f; //-0.5f;
+                float manual_shift_y = 0.0f; //1.0f;
+                float manual_shift_z = 0.0f; //2.0f;
+                float manual_scale = 0.1f;  //to cm
+                if (interpolatedFrame->nHands > 0)
+                {
+                    if (!hand_in_frame)
+                    {
+                        std::cout << "hand in frame" << std::endl;
+                    }
+                    hand_in_frame = true;
+                }
+                else
+                {
+                    if (hand_in_frame)
+                    {
+                        std::cout << "no hand in frame" << std::endl;
+                    }
+                    hand_in_frame = false;
+                }
                 for(uint32_t h = 0; h < interpolatedFrame->nHands; h++)
                 {
-                    LEAP_HAND* hand = &interpolatedFrame->pHands[h];                    
+                    LEAP_HAND* hand = &interpolatedFrame->pHands[h];
+                    glm::vec3 palm_pos = glm::vec3(hand->palm.position.x*manual_scale,
+                                                   hand->palm.position.y*manual_scale,
+                                                   hand->palm.position.z*manual_scale);
+                    glm::mat4 palm_orientation = glm::toMat4(glm::quat(hand->palm.orientation.w,
+                                                                        hand->palm.orientation.x,
+                                                                        hand->palm.orientation.y,
+                                                                        hand->palm.orientation.z));
                     LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
                     LEAP_VECTOR arm_j2 = hand->arm.next_joint;
+                    // glm::mat4 local_to_world = glm::mat4(1.0f);
+                    // glm::mat4 rot = glm::toMat4(glm::quat(hand->palm.orientation.w,
+                    //                                     hand->palm.orientation.x,
+                    //                                     hand->palm.orientation.y,
+                    //                                     hand->palm.orientation.z));
+                    // glm::mat4 trans = glm::translate(glm::mat4(1.0f), glm::vec3(manual_shift_x + hand->palm.position.x*manual_scale,
+                    //                                                             manual_shift_y + hand->palm.position.y*manual_scale,
+                    //                                                             manual_shift_z + hand->palm.position.z*manual_scale));
+                    // glm::mat4 rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
+                    //                                     hand->arm.rotation.x,
+                    //                                     hand->arm.rotation.y,
+                    //                                     hand->arm.rotation.z));
+                    // glm::mat4 trans = glm::translate(glm::mat4(1.0f), glm::vec3(manual_shift_x + arm_j1.x*manual_scale,
+                    //                                                             manual_shift_y + arm_j1.y*manual_scale,
+                    //                                                             manual_shift_z + arm_j1.z*manual_scale));
+                    // local_to_world = rot*local_to_world;
+                    // skeleton_bone_transforms.push_back(local_to_world);
                     skeleton_vertices.push_back(manual_shift_x + (arm_j1.x*manual_scale));
                     skeleton_vertices.push_back(manual_shift_y + (-arm_j1.z*manual_scale));
                     skeleton_vertices.push_back(manual_shift_z + (-arm_j1.y*manual_scale));
@@ -313,6 +367,16 @@ int main( int /*argc*/, char* /*argv*/[] )
                             skeleton_vertices.push_back(1.0f);
                             skeleton_vertices.push_back(0.0f);
                             skeleton_vertices.push_back(0.0f);
+                            glm::mat4 rot = glm::toMat4(glm::quat(finger.bones[b].rotation.w,
+                                                        finger.bones[b].rotation.x,
+                                                        finger.bones[b].rotation.y,
+                                                        finger.bones[b].rotation.z));
+                            rot = palm_orientation * rot;
+                            glm::vec3 translate = glm::vec3(joint1.x*manual_scale,
+                                                            -joint1.z*manual_scale,
+                                                            -joint1.y*manual_scale);                                            
+                            glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
+                            skeleton_bone_transforms.push_back(trans*rot);
                         }
                     }
                     // std::cout << vertices[0] << "," << vertices[1] << "," << vertices[2] <<std::endl;
@@ -328,10 +392,20 @@ int main( int /*argc*/, char* /*argv*/[] )
         vcolorShader.use();
         vcolorShader.setMat4("projection", projection);
         vcolorShader.setMat4("view", view);
+        vcolorShader.setMat4("model", glm::mat4(1.0f));
         glBindVertexArray(skeletonVAO);
         glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
-        // glBindVertexArray(gizmoVAO);
-        // glDrawArrays(GL_LINES, 0, 6);
+        glBindVertexArray(gizmoVAO);
+        glDrawArrays(GL_LINES, 0, 6);
+        for (unsigned int i = 0; i < skeleton_bone_transforms.size(); i++)
+        {
+            glm::mat4 local_to_world = glm::mat4(1.0f);
+            local_to_world = skeleton_bone_transforms[i]*local_to_world;
+            // local_to_world = glm::translate(local_to_world, glm::vec3(0.0f, 0.0f, 0.0f));
+            // model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
+            vcolorShader.setMat4("model", local_to_world);
+            glDrawArrays(GL_LINES, 0, 6);
+        }
         // render the loaded model
         // glm::mat4 model = glm::mat4(1.0f);
         // mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down

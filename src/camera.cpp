@@ -57,12 +57,12 @@ class CConfigurationEventPrinter : public CConfigurationEventHandler
 
         void OnDestroy( CInstantCamera& camera )
         {
-            std::cout << "OnDestroy event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+            // std::cout << "OnDestroy event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         }
 
         void OnDestroyed( CInstantCamera& /*camera*/ )
         {
-            std::cout << "OnDestroyed event" << std::endl;
+            // std::cout << "OnDestroyed event" << std::endl;
         }
 
         void OnDetach( CInstantCamera& camera )
@@ -418,7 +418,8 @@ void BaslerCamera::kill()
     if (!is_open)
         return;
     camera.Close();
-    PylonTerminate();
+    // PylonTerminate();
+    is_open = false;
     std::cout << "basler camera killed." << std::endl;
 }
 #ifdef PYTHON_BINDINGS_BUILD

@@ -537,22 +537,54 @@ void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::ma
 
     // ReadNodeHierarchy(AnimationTimeTicks, pScene->mRootNode, Identity);
     Transforms.resize(m_BoneInfo.size());
-
-    for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
-        // Transforms[i] = m_BoneInfo[i].FinalTransformation;
-        // if (i == 0)
-            // test.m[0][0] = sin(TimeInSeconds);
-        Transforms[i] = iden;
+    if (leap_bone_transforms.size() > 0)
+    {
+        for (auto const& x : bone_leap_map)
+        {
+            Transforms[m_BoneNameToIndexMap[x.first]] = leap_bone_transforms[x.second];
+        }
     }
-    for (unsigned int i = 0 ; i < leap_bone_transforms.size() ; i++) {
-        if (leap_bone_map.find(i) == leap_bone_map.end())
-        {
-            continue;
+    else
+    {
+        for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
+            // Transforms[i] = m_BoneInfo[i].FinalTransformation;
+            // if (i == 0)
+                // test.m[0][0] = sin(TimeInSeconds);
+            Transforms[i] = iden;
         }
-        else 
-        {
-            Transforms[m_BoneNameToIndexMap[leap_bone_map[i]]] = leap_bone_transforms[i];
-        }
+    }
+    // for (unsigned int i = 0 ; i < leap_bone_transforms.size() ; i++) {
+    //     if (leap_bone_map.find(i) == leap_bone_map.end())
+    //     {
+    //         continue;
+    //     }
+    //     else 
+    //     {
+    //         Transforms[m_BoneNameToIndexMap[leap_bone_map[i]]] = leap_bone_transforms[i];
+    //     }
             
+    // }
+}
+
+std::string SkinnedModel::GetDirFromFilename(const std::string& Filename)
+{
+    // Extract the directory part from the file name
+    std::string::size_type SlashIndex;
+    SlashIndex = Filename.find_last_of("\\");
+
+    if (SlashIndex == -1) {
+        SlashIndex = Filename.find_last_of("/");
     }
+    std::string Dir;
+
+    if (SlashIndex == std::string::npos) {
+        Dir = ".";
+    }
+    else if (SlashIndex == 0) {
+        Dir = "/";
+    }
+    else {
+        Dir = Filename.substr(0, SlashIndex);
+    }
+    return Dir;
 }

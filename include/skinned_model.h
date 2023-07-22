@@ -30,29 +30,57 @@ public:
     SkinnedModel(const std::string& Filename) 
     {
         LoadMesh(Filename);
-        leap_bone_map = 
+        // leap_bone_map = 
+        // {
+        //     {0, "Wrist"},
+        //     {2, "thumb_a"},
+        //     {3, "thumb_a"},
+        //     {4, "thumb_b"},
+        //     {5, "thumb_end"},
+        //     {6, "index_a"},
+        //     {7, "index_b"},
+        //     {8, "index_c"},
+        //     {9, "index_end"},
+        //     {10, "middle_a"},
+        //     {11, "middle_b"},
+        //     {12, "middle_c"},
+        //     {13, "middle_end"},
+        //     {14, "ring_a"},
+        //     {15, "ring_b"},
+        //     {16, "ring_c"},
+        //     {17, "ring_end"},
+        //     {18, "pinky_a"},
+        //     {20, "pinky_b"},
+        //     {21, "pinky_c"},
+        //     {22, "pinky_end"}
+        // };
+        bone_leap_map = 
         {
-            {0, "Wrist"},
-            {2, "thumb_meta"},
-            {3, "thumb_a"},
-            {4, "thumb_b"},
-            {5, "thumb_end"},
-            {6, "index_meta"},
-            {7, "index_a"},
-            {8, "index_b"},
-            {9, "index_c"},
-            {10, "middle_meta"},
-            {11, "middle_a"},
-            {12, "middle_b"},
-            {13, "middle_c"},
-            {14, "ring_meta"},
-            {15, "ring_a"},
-            {16, "ring_b"},
-            {17, "ring_c"},
-            {18, "pinky_meta"},
-            {19, "pinky_a"},
-            {20, "pinky_b"},
-            {21, "pinky_c"}
+            {"Wrist", 0},
+            {"thumb_meta", 1},
+            {"thumb_a", 3},
+            {"thumb_b", 4},
+            {"thumb_end", 5},
+            {"index_meta", 1},
+            {"index_a", 6},
+            {"index_b", 7},
+            {"index_c", 8},
+            {"index_end", 9},
+            {"middle_meta", 1},
+            {"middle_a", 10},
+            {"middle_b", 11},
+            {"middle_c", 12},
+            {"middle_end", 13},
+            {"ring_meta", 1},
+            {"ring_a", 14},
+            {"ring_b", 15},
+            {"ring_c", 16},
+            {"ring_end", 17},
+            {"pinky_meta", 1},
+            {"pinky_a", 18},
+            {"pinky_b", 19},
+            {"pinky_c", 20},
+            {"pinky_end", 21}
         };
     };
 
@@ -134,7 +162,7 @@ private:
     unsigned int FindScaling(float AnimationTime, const aiNodeAnim* pNodeAnim);
     unsigned int FindRotation(float AnimationTime, const aiNodeAnim* pNodeAnim);
     unsigned int FindPosition(float AnimationTime, const aiNodeAnim* pNodeAnim);
-    const aiNodeAnim* FindNodeAnim(const aiAnimation* pAnimation, const std::string& NodeName);
+    // const aiNodeAnim* FindNodeAnim(const aiAnimation* pAnimation, const std::string& NodeName);
     std::string GetDirFromFilename(const std::string& Filename);
     // void ReadNodeHierarchy(float AnimationTime, const aiNode* pNode, const glm::mat4& ParentTransform);
 
@@ -182,6 +210,7 @@ private:
 
     std::map<std::string, unsigned int> m_BoneNameToIndexMap;
     std::map<unsigned int, std::string> leap_bone_map;
+    std::map<std::string, unsigned int> bone_leap_map;
     struct BoneInfo
     {
         glm::mat4 OffsetMatrix;
