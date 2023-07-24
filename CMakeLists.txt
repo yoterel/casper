@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
 set(Python_EXECUTABLE "C:/Users/sens/.conda/envs/sandbox/python.exe")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
@@ -45,8 +45,9 @@ add_executable(ahand
     src/main.cpp
     src/display.cpp
     src/camera.cpp
+    src/gl_camera.cpp
     src/SerialPort.cpp
-    # src/model.cpp
+    src/text.cpp
     src/timer.cpp
     src/leap.cpp
     src/texture.cpp
@@ -75,6 +76,9 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm"
 target_link_libraries(ahand PRIVATE LeapSDK::LeapC)
 # stb
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# freetype
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
+target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp
@@ -136,4 +140,11 @@ add_custom_command(TARGET ahand
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ASSIMP_DLLS}
+                $<TARGET_FILE_DIR:ahand>)
+
+file(GLOB FREETYPE_DLLS "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/*.dll") 
+add_custom_command(TARGET ahand
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${FREETYPE_DLLS}
                 $<TARGET_FILE_DIR:ahand>)

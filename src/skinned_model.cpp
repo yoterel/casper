@@ -65,7 +65,34 @@ bool SkinnedModel::LoadMesh(const std::string& Filename)
 
     // Make sure the VAO is not changed from the outside
     glBindVertexArray(0);
-
+    bone_leap_map = 
+        {
+            // {"Wrist", 0},
+            // {"thumb_meta", 1},
+            // {"thumb_a", 3},
+            // {"thumb_b", 4},
+            // {"thumb_end", 5},
+            // {"index_meta", 1},
+            {"index_a", 6},
+            {"index_b", 7},
+            {"index_c", 8},
+            {"index_end", 9},
+            // {"middle_meta", 1},
+            // {"middle_a", 10},
+            // {"middle_b", 11},
+            // {"middle_c", 12},
+            // {"middle_end", 13},
+            // {"ring_meta", 1},
+            // {"ring_a", 14},
+            // {"ring_b", 15},
+            // {"ring_c", 16},
+            // {"ring_end", 17},
+            // {"pinky_meta", 1},
+            // {"pinky_a", 18},
+            // {"pinky_b", 19},
+            // {"pinky_c", 20},
+            // {"pinky_end", 21}
+        };
     return Ret;
 }
 
@@ -537,6 +564,12 @@ void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::ma
 
     // ReadNodeHierarchy(AnimationTimeTicks, pScene->mRootNode, Identity);
     Transforms.resize(m_BoneInfo.size());
+    for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
+            // Transforms[i] = m_BoneInfo[i].FinalTransformation;
+            // if (i == 0)
+                // test.m[0][0] = sin(TimeInSeconds);
+            Transforms[i] = iden;
+    }
     if (leap_bone_transforms.size() > 0)
     {
         for (auto const& x : bone_leap_map)
@@ -544,15 +577,15 @@ void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::ma
             Transforms[m_BoneNameToIndexMap[x.first]] = leap_bone_transforms[x.second];
         }
     }
-    else
-    {
-        for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
-            // Transforms[i] = m_BoneInfo[i].FinalTransformation;
-            // if (i == 0)
-                // test.m[0][0] = sin(TimeInSeconds);
-            Transforms[i] = iden;
-        }
-    }
+    // else
+    // {
+    //     for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
+    //         // Transforms[i] = m_BoneInfo[i].FinalTransformation;
+    //         // if (i == 0)
+    //             // test.m[0][0] = sin(TimeInSeconds);
+    //         Transforms[i] = iden;
+    //     }
+    // }
     // for (unsigned int i = 0 ; i < leap_bone_transforms.size() ; i++) {
     //     if (leap_bone_map.find(i) == leap_bone_map.end())
     //     {

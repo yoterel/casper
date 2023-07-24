@@ -17,6 +17,7 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "leap.h"
+#include "text.h"
 
 using namespace std::literals::chrono_literals;
 
@@ -31,13 +32,14 @@ unsigned int setup_canvas_buffers();
 unsigned int setup_cube_buffers();
 void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO);
 void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
+void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 // void saveImage(char* filepath, GLFWwindow* w);
 // settings
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int image_size = proj_width * proj_height * 3;
 // camera
-GLCamera gl_camera(glm::vec3(0.0f, 0.0f, 10.0f));
+GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
@@ -79,6 +81,9 @@ int main( int /*argc*/, char* /*argv*/[] )
     glViewport(0, 0, proj_width, proj_height);  // set viewport
     glClearColor(0.5f, 0.5f, 0.5f, 1.0f); // glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glPointSize(10.0f);
+    // glEnable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  // callback for resizing
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
@@ -90,14 +95,52 @@ int main( int /*argc*/, char* /*argv*/[] )
     setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
     unsigned int gizmoVAO, gizmoVBO;
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
+    unsigned int circleVAO, circleVBO;
+    setup_circle_buffers(circleVAO, circleVBO);
     // setup 3d objects
     // Model ourModel("C:/src/augmented_hands/resource/backpack/backpack.obj");
-    SkinnedModel ourModel("C:/src/augmented_hands/resource/GenericHand.fbx");
+    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx");
+    glm::vec3 coa = skinnedModel.getCenterOfMass();
+    glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
+    glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f,0.0f,0.0f));
+    glm::mat4 flip_y = glm::mat4(1.0f);
+    flip_y[1][1] = -1.0f;
+    glm::mat4 flip_z = glm::mat4(1.0f);
+    flip_z[2][2] = -1.0f;
+    Text text("C:/src/augmented_hands/resource/arial.ttf");
     // setup shaders
     Shader canvasShader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
-    Shader modelShader("C:/src/augmented_hands/src/shaders/model.vs", "C:/src/augmented_hands/src/shaders/model.fs");
+    // Shader modelShader("C:/src/augmented_hands/src/shaders/model.vs", "C:/src/augmented_hands/src/shaders/model.fs");
     Shader vcolorShader("C:/src/augmented_hands/src/shaders/color_by_vertex.vs", "C:/src/augmented_hands/src/shaders/color_by_vertex.fs");
+    Shader textShader("C:/src/augmented_hands/src/shaders/text.vs", "C:/src/augmented_hands/src/shaders/text.fs");
+    textShader.use();
+    glm::mat4 projection = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
+    textShader.setMat4("projection", projection);
     SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
+    PointLight pointLights[SkinningShader::MAX_POINT_LIGHTS];
+    glm::mat4 lightTransform = glm::mat4(1.0f);
+    pointLights[0].AmbientIntensity = 1.0f;
+    pointLights[0].DiffuseIntensity = 1.0f;
+    pointLights[0].Color = glm::vec3(1.0f, 1.0f, 0.0f);
+    pointLights[0].Attenuation.Linear = 0.0f;
+    pointLights[0].Attenuation.Exp = 0.0f;
+
+    pointLights[1].DiffuseIntensity = 0.0f;
+    pointLights[1].Color = glm::vec3(0.0f, 1.0f, 1.0f);
+    pointLights[1].Attenuation.Linear = 0.0f;
+    pointLights[1].Attenuation.Exp = 0.2f;
+    pointLights[0].WorldPosition.x = 0.0f;
+    pointLights[0].WorldPosition.y = 1.0;
+    pointLights[0].WorldPosition.z = 1.0f;
+    pointLights[0].CalcLocalPosition(lightTransform);
+
+    pointLights[1].WorldPosition.x = 10.0f;
+    pointLights[1].WorldPosition.y = 1.0f;
+    pointLights[1].WorldPosition.z = 0.0f;
+    pointLights[1].CalcLocalPosition(lightTransform);
+
+    skinnedShader.SetPointLights(2, pointLights);
+    // glUniformMatrix4fv(glGetUniformLocation(shader.ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     // unsigned int modelVAO = setup_model_buffers();
     //setup textures
 
@@ -141,10 +184,10 @@ int main( int /*argc*/, char* /*argv*/[] )
     // canvasShader.setMat4("model", canvas_model_mat);
     // canvasShader.setMat4("view", view_mat);
     // canvasShader.setMat4("projection", canvas_projection_mat);
-    modelShader.use();
-    modelShader.setMat4("model", mesh_model_mat);
-    modelShader.setMat4("view", view_mat);
-    modelShader.setMat4("projection", perspective_projection_mat);
+    // modelShader.use();
+    // modelShader.setMat4("model", mesh_model_mat);
+    // modelShader.setMat4("view", view_mat);
+    // modelShader.setMat4("projection", perspective_projection_mat);
     vcolorShader.use();
     vcolorShader.setMat4("model", skeleton_model_mat);
     vcolorShader.setMat4("view", view_mat);
@@ -158,7 +201,9 @@ int main( int /*argc*/, char* /*argv*/[] )
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     std::vector<float> skeleton_vertices;
-    std::vector<glm::mat4> skeleton_bone_transforms;
+    std::vector<glm::mat4> bones_to_world;
+    std::vector<glm::mat4> bones_basis;
+    glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
     size_t n_skeleton_primitives = 0;
     // bool save_flag = true;
     bool close_signal = false;
@@ -266,16 +311,17 @@ int main( int /*argc*/, char* /*argv*/[] )
         /* draw canvas as bg */
 
         glm::mat4 view = gl_camera.GetViewMatrix();
-        glm::mat4 projection = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 0.1f, 100.0f); // (float)proj_width / (float)proj_height
-        modelShader.use();
-        modelShader.setMat4("projection", projection);
-        modelShader.setMat4("view", view);
+        glm::mat4 projection = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 100.0f); // (float)proj_width / (float)proj_height
+        // modelShader.use();
+        // modelShader.setMat4("projection", projection);
+        // modelShader.setMat4("view", view);
         // ourModel.Draw(modelShader);
         std::modf(glfwGetTime(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         //Get the buffer size needed to hold the tracking data
         skeleton_vertices.clear();
-        skeleton_bone_transforms.clear();
+        bones_to_world.clear();
+        bones_basis.clear();
         if(LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime+leap_time_delay, &targetFrameSize) == eLeapRS_Success)
         {
             //Allocate enough memory
@@ -310,6 +356,8 @@ int main( int /*argc*/, char* /*argv*/[] )
                 for(uint32_t h = 0; h < interpolatedFrame->nHands; h++)
                 {
                     LEAP_HAND* hand = &interpolatedFrame->pHands[h];
+                    if (hand->type == eLeapHandType_Right)
+                        continue;
                     glm::vec3 palm_pos = glm::vec3(hand->palm.position.x*manual_scale,
                                                    hand->palm.position.y*manual_scale,
                                                    hand->palm.position.z*manual_scale);
@@ -317,6 +365,13 @@ int main( int /*argc*/, char* /*argv*/[] )
                                                                         hand->palm.orientation.x,
                                                                         hand->palm.orientation.y,
                                                                         hand->palm.orientation.z));
+                    
+                    palm_orientation = palm_orientation * flip_z * flip_y;
+                    cur_palm_orientation = palm_orientation;
+                    glm::mat4 palm_trans = glm::translate(glm::mat4(1.0f), palm_pos);
+                    glm::mat4 palm_scale = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+                    bones_to_world.push_back(palm_trans*palm_orientation*palm_scale);
+                    bones_basis.push_back(palm_orientation);
                     LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
                     LEAP_VECTOR arm_j2 = hand->arm.next_joint;
                     // glm::mat4 local_to_world = glm::mat4(1.0f);
@@ -337,17 +392,29 @@ int main( int /*argc*/, char* /*argv*/[] )
                     // local_to_world = rot*local_to_world;
                     // skeleton_bone_transforms.push_back(local_to_world);
                     skeleton_vertices.push_back(manual_shift_x + (arm_j1.x*manual_scale));
-                    skeleton_vertices.push_back(manual_shift_y + (-arm_j1.z*manual_scale));
-                    skeleton_vertices.push_back(manual_shift_z + (-arm_j1.y*manual_scale));
+                    skeleton_vertices.push_back(manual_shift_y + (arm_j1.y*manual_scale));
+                    skeleton_vertices.push_back(manual_shift_z + (arm_j1.z*manual_scale));
                     skeleton_vertices.push_back(1.0f);
                     skeleton_vertices.push_back(0.0f);
                     skeleton_vertices.push_back(0.0f);
                     skeleton_vertices.push_back(manual_shift_x + (arm_j2.x*manual_scale));
-                    skeleton_vertices.push_back(manual_shift_y + (-arm_j2.z*manual_scale));
-                    skeleton_vertices.push_back(manual_shift_z + (-arm_j2.y*manual_scale));
+                    skeleton_vertices.push_back(manual_shift_y + (arm_j2.y*manual_scale));
+                    skeleton_vertices.push_back(manual_shift_z + (arm_j2.z*manual_scale));
                     skeleton_vertices.push_back(1.0f);
                     skeleton_vertices.push_back(0.0f);
                     skeleton_vertices.push_back(0.0f);
+                    glm::mat4 rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
+                                                        hand->arm.rotation.x,
+                                                        hand->arm.rotation.y,
+                                                        hand->arm.rotation.z
+                                                        ));
+                    // rot = palm_orientation * rot;
+                    glm::vec3 translate = glm::vec3(arm_j1.x*manual_scale,
+                                                    arm_j1.y*manual_scale,
+                                                    arm_j1.z*manual_scale);
+                    glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
+                    bones_to_world.push_back(trans*rot);
+                    bones_basis.push_back(rot);
                     for(uint32_t f = 0; f < 5; f++)
                     {
                         LEAP_DIGIT finger = hand->digits[f];
@@ -356,14 +423,14 @@ int main( int /*argc*/, char* /*argv*/[] )
                             LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
                             LEAP_VECTOR joint2 = finger.bones[b].next_joint;
                             skeleton_vertices.push_back(manual_shift_x + (joint1.x*manual_scale));
-                            skeleton_vertices.push_back(manual_shift_y + (-joint1.z*manual_scale));
-                            skeleton_vertices.push_back(manual_shift_z + (-joint1.y*manual_scale));
+                            skeleton_vertices.push_back(manual_shift_y + (joint1.y*manual_scale));
+                            skeleton_vertices.push_back(manual_shift_z + (joint1.z*manual_scale));
                             skeleton_vertices.push_back(1.0f);
                             skeleton_vertices.push_back(0.0f);
                             skeleton_vertices.push_back(0.0f);
                             skeleton_vertices.push_back(manual_shift_x + (joint2.x*manual_scale));
-                            skeleton_vertices.push_back(manual_shift_y + (-joint2.z*manual_scale));
-                            skeleton_vertices.push_back(manual_shift_z + (-joint2.y*manual_scale));
+                            skeleton_vertices.push_back(manual_shift_y + (joint2.y*manual_scale));
+                            skeleton_vertices.push_back(manual_shift_z + (joint2.z*manual_scale));
                             skeleton_vertices.push_back(1.0f);
                             skeleton_vertices.push_back(0.0f);
                             skeleton_vertices.push_back(0.0f);
@@ -371,12 +438,13 @@ int main( int /*argc*/, char* /*argv*/[] )
                                                         finger.bones[b].rotation.x,
                                                         finger.bones[b].rotation.y,
                                                         finger.bones[b].rotation.z));
-                            rot = palm_orientation * rot;
+                            // rot = palm_orientation * rot;
                             glm::vec3 translate = glm::vec3(joint1.x*manual_scale,
-                                                            -joint1.z*manual_scale,
-                                                            -joint1.y*manual_scale);                                            
+                                                            joint1.y*manual_scale,
+                                                            joint1.z*manual_scale);
                             glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                            skeleton_bone_transforms.push_back(trans*rot);
+                            bones_to_world.push_back(trans*rot*rotx*flip_y);
+                            bones_basis.push_back(rot*rotx*flip_y);
                         }
                     }
                     // std::cout << vertices[0] << "," << vertices[1] << "," << vertices[2] <<std::endl;
@@ -393,18 +461,34 @@ int main( int /*argc*/, char* /*argv*/[] )
         vcolorShader.setMat4("projection", projection);
         vcolorShader.setMat4("view", view);
         vcolorShader.setMat4("model", glm::mat4(1.0f));
-        glBindVertexArray(skeletonVAO);
+        glBindVertexArray(skeletonVAO);  // draws skeleton
         glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
-        glBindVertexArray(gizmoVAO);
+        glBindVertexArray(gizmoVAO);  // draws global coordinate system gizmo
         glDrawArrays(GL_LINES, 0, 6);
-        for (unsigned int i = 0; i < skeleton_bone_transforms.size(); i++)
+        if (bones_basis.size() > 0)  // draws gizmo per bone + palm visualizer
         {
-            glm::mat4 local_to_world = glm::mat4(1.0f);
-            local_to_world = skeleton_bone_transforms[i]*local_to_world;
-            // local_to_world = glm::translate(local_to_world, glm::vec3(0.0f, 0.0f, 0.0f));
-            // model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
-            vcolorShader.setMat4("model", local_to_world);
-            glDrawArrays(GL_LINES, 0, 6);
+            skinnedShader.use();
+            skinnedShader.SetWorldTransform(projection * view * bones_to_world[0] * rotx * coa_transform);
+            std::vector<glm::mat4> Transforms;
+            skinnedModel.GetBoneTransforms(0, Transforms, bones_basis);
+            for (uint i = 0 ; i < Transforms.size() ; i++) {
+                skinnedShader.SetBoneTransform(i, Transforms[i]);
+            }
+            skinnedModel.Render();
+            vcolorShader.use();
+            glBindVertexArray(circleVAO);
+            vcolorShader.setMat4("model", bones_to_world[0]);
+            glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
+            glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+            glm::vec3 palm_normal(palm_normal_hom);
+            palm_normal = glm::normalize(palm_normal);
+            glBindVertexArray(gizmoVAO);
+            for (unsigned int i = 0; i < bones_to_world.size(); i++)
+            {
+                vcolorShader.setMat4("model", bones_to_world[i]);
+                glDrawArrays(GL_LINES, 0, 6);
+            }
+            text.Render(textShader, std::format("palm normal: {:.02f}, {:.02f}, {:.02f}, {:.02f}", palm_normal.x, palm_normal.y, palm_normal.z, glm::l2Norm(palm_normal)), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
         }
         // render the loaded model
         // glm::mat4 model = glm::mat4(1.0f);
@@ -415,6 +499,10 @@ int main( int /*argc*/, char* /*argv*/[] )
         // modelShader.setMat4("view", view_mat);
         // glBindVertexArray(modelVAO);
         // glDrawArrays(GL_TRIANGLES, 0, 36);
+        glm::vec3 cam_pos = gl_camera.GetPos();
+        glm::vec3 cam_forward = glm::normalize(-cam_pos);
+        text.Render(textShader, std::format("camera pos: {:.02f}, {:.02f}, {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+        text.Render(textShader, std::format("camera forward: {:.02f}, {:.02f}, {:.02f}", cam_forward.x, cam_forward.y, cam_forward.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
         t2.stop();
         
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
@@ -574,6 +662,37 @@ void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO)
     glEnableVertexAttribArray(1);
 }
 
+void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
+{
+    std::vector<glm::vec3> vertices;
+    // std::vector<glm::vec3> colors;
+    float radius = 0.5f;
+    glm::vec3 center = glm::vec3(0.0f, 0.0f, 0.0f);
+    int n_vertices = 50;
+    vertices.push_back(center);
+    vertices.push_back(glm::vec3(1.0f, 1.0f, 1.0f));
+    for (int i = 0; i <= n_vertices; i++)   {
+        float twicePI = 2*glm::pi<float>();
+        vertices.push_back(glm::vec3(center.x + (radius * cos(i * twicePI / n_vertices)),
+                                     center.y,
+                                     center.z + (radius * sin(i * twicePI / n_vertices))));
+        vertices.push_back(glm::vec3(1.0f, 1.0f, 1.0f));
+    }
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+
+    auto test = vertices.data();
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, 6*(n_vertices+2) * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // color attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+}
 void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO)
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes

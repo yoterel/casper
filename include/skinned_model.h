@@ -30,58 +30,6 @@ public:
     SkinnedModel(const std::string& Filename) 
     {
         LoadMesh(Filename);
-        // leap_bone_map = 
-        // {
-        //     {0, "Wrist"},
-        //     {2, "thumb_a"},
-        //     {3, "thumb_a"},
-        //     {4, "thumb_b"},
-        //     {5, "thumb_end"},
-        //     {6, "index_a"},
-        //     {7, "index_b"},
-        //     {8, "index_c"},
-        //     {9, "index_end"},
-        //     {10, "middle_a"},
-        //     {11, "middle_b"},
-        //     {12, "middle_c"},
-        //     {13, "middle_end"},
-        //     {14, "ring_a"},
-        //     {15, "ring_b"},
-        //     {16, "ring_c"},
-        //     {17, "ring_end"},
-        //     {18, "pinky_a"},
-        //     {20, "pinky_b"},
-        //     {21, "pinky_c"},
-        //     {22, "pinky_end"}
-        // };
-        bone_leap_map = 
-        {
-            {"Wrist", 0},
-            {"thumb_meta", 1},
-            {"thumb_a", 3},
-            {"thumb_b", 4},
-            {"thumb_end", 5},
-            {"index_meta", 1},
-            {"index_a", 6},
-            {"index_b", 7},
-            {"index_c", 8},
-            {"index_end", 9},
-            {"middle_meta", 1},
-            {"middle_a", 10},
-            {"middle_b", 11},
-            {"middle_c", 12},
-            {"middle_end", 13},
-            {"ring_meta", 1},
-            {"ring_a", 14},
-            {"ring_b", 15},
-            {"ring_c", 16},
-            {"ring_end", 17},
-            {"pinky_meta", 1},
-            {"pinky_a", 18},
-            {"pinky_b", 19},
-            {"pinky_c", 20},
-            {"pinky_end", 21}
-        };
     };
 
     ~SkinnedModel();
@@ -101,6 +49,15 @@ public:
 
     void GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms);
 
+    glm::vec3 getCenterOfMass()
+    {
+        glm::vec3 center_of_mass = glm::vec3(0.0f, 0.0f, 0.0f);
+        for (unsigned int i = 0 ; i < m_Positions.size() ; i++) {
+            center_of_mass += m_Positions[i];
+        }
+        center_of_mass /= (float)m_Positions.size();
+        return center_of_mass;
+    };
 private:
     
 

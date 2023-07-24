@@ -45,7 +45,10 @@ public:
     glm::vec3 WorldPosition = glm::vec3(0.0f, 0.0f, 0.0f);
     LightAttenuation Attenuation;
 
-    void CalcLocalPosition(const glm::mat4& worldTransform);
+    void CalcLocalPosition(const glm::mat4& worldTransform)
+    {
+        LocalPosition = glm::vec3(glm::inverse(worldTransform) * glm::vec4(WorldPosition, 1.0f));
+    };
 
     const glm::vec3& GetLocalPosition() const { return LocalPosition; }
 
