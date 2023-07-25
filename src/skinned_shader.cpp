@@ -4,104 +4,110 @@ SkinningShader::SkinningShader(const char* vertexPath, const char* fragmentPath,
     Shader(vertexPath, fragmentPath, geometryPath)
     {
         worldTransformLoc = GetUniformLocation("gTransform");
-        samplerLoc = GetUniformLocation("gSampler");
-        samplerSpecularExponentLoc = GetUniformLocation("gSamplerSpecularExponent");
-        materialLoc.AmbientColor = GetUniformLocation("gMaterial.AmbientColor");
-        materialLoc.DiffuseColor = GetUniformLocation("gMaterial.DiffuseColor");
-        materialLoc.SpecularColor = GetUniformLocation("gMaterial.SpecularColor");
-        dirLightLoc.Color = GetUniformLocation("gDirectionalLight.Base.Color");
-        dirLightLoc.AmbientIntensity = GetUniformLocation("gDirectionalLight.Base.AmbientIntensity");
-        dirLightLoc.Direction = GetUniformLocation("gDirectionalLight.Direction");
-        dirLightLoc.DiffuseIntensity = GetUniformLocation("gDirectionalLight.Base.DiffuseIntensity");
-        CameraLocalPosLoc = GetUniformLocation("gCameraLocalPos");
-        NumPointLightsLocation = GetUniformLocation("gNumPointLights");
-        NumSpotLightsLocation = GetUniformLocation("gNumSpotLights");
-        for (unsigned int i = 0 ; i < sizeof(PointLightsLocation)/sizeof(PointLightsLocation[0]) ; i++) {
-        char Name[128];
-        memset(Name, 0, sizeof(Name));
-        _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Base.Color", i);
-        PointLightsLocation[i].Color = GetUniformLocation(Name);
-
-        _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Base.AmbientIntensity", i);
-        PointLightsLocation[i].AmbientIntensity = GetUniformLocation(Name);
-
-        _snprintf_s(Name, sizeof(Name), "gPointLights[%d].LocalPos", i);
-        PointLightsLocation[i].Position = GetUniformLocation(Name);
-
-        _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Base.DiffuseIntensity", i);
-        PointLightsLocation[i].DiffuseIntensity = GetUniformLocation(Name);
-
-        _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Atten.Constant", i);
-        PointLightsLocation[i].Atten.Constant = GetUniformLocation(Name);
-
-        _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Atten.Linear", i);
-        PointLightsLocation[i].Atten.Linear = GetUniformLocation(Name);
-
-        _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Atten.Exp", i);
-        PointLightsLocation[i].Atten.Exp = GetUniformLocation(Name);
-
-        if (PointLightsLocation[i].Color == INVALID_UNIFORM_LOCATION ||
-            PointLightsLocation[i].AmbientIntensity == INVALID_UNIFORM_LOCATION ||
-            PointLightsLocation[i].Position == INVALID_UNIFORM_LOCATION ||
-            PointLightsLocation[i].DiffuseIntensity == INVALID_UNIFORM_LOCATION ||
-            PointLightsLocation[i].Atten.Constant == INVALID_UNIFORM_LOCATION ||
-            PointLightsLocation[i].Atten.Linear == INVALID_UNIFORM_LOCATION ||
-            PointLightsLocation[i].Atten.Exp == INVALID_UNIFORM_LOCATION) {
-            std::cout << "Error: PointLightsLocation[i] is invalid" << std::endl;
+        // samplerLoc = GetUniformLocation("gSampler");
+        // samplerSpecularExponentLoc = GetUniformLocation("gSamplerSpecularExponent");
+        // materialLoc.AmbientColor = GetUniformLocation("gMaterial.AmbientColor");
+        // materialLoc.DiffuseColor = GetUniformLocation("gMaterial.DiffuseColor");
+        // materialLoc.SpecularColor = GetUniformLocation("gMaterial.SpecularColor");
+        // dirLightLoc.Color = GetUniformLocation("gDirectionalLight.Base.Color");
+        // dirLightLoc.AmbientIntensity = GetUniformLocation("gDirectionalLight.Base.AmbientIntensity");
+        // dirLightLoc.Direction = GetUniformLocation("gDirectionalLight.Direction");
+        // dirLightLoc.DiffuseIntensity = GetUniformLocation("gDirectionalLight.Base.DiffuseIntensity");
+        // CameraLocalPosLoc = GetUniformLocation("gCameraLocalPos");
+        // NumPointLightsLocation = GetUniformLocation("gNumPointLights");
+        // NumSpotLightsLocation = GetUniformLocation("gNumSpotLights");
+        displayBoneIndexLocation = GetUniformLocation("gDisplayBoneIndex");
+        if (displayBoneIndexLocation == INVALID_UNIFORM_LOCATION)
+        {
+            std::cout << "Error: displayBoneIndexLocation is invalid" << std::endl;
             exit(0);
         }
-    }
+        // for (unsigned int i = 0 ; i < sizeof(PointLightsLocation)/sizeof(PointLightsLocation[0]) ; i++) {
+        //     char Name[128];
+        //     memset(Name, 0, sizeof(Name));
+        //     _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Base.Color", i);
+        //     PointLightsLocation[i].Color = GetUniformLocation(Name);
 
-    for (unsigned int i = 0 ; i < sizeof(SpotLightsLocation)/sizeof(SpotLightsLocation[0]) ; i++) {
-        char Name[128];
-        memset(Name, 0, sizeof(Name));
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Base.Color", i);
-        SpotLightsLocation[i].Color = GetUniformLocation(Name);
+        //     _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Base.AmbientIntensity", i);
+        //     PointLightsLocation[i].AmbientIntensity = GetUniformLocation(Name);
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Base.AmbientIntensity", i);
-        SpotLightsLocation[i].AmbientIntensity = GetUniformLocation(Name);
+        //     _snprintf_s(Name, sizeof(Name), "gPointLights[%d].LocalPos", i);
+        //     PointLightsLocation[i].Position = GetUniformLocation(Name);
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.LocalPos", i);
-        SpotLightsLocation[i].Position = GetUniformLocation(Name);
+        //     _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Base.DiffuseIntensity", i);
+        //     PointLightsLocation[i].DiffuseIntensity = GetUniformLocation(Name);
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Direction", i);
-        SpotLightsLocation[i].Direction = GetUniformLocation(Name);
+        //     _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Atten.Constant", i);
+        //     PointLightsLocation[i].Atten.Constant = GetUniformLocation(Name);
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Cutoff", i);
-        SpotLightsLocation[i].Cutoff = GetUniformLocation(Name);
+        //     _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Atten.Linear", i);
+        //     PointLightsLocation[i].Atten.Linear = GetUniformLocation(Name);
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Base.DiffuseIntensity", i);
-        SpotLightsLocation[i].DiffuseIntensity = GetUniformLocation(Name);
+        //     _snprintf_s(Name, sizeof(Name), "gPointLights[%d].Atten.Exp", i);
+        //     PointLightsLocation[i].Atten.Exp = GetUniformLocation(Name);
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Atten.Constant", i);
-        SpotLightsLocation[i].Atten.Constant = GetUniformLocation(Name);
+        //     if (PointLightsLocation[i].Color == INVALID_UNIFORM_LOCATION ||
+        //         PointLightsLocation[i].AmbientIntensity == INVALID_UNIFORM_LOCATION ||
+        //         PointLightsLocation[i].Position == INVALID_UNIFORM_LOCATION ||
+        //         PointLightsLocation[i].DiffuseIntensity == INVALID_UNIFORM_LOCATION ||
+        //         PointLightsLocation[i].Atten.Constant == INVALID_UNIFORM_LOCATION ||
+        //         PointLightsLocation[i].Atten.Linear == INVALID_UNIFORM_LOCATION ||
+        //         PointLightsLocation[i].Atten.Exp == INVALID_UNIFORM_LOCATION) {
+        //         std::cout << "Error: PointLightsLocation is invalid" << std::endl;
+        //         // exit(0);
+        //     }
+        // }
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Atten.Linear", i);
-        SpotLightsLocation[i].Atten.Linear = GetUniformLocation(Name);
+        // for (unsigned int i = 0 ; i < sizeof(SpotLightsLocation)/sizeof(SpotLightsLocation[0]) ; i++) {
+        //     char Name[128];
+        //     memset(Name, 0, sizeof(Name));
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Base.Color", i);
+        //     SpotLightsLocation[i].Color = GetUniformLocation(Name);
 
-        _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Atten.Exp", i);
-        SpotLightsLocation[i].Atten.Exp = GetUniformLocation(Name);
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Base.AmbientIntensity", i);
+        //     SpotLightsLocation[i].AmbientIntensity = GetUniformLocation(Name);
 
-        if (SpotLightsLocation[i].Color == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].AmbientIntensity == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].Position == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].Direction == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].Cutoff == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].DiffuseIntensity == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].Atten.Constant == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].Atten.Linear == INVALID_UNIFORM_LOCATION ||
-            SpotLightsLocation[i].Atten.Exp == INVALID_UNIFORM_LOCATION) {
-            std::cout << "Error: SpotLightsLocation[i] is invalid" << std::endl;
-            exit(0);
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.LocalPos", i);
+        //     SpotLightsLocation[i].Position = GetUniformLocation(Name);
+
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Direction", i);
+        //     SpotLightsLocation[i].Direction = GetUniformLocation(Name);
+
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Cutoff", i);
+        //     SpotLightsLocation[i].Cutoff = GetUniformLocation(Name);
+
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Base.DiffuseIntensity", i);
+        //     SpotLightsLocation[i].DiffuseIntensity = GetUniformLocation(Name);
+
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Atten.Constant", i);
+        //     SpotLightsLocation[i].Atten.Constant = GetUniformLocation(Name);
+
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Atten.Linear", i);
+        //     SpotLightsLocation[i].Atten.Linear = GetUniformLocation(Name);
+
+        //     _snprintf_s(Name, sizeof(Name), "gSpotLights[%d].Base.Atten.Exp", i);
+        //     SpotLightsLocation[i].Atten.Exp = GetUniformLocation(Name);
+
+        //     if (SpotLightsLocation[i].Color == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].AmbientIntensity == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].Position == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].Direction == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].Cutoff == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].DiffuseIntensity == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].Atten.Constant == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].Atten.Linear == INVALID_UNIFORM_LOCATION ||
+        //         SpotLightsLocation[i].Atten.Exp == INVALID_UNIFORM_LOCATION) {
+        //         std::cout << "Error: SpotLightsLocation[i] is invalid" << std::endl;
+        //         // exit(0);
+        //     }
+        // }
+
+        for (unsigned int i = 0 ; i < MAX_BONES ; i++) {
+            char Name[128];
+            memset(Name, 0, sizeof(Name));
+            _snprintf_s(Name, sizeof(Name), "gBones[%d]", i);
+            m_boneLocation[i] = GetUniformLocation(Name);
         }
-    }
-
-    for (unsigned int i = 0 ; i < sizeof(m_boneLocation)/sizeof(m_boneLocation[0]) ; i++) {
-        char Name[128];
-        memset(Name, 0, sizeof(Name));
-        _snprintf_s(Name, sizeof(Name), "gBones[%d]", i);
-        m_boneLocation[i] = GetUniformLocation(Name);
-    }
     };
 
 GLint SkinningShader::GetUniformLocation(const char* pUniformName)
@@ -120,6 +126,10 @@ void SkinningShader::SetWorldTransform(const glm::mat4& worldTransform)
     glUniformMatrix4fv(worldTransformLoc, 1, GL_FALSE, glm::value_ptr(worldTransform));
 }
 
+void SkinningShader::SetDisplayBoneIndex(unsigned int DisplayBoneIndex)
+{
+    glUniform1i(displayBoneIndexLocation, DisplayBoneIndex);
+}
 
 void SkinningShader::SetTextureUnit(unsigned int TextureUnit)
 {
@@ -193,18 +203,12 @@ void SkinningShader::SetSpotLights(unsigned int NumLights, const SpotLight* pLig
     }
 }
 
-
-// void SkinningShader::SetDisplayBoneIndex(uint DisplayBoneIndex)
-// {
-//     glUniform1i(displayBoneIndexLocation, DisplayBoneIndex);
-// }
-
 void SkinningShader::SetBoneTransform(unsigned int Index, const glm::mat4& Transform)
 {
-    //assert(Index < MAX_BONES);
+    assert(Index < MAX_BONES);
     if (Index >= MAX_BONES) {
         return;
     }
     //Transform.Print();
-    glUniformMatrix4fv(m_boneLocation[Index], 1, GL_TRUE, (const GLfloat*)glm::value_ptr(Transform));
+    glUniformMatrix4fv(m_boneLocation[Index], 1, GL_FALSE, (const GLfloat*)glm::value_ptr(Transform));
 }

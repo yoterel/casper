@@ -8,19 +8,19 @@ layout (location = 4) in ivec2 BoneIDs1;
 layout (location = 5) in vec4 Weights0;
 layout (location = 6) in vec2 Weights1;
 
-out vec2 TexCoord0;
-out vec3 Normal0;
-out vec3 LocalPos0;
+//out vec2 TexCoord0;
+//out vec3 Normal0;
+//out vec3 LocalPos0;
 flat out ivec4 BoneIDs00;
 flat out ivec2 BoneIDs11;
 out vec4 Weights00;
 out vec2 Weights11;
-
+out vec3 ourColor;
 const int MAX_BONES = 200;
 
 uniform mat4 gTransform;
 uniform mat4 gBones[MAX_BONES];
-
+uniform int gDisplayBoneIndex;
 void main()
 {
     mat4 BoneTransform = gBones[BoneIDs0[0]] * Weights0[0];
@@ -33,11 +33,30 @@ void main()
     
     vec4 PosL = BoneTransform * vec4(Position, 1.0);
     gl_Position = gTransform * PosL;
-    TexCoord0 = TexCoord;
-    Normal0 = Normal;
-    LocalPos0 = Position;
+    //TexCoord0 = TexCoord;
+    //Normal0 = Normal;
+    //LocalPos0 = Position;
     BoneIDs00 = BoneIDs0;
     BoneIDs11 = BoneIDs1;
     Weights00 = Weights0;
     Weights11 = Weights1;
+    ourColor = vec3(0.0, 0.0, 0.0);
+    for (int i = 0 ; i < 6 ; i++) {
+        if (i < 4)
+        {
+            if (BoneIDs00[i] == gDisplayBoneIndex)
+            {
+                ourColor = vec3(0.0, 0.0, 1.0) * Weights0[i];
+                break;
+            }
+        }
+        else
+        {
+            if (BoneIDs11[i-4] == gDisplayBoneIndex)
+            {
+                ourColor = vec3(0.0, 0.0, 1.0) * Weights1[i-4];
+                break;
+            }
+        }
+    }
 }

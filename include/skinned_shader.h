@@ -1,12 +1,12 @@
-#ifndef SKINNING_TECHNIQUE_H
-#define SKINNING_TECHNIQUE_H
+#ifndef SKINNED_SHADER_H
+#define SKINNED_SHADER_H
 
 #include "shader.h"
 #include "material.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#define MAX_BONES (200)
+#define MAX_BONES (50)
 #define INVALID_UNIFORM_LOCATION 0xffffffff
 
 class BaseLight
@@ -83,6 +83,7 @@ public:
     SkinningShader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr);
 
     void SetWorldTransform(const glm::mat4& worldTransform);
+    void SetDisplayBoneIndex(unsigned int DisplayBoneIndex);
     void SetTextureUnit(unsigned int TextureUnit);
     void SetSpecularExponentTextureUnit(unsigned int TextureUnit);
     void SetDirectionalLight(const DirectionalLight& Light);
@@ -102,6 +103,7 @@ private:
     GLuint CameraLocalPosLoc;
     GLuint NumPointLightsLocation;
     GLuint NumSpotLightsLocation;
+    GLuint displayBoneIndexLocation;
 
     struct {
         GLuint AmbientColor;
@@ -144,8 +146,7 @@ struct {
         } Atten;
     } SpotLightsLocation[MAX_SPOT_LIGHTS];
     GLuint m_boneLocation[MAX_BONES];
-    // GLuint displayBoneIndexLocation;
 };
 
 
-#endif  /* SKINNING_TECHNIQUE_H */
+#endif  /* SKINNED_SHADER_H */

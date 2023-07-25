@@ -1,5 +1,12 @@
-#include <chrono>
+#include <iostream>
 #include <thread>
+#include <chrono>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include "queue.h"
 #include "camera.h"
 #include "gl_camera.h"
@@ -8,18 +15,11 @@
 #include "shader.h"
 #include "skinned_shader.h"
 #include "skinned_model.h"
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-#include <iostream>
 #include "timer.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/quaternion.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include "leap.h"
 #include "text.h"
 
-using namespace std::literals::chrono_literals;
+// using namespace std::literals::chrono_literals;
 
 /* settings */
 
@@ -46,10 +46,17 @@ bool firstMouse = true;
 // timing
 double deltaTime = 0.0;
 double lastFrame = 0.0;
+unsigned int fps = 0;
+float ms_per_frame = 0;
+// others
+unsigned int displayBoneIndex = 0;
+bool space_pressed_flag = false;
+unsigned int n_bones = 0;
 
 int main( int /*argc*/, char* /*argv*/[] )
 {
-    Timer t0, t1, t2, t3, t4;  // t1.start(); t1.stop(); t1.getElapsedTimeInMilliSec();
+    Timer t0, t1, t2, t3, t4, t_app;  // t1.start(); t1.stop(); t1.getElapsedTimeInMilliSec();
+    t_app.start();
     // render output window
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -100,9 +107,14 @@ int main( int /*argc*/, char* /*argv*/[] )
     // setup 3d objects
     // Model ourModel("C:/src/augmented_hands/resource/backpack/backpack.obj");
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx");
+    n_bones = skinnedModel.NumBones();
     glm::vec3 coa = skinnedModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
+    glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
+    glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
+    glm::mat4 timesTwenty = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f,0.0f,0.0f));
+    glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f,1.0f,0.0f));
     glm::mat4 flip_y = glm::mat4(1.0f);
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
@@ -138,8 +150,6 @@ int main( int /*argc*/, char* /*argv*/[] )
     pointLights[1].WorldPosition.y = 1.0f;
     pointLights[1].WorldPosition.z = 0.0f;
     pointLights[1].CalcLocalPosition(lightTransform);
-
-    skinnedShader.SetPointLights(2, pointLights);
     // glUniformMatrix4fv(glGetUniformLocation(shader.ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     // unsigned int modelVAO = setup_model_buffers();
     //setup textures
@@ -238,7 +248,7 @@ int main( int /*argc*/, char* /*argv*/[] )
             t_block.start();
             while (!close_signal) {
                 camera_queue.push(image);
-                while (t_block.getElapsedTimeInMicroSec() < 1000.0)
+                while (t_block.getElapsedTimeInMicroSec() < 300.0)
                 {
                 }
                 t_block.stop();
@@ -268,7 +278,9 @@ int main( int /*argc*/, char* /*argv*/[] )
         if ( currentFrame - previousTime >= 1.0 )
         {
             // Display the frame count here any way you want.
-            std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
+            fps = frameCount;
+            ms_per_frame = 1000.0f/frameCount;
+            // std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
             std::cout << "last wait_for_cam time: " << t0.averageLap() << std::endl;
             std::cout << "last Cam->GPU time: " << t1.averageLap() << std::endl;
             std::cout << "last Processing time: " << t2.averageLap() << std::endl;
@@ -336,7 +348,7 @@ int main( int /*argc*/, char* /*argv*/[] )
                 float manual_shift_x = 0.0f; //-0.5f;
                 float manual_shift_y = 0.0f; //1.0f;
                 float manual_shift_z = 0.0f; //2.0f;
-                float manual_scale = 0.1f;  //to cm
+                float manual_scale = 1.0f;  //to cm
                 if (interpolatedFrame->nHands > 0)
                 {
                     if (!hand_in_frame)
@@ -443,8 +455,8 @@ int main( int /*argc*/, char* /*argv*/[] )
                                                             joint1.y*manual_scale,
                                                             joint1.z*manual_scale);
                             glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                            bones_to_world.push_back(trans*rot*rotx*flip_y);
-                            bones_basis.push_back(rot*rotx*flip_y);
+                            bones_to_world.push_back(trans*rot*roty*roty);
+                            bones_basis.push_back(rot*roty*roty);  // trans*rot*roty*rotx*rotx
                         }
                     }
                     // std::cout << vertices[0] << "," << vertices[1] << "," << vertices[2] <<std::endl;
@@ -461,23 +473,22 @@ int main( int /*argc*/, char* /*argv*/[] )
         vcolorShader.setMat4("projection", projection);
         vcolorShader.setMat4("view", view);
         vcolorShader.setMat4("model", glm::mat4(1.0f));
-        glBindVertexArray(skeletonVAO);  // draws skeleton
-        glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
         glBindVertexArray(gizmoVAO);  // draws global coordinate system gizmo
         glDrawArrays(GL_LINES, 0, 6);
+        vcolorShader.setMat4("model", mm_to_cm);
+        glBindVertexArray(skeletonVAO);  // draws skeleton
+        glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
         if (bones_basis.size() > 0)  // draws gizmo per bone + palm visualizer
         {
             skinnedShader.use();
-            skinnedShader.SetWorldTransform(projection * view * bones_to_world[0] * rotx * coa_transform);
-            std::vector<glm::mat4> Transforms;
-            skinnedModel.GetBoneTransforms(0, Transforms, bones_basis);
-            for (uint i = 0 ; i < Transforms.size() ; i++) {
-                skinnedShader.SetBoneTransform(i, Transforms[i]);
-            }
-            skinnedModel.Render();
+            // skinnedShader.SetPointLights(2, pointLights);
+            // skinnedShader.SetMaterial(skinnedModel.GetMaterial());
+            skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+            skinnedShader.SetWorldTransform(projection * view * mm_to_cm * bones_to_world[0] * cm_to_mm * rotx * coa_transform);
+            skinnedModel.Render(skinnedShader, bones_basis, (float)t_app.getElapsedTimeInSec());
             vcolorShader.use();
             glBindVertexArray(circleVAO);
-            vcolorShader.setMat4("model", bones_to_world[0]);
+            vcolorShader.setMat4("model", mm_to_cm*bones_to_world[0]*timesTwenty);
             glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
             glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
             glm::vec3 palm_normal(palm_normal_hom);
@@ -485,24 +496,17 @@ int main( int /*argc*/, char* /*argv*/[] )
             glBindVertexArray(gizmoVAO);
             for (unsigned int i = 0; i < bones_to_world.size(); i++)
             {
-                vcolorShader.setMat4("model", bones_to_world[i]);
+                vcolorShader.setMat4("model", mm_to_cm*bones_to_world[i]*cm_to_mm);
                 glDrawArrays(GL_LINES, 0, 6);
             }
             text.Render(textShader, std::format("palm normal: {:.02f}, {:.02f}, {:.02f}, {:.02f}", palm_normal.x, palm_normal.y, palm_normal.z, glm::l2Norm(palm_normal)), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
         }
-        // render the loaded model
-        // glm::mat4 model = glm::mat4(1.0f);
-        // mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
-        // modelShader.setMat4("model", mesh_model_mat);
-        // mesh_model_mat = glm::rotate(mesh_model_mat, glm::radians(0.1f), glm::vec3(0.5f, 1.0f, 0.0f));
-        // modelShader.setMat4("model", mesh_model_mat);
-        // modelShader.setMat4("view", view_mat);
-        // glBindVertexArray(modelVAO);
-        // glDrawArrays(GL_TRIANGLES, 0, 36);
         glm::vec3 cam_pos = gl_camera.GetPos();
         glm::vec3 cam_forward = glm::normalize(-cam_pos);
         text.Render(textShader, std::format("camera pos: {:.02f}, {:.02f}, {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
         text.Render(textShader, std::format("camera forward: {:.02f}, {:.02f}, {:.02f}", cam_forward.x, cam_forward.y, cam_forward.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+        text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+        text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
         t2.stop();
         
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
@@ -861,6 +865,18 @@ void processInput(GLFWwindow *window)
         gl_camera.ProcessKeyboard(UP, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
         gl_camera.ProcessKeyboard(DOWN, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    {
+        space_pressed_flag = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    {
+        if (space_pressed_flag)
+        {
+            space_pressed_flag = false;
+            displayBoneIndex = (displayBoneIndex + 1) % n_bones;
+        }
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes

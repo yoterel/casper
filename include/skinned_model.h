@@ -13,6 +13,7 @@
 #include "texture.h"
 #include "assimp_helpers.h"
 #include "material.h"
+#include "skinned_shader.h"
 
 #define ASSIMP_LOAD_FLAGS (aiProcess_Triangulate | aiProcess_GenSmoothNormals |  aiProcess_JoinIdenticalVertices )
 #define MAX_NUM_BONES_PER_VERTEX 6
@@ -24,92 +25,88 @@
 #define BONE_WEIGHT_LOCATION0 5
 #define BONE_WEIGHT_LOCATION1 6
 
+struct VertexBoneData
+{
+    unsigned int BoneIDs[MAX_NUM_BONES_PER_VERTEX] = { 0 };
+    float Weights[MAX_NUM_BONES_PER_VERTEX] = { 0.0f };
+
+    VertexBoneData()
+    {
+    }
+
+    void AddBoneData(unsigned int BoneID, float Weight)
+    {
+        for (unsigned int i = 0 ; i < sizeof(BoneIDs)/sizeof(BoneIDs[0]) ; i++) {
+            if (Weights[i] == 0.0) {
+                BoneIDs[i] = BoneID;
+                Weights[i] = Weight;
+                //printf("Adding bone %d weight %f at index %i\n", BoneID, Weight, i);
+                return;
+            }
+        }
+
+        // should never get here - more bones than we have space for
+        assert(0);
+    }
+    float sum_weights()
+    {
+        float sum = 0.0f;
+        for (unsigned int i = 0 ; i < MAX_NUM_BONES_PER_VERTEX ; i++) {
+            sum += Weights[i];
+        }
+        return sum;
+    }
+};
+
+struct BoneInfo
+{
+    glm::mat4 OffsetMatrix;
+    glm::mat4 FinalTransformation;
+
+    BoneInfo(const glm::mat4& l2b_transform)
+    {
+        OffsetMatrix = l2b_transform;
+        FinalTransformation = glm::mat4();
+    }
+};
+
 class SkinnedModel
 {
 public:
     SkinnedModel(const std::string& Filename) 
     {
-        LoadMesh(Filename);
+        bool success = LoadMesh(Filename);
+        if (!success) {
+            std::cout << "Error loading mesh\n" << std::endl;
+            exit(1);
+        }
     };
-
-    ~SkinnedModel();
-
+    ~SkinnedModel(){ Clear(); };
     bool LoadMesh(const std::string& Filename);
-
-    void Render();
-
+    void Render(SkinningShader& shader, const std::vector<glm::mat4>& bone_basis, const float animationTime = 0.0f);
+    // WorldTrans& GetWorldTransform() { return m_worldTransform; }
+    const Material& GetMaterial();
+    void GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms);
+    glm::vec3 getCenterOfMass();
+    std::string getBoneName(unsigned int index);
     unsigned int NumBones() const
     {
         return (unsigned int)m_BoneNameToIndexMap.size();
     }
 
-    // WorldTrans& GetWorldTransform() { return m_worldTransform; }
-
-    const Material& GetMaterial();
-
-    void GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms);
-
-    glm::vec3 getCenterOfMass()
-    {
-        glm::vec3 center_of_mass = glm::vec3(0.0f, 0.0f, 0.0f);
-        for (unsigned int i = 0 ; i < m_Positions.size() ; i++) {
-            center_of_mass += m_Positions[i];
-        }
-        center_of_mass /= (float)m_Positions.size();
-        return center_of_mass;
-    };
 private:
-    
-
     void Clear();
-
     bool InitFromScene(const aiScene* pScene, const std::string& Filename);
-
     void CountVerticesAndIndices(const aiScene* pScene, unsigned int& NumVertices, unsigned int& NumIndices);
-
     void ReserveSpace(unsigned int NumVertices, unsigned int NumIndices);
-
     void InitAllMeshes(const aiScene* pScene);
-
     void InitSingleMesh(unsigned int MeshIndex, const aiMesh* paiMesh);
-
     bool InitMaterials(const aiScene* pScene, const std::string& Filename);
-
     void PopulateBuffers();
-
     void LoadTextures(const std::string& Dir, const aiMaterial* pMaterial, int index);
-
     void LoadDiffuseTexture(const std::string& Dir, const aiMaterial* pMaterial, int index);
-
     void LoadSpecularTexture(const std::string& Dir, const aiMaterial* pMaterial, int index);
-
     void LoadColors(const aiMaterial* pMaterial, int index);
-
-    struct VertexBoneData
-    {
-        unsigned int BoneIDs[MAX_NUM_BONES_PER_VERTEX] = { 0 };
-        float Weights[MAX_NUM_BONES_PER_VERTEX] = { 0.0f };
-
-        VertexBoneData()
-        {
-        }
-
-        void AddBoneData(unsigned int BoneID, float Weight)
-        {
-            for (unsigned int i = 0 ; i < sizeof(BoneIDs)/sizeof(BoneIDs[0]) ; i++) {
-                if (Weights[i] == 0.0) {
-                    BoneIDs[i] = BoneID;
-                    Weights[i] = Weight;
-                    //printf("Adding bone %d weight %f at index %i\n", BoneID, Weight, i);
-                    return;
-                }
-            }
-
-            // should never get here - more bones than we have space for
-            assert(0);
-        }
-    };
-
     void LoadMeshBones(unsigned int MeshIndex, const aiMesh* paiMesh);
     void LoadSingleBone(unsigned int MeshIndex, const aiBone* pBone);
     int GetBoneId(const aiBone* pBone);
@@ -120,8 +117,9 @@ private:
     unsigned int FindRotation(float AnimationTime, const aiNodeAnim* pNodeAnim);
     unsigned int FindPosition(float AnimationTime, const aiNodeAnim* pNodeAnim);
     // const aiNodeAnim* FindNodeAnim(const aiAnimation* pAnimation, const std::string& NodeName);
-    std::string GetDirFromFilename(const std::string& Filename);
+    void ReadNodeHierarchy(const aiNode* pNode, const glm::mat4& ParentTransform);
     // void ReadNodeHierarchy(float AnimationTime, const aiNode* pNode, const glm::mat4& ParentTransform);
+    std::string GetDirFromFilename(const std::string& Filename);
 
 #define INVALID_MATERIAL 0xFFFFFFFF
 
@@ -166,19 +164,9 @@ private:
     std::vector<VertexBoneData> m_Bones;
 
     std::map<std::string, unsigned int> m_BoneNameToIndexMap;
+    std::map<unsigned int, std::string> m_BoneIndexToNameMap;
     std::map<unsigned int, std::string> leap_bone_map;
     std::map<std::string, unsigned int> bone_leap_map;
-    struct BoneInfo
-    {
-        glm::mat4 OffsetMatrix;
-        glm::mat4 FinalTransformation;
-
-        BoneInfo(const glm::mat4& Offset)
-        {
-            OffsetMatrix = Offset;
-            FinalTransformation = glm::mat4();
-        }
-    };
 
     std::vector<BoneInfo> m_BoneInfo;
     glm::mat4 m_GlobalInverseTransform;
