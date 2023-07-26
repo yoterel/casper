@@ -1,5 +1,5 @@
-#ifndef CAMERA_H
-#define CAMERA_H
+#ifndef Gl_CAMERA_H
+#define Gl_CAMERA_H
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
@@ -16,6 +16,12 @@ enum Camera_Movement {
     DOWN
 };
 
+enum Camera_Mode
+{
+    FREE_CAMERA,
+    ORBIT_CAMERA,
+    FIXED_CAMERA
+};
 // Default camera values
 const float YAW         = -90.0f;
 const float PITCH       =  0.0f;
@@ -28,7 +34,8 @@ const float ZOOM        =  45.0f;
 class GLCamera
 {
 public:
-    GLCamera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f));
+    GLCamera(glm::vec3 position, glm::vec3 up);
+    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front);
     GLCamera(glm::vec3 position, glm::vec3 up, float yaw, float pitch);
     GLCamera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw, float pitch);
     glm::mat4 GetViewMatrix();
@@ -51,6 +58,7 @@ private:
     glm::vec3 Right;
     glm::vec3 WorldUp;
     void updateCameraVectors();
+    Camera_Mode mode;
 };
 
 #endif

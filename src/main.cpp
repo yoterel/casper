@@ -43,7 +43,7 @@ const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int image_size = proj_width * proj_height * 3;
 // camera
-GLCamera gl_camera(glm::vec3(20.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f,0.0f,0.0f));
 // GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;

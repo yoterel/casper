@@ -1,9 +1,9 @@
 #include "gl_camera.h"
 
-
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up) :
-MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM), mode(Camera_Mode::ORBIT_CAMERA)
 {
+
     Front = -glm::normalize(position);
     // Pitch = asin(Front.y);
     // Yaw = atan2(Front.x, Front.z);
@@ -11,8 +11,21 @@ MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
     WorldUp = up;
     updateCameraVectors();
 }
+GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front) :
+MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM), mode(Camera_Mode::FIXED_CAMERA)
+{
+
+    Front = glm::normalize(front);
+    // Pitch = asin(Front.y);
+    // Yaw = atan2(Front.x, Front.z);
+    Position = position;
+    WorldUp = up;
+    Right = glm::normalize(glm::cross(Front, WorldUp));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+    Up    = glm::normalize(glm::cross(Right, Front));
+    updateCameraVectors();
+}
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, float yaw, float pitch) :
-Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM), mode(Camera_Mode::FREE_CAMERA)
 {
     Position = position;
     WorldUp = up;
@@ -22,7 +35,7 @@ Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENS
 }
 // constructor with scalar values
 GLCamera::GLCamera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw, float pitch) :
-Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM), mode(Camera_Mode::FREE_CAMERA)
 {
     Position = glm::vec3(posX, posY, posZ);
     WorldUp = glm::vec3(upX, upY, upZ);
@@ -57,7 +70,7 @@ void GLCamera::ProcessKeyboard(Camera_Movement direction, float deltaTime)
         Position += Up * velocity;
     if (direction == DOWN)
         Position -= Up * velocity;
-    Front = -glm::normalize(Position);
+    
     updateCameraVectors();
     // std::cout << "Cam pos: " << Position.x << ", " << Position.y << ", " << Position.z << std::endl;
     // std::cout << "Cam forward: " << Front.x << ", " << Front.y << ", " << Front.z << std::endl;
@@ -97,13 +110,33 @@ void GLCamera::ProcessMouseScroll(float yoffset)
 // calculates the front vector from the Camera's (updated) Euler Angles
 void GLCamera::updateCameraVectors()
 {
-    // calculate the new Front vector
-    // glm::vec3 front;
-    // front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-    // front.y = sin(glm::radians(Pitch));
-    // front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-    // Front = glm::normalize(front);
-    // also re-calculate the Right and Up vector
-    Right = glm::normalize(glm::cross(Front, WorldUp));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
-    Up    = glm::normalize(glm::cross(Right, Front));
+    switch (mode)
+    {
+        case Camera_Mode::ORBIT_CAMERA:
+        {
+            Front = -glm::normalize(Position);
+            Right = glm::normalize(glm::cross(Front, WorldUp));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+            Up    = glm::normalize(glm::cross(Right, Front));
+            break;
+        }
+        case Camera_Mode::FREE_CAMERA:
+        {
+            // calculate the new Front vector
+            glm::vec3 front;
+            front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+            front.y = sin(glm::radians(Pitch));
+            front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+            Front = glm::normalize(front);
+            // also re-calculate the Right and Up vector
+            Right = glm::normalize(glm::cross(Front, WorldUp));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+            Up    = glm::normalize(glm::cross(Right, Front));
+            break;
+        }
+        case Camera_Mode::FIXED_CAMERA:
+        {
+            break;
+        }
+        default:
+            break;
+    }
 }
