@@ -60,12 +60,12 @@ struct VertexBoneData
 
 struct BoneInfo
 {
-    glm::mat4 OffsetMatrix;
+    glm::mat4 LocalToBoneTransform;
     glm::mat4 FinalTransformation;
 
     BoneInfo(const glm::mat4& l2b_transform)
     {
-        OffsetMatrix = l2b_transform;
+        LocalToBoneTransform = l2b_transform;
         FinalTransformation = glm::mat4();
     }
 };
@@ -83,17 +83,19 @@ public:
     };
     ~SkinnedModel(){ Clear(); };
     bool LoadMesh(const std::string& Filename);
-    void Render(SkinningShader& shader, const std::vector<glm::mat4>& bone_basis, const float animationTime = 0.0f);
+    void Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, const float animationTime = 0.0f);
     // WorldTrans& GetWorldTransform() { return m_worldTransform; }
     const Material& GetMaterial();
-    void GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms);
+    void GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world);
     glm::vec3 getCenterOfMass();
     std::string getBoneName(unsigned int index);
     unsigned int NumBones() const
     {
         return (unsigned int)m_BoneNameToIndexMap.size();
     }
-
+    void GetLocalToBoneTransforms(std::vector<glm::mat4>& Transforms, bool inverse = false, bool only_leap_bones = false);
+    void GetBoneFinalTransforms(std::vector<glm::mat4>& Transforms);
+    void GetBoneTransformRelativeToParent(std::vector<glm::mat4>& Transforms);
 private:
     void Clear();
     bool InitFromScene(const aiScene* pScene, const std::string& Filename);

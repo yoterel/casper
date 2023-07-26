@@ -61,7 +61,8 @@ bool SkinnedModel::LoadMesh(const std::string& Filename)
     glBindVertexArray(0);
     bone_leap_map = 
         {
-            // {"Elbow", 0},
+            // {"Wrist", 0},
+            {"Elbow", 1},
             {"thumb_meta", 3},
             {"thumb_a", 4},
             {"thumb_b", 5},
@@ -399,11 +400,11 @@ void SkinnedModel::PopulateBuffers()
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(m_Indices[0]) * m_Indices.size(), &m_Indices[0], GL_STATIC_DRAW);
 }
 
-void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_basis, const float animationTime)
+void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, const float animationTime)
 {
     shader.use();
     std::vector<glm::mat4> Transforms;
-    this->GetBoneTransforms(animationTime, Transforms, bones_basis);
+    this->GetBoneTransforms(animationTime, Transforms, bones_to_world, local_to_world);
     for (unsigned int i = 0 ; i < Transforms.size() ; i++) {
         shader.SetBoneTransform(i, Transforms[i]);
     }
@@ -455,30 +456,75 @@ glm::vec3 SkinnedModel::getCenterOfMass()
     return center_of_mass;
 };
 
-void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms)
+void SkinnedModel::GetLocalToBoneTransforms(std::vector<glm::mat4>& Transforms, bool inverse, bool only_leap_bones)
+{
+    if (only_leap_bones)
+    {
+        Transforms.resize(bone_leap_map.size());
+        int i = 0;
+        for (auto const& x : bone_leap_map)
+        {
+            unsigned int bone_index = m_BoneNameToIndexMap[x.first];
+            if (inverse)
+                Transforms[i] = glm::inverse(m_BoneInfo[bone_index].LocalToBoneTransform);
+            else
+                Transforms[i] = m_BoneInfo[bone_index].LocalToBoneTransform;
+            i++;
+        }
+    }
+    else
+    {
+        Transforms.resize(m_BoneInfo.size());
+        for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
+            if (inverse)
+                Transforms[i] = glm::inverse(m_BoneInfo[i].LocalToBoneTransform);
+            else
+                Transforms[i] = m_BoneInfo[i].LocalToBoneTransform;
+        }
+    }
+}
+
+void SkinnedModel::GetBoneFinalTransforms(std::vector<glm::mat4>& Transforms)
 {
     Transforms.resize(m_BoneInfo.size());
     for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
         Transforms[i] = m_BoneInfo[i].FinalTransformation;
     }
-    
+}
+
+void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4>& Transforms)
+{
+    Transforms.resize(m_BoneInfo.size());
+    aiNode* pNode = pScene->mRootNode;
+    std::string NodeName(pNode->mName.data);
+    glm::mat4 NodeTransformation(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
+    // glm::mat4 GlobalTransformation = ParentTransform * NodeTransformation;
+    if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end()) {
+        unsigned int BoneIndex = m_BoneNameToIndexMap[NodeName];
+        Transforms[BoneIndex] = NodeTransformation;
+    }
+}
+void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world)
+{
+    Transforms.resize(m_BoneInfo.size());
+    // default bind pose using bones
     // for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
-    //         // Transforms[i] = m_BoneInfo[i].FinalTransformation;
-    //         // if (i == 0)
-    //             // test.m[0][0] = sin(TimeInSeconds);
-    //         Transforms[i] = iden;
+    //     Transforms[i] = m_BoneInfo[i].FinalTransformation;
     // }
-    if (leap_bone_transforms.size() > 0)
+    // default bind pose not using bones
+    glm::mat4 iden = glm::mat4(1.0f);
+    for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
+        Transforms[i] = local_to_world*iden;
+    }
+    // default bind pose 
+    // skin the mesh using the bone to world transforms from leap
+    // offset matrix is local to bone matrix ("inverse bind pose")
+    if (bones_to_world.size() > 0)
     {
-        // glm::mat4 rot = glm::rotate(glm::mat4(1.0f), sin(AnimationTimeSec), glm::vec3(0.0f, 1.0f, 0.0f));
         for (auto const& x : bone_leap_map)
         {
-            // if (x.first == "index_b")
-            // {
-            unsigned int bone_index = m_BoneNameToIndexMap[x.first];
-                
-            Transforms[bone_index] = glm::inverse(leap_bone_transforms[0]) * leap_bone_transforms[x.second] * m_BoneInfo[bone_index].OffsetMatrix;
-            // }
+            unsigned int bone_index = m_BoneNameToIndexMap[x.first];    
+            Transforms[bone_index] = bones_to_world[x.second] * m_BoneInfo[bone_index].LocalToBoneTransform;
         }
     }
 }
@@ -490,7 +536,7 @@ void SkinnedModel::ReadNodeHierarchy(const aiNode* pNode, const glm::mat4& Paren
     glm::mat4 GlobalTransformation = ParentTransform * NodeTransformation;
     if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end()) {
         unsigned int BoneIndex = m_BoneNameToIndexMap[NodeName];
-        m_BoneInfo[BoneIndex].FinalTransformation = GlobalTransformation * m_BoneInfo[BoneIndex].OffsetMatrix;
+        m_BoneInfo[BoneIndex].FinalTransformation = GlobalTransformation * m_BoneInfo[BoneIndex].LocalToBoneTransform;
     }
     for (unsigned int i = 0 ; i < pNode->mNumChildren ; i++) {
         ReadNodeHierarchy(pNode->mChildren[i], GlobalTransformation);

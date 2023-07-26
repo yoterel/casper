@@ -33,6 +33,7 @@ public:
     // LEAP_TRACKING_EVENT* GetFrame(void); //Used in polling example
     LEAP_DEVICE_INFO* GetDeviceProperties(void); //Used in polling example
     void setDevice(const LEAP_DEVICE_INFO *deviceProps);
+    int64_t LeapGetTime() {return LeapGetNow();};
     bool IsConnected = false;
 private:
     void CloseConnection(void);
