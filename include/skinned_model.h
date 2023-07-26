@@ -15,6 +15,7 @@
 #include "material.h"
 #include "skinned_shader.h"
 
+#define INVALID_MATERIAL 0xFFFFFFFF
 #define ASSIMP_LOAD_FLAGS (aiProcess_Triangulate | aiProcess_GenSmoothNormals |  aiProcess_JoinIdenticalVertices )
 #define MAX_NUM_BONES_PER_VERTEX 6
 #define POSITION_LOCATION    0
@@ -24,6 +25,31 @@
 #define BONE_ID_LOCATION1     4
 #define BONE_WEIGHT_LOCATION0 5
 #define BONE_WEIGHT_LOCATION1 6
+
+enum BUFFER_TYPE 
+{
+    INDEX_BUFFER = 0,
+    POS_VB       = 1,
+    TEXCOORD_VB  = 2,
+    NORMAL_VB    = 3,
+    BONE_VB      = 4,
+    NUM_BUFFERS  = 5
+};
+
+struct BasicMeshEntry {
+    BasicMeshEntry()
+    {
+        NumIndices = 0;
+        BaseVertex = 0;
+        BaseIndex = 0;
+        MaterialIndex = INVALID_MATERIAL;
+    }
+
+    unsigned int NumIndices;
+    unsigned int BaseVertex;
+    unsigned int BaseIndex;
+    unsigned int MaterialIndex;
+};
 
 struct VertexBoneData
 {
@@ -73,8 +99,9 @@ struct BoneInfo
 class SkinnedModel
 {
 public:
-    SkinnedModel(const std::string& Filename) 
+    SkinnedModel(const std::string& Filename, const std::string& ExternalTextureFileName = "") 
     {
+        m_externalTextureFileName = ExternalTextureFileName;
         bool success = LoadMesh(Filename);
         if (!success) {
             std::cout << "Error loading mesh\n" << std::endl;
@@ -84,7 +111,6 @@ public:
     ~SkinnedModel(){ Clear(); };
     bool LoadMesh(const std::string& Filename);
     void Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, const float animationTime = 0.0f);
-    // WorldTrans& GetWorldTransform() { return m_worldTransform; }
     const Material& GetMaterial();
     void GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world);
     glm::vec3 getCenterOfMass();
@@ -118,43 +144,14 @@ private:
     unsigned int FindScaling(float AnimationTime, const aiNodeAnim* pNodeAnim);
     unsigned int FindRotation(float AnimationTime, const aiNodeAnim* pNodeAnim);
     unsigned int FindPosition(float AnimationTime, const aiNodeAnim* pNodeAnim);
-    // const aiNodeAnim* FindNodeAnim(const aiAnimation* pAnimation, const std::string& NodeName);
     void ReadNodeHierarchy(const aiNode* pNode, const glm::mat4& ParentTransform);
-    // void ReadNodeHierarchy(float AnimationTime, const aiNode* pNode, const glm::mat4& ParentTransform);
     std::string GetDirFromFilename(const std::string& Filename);
 
-#define INVALID_MATERIAL 0xFFFFFFFF
-
-    enum BUFFER_TYPE {
-        INDEX_BUFFER = 0,
-        POS_VB       = 1,
-        TEXCOORD_VB  = 2,
-        NORMAL_VB    = 3,
-        BONE_VB      = 4,
-        NUM_BUFFERS  = 5
-    };
-
-    // WorldTrans m_worldTransform;
     unsigned int m_VAO = 0;
     unsigned int m_Buffers[NUM_BUFFERS] = { 0 };
-
-    struct BasicMeshEntry {
-        BasicMeshEntry()
-        {
-            NumIndices = 0;
-            BaseVertex = 0;
-            BaseIndex = 0;
-            MaterialIndex = INVALID_MATERIAL;
-        }
-
-        unsigned int NumIndices;
-        unsigned int BaseVertex;
-        unsigned int BaseIndex;
-        unsigned int MaterialIndex;
-    };
-
     Assimp::Importer Importer;
     const aiScene* pScene = NULL;
+    std::string m_externalTextureFileName;
     std::vector<BasicMeshEntry> m_Meshes;
     std::vector<Material> m_Materials;
 

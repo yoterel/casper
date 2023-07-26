@@ -4,11 +4,11 @@ SkinningShader::SkinningShader(const char* vertexPath, const char* fragmentPath,
     Shader(vertexPath, fragmentPath, geometryPath)
     {
         worldTransformLoc = GetUniformLocation("gTransform");
-        // samplerLoc = GetUniformLocation("gSampler");
+        samplerLoc = GetUniformLocation("gSampler");
         // samplerSpecularExponentLoc = GetUniformLocation("gSamplerSpecularExponent");
-        // materialLoc.AmbientColor = GetUniformLocation("gMaterial.AmbientColor");
-        // materialLoc.DiffuseColor = GetUniformLocation("gMaterial.DiffuseColor");
-        // materialLoc.SpecularColor = GetUniformLocation("gMaterial.SpecularColor");
+        materialLoc.AmbientColor = GetUniformLocation("gMaterial.AmbientColor");
+        materialLoc.DiffuseColor = GetUniformLocation("gMaterial.DiffuseColor");
+        materialLoc.SpecularColor = GetUniformLocation("gMaterial.SpecularColor");
         // dirLightLoc.Color = GetUniformLocation("gDirectionalLight.Base.Color");
         // dirLightLoc.AmbientIntensity = GetUniformLocation("gDirectionalLight.Base.AmbientIntensity");
         // dirLightLoc.Direction = GetUniformLocation("gDirectionalLight.Direction");

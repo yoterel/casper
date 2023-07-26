@@ -282,11 +282,25 @@ void SkinnedModel::LoadDiffuseTexture(const std::string& Dir, const aiMaterial* 
             m_Materials[index].pDiffuse = new Texture(GL_TEXTURE_2D, FullPath.c_str());
 
             if (!m_Materials[index].pDiffuse->Load()) {
-                printf("Error loading diffuse texture '%s'\n", FullPath.c_str());
-                exit(0);
+                std::cout << "Error loading diffuse texture '" << FullPath << "'" << std::endl;
+                exit(1);
             }
             else {
-                printf("Loaded diffuse texture '%s'\n", FullPath.c_str());
+                std::cout << "Loaded diffuse texture '" << FullPath << "'" << std::endl;
+            }
+        }
+    }
+    else
+    {
+        if (m_externalTextureFileName != "")
+        {
+            m_Materials[index].pDiffuse = new Texture(GL_TEXTURE_2D, m_externalTextureFileName.c_str());
+            if (!m_Materials[index].pDiffuse->Load()) {
+                std::cout << "Error loading diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
+                exit(1);
+            }
+            else {
+                std::cout << "Loaded diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
             }
         }
     }

@@ -19,31 +19,25 @@
 #include "leap.h"
 #include "text.h"
 
-// using namespace std::literals::chrono_literals;
-
-/* settings */
-
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector<glm::mat4>& bones_to_world, std::vector<glm::vec3>& skeleton_vertices, bool debug);
-
-// unsigned int compile_shaders();
 unsigned int setup_canvas_buffers();
 unsigned int setup_cube_buffers();
 void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO);
 void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
 void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
-// void saveImage(char* filepath, GLFWwindow* w);
 // settings
 bool debug_mode = false;
 bool hand_in_frame = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int image_size = proj_width * proj_height * 3;
-// camera
+// "fixed" camera
 GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f,0.0f,0.0f));
+// "orbit" camera
 // GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
@@ -96,7 +90,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     glPointSize(10.0f);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
-    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  // callback for resizing
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -111,7 +105,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
-    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx");
+    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx", "C:/src/augmented_hands/resource/uv.png");
     n_bones = skinnedModel.NumBones();
     glm::vec3 coa = skinnedModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
@@ -388,7 +382,8 @@ int main( int /*argc*/, char* /*argv*/[] )
             }
             skinnedShader.use();
             // skinnedShader.SetPointLights(2, pointLights);
-            // skinnedShader.SetMaterial(skinnedModel.GetMaterial());
+            skinnedShader.SetMaterial(skinnedModel.GetMaterial());
+            skinnedShader.SetTextureUnit(0);
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShader.SetWorldTransform(projection_transform * view_transform);
             // for (unsigned int i = 0; i < bones_to_world.size(); i++)
