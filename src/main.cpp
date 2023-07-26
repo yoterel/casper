@@ -92,7 +92,7 @@ int main( int /*argc*/, char* /*argv*/[] )
 
     glfwSwapInterval(0);  // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height);  // set viewport
-    glClearColor(0.5f, 0.5f, 0.5f, 1.0f); // glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glPointSize(10.0f);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
@@ -229,6 +229,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
     blocking_queue<CPylonImage> camera_queue;
+    blocking_queue<uint8_t*> projector_queue;
     BaslerCamera camera;
     DynaFlashProjector projector(proj_width, proj_height);
     if (!projector.init()) {
@@ -239,9 +240,9 @@ int main( int /*argc*/, char* /*argv*/[] )
     // std::cout << "leap connected with serial: " << info->serial << std::endl;
     LEAP_CLOCK_REBASER clockSynchronizer;
     LeapCreateClockRebaser(&clockSynchronizer);
-    std::thread producer;
-
+    std::thread producer, consumer;
     // actual thread loops
+    // image producer
     if (producer_is_fake) {
         /* fake producer */
         cam_height = 540;
@@ -267,6 +268,19 @@ int main( int /*argc*/, char* /*argv*/[] )
         camera.init(camera_queue, close_signal, cam_height, cam_width);
         camera.acquire();
     }
+    // image consumer
+    consumer = std::thread([&projector_queue, &projector, &close_signal]() {  //, &projector
+        uint8_t* buffer;
+        bool sucess;
+        while (!close_signal) {
+            sucess = projector_queue.pop_with_timeout(100, buffer);
+            if (sucess)
+                projector.show_buffer(buffer);
+            // else
+            //     std::cout << "Consumer timeout" << std::endl;
+        }
+        std::cout << "Consumer finish" << std::endl;
+    });
     // main loop
     while(!glfwWindowShouldClose(window))
     {
@@ -291,6 +305,7 @@ int main( int /*argc*/, char* /*argv*/[] )
             std::cout << "last GPU->CPU time: " << t3.averageLap() << std::endl;
             std::cout << "last project time: " << t4.averageLap() << std::endl;
             std::cout << "cam q size: " << camera_queue.size() << std::endl;
+            std::cout << "proj q size: " << projector_queue.size() << std::endl;
             frameCount = 0;
             previousTime = currentFrame;
             t0.reset();
@@ -390,11 +405,11 @@ int main( int /*argc*/, char* /*argv*/[] )
         {
             glm::vec3 cam_pos = gl_camera.GetPos();
             glm::vec3 cam_forward = glm::normalize(-cam_pos);
-            text.Render(textShader, std::format("camera pos: {:.02f}, {:.02f}, {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
-            text.Render(textShader, std::format("camera forward: {:.02f}, {:.02f}, {:.02f}", cam_forward.x, cam_forward.y, cam_forward.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
-            text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+            text.Render(textShader, std::format("camera pos: {:.02f}, {:.02f}, {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("camera forward: {:.02f}, {:.02f}, {:.02f}", cam_forward.x, cam_forward.y, cam_forward.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         }
-        text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+        text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         t2.stop();
         
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
@@ -409,7 +424,8 @@ int main( int /*argc*/, char* /*argv*/[] )
             t3.stop();
             t4.start();
             // auto projector_thread = std::thread([&projector, &colorBuffer]() {  //, &projector
-            projector.show_buffer(colorBuffer);
+            projector_queue.push(colorBuffer);
+            // projector.show_buffer(colorBuffer);
             // });
             t4.stop();
             // stbi_flip_vertically_on_write(true);
@@ -421,10 +437,11 @@ int main( int /*argc*/, char* /*argv*/[] )
         glfwPollEvents();
     }
     // stbi_image_free(data);
+    close_signal = true;
+    consumer.join();
     projector.kill();
     camera.kill();
     glfwTerminate();
-    close_signal = true;
     delete[] colorBuffer;
     if (producer_is_fake)
     {
@@ -809,7 +826,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector<glm::mat4>& bones_to_world, std::vector<glm::vec3>& skeleton_vertices, bool debug)
 {
     uint64_t targetFrameSize = 0;
-    int leap_time_delay = 50000;  // us
+    int leap_time_delay = 40000;  // us
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f,1.0f,0.0f));
     glm::mat4 flip_y = glm::mat4(1.0f);
     flip_y[1][1] = -1.0f;

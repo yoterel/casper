@@ -37,7 +37,7 @@ public:
             return false;
         }
         value = std::move(this->d_queue.front());
-        this->d_queue.pop_front();
+        this->d_queue.clear();
         return true;
     }
     size_t size() {
