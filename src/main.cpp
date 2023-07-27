@@ -442,13 +442,6 @@ int main( int /*argc*/, char* /*argv*/[] )
     {
         producer.join();
     }
-    /* setup projector */
-    // DynaFlashProjector projector(proj_width, proj_height);
-    // bool success = projector.init();
-    // if (!success) {
-    //     std::cerr << "Failed to initialize projector\n";
-    //     return 1;
-    // }
     /* setup trigger */
     // char* portName = "\\\\.\\COM4";
     // #define DATA_LENGTH 255
@@ -461,82 +454,6 @@ int main( int /*argc*/, char* /*argv*/[] )
     //     else std::cerr << "Data was not written" << std::endl;
     // }
     /* end setup trigger */
-    
-    /* CPU consumer */
-    // auto consumer = std::thread([&camera_queue, &close_signal, &projector, &cam_height, &cam_width]() {  //, &projector
-    //     bool flag = false;
-    //     // uint8_t cam_height = projector.height;
-    //     // uint8_t cam_width = projector.width;
-    //     // projector.show(white_image);
-    //     while (!close_signal) {
-    //         // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    //         if (flag == true || camera_queue.size() == 0) {
-    //             // cv::Mat image;
-    //             // bool success = camera_queue.pop_with_timeout(1, image);
-    //             // auto start = std::chrono::system_clock::now();
-    //             // projector.show();
-    //             // auto runtime = std::chrono::system_clock::now() - start;
-    //             // std::cout << "ms: "
-    //             // << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
-    //             // << "\n";
-    //         }else{
-    //             auto start = std::chrono::system_clock::now();
-    //             // std::cout << "queue size: " << camera_queue.size() << "\n";
-    //             CPylonImage pylonImage = camera_queue.pop();
-    //             uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
-    //             // std::cout << "Image popped !!! " << std::endl;
-    //             cv::Mat myimage = cv::Mat(cam_height, cam_width, CV_8UC3, buffer);
-    //             // std::cout << myimage.empty() << std::endl;
-    //             // cv::imwrite("test1.png", myimage);
-    //             cv::cvtColor(myimage, myimage, cv::COLOR_RGB2GRAY);
-    //             cv::threshold(myimage, myimage, 50, 255, cv::THRESH_BINARY);
-    //             cv::cvtColor(myimage, myimage, cv::COLOR_GRAY2RGB);
-    //             cv::resize(myimage, myimage, cv::Size(projector.width, projector.height));
-    //             projector.show_buffer(myimage.data);
-    //             // projector.show();
-    //             // free(buffer);
-    //             auto runtime = std::chrono::system_clock::now() - start;
-    //             std::cout << "ms: "
-    //             << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
-    //             << "\n";
-    //         }
-    //         //     continue;
-    //         // }
-    //         // else
-    //         // {
-    //         //     if (flag == true || camera_queue.size() == 0)
-    //         //     {
-    //                 // image = cv::Mat::ones(cv::Size(1024, 768), CV_8UC3);
-    //             // }
-    //             // else
-    //             // {
-    //             //     image = camera_queue.pop();
-    //             //     // cv::namedWindow("image", cv::WINDOW_AUTOSIZE );
-    //             //     // cv::imshow("image", image);
-    //             //     // cv::waitKey(1);
-    //             // }
-    //         // flag = !flag;
-    //         // }
-            
-    //     }
-    //     std::cout << "Consumer finish" << std::endl;
-    // });
-    /* main thread */
-    // while (!close_signal)
-    // {
-    //     std::string userInput;
-    //     std::getline(std::cin, userInput);
-    //     for (size_t i = 0; i < userInput.size(); ++i)
-    //     {
-    //         char key = userInput[i];
-    //         if (key == 'q')
-    //         {
-    //             close_signal = true;
-    //             break;
-    //         }
-    //     }
-    // }
-    // consumer.join();
     return 0;
 }
 
