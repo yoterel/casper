@@ -47,7 +47,8 @@ void Canvas::Render(Shader& shader, uint8_t* buffer)
     // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
     glBindTexture(GL_TEXTURE_2D, m_texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_srcWidth, m_srcHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer);
-    this->ProcesssWithCuda();
+    if (cuda_interop)
+        this->ProcesssWithCuda();
     // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
     // glBindTexture(GL_TEXTURE_2D, m_texture);
     // glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_RGBA,
@@ -182,9 +183,12 @@ void Canvas::PopulateBuffers()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_srcWidth, m_srcHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0); 
-    this->checkCudaErrors(cudaGraphicsGLRegisterImage(&m_cudaGraphicsResource, m_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+    if (cuda_interop)
+    {
     // resource description for surface
-    memset(&m_resourceDesc, 0, sizeof(m_resourceDesc));
-    m_resourceDesc.resType = cudaResourceTypeArray;
+        this->checkCudaErrors(cudaGraphicsGLRegisterImage(&m_cudaGraphicsResource, m_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+        memset(&m_resourceDesc, 0, sizeof(m_resourceDesc));
+        m_resourceDesc.resType = cudaResourceTypeArray;
+    }
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }

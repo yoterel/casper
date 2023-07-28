@@ -28,6 +28,7 @@ private:
     void Clear();
     void ProcesssWithCuda();
     void checkCudaErrors(int result);
+    bool cuda_interop = true;
     unsigned int m_VAO = 0;
     unsigned int m_VBO = 0;
     unsigned int m_EBO = 0;
