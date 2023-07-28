@@ -80,6 +80,7 @@
         "stop_token": "cpp",
         "xlocbuf": "cpp",
         "xlocmes": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "filesystem": "cpp"
     }
 }

@@ -108,7 +108,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx", "C:/src/augmented_hands/resource/uv.png");
-    Canvas canvas(proj_width, proj_height, cam_width, cam_height);
+    Canvas canvas(cam_width, cam_height, proj_width, proj_height);
     n_bones = skinnedModel.NumBones();
     glm::vec3 coa = skinnedModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
@@ -311,9 +311,8 @@ int main( int /*argc*/, char* /*argv*/[] )
         t2.stop();
         
         // send result to projector queue
-        if (use_pbo) {  // todo: change to PBO http://www.songho.ca/opengl/gl_pbo.html
-            // saveImage("test.png", window);
-            // save_flag = false;
+        if (use_pbo) {  // todo: change to asynchronous read-back http://www.songho.ca/opengl/gl_pbo.html
+            std::cout << "pbo not implemented yet" << std::endl;
         }else{
             t3.start();
             glReadBuffer(GL_FRONT);

@@ -5,7 +5,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
-#include <Windows.h>
+#define WINDOWS_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#pragma warning(disable : 4996)
 #include <process.h>
 #include "LeapC.h"
 #define LockMutex EnterCriticalSection

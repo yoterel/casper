@@ -55,11 +55,19 @@ add_executable(ahand
     src/skinned_model.cpp
     src/skinned_shader.cpp
     src/canvas.cpp
+    src/cuda/cuda2gl.cu
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
+set_target_properties(ahand PROPERTIES CUDA_ARCHITECTURES "72")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common")
+# cuda
+target_include_directories(ahand PRIVATE "$ENV{CUDA_PATH}/include")
+target_link_libraries(ahand PRIVATE "$ENV{CUDA_PATH}/lib/x64/cudart.lib")
+# pylon
 target_link_libraries(ahand PRIVATE pylon::pylon)
+# opencv
 target_link_libraries(ahand PRIVATE ${OpenCV_LIBS})
 # dynaflash
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
