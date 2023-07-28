@@ -54,6 +54,7 @@ add_executable(ahand
     src/texture.cpp
     src/skinned_model.cpp
     src/skinned_shader.cpp
+    src/canvas.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
@@ -95,6 +96,8 @@ target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 add_executable(cuda_example 
     # src/add.cu
     src/cuda/boxFilter.cu
+    # src/cuda/cuda2gl.cpp
+    # src/cuda/cuda2gl.cu
 )
 set_target_properties(cuda_example PROPERTIES CUDA_ARCHITECTURES "72")
 target_include_directories(cuda_example PRIVATE "C:/src/cuda-samples/Common")

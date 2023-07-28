@@ -18,6 +18,7 @@
 #include "timer.h"
 #include "leap.h"
 #include "text.h"
+#include "canvas.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -34,6 +35,8 @@ bool debug_mode = false;
 bool hand_in_frame = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
+const unsigned int cam_height = 540;
+const unsigned int cam_width = 720;
 const unsigned int image_size = proj_width * proj_height * 3;
 // "fixed" camera
 GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f,0.0f,0.0f));
@@ -55,7 +58,7 @@ glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 
 int main( int /*argc*/, char* /*argv*/[] )
 {
-    Timer t0, t1, t2, t3, t4, t_app;  // t1.start(); t1.stop(); t1.getElapsedTimeInMilliSec();
+    Timer t0, t1, t2, t3, t4, t_app;
     t_app.start();
     // render output window
     glfwInit();
@@ -98,7 +101,6 @@ int main( int /*argc*/, char* /*argv*/[] )
     // tell GLFW to capture our mouse
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     // setup buffers
-    unsigned int canvasVAO = setup_canvas_buffers();
     unsigned int skeletonVAO, skeletonVBO;
     setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
     unsigned int gizmoVAO, gizmoVBO;
@@ -106,6 +108,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx", "C:/src/augmented_hands/resource/uv.png");
+    Canvas canvas(proj_width, proj_height, cam_width, cam_height);
     n_bones = skinnedModel.NumBones();
     glm::vec3 coa = skinnedModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
@@ -126,81 +129,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
-    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
-    PointLight pointLights[SkinningShader::MAX_POINT_LIGHTS];
-    glm::mat4 lightTransform = glm::mat4(1.0f);
-    pointLights[0].AmbientIntensity = 1.0f;
-    pointLights[0].DiffuseIntensity = 1.0f;
-    pointLights[0].Color = glm::vec3(1.0f, 1.0f, 0.0f);
-    pointLights[0].Attenuation.Linear = 0.0f;
-    pointLights[0].Attenuation.Exp = 0.0f;
-
-    pointLights[1].DiffuseIntensity = 0.0f;
-    pointLights[1].Color = glm::vec3(0.0f, 1.0f, 1.0f);
-    pointLights[1].Attenuation.Linear = 0.0f;
-    pointLights[1].Attenuation.Exp = 0.2f;
-    pointLights[0].WorldPosition.x = 0.0f;
-    pointLights[0].WorldPosition.y = 1.0;
-    pointLights[0].WorldPosition.z = 1.0f;
-    pointLights[0].CalcLocalPosition(lightTransform);
-
-    pointLights[1].WorldPosition.x = 10.0f;
-    pointLights[1].WorldPosition.y = 1.0f;
-    pointLights[1].WorldPosition.z = 0.0f;
-    pointLights[1].CalcLocalPosition(lightTransform);
-    // glUniformMatrix4fv(glGetUniformLocation(shader.ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-    // unsigned int modelVAO = setup_model_buffers();
-    //setup textures
-
-    // create a texture 
-    // -------------------------
-    unsigned int camera_texture;
-    // texture 1
-    // ---------
-    glGenTextures(1, &camera_texture);
-    glBindTexture(GL_TEXTURE_2D, camera_texture); 
-     // set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    // set texture filtering parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // create transformation matrices
-    glm::mat4 canvas_model_mat = glm::mat4(1.0f);
-    glm::mat4 skeleton_model_mat = glm::mat4(1.0f);
-    glm::mat4 mesh_model_mat = glm::mat4(1.0f);
-    // model_mat = glm::rotate(model_mat, glm::radians(-55.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-    mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(0.5f, 0.5f, 0.5f));
-    // glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
-    // canvas_model_mat = glm::scale(canvas_model_mat, glm::vec3(0.75f, 0.75f, 1.0f));  // 2.0f, 2.0f, 2.0f
-    glm::mat4 view_mat = gl_camera.GetViewMatrix();
-    // glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  10.0f);
-    // glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-    // glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
-    // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-    // view_mat = glm::translate(view_mat, glm::vec3(0.0f, 0.0f, -3.0f));
-    // glm::mat4 perspective_projection_mat = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
-    // glm::mat4 projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
-    glm::mat4 canvas_projection_mat = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
-    // glm::mat4 projection_mat = glm::frustum(-(float)proj_width*0.5f, (float)proj_width*0.5f, -(float)proj_height*0.5f, (float)proj_height*0.5f, 0.1f, 100.0f);
-    // setup shader inputs
-    float bg_thresh = 0.05f;
-    canvasShader.use();
-    canvasShader.setInt("camera_texture", 0);
-    canvasShader.setFloat("threshold", bg_thresh);
-    // canvasShader.setMat4("model", canvas_model_mat);
-    // canvasShader.setMat4("view", view_mat);
-    // canvasShader.setMat4("projection", canvas_projection_mat);
-    // modelShader.use();
-    // modelShader.setMat4("model", mesh_model_mat);
-    // modelShader.setMat4("view", view_mat);
-    // modelShader.setMat4("projection", perspective_projection_mat);
-    // vcolorShader.use();
-    // vcolorShader.setMat4("model", skeleton_model_mat);
-    // vcolorShader.setMat4("view", view_mat);
-    // vcolorShader.setMat4("projection", perspective_projection_mat);
-    
+    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");  
     // initialize
     double previousTime = glfwGetTime();
     double currentFrame = glfwGetTime();
@@ -209,16 +138,13 @@ int main( int /*argc*/, char* /*argv*/[] )
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     std::vector<glm::vec3> skeleton_vertices;
-    // std::vector<glm::mat4> bones_to_world_debug;
     std::vector<glm::mat4> bones_to_world;
-    // glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
     size_t n_skeleton_primitives = 0;
-    // bool save_flag = true;
     bool close_signal = false;
     
     bool use_pbo = false;
     int leap_time_delay = 50000;  // us
-    bool producer_is_fake = true;
+    bool producer_is_fake = false;
     uint8_t* colorBuffer = new uint8_t[image_size];
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
@@ -230,8 +156,6 @@ int main( int /*argc*/, char* /*argv*/[] )
         std::cerr << "Failed to initialize projector\n";
     }
     LeapConnect leap;
-    // LEAP_DEVICE_INFO* info = leap.GetDeviceProperties();
-    // std::cout << "leap connected with serial: " << info->serial << std::endl;
     LEAP_CLOCK_REBASER clockSynchronizer;
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer;
@@ -286,7 +210,7 @@ int main( int /*argc*/, char* /*argv*/[] )
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
         frameCount++;
-        // If a second has passed.
+        // stats display
         if ( currentFrame - previousTime >= 1.0 )
         {
             // Display the frame count here any way you want.
@@ -311,90 +235,69 @@ int main( int /*argc*/, char* /*argv*/[] )
         // input
         processInput(window);
         // render
-        // ------
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         t0.start();
         CPylonImage pylonImage = camera_queue.pop();
         uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
         t0.stop();
-        
-        // bind textures on corresponding texture units
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, camera_texture);
-        // load texture to GPU (large overhead)
         t1.start();
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, cam_width, cam_height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer);
+        canvas.Render(canvasShader, buffer);
         t1.stop();
         t2.start();
-
-        /* draw canvas as bg */
-        // glDisable(GL_DEPTH_TEST);  // enable depth testing
-        // canvasShader.use();
-        // glBindVertexArray(canvasVAO);
-        // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        // glEnable(GL_DEPTH_TEST);  // enable depth testing
-        /* draw canvas as bg */
-
         std::modf(glfwGetTime(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-        //Get the buffer size needed to hold the tracking data
-        skeleton_vertices.clear();
-        bones_to_world.clear();
         getLeapFrame(leap, targetFrameTime, bones_to_world, skeleton_vertices, debug_mode);
         glm::mat4 view_transform = gl_camera.GetViewMatrix();
         glm::mat4 projection_transform = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 500.0f); // (float)proj_width / (float)proj_height
-        if (debug_mode)
-        {
-            glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-            glBufferData(GL_ARRAY_BUFFER,  sizeof(float)*skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
-            n_skeleton_primitives = skeleton_vertices.size();
-            vcolorShader.use();
-            vcolorShader.setMat4("projection", projection_transform);
-            vcolorShader.setMat4("view", view_transform);
-            vcolorShader.setMat4("model", mm_to_cm);
-            glBindVertexArray(skeletonVAO);  // draws skeleton
-            glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
-            vcolorShader.setMat4("model", glm::mat4(1.0f));
-            glBindVertexArray(gizmoVAO);  // draws global coordinate system gizmo
-            glDrawArrays(GL_LINES, 0, 6);
-        }
         if (bones_to_world.size() > 0)
         {
             glm::mat4 LocalToWorld = bones_to_world[0] * rotx * coa_transform;
             if (debug_mode)
             {
+                // draw skeleton vertices
+                glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
+                glBufferData(GL_ARRAY_BUFFER,  sizeof(float)*skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
+                n_skeleton_primitives = skeleton_vertices.size();
+                vcolorShader.use();
+                vcolorShader.setMat4("projection", projection_transform);
+                vcolorShader.setMat4("view", view_transform);
+                vcolorShader.setMat4("model", mm_to_cm);
+                glBindVertexArray(skeletonVAO);
+                glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
+                // draws global coordinate system gizmo
+                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                glBindVertexArray(gizmoVAO);
+                glDrawArrays(GL_LINES, 0, 6);
+                // draw circle oriented like hand palm from leap motion
+                // glBindVertexArray(circleVAO);
+                // vcolorShader.setMat4("model", bones_to_world[0]);
+                // glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
+                // draw skeleton bones (as gizmos representing their local coordinate system)
                 std::vector<glm::mat4> BoneToLocalTransforms;
                 skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                // in bind pose
                 for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
                 {
                     vcolorShader.setMat4("model", LocalToWorld * BoneToLocalTransforms[i]);
                     glDrawArrays(GL_LINES, 0, 6);
                 }
+                // in leap motion pose
                 for (unsigned int i = 0; i < bones_to_world.size(); i++)
                 {
                     vcolorShader.setMat4("model", bones_to_world[i]);
                     glDrawArrays(GL_LINES, 0, 6);
                 }
+                // draw debug info
                 glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
                 glm::vec3 palm_normal(palm_normal_hom);
                 palm_normal = glm::normalize(palm_normal);
                 text.Render(textShader, std::format("palm normal: {:.02f}, {:.02f}, {:.02f}, {:.02f}", palm_normal.x, palm_normal.y, palm_normal.z, glm::l2Norm(palm_normal)), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
             }
+            // draw skinned mesh
             skinnedShader.use();
-            // skinnedShader.SetPointLights(2, pointLights);
-            skinnedShader.SetMaterial(skinnedModel.GetMaterial());
-            skinnedShader.SetTextureUnit(0);
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShader.SetWorldTransform(projection_transform * view_transform);
-            // for (unsigned int i = 0; i < bones_to_world.size(); i++)
-            // {
-            //     bones_to_world[i] = mm_to_cm * bones_to_world[i] * cm_to_mm;
-            // }
             skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, (float)t_app.getElapsedTimeInSec());
-            // vcolorShader.use();
-            // glBindVertexArray(circleVAO);
-            // vcolorShader.setMat4("model", mm_to_cm*bones_to_world[0]*timesTwenty);
-            // glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
         }
         if (debug_mode)
         {
@@ -407,8 +310,7 @@ int main( int /*argc*/, char* /*argv*/[] )
         text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         t2.stop();
         
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
+        // send result to projector queue
         if (use_pbo) {  // todo: change to PBO http://www.songho.ca/opengl/gl_pbo.html
             // saveImage("test.png", window);
             // save_flag = false;
@@ -428,10 +330,10 @@ int main( int /*argc*/, char* /*argv*/[] )
             // stride += (stride % 4) ? (4 - stride % 4) : 0;
             // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
         }
+        // swap buffers and poll IO events
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-    // stbi_image_free(data);
     close_signal = true;
     consumer.join();
     projector.kill();
@@ -737,6 +639,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
 void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector<glm::mat4>& bones_to_world, std::vector<glm::vec3>& skeleton_vertices, bool debug)
 {
+    skeleton_vertices.clear();
+    bones_to_world.clear();
     uint64_t targetFrameSize = 0;
     int leap_time_delay = 40000;  // us
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f,1.0f,0.0f));
@@ -746,6 +650,7 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
     flip_z[2][2] = -1.0f;
     glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
     glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
+    //Get the buffer size needed to hold the tracking data
     if(LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime+leap_time_delay, &targetFrameSize) == eLeapRS_Success)
     {
         //Allocate enough memory
@@ -842,3 +747,27 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
         }
     }
 }
+
+    // // create transformation matrices
+    // glm::mat4 canvas_model_mat = glm::mat4(1.0f);
+    // glm::mat4 skeleton_model_mat = glm::mat4(1.0f);
+    // glm::mat4 mesh_model_mat = glm::mat4(1.0f);
+    // // model_mat = glm::rotate(model_mat, glm::radians(-55.0f), glm::vec3(0.5f, 1.0f, 0.0f));
+    // mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(0.5f, 0.5f, 0.5f));
+    // // glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
+    // // canvas_model_mat = glm::scale(canvas_model_mat, glm::vec3(0.75f, 0.75f, 1.0f));  // 2.0f, 2.0f, 2.0f
+    // glm::mat4 view_mat = gl_camera.GetViewMatrix();
+    // // glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  10.0f);
+    // // glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+    // // glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
+    // // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    // // view_mat = glm::translate(view_mat, glm::vec3(0.0f, 0.0f, -3.0f));
+    // // glm::mat4 perspective_projection_mat = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
+    // // glm::mat4 projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
+    // // glm::mat4 projection_mat = glm::frustum(-(float)proj_width*0.5f, (float)proj_width*0.5f, -(float)proj_height*0.5f, (float)proj_height*0.5f, 0.1f, 100.0f);
+    // // setup shader inputs
+    // // float bg_thresh = 0.05f;
+    // // canvasShader.use();
+    // // canvasShader.setInt("camera_texture", 0);
+    // // canvasShader.setFloat("threshold", bg_thresh);
+    // glm::mat4 canvas_projection_mat = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);

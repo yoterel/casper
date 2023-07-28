@@ -11,8 +11,8 @@ flat in ivec2 BoneIDs11;
 in vec4 Weights00;
 in vec2 Weights11;
 in vec3 ourColor;
-
 out vec4 FragColor;
+
 struct Material
 {
     vec3 AmbientColor;

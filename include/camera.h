@@ -1,4 +1,6 @@
-#pragma once
+#ifndef BASLER_CAMERA_H
+#define BASLER_CAMERA_H
+
 #include <iostream>
 #include <pylon/PylonIncludes.h>
 // #include <pylon/PylonGUI.h>
@@ -40,3 +42,5 @@ private:
             .def("kill", &BaslerCamera::kill, "kills the camera"); 
     }
 #endif
+
+#endif // BASLER_CAMERA_H

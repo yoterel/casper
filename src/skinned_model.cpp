@@ -417,6 +417,8 @@ void SkinnedModel::PopulateBuffers()
 void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, const float animationTime)
 {
     shader.use();
+    shader.SetMaterial(this->GetMaterial());
+    shader.SetTextureUnit(0);
     std::vector<glm::mat4> Transforms;
     this->GetBoneTransforms(animationTime, Transforms, bones_to_world, local_to_world);
     for (unsigned int i = 0 ; i < Transforms.size() ; i++) {

@@ -158,6 +158,8 @@ void LeapConnect::OpenConnection(void){
       pollingThread = std::thread(&LeapConnect::serviceMessageLoop, this);
     }
   }
+  // LEAP_DEVICE_INFO* info = leap.GetDeviceProperties();
+  // std::cout << "leap connected with serial: " << info->serial << std::endl;
 }
 
 void LeapConnect::CloseConnection(void){
