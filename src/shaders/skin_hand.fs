@@ -25,6 +25,8 @@ uniform sampler2D gSampler;
 
 void main()
 {
-    // FragColor = vec4(ourColor, 0.9); // boneweight debug
-    FragColor = texture(gSampler, TexCoord0);  // diffuse texture
+    // finalColor = vec4(ourColor, 0.9); // boneweight debug
+    vec4 finalColor = texture(gSampler, TexCoord0);  // diffuse texture
+    finalColor.w = 0.5;
+    FragColor = finalColor;
 }

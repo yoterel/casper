@@ -14,4 +14,5 @@ void main()
 	float avg = (col.r + col.g + col.b) * 0.333333;
 	float bin = mix(0.0, 1.0, step(threshold, avg));
 	FragColor = vec4(0.0, bin, 0.0, 1.0);
+	// FragColor = vec4(col, 1.0);
 }

@@ -20,47 +20,49 @@
 #include "text.h"
 #include "canvas.h"
 
+// forward declarations
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector<glm::mat4>& bones_to_world, std::vector<glm::vec3>& skeleton_vertices, bool debug);
-unsigned int setup_canvas_buffers();
-unsigned int setup_cube_buffers();
 void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO);
 void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
-void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
+// unsigned int setup_cube_buffers();
+// void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
+
 // settings
 bool debug_mode = false;
-bool hand_in_frame = false;
+bool use_cuda = true;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_height = 540;
 const unsigned int cam_width = 720;
-const unsigned int image_size = proj_width * proj_height * 3;
 // "fixed" camera
 GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f,0.0f,0.0f));
 // "orbit" camera
 // GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+
+// init
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
-// timing
 double deltaTime = 0.0;
 double lastFrame = 0.0;
 unsigned int fps = 0;
 float ms_per_frame = 0;
-// others
 unsigned int displayBoneIndex = 0;
 bool space_pressed_flag = false;
 unsigned int n_bones = 0;
 glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
+bool hand_in_frame = false;
+const unsigned int image_size = proj_width * proj_height * 3;
 
 int main( int /*argc*/, char* /*argv*/[] )
 {
     Timer t0, t1, t2, t3, t4, t_app;
     t_app.start();
-    // render output window
+    // init GLFW
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -98,7 +100,6 @@ int main( int /*argc*/, char* /*argv*/[] )
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  // callback for resizing
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
-    // tell GLFW to capture our mouse
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     // setup buffers
     unsigned int skeletonVAO, skeletonVBO;
@@ -108,7 +109,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx", "C:/src/augmented_hands/resource/uv.png");
-    Canvas canvas(cam_width, cam_height, proj_width, proj_height);
+    Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     n_bones = skinnedModel.NumBones();
     glm::vec3 coa = skinnedModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
@@ -123,14 +124,18 @@ int main( int /*argc*/, char* /*argv*/[] )
     flip_z[2][2] = -1.0f;
     Text text("C:/src/augmented_hands/resource/arial.ttf");
     // setup shaders
-    Shader canvasShader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
+    Shader canvasShader;
+    if (use_cuda)
+        canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
+    else
+        canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
     Shader vcolorShader("C:/src/augmented_hands/src/shaders/color_by_vertex.vs", "C:/src/augmented_hands/src/shaders/color_by_vertex.fs");
     Shader textShader("C:/src/augmented_hands/src/shaders/text.vs", "C:/src/augmented_hands/src/shaders/text.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
     SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");  
-    // initialize
+    // more inits
     double previousTime = glfwGetTime();
     double currentFrame = glfwGetTime();
     double whole = 0.0;
@@ -141,7 +146,6 @@ int main( int /*argc*/, char* /*argv*/[] )
     std::vector<glm::mat4> bones_to_world;
     size_t n_skeleton_primitives = 0;
     bool close_signal = false;
-    
     bool use_pbo = false;
     int leap_time_delay = 50000;  // us
     bool producer_is_fake = false;
@@ -333,6 +337,7 @@ int main( int /*argc*/, char* /*argv*/[] )
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+    // cleanup
     close_signal = true;
     consumer.join();
     projector.kill();
@@ -384,37 +389,6 @@ void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO)
     glEnableVertexAttribArray(1);
 }
 
-void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
-{
-    std::vector<glm::vec3> vertices;
-    // std::vector<glm::vec3> colors;
-    float radius = 0.5f;
-    glm::vec3 center = glm::vec3(0.0f, 0.0f, 0.0f);
-    int n_vertices = 50;
-    vertices.push_back(center);
-    vertices.push_back(glm::vec3(1.0f, 1.0f, 1.0f));
-    for (int i = 0; i <= n_vertices; i++)   {
-        float twicePI = 2*glm::pi<float>();
-        vertices.push_back(glm::vec3(center.x + (radius * cos(i * twicePI / n_vertices)),
-                                     center.y,
-                                     center.z + (radius * sin(i * twicePI / n_vertices))));
-        vertices.push_back(glm::vec3(1.0f, 1.0f, 1.0f));
-    }
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glBindVertexArray(VAO);
-
-    auto test = vertices.data();
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, 6*(n_vertices+2) * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    // color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-}
 void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO)
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -443,126 +417,6 @@ void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO)
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 }
-
-unsigned int setup_canvas_buffers()
-{
-    // set up vertex data (and buffer(s)) and configure vertex attributes
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
-    float scale = 1.0f;
-    float vertices[] = {
-        // positions          // colors           // texture coords
-         scale,  scale, 0.0f,   1.0f, 1.0f, // top right
-         scale, -scale, 0.0f,   1.0f, 0.0f, // bottom right
-        -scale, -scale, 0.0f,   0.0f, 0.0f, // bottom left
-        -scale,  scale, 0.0f,   0.0f, 1.0f  // top left 
-    };
-    unsigned int indices[] = {
-        0, 1, 3, // first triangle
-        1, 2, 3  // second triangle
-    };
-    unsigned int VBO, VAO, EBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
-    // glGenBuffers(1, &PBO);
-
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    // texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    return VAO;
-}
-
-unsigned int setup_cube_buffers()
-{
-    // set up vertex data (and buffer(s)) and configure vertex attributes
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
-    float vertices[] = {
-    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
-     0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
-
-    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-     0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-     0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-     0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-    -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-
-    -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-    -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-    -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-
-     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-     0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-     0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-     0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-
-    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-     0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
-     0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-     0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-
-    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-    -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
-    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
-    };
-    unsigned int VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    // texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    return VAO;
-}
-
-// void saveImage(char* filepath, GLFWwindow* w) {
-//     int width, height;
-//     glfwGetFramebufferSize(w, &width, &height);
-//     GLsizei nrChannels = 3;
-//     GLsizei stride = nrChannels * width;
-//     stride += (stride % 4) ? (4 - stride % 4) : 0;
-//     GLsizei bufferSize = stride * height;
-//     std::vector<char> buffer(bufferSize);
-//     glPixelStorei(GL_PACK_ALIGNMENT, 4);
-//     glReadBuffer(GL_FRONT);
-//     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer.data());
-//     // stbi_flip_vertically_on_write(true);
-//     // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
-// }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
@@ -746,7 +600,20 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
         }
     }
 }
-
+// void saveImage(char* filepath, GLFWwindow* w) {
+//     int width, height;
+//     glfwGetFramebufferSize(w, &width, &height);
+//     GLsizei nrChannels = 3;
+//     GLsizei stride = nrChannels * width;
+//     stride += (stride % 4) ? (4 - stride % 4) : 0;
+//     GLsizei bufferSize = stride * height;
+//     std::vector<char> buffer(bufferSize);
+//     glPixelStorei(GL_PACK_ALIGNMENT, 4);
+//     glReadBuffer(GL_FRONT);
+//     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer.data());
+//     // stbi_flip_vertically_on_write(true);
+//     // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
+// }
     // // create transformation matrices
     // glm::mat4 canvas_model_mat = glm::mat4(1.0f);
     // glm::mat4 skeleton_model_mat = glm::mat4(1.0f);
@@ -770,3 +637,100 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
     // // canvasShader.setInt("camera_texture", 0);
     // // canvasShader.setFloat("threshold", bg_thresh);
     // glm::mat4 canvas_projection_mat = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
+
+//     unsigned int setup_cube_buffers()
+// {
+//     // set up vertex data (and buffer(s)) and configure vertex attributes
+//     // ------------------------------------------------------------------
+//     // ------------------------------------------------------------------
+//     float vertices[] = {
+//     -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+//      0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+//     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+//     -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+
+//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+//      0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+//      0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+//      0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+//     -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+
+//     -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+//     -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+//     -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+//      0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+//      0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+//      0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+//      0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
+//      0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+//      0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+
+//     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+//     -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
+//     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
+//     };
+//     unsigned int VBO, VAO;
+//     glGenVertexArrays(1, &VAO);
+//     glGenBuffers(1, &VBO);
+//     glBindVertexArray(VAO);
+
+//     glBindBuffer(GL_ARRAY_BUFFER, VBO);
+//     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+//     // position attribute
+//     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+//     glEnableVertexAttribArray(0);
+//     // texture coord attribute
+//     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+//     glEnableVertexAttribArray(1);
+//     return VAO;
+// }
+
+// void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
+// {
+//     std::vector<glm::vec3> vertices;
+//     // std::vector<glm::vec3> colors;
+//     float radius = 0.5f;
+//     glm::vec3 center = glm::vec3(0.0f, 0.0f, 0.0f);
+//     int n_vertices = 50;
+//     vertices.push_back(center);
+//     vertices.push_back(glm::vec3(1.0f, 1.0f, 1.0f));
+//     for (int i = 0; i <= n_vertices; i++)   {
+//         float twicePI = 2*glm::pi<float>();
+//         vertices.push_back(glm::vec3(center.x + (radius * cos(i * twicePI / n_vertices)),
+//                                      center.y,
+//                                      center.z + (radius * sin(i * twicePI / n_vertices))));
+//         vertices.push_back(glm::vec3(1.0f, 1.0f, 1.0f));
+//     }
+//     glGenVertexArrays(1, &VAO);
+//     glGenBuffers(1, &VBO);
+//     glBindVertexArray(VAO);
+
+//     auto test = vertices.data();
+//     glBindBuffer(GL_ARRAY_BUFFER, VBO);
+//     glBufferData(GL_ARRAY_BUFFER, 6*(n_vertices+2) * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+//     // position attribute
+//     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+//     glEnableVertexAttribArray(0);
+//     // color attribute
+//     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+//     glEnableVertexAttribArray(1);
+// }
