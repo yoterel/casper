@@ -55,6 +55,7 @@ add_executable(ahand
     src/skinned_model.cpp
     src/skinned_shader.cpp
     src/canvas.cpp
+    src/utils.cpp
     src/cuda/cuda2gl.cu
     third-party/glad${GLAD_VER}/src/glad.c
 )

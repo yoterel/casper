@@ -81,6 +81,10 @@
         "xlocbuf": "cpp",
         "xlocmes": "cpp",
         "fstream": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "bitset": "cpp",
+        "cwctype": "cpp",
+        "stack": "cpp",
+        "__nullptr": "cpp"
     }
 }

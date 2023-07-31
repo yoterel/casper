@@ -19,6 +19,7 @@
 #include "leap.h"
 #include "text.h"
 #include "canvas.h"
+#include "utils.h"
 
 // forward declarations
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -320,7 +321,9 @@ int main( int /*argc*/, char* /*argv*/[] )
         }else{
             t3.start();
             glReadBuffer(GL_FRONT);
+            // glCheckError();
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
+            // glCheckError();
             t3.stop();
             t4.start();
             // auto projector_thread = std::thread([&projector, &colorBuffer]() {  //, &projector

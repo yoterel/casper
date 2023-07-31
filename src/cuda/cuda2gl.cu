@@ -31,7 +31,8 @@
 
 namespace cg = cooperative_groups;
 
-#include <helper_cuda.h>
+// #include <helper_cuda.h>
+#include "utils.h"
 
 cudaTextureObject_t inTexObject;
 

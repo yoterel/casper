@@ -314,7 +314,7 @@ public:
                 width = ptrGrabResult->GetWidth();
             }
             CImageFormatConverter formatConverter;
-	        formatConverter.OutputPixelFormat= PixelType_RGB8packed;
+	        formatConverter.OutputPixelFormat= PixelType_BGRA8packed;
             CPylonImage pylonImage;
             formatConverter.Convert(pylonImage, ptrGrabResult);
             // uint8_t* buffer = (uint8_t*) pylonImage.GetBuffer();
