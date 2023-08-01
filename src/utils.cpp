@@ -1,4 +1,25 @@
 #include "utils.h"
+// #include <Exceptions.h>
+#include <iostream>
+
+// template <typename T>
+void check(cudaError_t result, char const *const func, const char *const file, int const line)
+{
+  if (result) {
+    fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n", file, line,
+            static_cast<unsigned int>(result), _cudaGetErrorEnum(result), func);
+    exit(EXIT_FAILURE);
+  }
+}
+
+void check2(NppStatus eStatusNPP)
+{
+    if (eStatusNPP != NPP_SUCCESS) 
+    {
+        std::cout << "NPP_CHECK_NPP - eStatusNPP = " << _cudaGetErrorEnum_NPP(eStatusNPP) << "("<< eStatusNPP << ")" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
 
 GLenum glCheckError_(const char *file, int line)
 {
@@ -24,4 +45,8 @@ GLenum glCheckError_(const char *file, int line)
 
 const char *_cudaGetErrorEnum(cudaError_t error) {
   return cudaGetErrorName(error);
+}
+const char *_cudaGetErrorEnum_NPP(NppStatus error)
+{ 
+    return "npp error"; 
 }

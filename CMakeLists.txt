@@ -57,6 +57,7 @@ add_executable(ahand
     src/canvas.cpp
     src/utils.cpp
     src/cuda/cuda2gl.cu
+    src/image_process.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
@@ -66,6 +67,23 @@ target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common")
 # cuda
 target_include_directories(ahand PRIVATE "$ENV{CUDA_PATH}/include")
 target_link_libraries(ahand PRIVATE "$ENV{CUDA_PATH}/lib/x64/cudart.lib")
+# npp
+set_target_properties(ahand PROPERTIES CUDA_ARCHITECTURES "72")
+# target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common")
+target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common/UtilNPP")
+# target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common/FreeImage/Dist/x64")
+target_link_libraries(ahand PRIVATE 
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppc.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppial.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppicc.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppidei.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppif.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppig.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppim.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppist.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppisu.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppitc.lib"
+                        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/npps.lib")
 # pylon
 target_link_libraries(ahand PRIVATE pylon::pylon)
 # opencv

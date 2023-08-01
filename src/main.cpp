@@ -20,6 +20,7 @@
 #include "text.h"
 #include "canvas.h"
 #include "utils.h"
+#include "image_process.h"
 
 // forward declarations
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -34,7 +35,7 @@ void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
 
 // settings
 bool debug_mode = false;
-bool use_cuda = true;
+bool use_cuda = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_height = 540;
@@ -137,6 +138,7 @@ int main( int /*argc*/, char* /*argv*/[] )
     textShader.setMat4("projection", orth_projection_transform);
     SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");  
     // more inits
+    NPP_wrapper::printfNPPinfo();
     double previousTime = glfwGetTime();
     double currentFrame = glfwGetTime();
     double whole = 0.0;
@@ -244,6 +246,12 @@ int main( int /*argc*/, char* /*argv*/[] )
         t0.start();
         CPylonImage pylonImage = camera_queue.pop();
         uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
+        // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
+        // NPP_wrapper::cuda_process(buffer, output, cam_width, cam_height);
+        // cv::Mat cv_image_input(cam_height, cam_width, CV_8UC4, buffer);
+        // cv::imwrite("input.png", cv_image_input);
+        // cv::Mat cv_image_output(cam_height, cam_width, CV_8UC1, output);
+        // cv::imwrite("output.png", cv_image_output);
         t0.stop();
         t1.start();
         canvas.Render(canvasShader, buffer);
