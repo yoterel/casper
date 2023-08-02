@@ -113,3 +113,66 @@ bool NPP_wrapper::process(uint8_t* host_buffer_in, uint8_t* host_buffer_out, uns
     return false;
     }
 }
+
+bool distanceTransform(uint8_t* host_buffer_in, 
+                       uint8_t* host_buffer_out,
+                       unsigned int width, unsigned int height)
+{
+try {
+    npp::ImageCPU_8u_C4 oHostSrc(width, height);
+    memcpy(oHostSrc.data(), host_buffer_in, width * height * 4 * sizeof(uint8_t));
+    npp::ImageNPP_8u_C4 oDeviceSrc(oHostSrc);
+    npp::ImageNPP_8u_C1 oDeviceDst(oDeviceSrc.size());
+    NppiSize oSizeROI = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
+    Npp32f aCoeffs[3] = {0.333f, 0.333f, 0.333f};
+    // color to gray
+    nppiColorToGray_8u_AC4C1R(oDeviceSrc.data(), oDeviceSrc.pitch(),
+                              oDeviceDst.data(), oDeviceDst.pitch(),
+                              oSizeROI, aCoeffs);
+    // threshold
+    nppiThreshold_Val_8u_C1IR(oDeviceDst.data(), oDeviceDst.pitch(), oSizeROI, 10, 255, NPP_CMP_GREATER);
+    npp::ImageNPP_16s_C1 oDeviceDstVoronoiIndices(width * 2, height);
+    npp::ImageNPP_16s_C1 oDeviceDstVoronoiIndices(width * 2, height);
+    /* closest point transform */
+    // get site indices from distance transform
+    nppiDistanceTransformPBA_8u16u_C1R_Ctx(oDeviceDst.data(), oDeviceDst.pitch(), 255, 255, 0, 0, oDeviceDstVoronoiIndices.data(), oDeviceDstVoronoiIndices.pitch(), 0, 0, 0, 0, oSizeROI, oDeviceBuffer.data(), 0);
+    // split result into x and y maps (is there an easier way?)
+    //prepare a mask that is checkerboard pattern of 0 and 1 (ymap)
+    //nppiCopy_16s_C1MR
+    //invert the mask and copy again to get (xmap)
+    //nppiCopy_16s_C1MR
+    //increase bit depth and convert to float
+    //nppiConvert_16s32f_C1R
+    //divide by width and height
+    //nppiDivC_32f_C1IR
+    // finally, remap the input using the maps...
+    // nppiRemap_8u_C4R
+    // save result back to buffer
+    npp::ImageCPU_8u_C1 oHostDst(oDeviceDst.size());
+    oDeviceDst.copyTo(oHostDst.data(), oHostDst.pitch());
+    // NppiSize oSizeROI = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
+    // checkErrorNPP(nppiColorToGray_8u_C4C1R(
+    //     oDeviceSrc.data(), oDeviceSrc.pitch(),
+    //     oDeviceDst.data(), oDeviceSrc.pitch(),
+    //     oSizeROI, aCoeffs));
+    // npp::ImageCPU_8u_C1 oHostDst(oDeviceDst.size());
+    // oDeviceDst.copyTo(oHostDst.data(), oHostDst.pitch());
+    memcpy(host_buffer_out, oHostDst.data(), width * height * sizeof(uint8_t));
+    nppiFree(oDeviceSrc.data());
+    nppiFree(oDeviceDst.data());
+    return true;
+
+
+    } catch (npp::Exception &rException) {
+    std::cerr << "Program error! The following exception occurred: \n";
+    std::cerr << rException << std::endl;
+    std::cerr << "Aborting." << std::endl;
+    return false;
+    // exit(1);
+    } catch (...) {
+    std::cerr << "Program error! An unknow type of exception occurred. \n";
+    std::cerr << "Aborting." << std::endl;
+    // exit(1);
+    return false;
+    }
+}
