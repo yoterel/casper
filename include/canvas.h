@@ -31,6 +31,7 @@ private:
     // void CreateTexture();
     void Clear();
     void ProcesssWithCuda();
+    void ProcesssWithCuda2();
     #ifndef USE_TEXSUBIMAGE2D
     void initCUDABuffers();
     #endif
@@ -40,22 +41,22 @@ private:
     unsigned int m_EBO = 0;
     unsigned int m_FBO = 0;
     unsigned int m_depth_buffer = 0;
-    unsigned int m_texture_dst;  // create texture that will receive the result of CUDA
+    // unsigned int m_texture_dst;  // create texture that will receive the result of CUDA
     unsigned int m_texture_src;  // create texture for blitting onto the screen
     float bg_thresh = 0.05f;
     unsigned int m_srcWidth, m_srcHeight;
     unsigned int m_dstWidth, m_dstHeight;
     // #ifdef USE_TEXSUBIMAGE2D
     unsigned int m_PBO = 0;
-    struct cudaGraphicsResource *m_cuda_pbo_dest_resource = NULL;
+    struct cudaGraphicsResource* m_PBO_CUDA = NULL;
     // #else
     unsigned int *m_cuda_dest_resource = NULL;
-    struct cudaGraphicsResource *m_cuda_tex_result_resource = NULL;
+    struct cudaGraphicsResource* m_cuda_tex_result_resource = NULL;
     // #endif
-    struct cudaGraphicsResource *m_cuda_tex_screen_resource = NULL;
-    unsigned int size_tex_data;
-    unsigned int num_texels;
-    unsigned int num_values;
+    struct cudaGraphicsResource* m_cuda_tex_screen_resource = NULL;
+    unsigned int m_size_tex_data;
+    unsigned int m_num_texels;
+    unsigned int m_num_values;
     // struct cudaResourceDesc m_resourceDesc;
     // cudaGraphicsResource *m_cudaGraphicsResource = NULL;
     // cudaArray            *m_cudaArray = NULL;

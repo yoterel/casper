@@ -21,7 +21,7 @@
 #include "canvas.h"
 #include "utils.h"
 #include "image_process.h"
-
+#include <helper_string.h>
 // forward declarations
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -36,6 +36,8 @@ void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
 // settings
 bool debug_mode = false;
 bool use_cuda = false;
+bool producer_is_fake = false;
+// init state
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_height = 540;
@@ -44,8 +46,6 @@ const unsigned int cam_width = 720;
 GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f,0.0f,0.0f));
 // "orbit" camera
 // GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-
-// init
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
@@ -60,8 +60,14 @@ glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 bool hand_in_frame = false;
 const unsigned int image_size = proj_width * proj_height * 3;
 
-int main( int /*argc*/, char* /*argv*/[] )
+int main( int argc, char* argv[])
 {
+    if (checkCmdLineFlag(argc, (const char **)argv, "cuda"))
+        use_cuda = true;
+    if (checkCmdLineFlag(argc, (const char **)argv, "debug"))
+        debug_mode = true;
+    if (checkCmdLineFlag(argc, (const char **)argv, "fake_cam"))
+        producer_is_fake = true;
     Timer t0, t1, t2, t3, t4, t_app;
     t_app.start();
     // init GLFW
@@ -151,7 +157,6 @@ int main( int /*argc*/, char* /*argv*/[] )
     bool close_signal = false;
     bool use_pbo = false;
     int leap_time_delay = 50000;  // us
-    bool producer_is_fake = false;
     uint8_t* colorBuffer = new uint8_t[image_size];
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
@@ -225,7 +230,7 @@ int main( int /*argc*/, char* /*argv*/[] )
             ms_per_frame = 1000.0f/frameCount;
             // std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
             std::cout << "last wait_for_cam time: " << t0.averageLap() << std::endl;
-            std::cout << "last Cam->GPU time: " << t1.averageLap() << std::endl;
+            std::cout << "last canvas process time: " << t1.averageLap() << std::endl;
             std::cout << "last Processing time: " << t2.averageLap() << std::endl;
             std::cout << "last GPU->CPU time: " << t3.averageLap() << std::endl;
             std::cout << "last project time: " << t4.averageLap() << std::endl;

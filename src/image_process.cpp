@@ -29,11 +29,54 @@ bool NPP_wrapper::printfNPPinfo()
     // bool bVal = checkCudaCapabilities(1, 0);
     return true;
 }
-bool NPP_wrapper::cuda_process(uint8_t* buffer_in, uint8_t* buffer_out, unsigned int width, unsigned int height)
+
+bool NPP_wrapper::process(uint8_t* device_buffer_io, unsigned int width, unsigned int height)
+{
+        try {
+        NppiSize oSizeROI = {(int)width, (int)height};
+        int stepSize = 4 * width * sizeof(uint8_t);
+        Npp32f aCoeffs[3] = {0.333f, 0.333f, 0.333f};
+        npp::ImageNPP_8u_C1 oDeviceDst1C(width, height);
+        npp::ImageNPP_8u_C4 oDeviceDst4C(width, height);
+        nppiColorToGray_8u_AC4C1R((Npp8u*)device_buffer_io, stepSize,
+                                oDeviceDst1C.data(), oDeviceDst1C.pitch(),
+                                oSizeROI, aCoeffs);
+        nppiThreshold_Val_8u_C1IR(oDeviceDst1C.data(), oDeviceDst1C.pitch(), oSizeROI, 10, 255, NPP_CMP_GREATER);
+        nppiDup_8u_C1AC4R(oDeviceDst1C.data(), oDeviceDst1C.pitch(), oDeviceDst4C.data(), oDeviceDst4C.pitch(), oSizeROI);
+        // inplace gamma
+        // npp::ImageNPP_8u_C4 oDeviceDst(width, height);
+        // checkErrorNPP(nppiGammaFwd_8u_AC4IR((Npp8u*)device_buffer_io, stepSize, oSizeROI));
+        // out of place gamma
+        // npp::ImageNPP_8u_C4 oDeviceDst(width, height);
+        // checkErrorNPP(nppiGammaFwd_8u_AC4R((Npp8u*)device_buffer_io, stepSize, oDeviceDst.data(), oDeviceDst.pitch(), oSizeROI));
+        cudaError_t eResult;
+        eResult = cudaMemcpy2D((Npp8u*)device_buffer_io, stepSize, oDeviceDst4C.data(), oDeviceDst4C.pitch(), width * 4 * sizeof(Npp8u), height, cudaMemcpyDeviceToDevice);
+        NPP_ASSERT(cudaSuccess == eResult);
+        // device_buffer_io = oDeviceDst.data();
+        nppiFree(oDeviceDst1C.data());
+        nppiFree(oDeviceDst4C.data());
+        return true;
+
+
+        } catch (npp::Exception &rException) {
+        std::cerr << "Program error! The following exception occurred: \n";
+        std::cerr << rException << std::endl;
+        std::cerr << "Aborting." << std::endl;
+        return false;
+        // exit(1);
+        } catch (...) {
+        std::cerr << "Program error! An unknow type of exception occurred. \n";
+        std::cerr << "Aborting." << std::endl;
+        // exit(1);
+        return false;
+    }
+}
+
+bool NPP_wrapper::process(uint8_t* host_buffer_in, uint8_t* host_buffer_out, unsigned int width, unsigned int height)
 {
     try {
     npp::ImageCPU_8u_C4 oHostSrc(width, height);
-    memcpy(oHostSrc.data(), buffer_in, width * height * 4 * sizeof(uint8_t));
+    memcpy(oHostSrc.data(), host_buffer_in, width * height * 4 * sizeof(uint8_t));
     npp::ImageNPP_8u_C4 oDeviceSrc(oHostSrc);
     npp::ImageNPP_8u_C1 oDeviceDst(oDeviceSrc.size());
     NppiSize oSizeROI = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
@@ -51,7 +94,7 @@ bool NPP_wrapper::cuda_process(uint8_t* buffer_in, uint8_t* buffer_out, unsigned
     //     oSizeROI, aCoeffs));
     // npp::ImageCPU_8u_C1 oHostDst(oDeviceDst.size());
     // oDeviceDst.copyTo(oHostDst.data(), oHostDst.pitch());
-    memcpy(buffer_out, oHostDst.data(), width * height * sizeof(uint8_t));
+    memcpy(host_buffer_out, oHostDst.data(), width * height * sizeof(uint8_t));
     nppiFree(oDeviceSrc.data());
     nppiFree(oDeviceDst.data());
     return true;
