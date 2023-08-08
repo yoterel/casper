@@ -49,20 +49,122 @@ void Canvas::Clear()
         glDeleteTextures(1, &m_texture_src);
         m_texture_src = 0;
     }
-    if (m_depth_buffer != 0) {
-        glDeleteRenderbuffers(1, &m_depth_buffer);
-        m_depth_buffer = 0;
+    if (m_depth_buffer[0] != 0) {
+        glDeleteRenderbuffers(2, m_depth_buffer);
+        // m_depth_buffer = 0;
     }
-    if (m_FBO != 0) {
-        glDeleteFramebuffers(1, &m_FBO);
-        m_FBO = 0;
+    if (m_FBO[0] != 0) {
+        glDeleteFramebuffers(2, m_FBO);
+        // m_FBO = {0};
     }
-    // if (m_texture_dst != 0) {
-    //     glDeleteTextures(1, &m_texture_dst);
-    //     m_texture_dst = 0;
-    // }
+    if (m_pingpong_textures[0] != 0) {
+        glDeleteTextures(2, m_pingpong_textures);
+        // m_texture_dst = 0;
+    }
 }
+void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug, uint8_t* buffer)
+{
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
+    GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+    if (ptr)
+    {
+        memcpy(ptr, buffer, m_size_tex_data);
+        glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
+    }
+    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[0]);
+    jfaInit.use();
+    jfaInit.setInt("src", 0);
+    jfaInit.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+    // jfaInit.setBool("flipVer", false);
+    glViewport(0, 0, m_srcWidth, m_srcHeight);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glBindVertexArray(m_VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+    glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[1]);
+    glViewport(0, 0, m_srcWidth, m_srcHeight);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    /* sanity (render to screen)*/
+    // debug.use();
+    // debug.setInt("jfa", 0);
+    // debug.setInt("src", 1);
+    // debug.setBool("flipVer", true);
+    // debug.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+    // glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // glActiveTexture(GL_TEXTURE0);
+    // glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
+    // glActiveTexture(GL_TEXTURE1);
+    // glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    // glViewport(0, 0, m_dstWidth, m_dstHeight);
+    // glDisable(GL_DEPTH_TEST);
+    // glDisable(GL_CULL_FACE);
+    // glDisable(GL_BLEND);
+    // glBindVertexArray(m_VAO);
+    // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    // glEnable(GL_CULL_FACE);
+    // glEnable(GL_BLEND);
+    // glEnable(GL_DEPTH_TEST);
+    /* sanity */
 
+    // jump flood
+    int numPasses = 5;
+    for (int i = 0; i < numPasses; i++)
+    {
+        jfa.use();
+        jfa.setBool("flipVer", false);
+        jfa.setInt("src", 0);
+        jfa.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+        jfa.setInt("pass", i);
+        jfa.setInt("numPasses", numPasses);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        glBindVertexArray(m_VAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[(i+1)%2]);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[i%2]);
+        // glViewport(0, 0, m_srcWidth, m_srcHeight);
+        // glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+    // finally render to screen
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, m_dstWidth, m_dstHeight);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[1]);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    canvas.use();
+    canvas.setInt("jfa", 0);
+    canvas.setInt("src", 1);
+    canvas.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+    canvas.setBool("flipVer", true);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glBindVertexArray(m_VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
 void Canvas::Render(Shader& shader, uint8_t* buffer)
 {
     if (m_use_cuda)
@@ -95,6 +197,7 @@ void Canvas::Render(Shader& shader, uint8_t* buffer)
         glBindTexture(GL_TEXTURE_2D, m_texture_src);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
         // glBindTexture(GL_TEXTURE_2D, m_texture_dst);
         //glCheckError();
         // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_srcWidth, m_srcHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
@@ -112,7 +215,7 @@ void Canvas::Render(Shader& shader, uint8_t* buffer)
     }
     // second pass: render the texture onto quad
     shader.use();
-    shader.setInt("camera_texture", 0);
+    shader.setInt("src", 0);
     shader.setFloat("threshold", bg_thresh);
     shader.setBool("flipVer", true);
     // draw texture on quad
@@ -143,7 +246,8 @@ void Canvas::ProcesssWithCuda()
                                          &num_bytes,
                                          m_PBO_CUDA);
     // do work
-    NPP_wrapper::process(out_data, m_srcWidth, m_srcHeight);
+    // NPP_wrapper::process(out_data, m_srcWidth, m_srcHeight);
+    NPP_wrapper::distanceTransform(out_data, m_srcWidth, m_srcHeight);
     cudaGraphicsUnmapResources(1, &m_PBO_CUDA, 0);
 }
 
@@ -177,23 +281,7 @@ void Canvas::initGLBuffers()
     //                                            cudaGraphicsMapFlagsNone));
     // #endif
     // texture dst from cuda processing
-    // glGenTextures(1, &m_texture_dst);
-    // //glCheckError();
-    // glBindTexture(GL_TEXTURE_2D, m_texture_dst);
-    // //glCheckError();
-    //  // set the texture wrapping parameters
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
-    // //glCheckError();
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    // //glCheckError();
-    // // set texture filtering parameters
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    // //glCheckError();
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // //glCheckError();
-    // #ifdef USE_TEXSUBIMAGE2D
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_srcWidth, m_srcHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-    // //glCheckError();
+    //glCheckError();
     // #else
     // if (m_use_cuda)
     // {
@@ -258,32 +346,51 @@ void Canvas::initGLBuffers()
     // }
     
 
-    // create a renderbuffer
-    glGenRenderbuffers(1, &m_depth_buffer);
-    //glCheckError();
-    glBindRenderbuffer(GL_RENDERBUFFER, m_depth_buffer);
-    //glCheckError();
-    // allocate storage
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_srcWidth, m_srcHeight);
-    //glCheckError();
-    // clean up
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    //glCheckError();
-    glGenFramebuffers(1, &m_FBO);
-    //glCheckError();
-    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
-    //glCheckError();
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture_src, 0);
-    //glCheckError();
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depth_buffer);
-    //glCheckError();
-    GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
+    // create fbos
+    glGenTextures(2, m_pingpong_textures);
+    glGenRenderbuffers(2, m_depth_buffer);
+    glGenFramebuffers(2, m_FBO);
+    for (int i = 0; i < 2; i++)
     {
-        std::cout << "ERROR: Incomplete framebuffer status." << std::endl;
+        //glCheckError();
+        glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[i]);
+        //glCheckError();
+        // set the texture wrapping parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+        //glCheckError();
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        //glCheckError();
+        // set texture filtering parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        //glCheckError();
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        //glCheckError();
+        // #ifdef USE_TEXSUBIMAGE2D
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_srcWidth, m_srcHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+        //glCheckError();
+        glBindRenderbuffer(GL_RENDERBUFFER, m_depth_buffer[i]);
+        //glCheckError();
+        // allocate storage
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_srcWidth, m_srcHeight);
+        //glCheckError();
+        // clean up
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        //glCheckError();
+        //glCheckError();
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[i]);
+        //glCheckError();
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_pingpong_textures[i], 0);
+        //glCheckError();
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depth_buffer[i]);
+        //glCheckError();
+        GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
+        {
+            std::cout << "ERROR: Incomplete framebuffer status." << std::endl;
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    //glCheckError();
+    // glCheckError();
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------

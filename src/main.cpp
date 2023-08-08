@@ -63,11 +63,20 @@ const unsigned int image_size = proj_width * proj_height * 3;
 int main( int argc, char* argv[])
 {
     if (checkCmdLineFlag(argc, (const char **)argv, "cuda"))
+    {
+        std::cout << "Using CUDA..." << std::endl;
         use_cuda = true;
+    }
     if (checkCmdLineFlag(argc, (const char **)argv, "debug"))
+    {
+        std::cout << "Debug mode on..." << std::endl;
         debug_mode = true;
+    }
     if (checkCmdLineFlag(argc, (const char **)argv, "fake_cam"))
+    {
+        std::cout << "Fake camera on..." << std::endl;
         producer_is_fake = true;
+    }
     Timer t0, t1, t2, t3, t4, t_app;
     t_app.start();
     // init GLFW
@@ -133,6 +142,12 @@ int main( int argc, char* argv[])
     Text text("C:/src/augmented_hands/resource/arial.ttf");
     // setup shaders
     Shader canvasShader;
+    // Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
+    // Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
+    Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
+    Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
+    Shader remapShader("C:/src/augmented_hands/src/shaders/remap.vs", "C:/src/augmented_hands/src/shaders/remap.fs");
+    Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
     if (use_cuda)
         canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
     else
@@ -252,14 +267,24 @@ int main( int argc, char* argv[])
         CPylonImage pylonImage = camera_queue.pop();
         uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
-        // NPP_wrapper::cuda_process(buffer, output, cam_width, cam_height);
+        // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
+        // NPP_wrapper::distanceTransform(buffer, output, cam_width, cam_height);
         // cv::Mat cv_image_input(cam_height, cam_width, CV_8UC4, buffer);
         // cv::imwrite("input.png", cv_image_input);
-        // cv::Mat cv_image_output(cam_height, cam_width, CV_8UC1, output);
+        // cv::Mat cv_image_output(cam_height, cam_width, CV_8UC4, output);
         // cv::imwrite("output.png", cv_image_output);
+        // cv::Mat cv_image_output_distance(cam_height, cam_width, CV_16UC1, dist_output);
+        // cv_image_output_distance.convertTo(cv_image_output_distance, CV_8U);
+        // cv::imwrite("output_distance.png", cv_image_output_distance);
+        // double minVal; 
+        // double maxVal; 
+        // cv::Point minLoc; 
+        // cv::Point maxLoc;
+        // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t0.stop();
         t1.start();
-        canvas.Render(canvasShader, buffer);
+        // canvas.Render(canvasShader, buffer);
+        canvas.Render(jfaInitShader, jfaShader, remapShader, debugShader, buffer);
         t1.stop();
         t2.start();
         std::modf(glfwGetTime(), &whole);

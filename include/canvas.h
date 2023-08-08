@@ -25,13 +25,14 @@ public:
            bool use_cuda);
     ~Canvas(){ Clear(); };
     void Render(Shader& shader, uint8_t* buffer);
+    void Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug, uint8_t* buffer);
     
 private:
     void initGLBuffers();
     // void CreateTexture();
     void Clear();
     void ProcesssWithCuda();
-    void ProcesssWithCuda2();
+    void ProcesssWithGL();
     #ifndef USE_TEXSUBIMAGE2D
     void initCUDABuffers();
     #endif
@@ -39,8 +40,9 @@ private:
     unsigned int m_VAO = 0;
     unsigned int m_VBO = 0;
     unsigned int m_EBO = 0;
-    unsigned int m_FBO = 0;
-    unsigned int m_depth_buffer = 0;
+    unsigned int m_depth_buffer[2] = { 0 };
+    unsigned int m_FBO[2] = { 0 };
+    unsigned int m_pingpong_textures[2] = { 0 };
     // unsigned int m_texture_dst;  // create texture that will receive the result of CUDA
     unsigned int m_texture_src;  // create texture for blitting onto the screen
     float bg_thresh = 0.05f;
