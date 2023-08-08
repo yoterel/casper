@@ -27,6 +27,6 @@ void main()
 {
     // finalColor = vec4(ourColor, 0.9); // boneweight debug
     vec4 finalColor = texture(gSampler, TexCoord0);  // diffuse texture
-    finalColor.w = 0.5;
+    // finalColor.w = 1.0;
     FragColor = finalColor;
 }

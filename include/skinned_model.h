@@ -99,9 +99,12 @@ struct BoneInfo
 class SkinnedModel
 {
 public:
-    SkinnedModel(const std::string& Filename, const std::string& ExternalTextureFileName = "") 
+    SkinnedModel(const std::string& Filename, const std::string& ExternalTextureFileName = "",
+                 const unsigned int width=0, const unsigned int height=0)
     {
         m_externalTextureFileName = ExternalTextureFileName;
+        m_width = width;
+        m_height = height;
         bool success = LoadMesh(Filename);
         if (!success) {
             std::cout << "Error loading mesh\n" << std::endl;
@@ -110,18 +113,22 @@ public:
     };
     ~SkinnedModel(){ Clear(); };
     bool LoadMesh(const std::string& Filename);
-    void Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, const float animationTime = 0.0f);
+    void Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, bool useFBO = true);
     const Material& GetMaterial();
-    void GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world);
+    void GetBoneTransforms(std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world);
     glm::vec3 getCenterOfMass();
     std::string getBoneName(unsigned int index);
     unsigned int NumBones() const
     {
         return (unsigned int)m_BoneNameToIndexMap.size();
-    }
+    };
     void GetLocalToBoneTransforms(std::vector<glm::mat4>& Transforms, bool inverse = false, bool only_leap_bones = false);
     void GetBoneFinalTransforms(std::vector<glm::mat4>& Transforms);
     void GetBoneTransformRelativeToParent(std::vector<glm::mat4>& Transforms);
+    unsigned int GetFBOTexture()
+    {
+        return m_fbo_texture;
+    };
 private:
     void Clear();
     bool InitFromScene(const aiScene* pScene, const std::string& Filename);
@@ -147,8 +154,12 @@ private:
     void ReadNodeHierarchy(const aiNode* pNode, const glm::mat4& ParentTransform);
     std::string GetDirFromFilename(const std::string& Filename);
 
+
+    unsigned int m_width, m_height;
     unsigned int m_VAO = 0;
     unsigned int m_Buffers[NUM_BUFFERS] = { 0 };
+    unsigned int m_FBO, m_fbo_depth_buffer, m_fbo_texture;
+
     Assimp::Importer Importer;
     const aiScene* pScene = NULL;
     std::string m_externalTextureFileName;

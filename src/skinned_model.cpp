@@ -29,6 +29,21 @@ void SkinnedModel::Clear()
         glDeleteVertexArrays(1, &m_VAO);
         m_VAO = 0;
     }
+
+    if (m_FBO != 0) {
+        glDeleteFramebuffers(1, &m_FBO);
+        m_FBO = 0;
+    }
+
+    if (m_fbo_texture != 0) {
+        glDeleteTextures(1, &m_fbo_texture);
+        m_fbo_texture = 0;
+    }
+
+    if (m_fbo_depth_buffer != 0) {
+        glDeleteRenderbuffers(1, &m_fbo_depth_buffer);
+        m_fbo_depth_buffer = 0;
+    }
 }
 
 
@@ -412,15 +427,65 @@ void SkinnedModel::PopulateBuffers()
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_Buffers[INDEX_BUFFER]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(m_Indices[0]) * m_Indices.size(), &m_Indices[0], GL_STATIC_DRAW);
+    // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    glGenTextures(1, &m_fbo_texture);
+    glGenRenderbuffers(1, &m_fbo_depth_buffer);
+    glGenFramebuffers(1, &m_FBO);
+    //glCheckError();
+    glBindTexture(GL_TEXTURE_2D, m_fbo_texture);
+    //glCheckError();
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+    //glCheckError();
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    //glCheckError();
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    //glCheckError();
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    //glCheckError();
+    // #ifdef USE_TEXSUBIMAGE2D
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    //glCheckError();
+    glBindRenderbuffer(GL_RENDERBUFFER, m_fbo_depth_buffer);
+    //glCheckError();
+    // allocate storage
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_width, m_height);
+    //glCheckError();
+    // clean up
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    //glCheckError();
+    //glCheckError();
+    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+    //glCheckError();
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_fbo_texture, 0);
+    //glCheckError();
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_fbo_depth_buffer);
+    //glCheckError();
+    GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cout << "ERROR: Incomplete framebuffer status." << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, const float animationTime)
+void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, bool useFBO)
 {
+    if (useFBO)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+        glEnable(GL_DEPTH_TEST);
+        glViewport(0, 0, m_width, m_height);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
     shader.use();
     shader.SetMaterial(this->GetMaterial());
     shader.SetTextureUnit(0);
     std::vector<glm::mat4> Transforms;
-    this->GetBoneTransforms(animationTime, Transforms, bones_to_world, local_to_world);
+    this->GetBoneTransforms(Transforms, bones_to_world, local_to_world);
     for (unsigned int i = 0 ; i < Transforms.size() ; i++) {
         shader.SetBoneTransform(i, Transforms[i]);
     }
@@ -448,6 +513,10 @@ void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& 
 
     // Make sure the VAO is not changed from the outside
     glBindVertexArray(0);
+    if (useFBO)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
 }
 
 
@@ -520,7 +589,7 @@ void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4>& Tran
         Transforms[BoneIndex] = NodeTransformation;
     }
 }
-void SkinnedModel::GetBoneTransforms(float AnimationTimeSec, std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world)
+void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world)
 {
     Transforms.resize(m_BoneInfo.size());
     // default bind pose using bones

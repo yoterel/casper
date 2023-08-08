@@ -25,7 +25,7 @@ public:
            bool use_cuda);
     ~Canvas(){ Clear(); };
     void Render(Shader& shader, uint8_t* buffer);
-    void Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug, uint8_t* buffer);
+    void Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int texture, Shader& debug, uint8_t* buffer);
     
 private:
     void initGLBuffers();

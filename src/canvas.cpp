@@ -62,26 +62,26 @@ void Canvas::Clear()
         // m_texture_dst = 0;
     }
 }
-void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug, uint8_t* buffer)
+void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int texture, Shader& debug, uint8_t* buffer)
 {
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
-    GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-    if (ptr)
-    {
-        memcpy(ptr, buffer, m_size_tex_data);
-        glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
-    }
-    glBindTexture(GL_TEXTURE_2D, m_texture_src);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    
+    // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
+    // glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
+    // GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+    // if (ptr)
+    // {
+    //     memcpy(ptr, buffer, m_size_tex_data);
+    //     glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
+    // }
+    // glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    // glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+    // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, texture);
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[0]);
     jfaInit.use();
     jfaInit.setInt("src", 0);
-    jfaInit.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+    jfaInit.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
     // jfaInit.setBool("flipVer", false);
-    glViewport(0, 0, m_srcWidth, m_srcHeight);
+    glViewport(0, 0, m_dstWidth, m_dstHeight);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
@@ -94,7 +94,7 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug,
     glEnable(GL_DEPTH_TEST);
     glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[1]);
-    glViewport(0, 0, m_srcWidth, m_srcHeight);
+    glViewport(0, 0, m_dstWidth, m_dstHeight);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
@@ -102,13 +102,13 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug,
     // debug.use();
     // debug.setInt("jfa", 0);
     // debug.setInt("src", 1);
-    // debug.setBool("flipVer", true);
-    // debug.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+    // debug.setBool("flipVer", false);
+    // debug.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
     // glBindFramebuffer(GL_FRAMEBUFFER, 0);
     // glActiveTexture(GL_TEXTURE0);
     // glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
     // glActiveTexture(GL_TEXTURE1);
-    // glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    // glBindTexture(GL_TEXTURE_2D, texture);
     // glViewport(0, 0, m_dstWidth, m_dstHeight);
     // glDisable(GL_DEPTH_TEST);
     // glDisable(GL_CULL_FACE);
@@ -121,13 +121,13 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug,
     /* sanity */
 
     // jump flood
-    int numPasses = 5;
+    int numPasses = 11;
     for (int i = 0; i < numPasses; i++)
     {
         jfa.use();
         jfa.setBool("flipVer", false);
         jfa.setInt("src", 0);
-        jfa.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+        jfa.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
         jfa.setInt("pass", i);
         jfa.setInt("numPasses", numPasses);
         glDisable(GL_DEPTH_TEST);
@@ -150,11 +150,11 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, Shader& debug,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[1]);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    glBindTexture(GL_TEXTURE_2D, texture);
     canvas.use();
     canvas.setInt("jfa", 0);
     canvas.setInt("src", 1);
-    canvas.setVec2("resolution", glm::vec2(m_srcWidth, m_srcHeight));
+    canvas.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
     canvas.setBool("flipVer", true);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -366,12 +366,12 @@ void Canvas::initGLBuffers()
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         //glCheckError();
         // #ifdef USE_TEXSUBIMAGE2D
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_srcWidth, m_srcHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_dstWidth, m_dstHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
         //glCheckError();
         glBindRenderbuffer(GL_RENDERBUFFER, m_depth_buffer[i]);
         //glCheckError();
         // allocate storage
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_srcWidth, m_srcHeight);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_dstWidth, m_dstHeight);
         //glCheckError();
         // clean up
         glBindRenderbuffer(GL_RENDERBUFFER, 0);

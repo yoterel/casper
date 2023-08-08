@@ -125,7 +125,9 @@ int main( int argc, char* argv[])
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
-    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx", "C:/src/augmented_hands/resource/uv.png");
+    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
+                              "C:/src/augmented_hands/resource/uv.png",
+                              proj_width, proj_height);
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     n_bones = skinnedModel.NumBones();
     glm::vec3 coa = skinnedModel.getCenterOfMass();
@@ -282,10 +284,6 @@ int main( int argc, char* argv[])
         // cv::Point maxLoc;
         // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t0.stop();
-        t1.start();
-        // canvas.Render(canvasShader, buffer);
-        canvas.Render(jfaInitShader, jfaShader, remapShader, debugShader, buffer);
-        t1.stop();
         t2.start();
         std::modf(glfwGetTime(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
@@ -340,7 +338,13 @@ int main( int argc, char* argv[])
             skinnedShader.use();
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShader.SetWorldTransform(projection_transform * view_transform);
-            skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, (float)t_app.getElapsedTimeInSec());
+            skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld);
+            unsigned int slow_tracker_texture = skinnedModel.GetFBOTexture();
+            t1.start();
+            // canvas.Render(canvasShader, buffer);
+            canvas.Render(jfaInitShader, jfaShader, remapShader, slow_tracker_texture, debugShader, buffer);
+            t1.stop();
+
         }
         if (debug_mode)
         {
