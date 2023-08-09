@@ -23,14 +23,14 @@
 #include "image_process.h"
 #include <helper_string.h>
 // forward declarations
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void mouse_callback(GLFWwindow* window, double xpos, double ypos);
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void framebuffer_size_callback(GLFWwindow *window, int width, int height);
+void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector<glm::mat4>& bones_to_world, std::vector<glm::vec3>& skeleton_vertices, bool debug);
-void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO);
-void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
-void initGLBuffers(unsigned int* pbo);
+void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world, std::vector<glm::vec3> &skeleton_vertices, bool debug);
+void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
+void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
+void initGLBuffers(unsigned int *pbo);
 // unsigned int setup_cube_buffers();
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
@@ -45,7 +45,7 @@ const unsigned int proj_height = 768;
 const unsigned int cam_height = 540;
 const unsigned int cam_width = 720;
 // "fixed" camera
-GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f,0.0f,0.0f));
+GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
 // "orbit" camera
 // GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 float lastX = proj_width / 2.0f;
@@ -64,7 +64,7 @@ const unsigned int num_texels = proj_width * proj_height;
 // const unsigned int texture_size = num_texels * 4 * sizeof(uint8_t);
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
 
-int main( int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     if (checkCmdLineFlag(argc, (const char **)argv, "cuda"))
     {
@@ -95,7 +95,7 @@ int main( int argc, char* argv[])
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
-    GLFWwindow* window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL);  //monitors[0], NULL for full screen
+    GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -115,15 +115,15 @@ int main( int argc, char* argv[])
     std::cout << "  GLSL Version : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << std::endl;
 
-    glfwSwapInterval(0);  // do not sync to monitor
-    glViewport(0, 0, proj_width, proj_height);  // set viewport
+    glfwSwapInterval(0);                       // do not sync to monitor
+    glViewport(0, 0, proj_width, proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glPointSize(10.0f);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  // callback for resizing
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback); // callback for resizing
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -132,7 +132,7 @@ int main( int argc, char* argv[])
     setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
     unsigned int gizmoVAO, gizmoVBO;
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
-    unsigned int pbo[2] = { 0 };
+    unsigned int pbo[2] = {0};
     if (use_pbo)
     {
         initGLBuffers(pbo);
@@ -140,8 +140,8 @@ int main( int argc, char* argv[])
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
-                            //   "C:/src/augmented_hands/resource/uv.png",
-                                "C:/src/augmented_hands/resource/wood.jpg",
+                              //   "C:/src/augmented_hands/resource/uv.png",
+                              "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height);
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     n_bones = skinnedModel.NumBones();
@@ -150,8 +150,8 @@ int main( int argc, char* argv[])
     glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
     glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
     glm::mat4 timesTwenty = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
-    glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f,0.0f,0.0f));
-    glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f,1.0f,0.0f));
+    glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 flip_y = glm::mat4(1.0f);
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
@@ -174,7 +174,7 @@ int main( int argc, char* argv[])
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
-    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");  
+    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
     // more inits
     NPP_wrapper::printfNPPinfo();
     double previousTime = glfwGetTime();
@@ -187,15 +187,16 @@ int main( int argc, char* argv[])
     std::vector<glm::mat4> bones_to_world;
     size_t n_skeleton_primitives = 0;
     bool close_signal = false;
-    int leap_time_delay = 50000;  // us
-    uint8_t* colorBuffer = new uint8_t[image_size];
+    int leap_time_delay = 50000; // us
+    uint8_t *colorBuffer = new uint8_t[image_size];
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
     blocking_queue<CPylonImage> camera_queue;
-    blocking_queue<uint8_t*> projector_queue;
+    blocking_queue<uint8_t *> projector_queue;
     BaslerCamera camera;
     DynaFlashProjector projector(proj_width, proj_height);
-    if (!projector.init()) {
+    if (!projector.init())
+    {
         std::cerr << "Failed to initialize projector\n";
     }
     LeapConnect leap;
@@ -204,15 +205,17 @@ int main( int argc, char* argv[])
     std::thread producer, consumer;
     // actual thread loops
     // image producer
-    if (producer_is_fake) {
+    if (producer_is_fake)
+    {
         /* fake producer */
         cam_height = 540;
         cam_width = 720;
-        producer = std::thread([&camera_queue, &close_signal, &cam_height, &cam_width]() {  //, &projector
-            CPylonImage image = CPylonImage::Create( PixelType_RGB8packed, cam_width, cam_height);
+        producer = std::thread([&camera_queue, &close_signal, &cam_height, &cam_width]() { //, &projector
+            CPylonImage image = CPylonImage::Create(PixelType_RGB8packed, cam_width, cam_height);
             Timer t_block;
             t_block.start();
-            while (!close_signal) {
+            while (!close_signal)
+            {
                 camera_queue.push(image);
                 while (t_block.getElapsedTimeInMicroSec() < 300.0)
                 {
@@ -230,10 +233,11 @@ int main( int argc, char* argv[])
         camera.acquire();
     }
     // image consumer
-    consumer = std::thread([&projector_queue, &projector, &close_signal]() {  //, &projector
-        uint8_t* buffer;
+    consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
+        uint8_t *buffer;
         bool sucess;
-        while (!close_signal) {
+        while (!close_signal)
+        {
             sucess = projector_queue.pop_with_timeout(100, buffer);
             if (sucess)
                 projector.show_buffer(buffer);
@@ -243,7 +247,7 @@ int main( int argc, char* argv[])
         std::cout << "Consumer finish" << std::endl;
     });
     // main loop
-    while(!glfwWindowShouldClose(window))
+    while (!glfwWindowShouldClose(window))
     {
         t_misc.start();
         // per-frame time logic
@@ -255,14 +259,14 @@ int main( int argc, char* argv[])
         lastFrame = currentFrame;
         frameCount++;
         // stats display
-        if ( currentFrame - previousTime >= 1.0 )
+        if (currentFrame - previousTime >= 1.0)
         {
             // Display the frame count here any way you want.
             fps = frameCount;
-            ms_per_frame = 1000.0f/frameCount;
+            ms_per_frame = 1000.0f / frameCount;
             double tpbo, ttex, tproc;
             canvas.getTimerValues(tpbo, ttex, tproc);
-            std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
+            std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
             std::cout << "total app time: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
             std::cout << "misc time: " << t_misc.averageLap() << std::endl;
             std::cout << "wait for cam time: " << t0.averageLap() << std::endl;
@@ -289,7 +293,7 @@ int main( int argc, char* argv[])
             t_misc.reset();
             canvas.resetTimers();
         }
-        
+
         // input
         processInput(window);
         // render
@@ -297,7 +301,7 @@ int main( int argc, char* argv[])
         t_misc.stop();
         t0.start();
         CPylonImage pylonImage = camera_queue.pop();
-        uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
+        uint8_t *buffer = (uint8_t *)pylonImage.GetBuffer();
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
         // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
         // NPP_wrapper::distanceTransform(buffer, output, cam_width, cam_height);
@@ -308,9 +312,9 @@ int main( int argc, char* argv[])
         // cv::Mat cv_image_output_distance(cam_height, cam_width, CV_16UC1, dist_output);
         // cv_image_output_distance.convertTo(cv_image_output_distance, CV_8U);
         // cv::imwrite("output_distance.png", cv_image_output_distance);
-        // double minVal; 
-        // double maxVal; 
-        // cv::Point minLoc; 
+        // double minVal;
+        // double maxVal;
+        // cv::Point minLoc;
         // cv::Point maxLoc;
         // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t0.stop();
@@ -329,7 +333,7 @@ int main( int argc, char* argv[])
             {
                 // draw skeleton vertices
                 glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-                glBufferData(GL_ARRAY_BUFFER,  sizeof(float)*skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
                 n_skeleton_primitives = skeleton_vertices.size();
                 vcolorShader.use();
                 vcolorShader.setMat4("projection", projection_transform);
@@ -387,10 +391,9 @@ int main( int argc, char* argv[])
         t3.start();
         // text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         t3.stop();
-        
-        
+
         // send result to projector queue
-        
+
         glReadBuffer(GL_FRONT);
         if (use_pbo)
         {
@@ -399,12 +402,12 @@ int main( int argc, char* argv[])
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
             t4.stop();
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(frameCount + 1) % 2]);
-            GLubyte* src = (GLubyte*)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
-            if(src)
+            GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+            if (src)
             {
                 memcpy(colorBuffer, src, image_size);
                 projector_queue.push(colorBuffer);
-                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);        // release pointer to the mapped buffer
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
             }
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         }
@@ -417,9 +420,9 @@ int main( int argc, char* argv[])
         }
         // glCheckError();
         // glCheckError();
-        
+
         // auto projector_thread = std::thread([&projector, &colorBuffer]() {  //, &projector
-        
+
         // projector.show_buffer(colorBuffer);
         // });
         // stbi_flip_vertically_on_write(true);
@@ -446,7 +449,7 @@ int main( int argc, char* argv[])
     // #define DATA_LENGTH 255
     // SerialPort *arduino = new SerialPort(portName);
     // std::cout << "Arduino is connected: " << arduino->isConnected() << std::endl;
-    // const char *sendString = "trigger\n"; 
+    // const char *sendString = "trigger\n";
     // if (arduino->isConnected()){
     //     bool hasWritten = arduino->writeSerialPort(sendString, DATA_LENGTH);
     //     if (hasWritten) std::cout << "Data Written Successfully" << std::endl;
@@ -456,16 +459,16 @@ int main( int argc, char* argv[])
     return 0;
 }
 
-void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO)
+void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO)
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
     float vertices[] = {
-    // positions         // colors
-     0.5f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f,   // bottom right
-    -0.5f, -0.5f, 0.0f,  0.0f, 1.0f, 0.0f,   // bottom left
-     0.0f,  0.5f, 0.0f,  0.0f, 0.0f, 1.0f    // top 
+        // positions         // colors
+        0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,  // bottom right
+        -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, // bottom left
+        0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f    // top
     };
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -475,26 +478,26 @@ void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
     // color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 }
 
-void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO)
+void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO)
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
     float vertices[] = {
-    // positions         // colors
-     0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,   // X
-     1.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,   // X
-     0.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,   // Y
-     0.0f, 1.0f, 0.0f,  0.0f, 1.0f, 0.0f,   // Y
-     0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 1.0f,   // Z
-     0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f,   // Z
+        // positions         // colors
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // X
+        1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // X
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, // Y
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // Y
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, // Z
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Z
     };
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -504,14 +507,14 @@ void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
     // color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 }
 
-void initGLBuffers(unsigned int* pbo)
+void initGLBuffers(unsigned int *pbo)
 {
     // set up vertex data parameter
     void *data = malloc(image_size);
@@ -559,16 +562,16 @@ void processInput(GLFWwindow *window)
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
 // ---------------------------------------------------------------------------------------------
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
-    // make sure the viewport matches the new window dimensions; note that width and 
+    // make sure the viewport matches the new window dimensions; note that width and
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
 
 // glfw: whenever the mouse moves, this callback is called
 // -------------------------------------------------------
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
@@ -591,36 +594,36 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
 // ----------------------------------------------------------------------
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     gl_camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }
 
-void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector<glm::mat4>& bones_to_world, std::vector<glm::vec3>& skeleton_vertices, bool debug)
+void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world, std::vector<glm::vec3> &skeleton_vertices, bool debug)
 {
     skeleton_vertices.clear();
     bones_to_world.clear();
     uint64_t targetFrameSize = 0;
-    int leap_time_delay = 40000;  // us
-    glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f,1.0f,0.0f));
+    int leap_time_delay = 40000; // us
+    glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 flip_y = glm::mat4(1.0f);
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
     glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
-    //Get the buffer size needed to hold the tracking data
-    if(LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime+leap_time_delay, &targetFrameSize) == eLeapRS_Success)
+    // Get the buffer size needed to hold the tracking data
+    if (LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + leap_time_delay, &targetFrameSize) == eLeapRS_Success)
     {
-        //Allocate enough memory
-        LEAP_TRACKING_EVENT* interpolatedFrame = (LEAP_TRACKING_EVENT*)malloc((size_t)targetFrameSize);
-        //Get the frame
-        if(LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime+leap_time_delay, interpolatedFrame, targetFrameSize) == eLeapRS_Success)
+        // Allocate enough memory
+        LEAP_TRACKING_EVENT *interpolatedFrame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
+        // Get the frame
+        if (LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime + leap_time_delay, interpolatedFrame, targetFrameSize) == eLeapRS_Success)
         {
-            //Use the data...
-            // std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
-            // std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
-            // std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
+            // Use the data...
+            //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
+            //  std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
+            //  std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
             if (debug)
             {
                 if (interpolatedFrame->nHands > 0)
@@ -641,19 +644,19 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
                 }
             }
             glm::vec3 red = glm::vec3(1.0f, 0.0f, 0.0f);
-            for(uint32_t h = 0; h < interpolatedFrame->nHands; h++)
+            for (uint32_t h = 0; h < interpolatedFrame->nHands; h++)
             {
-                LEAP_HAND* hand = &interpolatedFrame->pHands[h];
+                LEAP_HAND *hand = &interpolatedFrame->pHands[h];
                 if (hand->type == eLeapHandType_Right)
                     continue;
                 glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
-                                                hand->palm.position.y,
-                                                hand->palm.position.z);
+                                               hand->palm.position.y,
+                                               hand->palm.position.z);
                 glm::mat4 palm_orientation = glm::toMat4(glm::quat(hand->palm.orientation.w,
-                                                                    hand->palm.orientation.x,
-                                                                    hand->palm.orientation.y,
-                                                                    hand->palm.orientation.z));
-                
+                                                                   hand->palm.orientation.x,
+                                                                   hand->palm.orientation.y,
+                                                                   hand->palm.orientation.z));
+
                 palm_orientation = palm_orientation * flip_z * flip_y;
                 cur_palm_orientation = palm_orientation;
                 glm::mat4 palm_trans = glm::translate(glm::mat4(1.0f), palm_pos);
@@ -663,7 +666,7 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
                 // }
                 // else
                 // {
-                bones_to_world.push_back(mm_to_cm*palm_trans*palm_orientation*cm_to_mm);
+                bones_to_world.push_back(mm_to_cm * palm_trans * palm_orientation * cm_to_mm);
                 // }
                 LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
                 LEAP_VECTOR arm_j2 = hand->arm.next_joint;
@@ -672,18 +675,17 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
                 skeleton_vertices.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
                 skeleton_vertices.push_back(red);
                 glm::mat4 rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
-                                                    hand->arm.rotation.x,
-                                                    hand->arm.rotation.y,
-                                                    hand->arm.rotation.z
-                                                    ));
+                                                      hand->arm.rotation.x,
+                                                      hand->arm.rotation.y,
+                                                      hand->arm.rotation.z));
                 // rot = palm_orientation * rot;
-                glm::vec3 translate = glm::vec3(arm_j1.x, arm_j1.y,arm_j1.z);
+                glm::vec3 translate = glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z);
                 glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                bones_to_world.push_back(mm_to_cm*trans*rot*roty*flip_z*flip_y*cm_to_mm);
-                for(uint32_t f = 0; f < 5; f++)
+                bones_to_world.push_back(mm_to_cm * trans * rot * roty * flip_z * flip_y * cm_to_mm);
+                for (uint32_t f = 0; f < 5; f++)
                 {
                     LEAP_DIGIT finger = hand->digits[f];
-                    for(uint32_t b = 0; b < 4; b++)
+                    for (uint32_t b = 0; b < 4; b++)
                     {
                         LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
                         LEAP_VECTOR joint2 = finger.bones[b].next_joint;
@@ -692,16 +694,16 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
                         skeleton_vertices.push_back(glm::vec3(joint2.x, joint2.y, joint2.z));
                         skeleton_vertices.push_back(red);
                         glm::mat4 rot = glm::toMat4(glm::quat(finger.bones[b].rotation.w,
-                                                    finger.bones[b].rotation.x,
-                                                    finger.bones[b].rotation.y,
-                                                    finger.bones[b].rotation.z));
+                                                              finger.bones[b].rotation.x,
+                                                              finger.bones[b].rotation.y,
+                                                              finger.bones[b].rotation.z));
                         glm::vec3 translate = glm::vec3(joint1.x, joint1.y, joint1.z);
                         glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                        bones_to_world.push_back(mm_to_cm*trans*rot*roty*flip_z*flip_y*cm_to_mm);
+                        bones_to_world.push_back(mm_to_cm * trans * rot * roty * flip_z * flip_y * cm_to_mm);
                     }
                 }
             }
-            //Free the allocated buffer when done.
+            // Free the allocated buffer when done.
             free(interpolatedFrame);
         }
     }
@@ -720,29 +722,29 @@ void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector
 //     // stbi_flip_vertically_on_write(true);
 //     // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
 // }
-    // // create transformation matrices
-    // glm::mat4 canvas_model_mat = glm::mat4(1.0f);
-    // glm::mat4 skeleton_model_mat = glm::mat4(1.0f);
-    // glm::mat4 mesh_model_mat = glm::mat4(1.0f);
-    // // model_mat = glm::rotate(model_mat, glm::radians(-55.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-    // mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(0.5f, 0.5f, 0.5f));
-    // // glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
-    // // canvas_model_mat = glm::scale(canvas_model_mat, glm::vec3(0.75f, 0.75f, 1.0f));  // 2.0f, 2.0f, 2.0f
-    // glm::mat4 view_mat = gl_camera.GetViewMatrix();
-    // // glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  10.0f);
-    // // glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-    // // glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
-    // // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-    // // view_mat = glm::translate(view_mat, glm::vec3(0.0f, 0.0f, -3.0f));
-    // // glm::mat4 perspective_projection_mat = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
-    // // glm::mat4 projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
-    // // glm::mat4 projection_mat = glm::frustum(-(float)proj_width*0.5f, (float)proj_width*0.5f, -(float)proj_height*0.5f, (float)proj_height*0.5f, 0.1f, 100.0f);
-    // // setup shader inputs
-    // // float bg_thresh = 0.05f;
-    // // canvasShader.use();
-    // // canvasShader.setInt("camera_texture", 0);
-    // // canvasShader.setFloat("threshold", bg_thresh);
-    // glm::mat4 canvas_projection_mat = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
+// // create transformation matrices
+// glm::mat4 canvas_model_mat = glm::mat4(1.0f);
+// glm::mat4 skeleton_model_mat = glm::mat4(1.0f);
+// glm::mat4 mesh_model_mat = glm::mat4(1.0f);
+// // model_mat = glm::rotate(model_mat, glm::radians(-55.0f), glm::vec3(0.5f, 1.0f, 0.0f));
+// mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(0.5f, 0.5f, 0.5f));
+// // glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
+// // canvas_model_mat = glm::scale(canvas_model_mat, glm::vec3(0.75f, 0.75f, 1.0f));  // 2.0f, 2.0f, 2.0f
+// glm::mat4 view_mat = gl_camera.GetViewMatrix();
+// // glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  10.0f);
+// // glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+// // glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
+// // view_mat = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+// // view_mat = glm::translate(view_mat, glm::vec3(0.0f, 0.0f, -3.0f));
+// // glm::mat4 perspective_projection_mat = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
+// // glm::mat4 projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
+// // glm::mat4 projection_mat = glm::frustum(-(float)proj_width*0.5f, (float)proj_width*0.5f, -(float)proj_height*0.5f, (float)proj_height*0.5f, 0.1f, 100.0f);
+// // setup shader inputs
+// // float bg_thresh = 0.05f;
+// // canvasShader.use();
+// // canvasShader.setInt("camera_texture", 0);
+// // canvasShader.setFloat("threshold", bg_thresh);
+// glm::mat4 canvas_projection_mat = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
 
 //     unsigned int setup_cube_buffers()
 // {
