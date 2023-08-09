@@ -30,6 +30,7 @@ void processInput(GLFWwindow *window);
 void getLeapFrame(LeapConnect& leap, const int64_t& targetFrameTime, std::vector<glm::mat4>& bones_to_world, std::vector<glm::vec3>& skeleton_vertices, bool debug);
 void setup_skeleton_hand_buffers(unsigned int& VAO, unsigned int& VBO);
 void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
+void initGLBuffers(unsigned int* pbo);
 // unsigned int setup_cube_buffers();
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
@@ -59,7 +60,9 @@ bool space_pressed_flag = false;
 unsigned int n_bones = 0;
 glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 bool hand_in_frame = false;
-const unsigned int image_size = proj_width * proj_height * 3;
+const unsigned int num_texels = proj_width * proj_height;
+// const unsigned int texture_size = num_texels * 4 * sizeof(uint8_t);
+const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
 
 int main( int argc, char* argv[])
 {
@@ -129,6 +132,11 @@ int main( int argc, char* argv[])
     setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
     unsigned int gizmoVAO, gizmoVBO;
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
+    unsigned int pbo[2] = { 0 };
+    if (use_pbo)
+    {
+        initGLBuffers(pbo);
+    }
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
@@ -387,14 +395,14 @@ int main( int argc, char* argv[])
         if (use_pbo)
         {
             t4.start();
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pboIds[index]);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
             t4.stop();
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pboIds[nextIndex]);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(frameCount + 1) % 2]);
             GLubyte* src = (GLubyte*)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
             if(src)
             {
-                // change brightness
+                memcpy(colorBuffer, src, image_size);
                 projector_queue.push(colorBuffer);
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER);        // release pointer to the mapped buffer
             }
@@ -503,6 +511,19 @@ void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO)
     glEnableVertexAttribArray(1);
 }
 
+void initGLBuffers(unsigned int* pbo)
+{
+    // set up vertex data parameter
+    void *data = malloc(image_size);
+    // create ping pong pbos
+    glGenBuffers(2, pbo);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[0]);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, image_size, data, GL_STREAM_READ);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[1]);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, image_size, data, GL_STREAM_READ);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    free(data);
+}
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
