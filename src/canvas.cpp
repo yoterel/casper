@@ -13,7 +13,7 @@ Canvas::Canvas(unsigned int srcWidth, unsigned int srcHeight, unsigned int dstWi
     m_num_values = m_num_texels * 4;
     m_size_tex_data = sizeof(GLubyte) * m_num_values;
     initGLBuffers();
-    initCUDABuffers();
+    // initCUDABuffers();
 }
 
 void Canvas::Clear()
@@ -62,27 +62,43 @@ void Canvas::Clear()
         // m_texture_dst = 0;
     }
 }
-void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int texture, Shader& debug, uint8_t* buffer)
+void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker, unsigned int texture, uint8_t* buffer, bool use_pbo)
 {
-    // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
-    // glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
-    // GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-    // if (ptr)
-    // {
-    //     memcpy(ptr, buffer, m_size_tex_data);
-    //     glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
-    // }
-    // glBindTexture(GL_TEXTURE_2D, m_texture_src);
-    // glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
-    // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    if (use_pbo)
+    {
+        t0.start();
+        // transfer data from memory to GPU texture (using PBO)
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
+        glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
+        GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+        if (ptr)
+        {
+            memcpy(ptr, buffer, m_size_tex_data);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
+        }
+        t0.stop();
+        t1.start();
+        glBindTexture(GL_TEXTURE_2D, m_texture_src);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        t1.stop();
+    }
+    else
+    {
+        t1.start();
+        glBindTexture(GL_TEXTURE_2D, m_texture_src);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
+        t1.stop();
+    }
+    t2.start();
+    // init jfa seeds 
     glBindTexture(GL_TEXTURE_2D, texture);
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[0]);
     jfaInit.use();
     jfaInit.setInt("src", 0);
     jfaInit.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
-    // jfaInit.setBool("flipVer", false);
     glViewport(0, 0, m_dstWidth, m_dstHeight);
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -95,7 +111,7 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int t
     glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[1]);
     glViewport(0, 0, m_dstWidth, m_dstHeight);
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     /* sanity (render to screen)*/
@@ -125,7 +141,6 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int t
     for (int i = 0; i < numPasses; i++)
     {
         jfa.use();
-        jfa.setBool("flipVer", false);
         jfa.setInt("src", 0);
         jfa.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
         jfa.setInt("pass", i);
@@ -151,11 +166,14 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int t
     glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[1]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, texture);
-    canvas.use();
-    canvas.setInt("jfa", 0);
-    canvas.setInt("src", 1);
-    canvas.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
-    canvas.setBool("flipVer", true);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    fast_tracker.use();
+    fast_tracker.setInt("jfa", 0);
+    fast_tracker.setInt("src", 1);
+    fast_tracker.setInt("cam_image", 2);
+    fast_tracker.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
+    fast_tracker.setBool("flipVer", false);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -164,6 +182,7 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int t
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
+    t2.stop();
 }
 void Canvas::Render(Shader& shader, uint8_t* buffer)
 {
@@ -443,15 +462,26 @@ void Canvas::initGLBuffers()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     //glCheckError();
 }
-
-#ifndef USE_TEXSUBIMAGE2D
-void Canvas::initCUDABuffers() {
+void Canvas::getTimerValues(double& time0, double& time1, double& time2)
+{
+    time0 = t0.averageLap();
+    time1 = t1.averageLap();
+    time2 = t2.averageLap();
+}
+void Canvas::resetTimers()
+{
+    t0.reset();
+    t1.reset();
+    t2.reset();
+}
+// #ifndef USE_TEXSUBIMAGE2D
+// void Canvas::initCUDABuffers() {
   // set up vertex data parameter
 //   checkCudaErrors(cudaMalloc((void **)&m_cuda_dest_resource, m_size_tex_data));
   // checkCudaErrors(cudaHostAlloc((void**)&cuda_dest_resource, size_tex_data,
   // ));
-}
-#endif
+// }
+// #endif
 
 // void Canvas::ProcesssWithCuda()
 // {

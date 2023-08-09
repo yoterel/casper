@@ -37,6 +37,7 @@ void setup_gizmo_buffers(unsigned int& VAO, unsigned int& VBO);
 bool debug_mode = false;
 bool use_cuda = false;
 bool producer_is_fake = false;
+bool use_pbo = false;
 // init state
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
@@ -77,7 +78,12 @@ int main( int argc, char* argv[])
         std::cout << "Fake camera on..." << std::endl;
         producer_is_fake = true;
     }
-    Timer t0, t1, t2, t3, t4, t_app;
+    if (checkCmdLineFlag(argc, (const char **)argv, "pbo"))
+    {
+        std::cout << "Using PBO for async unpacking..." << std::endl;
+        use_pbo = true;
+    }
+    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc;
     t_app.start();
     // init GLFW
     glfwInit();
@@ -108,7 +114,7 @@ int main( int argc, char* argv[])
 
     glfwSwapInterval(0);  // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height);  // set viewport
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glPointSize(10.0f);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
@@ -126,7 +132,8 @@ int main( int argc, char* argv[])
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
-                              "C:/src/augmented_hands/resource/uv.png",
+                            //   "C:/src/augmented_hands/resource/uv.png",
+                                "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height);
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     n_bones = skinnedModel.NumBones();
@@ -148,7 +155,7 @@ int main( int argc, char* argv[])
     // Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
     Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
     Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
-    Shader remapShader("C:/src/augmented_hands/src/shaders/remap.vs", "C:/src/augmented_hands/src/shaders/remap.fs");
+    Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
     Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
     if (use_cuda)
         canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
@@ -172,7 +179,6 @@ int main( int argc, char* argv[])
     std::vector<glm::mat4> bones_to_world;
     size_t n_skeleton_primitives = 0;
     bool close_signal = false;
-    bool use_pbo = false;
     int leap_time_delay = 50000;  // us
     uint8_t* colorBuffer = new uint8_t[image_size];
     uint32_t cam_height = 0;
@@ -231,6 +237,7 @@ int main( int argc, char* argv[])
     // main loop
     while(!glfwWindowShouldClose(window))
     {
+        t_misc.start();
         // per-frame time logic
         // --------------------
         currentFrame = glfwGetTime();
@@ -245,14 +252,24 @@ int main( int argc, char* argv[])
             // Display the frame count here any way you want.
             fps = frameCount;
             ms_per_frame = 1000.0f/frameCount;
-            // std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
-            std::cout << "last wait_for_cam time: " << t0.averageLap() << std::endl;
-            std::cout << "last canvas process time: " << t1.averageLap() << std::endl;
-            std::cout << "last Processing time: " << t2.averageLap() << std::endl;
-            std::cout << "last GPU->CPU time: " << t3.averageLap() << std::endl;
-            std::cout << "last project time: " << t4.averageLap() << std::endl;
+            double tpbo, ttex, tproc;
+            canvas.getTimerValues(tpbo, ttex, tproc);
+            std::cout << "avg ms: " << 1000.0f/frameCount<<" FPS: " << frameCount << std::endl;
+            std::cout << "total app time: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
+            std::cout << "misc time: " << t_misc.averageLap() << std::endl;
+            std::cout << "wait for cam time: " << t0.averageLap() << std::endl;
+            std::cout << "leap frame time: " << t1.averageLap() << std::endl;
+            std::cout << "skinning time: " << t2.averageLap() << std::endl;
+            std::cout << "render text: " << t3.averageLap() << std::endl;
+            std::cout << "canvas pbo time: " << tpbo << std::endl;
+            std::cout << "canvas tex transfer time: " << ttex << std::endl;
+            std::cout << "canvas process time: " << tproc << std::endl;
+            // std::cout << "Processing time: " << t2.averageLap() << std::endl;
+            std::cout << "GPU->CPU time: " << t4.averageLap() << std::endl;
+            // std::cout << "project time: " << t4.averageLap() << std::endl;
             std::cout << "cam q size: " << camera_queue.size() << std::endl;
             std::cout << "proj q size: " << projector_queue.size() << std::endl;
+
             frameCount = 0;
             previousTime = currentFrame;
             t0.reset();
@@ -260,11 +277,16 @@ int main( int argc, char* argv[])
             t2.reset();
             t3.reset();
             t4.reset();
+            t5.reset();
+            t_misc.reset();
+            canvas.resetTimers();
         }
+        
         // input
         processInput(window);
         // render
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        t_misc.stop();
         t0.start();
         CPylonImage pylonImage = camera_queue.pop();
         uint8_t* buffer = ( uint8_t*) pylonImage.GetBuffer();
@@ -284,14 +306,16 @@ int main( int argc, char* argv[])
         // cv::Point maxLoc;
         // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t0.stop();
-        t2.start();
+        t1.start();
         std::modf(glfwGetTime(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         getLeapFrame(leap, targetFrameTime, bones_to_world, skeleton_vertices, debug_mode);
         glm::mat4 view_transform = gl_camera.GetViewMatrix();
         glm::mat4 projection_transform = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 500.0f); // (float)proj_width / (float)proj_height
+        t1.stop();
         if (bones_to_world.size() > 0)
         {
+            t2.start();
             glm::mat4 LocalToWorld = bones_to_world[0] * rotx * coa_transform;
             if (debug_mode)
             {
@@ -340,11 +364,9 @@ int main( int argc, char* argv[])
             skinnedShader.SetWorldTransform(projection_transform * view_transform);
             skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld);
             unsigned int slow_tracker_texture = skinnedModel.GetFBOTexture();
-            t1.start();
+            t2.stop();
             // canvas.Render(canvasShader, buffer);
-            canvas.Render(jfaInitShader, jfaShader, remapShader, slow_tracker_texture, debugShader, buffer);
-            t1.stop();
-
+            canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
         }
         if (debug_mode)
         {
@@ -354,30 +376,48 @@ int main( int argc, char* argv[])
             text.Render(textShader, std::format("camera forward: {:.02f}, {:.02f}, {:.02f}", cam_forward.x, cam_forward.y, cam_forward.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         }
-        text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-        t2.stop();
+        t3.start();
+        // text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+        t3.stop();
+        
         
         // send result to projector queue
-        if (use_pbo) {  // todo: change to asynchronous read-back http://www.songho.ca/opengl/gl_pbo.html
-            std::cout << "pbo not implemented yet" << std::endl;
-        }else{
-            t3.start();
-            glReadBuffer(GL_FRONT);
-            // glCheckError();
-            glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
-            // glCheckError();
-            t3.stop();
+        
+        glReadBuffer(GL_FRONT);
+        if (use_pbo)
+        {
             t4.start();
-            // auto projector_thread = std::thread([&projector, &colorBuffer]() {  //, &projector
-            projector_queue.push(colorBuffer);
-            // projector.show_buffer(colorBuffer);
-            // });
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pboIds[index]);
+            glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
             t4.stop();
-            // stbi_flip_vertically_on_write(true);
-            // int stride = 3 * proj_width;
-            // stride += (stride % 4) ? (4 - stride % 4) : 0;
-            // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pboIds[nextIndex]);
+            GLubyte* src = (GLubyte*)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+            if(src)
+            {
+                // change brightness
+                projector_queue.push(colorBuffer);
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);        // release pointer to the mapped buffer
+            }
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         }
+        else
+        {
+            t4.start();
+            glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
+            t4.stop();
+            projector_queue.push(colorBuffer);
+        }
+        // glCheckError();
+        // glCheckError();
+        
+        // auto projector_thread = std::thread([&projector, &colorBuffer]() {  //, &projector
+        
+        // projector.show_buffer(colorBuffer);
+        // });
+        // stbi_flip_vertically_on_write(true);
+        // int stride = 3 * proj_width;
+        // stride += (stride % 4) ? (4 - stride % 4) : 0;
+        // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
         // swap buffers and poll IO events
         glfwSwapBuffers(window);
         glfwPollEvents();

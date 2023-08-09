@@ -2,13 +2,13 @@
 #define CANVAS_H
 
 #include "shader.h"
+#include "timer.h"
 #include "opencv2/opencv.hpp"
 //GL includes
 #include <glad/glad.h>
 // CUDA includes
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
-
 // #define USE_TEXSUBIMAGE2D
 // #define USE_TEXTURE_RGBA8UI
 extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
@@ -25,17 +25,16 @@ public:
            bool use_cuda);
     ~Canvas(){ Clear(); };
     void Render(Shader& shader, uint8_t* buffer);
-    void Render(Shader& jfaInit, Shader& jfa, Shader& canvas, unsigned int texture, Shader& debug, uint8_t* buffer);
-    
+    void Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker,
+                unsigned int texture, uint8_t* buffer, bool use_pbo = true);
+    void getTimerValues(double& time0, double& time1, double& time2);
+    void resetTimers();
 private:
     void initGLBuffers();
     // void CreateTexture();
     void Clear();
     void ProcesssWithCuda();
     void ProcesssWithGL();
-    #ifndef USE_TEXSUBIMAGE2D
-    void initCUDABuffers();
-    #endif
     bool m_use_cuda;
     unsigned int m_VAO = 0;
     unsigned int m_VBO = 0;
@@ -59,6 +58,7 @@ private:
     unsigned int m_size_tex_data;
     unsigned int m_num_texels;
     unsigned int m_num_values;
+    Timer t0, t1, t2;
     // struct cudaResourceDesc m_resourceDesc;
     // cudaGraphicsResource *m_cudaGraphicsResource = NULL;
     // cudaArray            *m_cudaArray = NULL;

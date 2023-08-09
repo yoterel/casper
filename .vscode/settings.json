@@ -86,6 +86,9 @@
         "cwctype": "cpp",
         "stack": "cpp",
         "__nullptr": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__tree": "cpp"
     }
 }
