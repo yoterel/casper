@@ -1,3 +1,4 @@
+.vscode
 /build
 /third-party
 unity_augmented_hands/Assets/Plugins/Windows/x64/*
