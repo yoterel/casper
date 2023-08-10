@@ -4,28 +4,31 @@
 
 bool DynaFlashProjector::init()
 {
-    if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE)) {
+	if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE))
+	{
 		std::cout << "SetProcessWorkingSetSize Failed!\n";
-        return false;
+		return false;
 	}
-    pDynaFlash = CreateDynaFlash();
-	if (pDynaFlash == NULL) {
+	pDynaFlash = CreateDynaFlash();
+	if (pDynaFlash == NULL)
+	{
 		return false;
 	}
 
 	/* connect to DynaFlash */
-	if (pDynaFlash->Connect(board_index) != STATUS_SUCCESSFUL) {
+	if (pDynaFlash->Connect(board_index) != STATUS_SUCCESSFUL)
+	{
 		return false;
 	}
 
-    
 	/* reset DynaFlash */
-	if (pDynaFlash->Reset() != STATUS_SUCCESSFUL) {
+	if (pDynaFlash->Reset() != STATUS_SUCCESSFUL)
+	{
 		gracefully_close();
-        return false;
+		return false;
 	}
 
-    DYNAFLASH_PARAM tDynaFlash_Param = { 0 };
+	DYNAFLASH_PARAM tDynaFlash_Param = {0};
 	/* projection parameter setting */
 	tDynaFlash_Param.dFrameRate = frame_rate;
 	// tDynaFlash_Param.dRProportion = (double)2 * 100 / (double)5;
@@ -38,35 +41,46 @@ bool DynaFlashProjector::init()
 	tDynaFlash_Param.nBitDepth = bit_depth;
 	tDynaFlash_Param.nMirrorMode = 1;
 	tDynaFlash_Param.nFlipMode = 1;
-	if (pDynaFlash->SetParam(&tDynaFlash_Param) != STATUS_SUCCESSFUL) {
+	if (pDynaFlash->SetParam(&tDynaFlash_Param) != STATUS_SUCCESSFUL)
+	{
 		gracefully_close();
-        return false;
+		return false;
 	}
+	ILLUMINANCE_MODE cur_ilum_mode;
+	// if (pDynaFlash->GetIlluminance(&cur_ilum_mode) != STATUS_SUCCESSFUL)
+	// {
+	// 	gracefully_close();
+	// 	return false;
+	// }
+	std::cout << "DynaFlash current illuminance mode: " << cur_ilum_mode << std::endl;
 	/* Illuminance setting */
-	if (pDynaFlash->SetIlluminance(mode) != STATUS_SUCCESSFUL) {
+	if (pDynaFlash->SetIlluminance(ilum_mode) != STATUS_SUCCESSFUL)
+	{
 		gracefully_close();
-        return false;
+		return false;
 	}
 
 	print_led_values();
 	// set_led_values();
 	// print_led_values();
-	
+
 	/* Get frame buffer for projection */
-	if (pDynaFlash->AllocFrameBuffer(alloc_frame_buffer) != STATUS_SUCCESSFUL) {
+	if (pDynaFlash->AllocFrameBuffer(alloc_frame_buffer) != STATUS_SUCCESSFUL)
+	{
 		gracefully_close();
-        return false;
+		return false;
 	}
 
 	print_version();
 
-	if (pDynaFlash->Start() != STATUS_SUCCESSFUL) {
+	if (pDynaFlash->Start() != STATUS_SUCCESSFUL)
+	{
 		printf("Start Error\n");
 		gracefully_close();
-        return false;
+		return false;
 	}
 	initialized = true;
-    return true;
+	return true;
 }
 
 void DynaFlashProjector::print_led_values()
@@ -76,44 +90,45 @@ void DynaFlashProjector::print_led_values()
 	pDynaFlash->ReadDACRegister(0x01, &nDaValue[1]);
 	pDynaFlash->ReadDACRegister(0x02, &nDaValue[2]);
 	pDynaFlash->ReadDACRegister(0x03, &nDaValue[3]);
-	double current = ((nDaValue[0])*(5.0 / 1024.0)) / 0.75;
+	double current = ((nDaValue[0]) * (5.0 / 1024.0)) / 0.75;
 	std::cout << "green LED current: " << current << std::endl;
 	pDynaFlash->ReadDACRegister(0x04, &nDaValue[0]);
 	pDynaFlash->ReadDACRegister(0x05, &nDaValue[1]);
 	pDynaFlash->ReadDACRegister(0x06, &nDaValue[2]);
 	pDynaFlash->ReadDACRegister(0x07, &nDaValue[3]);
-	current = ((nDaValue[0])*(5.0 / 1024.0)) / 0.75;
+	current = ((nDaValue[0]) * (5.0 / 1024.0)) / 0.75;
 	std::cout << "red LED current: " << current << std::endl;
 	pDynaFlash->ReadDACRegister(0x08, &nDaValue[0]);
-	current = ((nDaValue[0])*(5.0 / 1024.0)) / 0.067;
+	current = ((nDaValue[0]) * (5.0 / 1024.0)) / 0.067;
 	std::cout << "blue LED current: " << current << std::endl;
 }
 
 void DynaFlashProjector::set_led_values()
 {
 	double green_current = 0.1f;
-	double Vadj = (10 * 0.075*green_current);
+	double Vadj = (10 * 0.075 * green_current);
 	unsigned long write_value = (int)(Vadj / (5.0 / 1024.0));
 	pDynaFlash->WriteDACRegister(0x00, write_value);
 	pDynaFlash->WriteDACRegister(0x01, write_value);
 	pDynaFlash->WriteDACRegister(0x02, write_value);
 	pDynaFlash->WriteDACRegister(0x03, write_value);
 	double red_current = 0.1f;
-	Vadj = (10 * 0.075*red_current);
+	Vadj = (10 * 0.075 * red_current);
 	write_value = (int)(Vadj / (5.0 / 1024.0));
 	pDynaFlash->WriteDACRegister(0x04, write_value);
 	pDynaFlash->WriteDACRegister(0x05, write_value);
 	pDynaFlash->WriteDACRegister(0x06, write_value);
 	pDynaFlash->WriteDACRegister(0x07, write_value);
 	double blue_current = 2.5f;
-	Vadj = (10 * 0.0067*blue_current);
+	Vadj = (10 * 0.0067 * blue_current);
 	write_value = (int)(Vadj / (5.0 / 1024.0));
 	pDynaFlash->WriteDACRegister(0x08, write_value);
 }
 
 void DynaFlashProjector::gracefully_close()
 {
-	if (initialized) {
+	if (initialized)
+	{
 		/* stop projection */
 		pDynaFlash->Stop();
 
@@ -151,7 +166,8 @@ void DynaFlashProjector::print_version()
 	printf("DynaFlash DLL Ver    : %08x\r\n", nVersion);
 }
 
-void DynaFlashProjector::show(const cv::Mat frame){
+void DynaFlashProjector::show(const cv::Mat frame)
+{
 	if (initialized)
 	{
 		// pFrameData = (char *)malloc(frame_size);
@@ -161,19 +177,22 @@ void DynaFlashProjector::show(const cv::Mat frame){
 		// }
 		// memcpy((void *)pFrameData, (void *)frame.data, frame_size);
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100) {
+		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
+		{
 			std::cout << "input - output > 100!" << std::endl;
 			return;
 		}
-		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL) 
+		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
 			std::cout << "GetFrameBuffer Error\n";
 			gracefully_close();
 		}
-		if ((pBuf != NULL) && (nGetFrameCnt != 0)) {
+		if ((pBuf != NULL) && (nGetFrameCnt != 0))
+		{
 			// std::cout << "frame count: " << nGetFrameCnt << std::endl;
 			memcpy(pBuf, frame.data, frame_size);
-			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL) {
+			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
+			{
 				std::cout << "PostFrameBuffer Error\n";
 				gracefully_close();
 			}
@@ -182,23 +201,27 @@ void DynaFlashProjector::show(const cv::Mat frame){
 	}
 }
 
-void DynaFlashProjector::show_buffer(const uint8_t* buffer){
+void DynaFlashProjector::show_buffer(const uint8_t *buffer)
+{
 	if (initialized)
 	{
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100) {
+		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
+		{
 			std::cout << "input - output > 100!" << std::endl;
 			return;
 		}
-		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL) 
+		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
 			std::cout << "GetFrameBuffer Error\n";
 			gracefully_close();
 		}
-		if ((pBuf != NULL) && (nGetFrameCnt != 0)) {
+		if ((pBuf != NULL) && (nGetFrameCnt != 0))
+		{
 			// std::cout << "frame count: " << nGetFrameCnt << std::endl;
 			memcpy(pBuf, buffer, frame_size);
-			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL) {
+			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
+			{
 				std::cout << "PostFrameBuffer Error\n";
 				gracefully_close();
 			}
@@ -207,21 +230,25 @@ void DynaFlashProjector::show_buffer(const uint8_t* buffer){
 	}
 }
 
-void DynaFlashProjector::show(){
+void DynaFlashProjector::show()
+{
 	if (initialized)
 	{
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100) {
+		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
+		{
 			return;
 		}
-		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL) 
+		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
 			std::cout << "GetFrameBuffer Error\n";
 			gracefully_close();
 		}
-		if ((pBuf != NULL) && (nGetFrameCnt != 0)) {
+		if ((pBuf != NULL) && (nGetFrameCnt != 0))
+		{
 			memcpy(pBuf, white_image.data, frame_size);
-			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL) {
+			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
+			{
 				std::cout << "PostFrameBuffer Error\n";
 				gracefully_close();
 			}

@@ -21,6 +21,7 @@
 #include "canvas.h"
 #include "utils.h"
 #include "image_process.h"
+#include "stb_image_write.h"
 #include <helper_string.h>
 // forward declarations
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
@@ -61,7 +62,6 @@ unsigned int n_bones = 0;
 glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
-// const unsigned int texture_size = num_texels * 4 * sizeof(uint8_t);
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
 
 int main(int argc, char *argv[])
@@ -140,8 +140,8 @@ int main(int argc, char *argv[])
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
-                              //   "C:/src/augmented_hands/resource/uv.png",
-                              "C:/src/augmented_hands/resource/wood.jpg",
+                              "C:/src/augmented_hands/resource/uv.png",
+                              //   "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height);
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     n_bones = skinnedModel.NumBones();
@@ -192,7 +192,8 @@ int main(int argc, char *argv[])
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
     blocking_queue<CPylonImage> camera_queue;
-    blocking_queue<uint8_t *> projector_queue;
+    blocking_queue<std::vector<uint8_t>> projector_queue;
+    // std::vector<uint8_t> tmpdata(image_size);
     BaslerCamera camera;
     DynaFlashProjector projector(proj_width, proj_height);
     if (!projector.init())
@@ -234,15 +235,17 @@ int main(int argc, char *argv[])
     }
     // image consumer
     consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
-        uint8_t *buffer;
+        // uint8_t *buffer;
+        std::vector<uint8_t> image;
+        // int stride = 3 * proj_width;
+        // stride += (stride % 4) ? (4 - stride % 4) : 0;
         bool sucess;
         while (!close_signal)
         {
-            sucess = projector_queue.pop_with_timeout(100, buffer);
+            sucess = projector_queue.pop_with_timeout(100, image);
             if (sucess)
-                projector.show_buffer(buffer);
-            // else
-            //     std::cout << "Consumer timeout" << std::endl;
+                projector.show_buffer(image.data());
+            // stbi_write_png("test.png", proj_width, proj_height, 3, image.data(), stride);
         }
         std::cout << "Consumer finish" << std::endl;
     });
@@ -387,13 +390,12 @@ int main(int argc, char *argv[])
             text.Render(textShader, std::format("camera pos: {:.02f}, {:.02f}, {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             text.Render(textShader, std::format("camera forward: {:.02f}, {:.02f}, {:.02f}", cam_forward.x, cam_forward.y, cam_forward.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            t3.start();
+            text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            t3.stop();
         }
-        t3.start();
-        // text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-        t3.stop();
 
         // send result to projector queue
-
         glReadBuffer(GL_FRONT);
         if (use_pbo)
         {
@@ -405,8 +407,11 @@ int main(int argc, char *argv[])
             GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
             if (src)
             {
-                memcpy(colorBuffer, src, image_size);
-                projector_queue.push(colorBuffer);
+                std::vector<uint8_t> data(src, src + image_size);
+                // tmpdata.assign(src, src + image_size);
+                // std::copy(src, src + tmpdata.size(), tmpdata.begin());
+                // memcpy(colorBuffer, src, image_size);
+                projector_queue.push(data);
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
             }
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -416,7 +421,8 @@ int main(int argc, char *argv[])
             t4.start();
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
             t4.stop();
-            projector_queue.push(colorBuffer);
+            std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
+            projector_queue.push(data);
         }
         // glCheckError();
         // glCheckError();

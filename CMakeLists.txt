@@ -119,29 +119,37 @@ target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-pa
 target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 
-######################################### sample program
-add_executable(cuda_example 
-    # src/add.cu
-    src/cuda/boxFilter.cu
-    # src/cuda/cuda2gl.cpp
-    # src/cuda/cuda2gl.cu
+######################################### cuda sample program
+# add_executable(cuda_example 
+#     # src/add.cu
+#     src/cuda/boxFilter.cu
+#     # src/cuda/cuda2gl.cpp
+#     # src/cuda/cuda2gl.cu
+# )
+# set_target_properties(cuda_example PROPERTIES CUDA_ARCHITECTURES "72")
+# target_include_directories(cuda_example PRIVATE "C:/src/cuda-samples/Common")
+# target_include_directories(cuda_example PRIVATE "C:/src/cuda-samples/Common/UtilNPP")
+# target_include_directories(cuda_example PRIVATE "C:/src/cuda-samples/Common/FreeImage/Dist/x64")
+# target_link_libraries(cuda_example PRIVATE "C:/src/cuda-samples/Common/FreeImage/Dist/x64/freeimage.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppc.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppial.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppicc.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppidei.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppif.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppig.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppim.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppist.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppisu.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppitc.lib")
+# target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/npps.lib")
+######################################### dynaflash example program
+add_executable(dyna_example 
+    src/dyna_example.cpp
 )
-set_target_properties(cuda_example PROPERTIES CUDA_ARCHITECTURES "72")
-target_include_directories(cuda_example PRIVATE "C:/src/cuda-samples/Common")
-target_include_directories(cuda_example PRIVATE "C:/src/cuda-samples/Common/UtilNPP")
-target_include_directories(cuda_example PRIVATE "C:/src/cuda-samples/Common/FreeImage/Dist/x64")
-target_link_libraries(cuda_example PRIVATE "C:/src/cuda-samples/Common/FreeImage/Dist/x64/freeimage.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppc.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppial.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppicc.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppidei.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppif.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppig.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppim.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppist.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppisu.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/nppitc.lib")
-target_link_libraries(cuda_example PRIVATE "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64/npps.lib")
+target_link_libraries(dyna_example PRIVATE ${OpenCV_LIBS})
+target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 ######################################### post build copy dlls
 file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/x64/vc15/bin/*.dll")
 add_custom_command(TARGET ahand 
