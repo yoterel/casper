@@ -40,6 +40,8 @@ bool debug_mode = false;
 bool use_cuda = false;
 bool producer_is_fake = false;
 bool use_pbo = false;
+bool use_projector = true;
+bool use_screen = true;
 // init state
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
@@ -85,6 +87,16 @@ int main(int argc, char *argv[])
     {
         std::cout << "Using PBO for async unpacking..." << std::endl;
         use_pbo = true;
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "no_proj"))
+    {
+        std::cout << "No projector mode is on" << std::endl;
+        use_projector = false;
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "no_screen"))
+    {
+        std::cout << "No screen mode is on" << std::endl;
+        use_screen = false;
     }
     Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc;
     t_app.start();
@@ -192,13 +204,16 @@ int main(int argc, char *argv[])
     uint32_t cam_height = 0;
     uint32_t cam_width = 0;
     blocking_queue<CPylonImage> camera_queue;
-    blocking_queue<std::vector<uint8_t>> projector_queue;
-    // std::vector<uint8_t> tmpdata(image_size);
+    // blocking_queue<std::vector<uint8_t>> projector_queue;
+    blocking_queue<uint8_t *> projector_queue;
     BaslerCamera camera;
     DynaFlashProjector projector(proj_width, proj_height);
-    if (!projector.init())
+    if (use_projector)
     {
-        std::cerr << "Failed to initialize projector\n";
+        if (!projector.init())
+        {
+            std::cerr << "Failed to initialize projector\n";
+        }
     }
     LeapConnect leap;
     LEAP_CLOCK_REBASER clockSynchronizer;
@@ -235,8 +250,8 @@ int main(int argc, char *argv[])
     }
     // image consumer
     consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
-        // uint8_t *buffer;
-        std::vector<uint8_t> image;
+        uint8_t *image;
+        // std::vector<uint8_t> image;
         // int stride = 3 * proj_width;
         // stride += (stride % 4) ? (4 - stride % 4) : 0;
         bool sucess;
@@ -244,7 +259,8 @@ int main(int argc, char *argv[])
         {
             sucess = projector_queue.pop_with_timeout(100, image);
             if (sucess)
-                projector.show_buffer(image.data());
+                projector.show_buffer(image);
+            // projector.show_buffer(image.data());
             // stbi_write_png("test.png", proj_width, proj_height, 3, image.data(), stride);
         }
         std::cout << "Consumer finish" << std::endl;
@@ -407,11 +423,11 @@ int main(int argc, char *argv[])
             GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
             if (src)
             {
-                std::vector<uint8_t> data(src, src + image_size);
+                // std::vector<uint8_t> data(src, src + image_size);
                 // tmpdata.assign(src, src + image_size);
                 // std::copy(src, src + tmpdata.size(), tmpdata.begin());
-                // memcpy(colorBuffer, src, image_size);
-                projector_queue.push(data);
+                memcpy(colorBuffer, src, image_size);
+                projector_queue.push(colorBuffer);
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
             }
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -421,8 +437,8 @@ int main(int argc, char *argv[])
             t4.start();
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
             t4.stop();
-            std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
-            projector_queue.push(data);
+            // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
+            projector_queue.push(colorBuffer);
         }
         // glCheckError();
         // glCheckError();
