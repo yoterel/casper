@@ -39,8 +39,8 @@ bool DynaFlashProjector::init()
 	tDynaFlash_Param.dBProportion = (double)100 / (double)3;
 	tDynaFlash_Param.nBinaryMode = frame_mode;
 	tDynaFlash_Param.nBitDepth = bit_depth;
-	tDynaFlash_Param.nMirrorMode = 1;
-	tDynaFlash_Param.nFlipMode = 1;
+	tDynaFlash_Param.nMirrorMode = (m_flip_hor ? 0 : 1);
+	tDynaFlash_Param.nFlipMode = (m_flip_ver ? 1 : 0);
 	if (pDynaFlash->SetParam(&tDynaFlash_Param) != STATUS_SUCCESSFUL)
 	{
 		gracefully_close();

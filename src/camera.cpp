@@ -97,10 +97,10 @@ public:
             std::cout << "exposure time cannot be less than 1850.0, setting to 1850.0" << std::endl;
             exposure_time = 1850.0;
         }
-        if (exposure_time > 10000.0)
+        if (exposure_time > 15000.0)
         {
-            std::cout << "exposure time cannot be greater than 10000.0, setting to 10000.0" << std::endl;
-            exposure_time = 10000.0;
+            std::cout << "exposure time cannot be greater than 15000.0, setting to 15000.0" << std::endl;
+            exposure_time = 15000.0;
         }
     }
     /// Apply acquire single frame configuration.

@@ -20,7 +20,9 @@ namespace nb = nanobind;
 class DynaFlashProjector
 {
 public:
-    DynaFlashProjector() : white_image(DYNA_FRAME_WIDTH, DYNA_FRAME_HEIGHT, CV_8UC3, cv::Scalar(255, 255, 255)){};
+    DynaFlashProjector(bool flip_ver = false, bool flip_hor = false) : white_image(DYNA_FRAME_WIDTH, DYNA_FRAME_HEIGHT, CV_8UC3, cv::Scalar(255, 255, 255)),
+                                                                       m_flip_ver(flip_ver),
+                                                                       m_flip_hor(flip_hor){};
     ~DynaFlashProjector()
     {
         gracefully_close();
@@ -37,9 +39,19 @@ public:
 #ifdef PYTHON_BINDINGS_BUILD
     void project(nb::ndarray<uint8_t, nb::shape<DYNA_FRAME_HEIGHT, DYNA_FRAME_WIDTH, 3>,
                              nb::c_contig, nb::device::cpu>
-                     data)
+                     data,
+                 bool bgr = true)
     {
-        show_buffer(data.data());
+        if (!bgr)
+        {
+            cv::Mat data_mat(DYNA_FRAME_HEIGHT, DYNA_FRAME_WIDTH, CV_8UC3, data.data());
+            cv::cvtColor(data_mat, data_mat, cv::COLOR_RGB2BGR);
+            show_buffer(data_mat.data);
+        }
+        else
+        {
+            show_buffer(data.data());
+        }
     };
 #endif
 private:
@@ -47,6 +59,8 @@ private:
     void print_led_values();
     void set_led_values();
     bool initialized = false;
+    bool m_flip_ver = false;
+    bool m_flip_hor = false;
     int board_index = 0;
     float frame_rate = 946.0f; // max: 946.0f
     int bit_depth = 8;
@@ -69,11 +83,11 @@ private:
 NB_MODULE(dynaflash, m)
 {
     nb::class_<DynaFlashProjector>(m, "projector")
-        .def(nb::init<>(), "a class to control a dynaflash projector")
+        .def(nb::init<bool, bool>(), nb::arg("flip_ver") = false, nb::arg("flip_hor") = false, "a class to control a dynaflash projector")
         .def("init", &DynaFlashProjector::init, "initializes the projector")
         .def("is_initialized", &DynaFlashProjector::is_initialized, "returns true if the projector is initialized")
         .def("kill", &DynaFlashProjector::kill, "frees the internal projector resources")
         .def("project_white", nb::overload_cast<>(&DynaFlashProjector::show), "projects a white image")
-        .def("project", &DynaFlashProjector::project, "projects an arbitrary numpy array (height, width, 3)");
+        .def("project", &DynaFlashProjector::project, nb::arg("data"), nb::arg("bgr") = true, "projects an arbitrary numpy array of type uint8, with shape (height, width, 3), bgr");
 }
 #endif
