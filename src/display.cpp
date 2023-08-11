@@ -46,13 +46,13 @@ bool DynaFlashProjector::init()
 		gracefully_close();
 		return false;
 	}
-	ILLUMINANCE_MODE cur_ilum_mode;
+	// ILLUMINANCE_MODE cur_ilum_mode;
 	// if (pDynaFlash->GetIlluminance(&cur_ilum_mode) != STATUS_SUCCESSFUL)
 	// {
 	// 	gracefully_close();
 	// 	return false;
 	// }
-	std::cout << "DynaFlash current illuminance mode: " << cur_ilum_mode << std::endl;
+	// std::cout << "DynaFlash current illuminance mode: " << cur_ilum_mode << std::endl;
 	/* Illuminance setting */
 	if (pDynaFlash->SetIlluminance(ilum_mode) != STATUS_SUCCESSFUL)
 	{
@@ -208,7 +208,7 @@ void DynaFlashProjector::show_buffer(const uint8_t *buffer)
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
 		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
 		{
-			std::cout << "input - output > 100!" << std::endl;
+			std::cout << "dropping frame, as (input buffer - output buffer) > 100" << std::endl;
 			return;
 		}
 		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)

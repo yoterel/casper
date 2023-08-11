@@ -3,279 +3,292 @@
 // Contains a Configuration Event Handler that prints a message for each event method call.
 
 class CConfigurationEventPrinter : public CConfigurationEventHandler
+{
+public:
+    void OnAttach(CInstantCamera & /*camera*/)
     {
-    public:
-        void OnAttach( CInstantCamera& /*camera*/ )
-        {
-            std::cout << "OnAttach event" << std::endl;
-        }
+        std::cout << "OnAttach event" << std::endl;
+    }
 
-        void OnAttached( CInstantCamera& camera )
-        {
-            std::cout << "OnAttached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnAttached(CInstantCamera &camera)
+    {
+        std::cout << "OnAttached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnOpen( CInstantCamera& camera )
-        {
-            // std::cout << "OnOpen event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnOpen(CInstantCamera &camera)
+    {
+        // std::cout << "OnOpen event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnOpened( CInstantCamera& camera )
-        {
-            // std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnOpened(CInstantCamera &camera)
+    {
+        // std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnGrabStart( CInstantCamera& camera )
-        {
-            // std::cout << "OnGrabStart event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnGrabStart(CInstantCamera &camera)
+    {
+        // std::cout << "OnGrabStart event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnGrabStarted( CInstantCamera& camera )
-        {
-            // std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnGrabStarted(CInstantCamera &camera)
+    {
+        // std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnGrabStop( CInstantCamera& camera )
-        {
-            // std::cout << "OnGrabStop event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnGrabStop(CInstantCamera &camera)
+    {
+        // std::cout << "OnGrabStop event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnGrabStopped( CInstantCamera& camera )
-        {
-            // std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnGrabStopped(CInstantCamera &camera)
+    {
+        // std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnClose( CInstantCamera& camera )
-        {
-            // std::cout << "OnClose event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnClose(CInstantCamera &camera)
+    {
+        // std::cout << "OnClose event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnClosed( CInstantCamera& camera )
-        {
-            // std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnClosed(CInstantCamera &camera)
+    {
+        // std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnDestroy( CInstantCamera& camera )
-        {
-            // std::cout << "OnDestroy event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnDestroy(CInstantCamera &camera)
+    {
+        // std::cout << "OnDestroy event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnDestroyed( CInstantCamera& /*camera*/ )
-        {
-            // std::cout << "OnDestroyed event" << std::endl;
-        }
+    void OnDestroyed(CInstantCamera & /*camera*/)
+    {
+        // std::cout << "OnDestroyed event" << std::endl;
+    }
 
-        void OnDetach( CInstantCamera& camera )
-        {
-            std::cout << "OnDetach event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnDetach(CInstantCamera &camera)
+    {
+        std::cout << "OnDetach event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnDetached( CInstantCamera& camera )
-        {
-            std::cout << "OnDetached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
+    void OnDetached(CInstantCamera &camera)
+    {
+        std::cout << "OnDetached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
 
-        void OnGrabError( CInstantCamera& camera, const char* errorMessage )
-        {
-            std::cout << "OnGrabError event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-            std::cout << "Error Message: " << errorMessage << std::endl;
-        }
+    void OnGrabError(CInstantCamera &camera, const char *errorMessage)
+    {
+        std::cout << "OnGrabError event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "Error Message: " << errorMessage << std::endl;
+    }
 
-        void OnCameraDeviceRemoved( CInstantCamera& camera )
-        {
-            std::cout << "OnCameraDeviceRemoved event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        }
-    };
+    void OnCameraDeviceRemoved(CInstantCamera &camera)
+    {
+        std::cout << "OnCameraDeviceRemoved event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+    }
+};
 
 class SingleFrameConfiguration : public CConfigurationEventHandler
 {
 public:
+    SingleFrameConfiguration(float exposure_time) : m_exposure_time(exposure_time)
+    {
+        if (exposure_time < 1850.0)
+        {
+            std::cout << "exposure time cannot be less than 1850.0, setting to 1850.0" << std::endl;
+            exposure_time = 1850.0;
+        }
+        if (exposure_time > 10000.0)
+        {
+            std::cout << "exposure time cannot be greater than 10000.0, setting to 10000.0" << std::endl;
+            exposure_time = 10000.0;
+        }
+    }
     /// Apply acquire single frame configuration.
-    static void ApplyConfiguration( GenApi::INodeMap& nodemap )
+    static void ApplyConfiguration(GenApi::INodeMap &nodemap, float exposure_time)
     {
         using namespace GenApi;
 
-        //Disable all trigger types.
-        CConfigurationHelper::DisableAllTriggers( nodemap );
+        // Disable all trigger types.
+        CConfigurationHelper::DisableAllTriggers(nodemap);
 
-        //Disable compression mode.
-        CConfigurationHelper::DisableCompression( nodemap );
+        // Disable compression mode.
+        CConfigurationHelper::DisableCompression(nodemap);
 
-        //Disable GenDC streaming.
-        CConfigurationHelper::DisableGenDC( nodemap );
+        // Disable GenDC streaming.
+        CConfigurationHelper::DisableGenDC(nodemap);
 
         // Set image component.
-        CConfigurationHelper::SelectRangeComponent( nodemap );
+        CConfigurationHelper::SelectRangeComponent(nodemap);
 
-        //Set acquisition mode.
-        CEnumParameter( nodemap, "AcquisitionMode" ).SetValue( "SingleFrame" );
-        CFloatParameter( nodemap, "ExposureTime" ).SetValue(1850.0f);  // 1850.0=for max fps, 1904.0f = for 500 fps
+        // Set acquisition mode.
+        CEnumParameter(nodemap, "AcquisitionMode").SetValue("SingleFrame");
+        CFloatParameter(nodemap, "ExposureTime").SetValue(exposure_time); // 1850.0=for max fps, 1904.0f = for 500 fps
     }
 
-    //Set basic camera settings
-    virtual void OnOpened( CInstantCamera& camera )
+    // Set basic camera settings
+    virtual void OnOpened(CInstantCamera &camera)
     {
         try
         {
-            ApplyConfiguration( camera.GetNodeMap() );
+            ApplyConfiguration(camera.GetNodeMap(), m_exposure_time);
             // Probe max packet size
-            CConfigurationHelper::ProbePacketSize( camera.GetStreamGrabberNodeMap() );
+            CConfigurationHelper::ProbePacketSize(camera.GetStreamGrabberNodeMap());
         }
-        catch (const GenericException& e)
+        catch (const GenericException &e)
         {
-            throw RUNTIME_EXCEPTION( "Could not apply configuration. Pylon::GenericException caught in OnOpened method msg=%hs", e.what() );
+            throw RUNTIME_EXCEPTION("Could not apply configuration. Pylon::GenericException caught in OnOpened method msg=%hs", e.what());
         }
-        catch (const std::exception& e)
+        catch (const std::exception &e)
         {
-            throw RUNTIME_EXCEPTION( "Could not apply configuration. std::exception caught in OnOpened method msg=%hs", e.what() );
+            throw RUNTIME_EXCEPTION("Could not apply configuration. std::exception caught in OnOpened method msg=%hs", e.what());
         }
         catch (...)
         {
-            throw RUNTIME_EXCEPTION( "Could not apply configuration. Unknown exception caught in OnOpened method." );
+            throw RUNTIME_EXCEPTION("Could not apply configuration. Unknown exception caught in OnOpened method.");
         }
     }
+
+private:
+    float m_exposure_time;
 };
-
-
 
 // hardware trigger configuration for basler camera
 
 class HardwareTriggerConfiguration : public CConfigurationEventHandler
+{
+public:
+    /// Apply trigger configuration.
+    static void ApplyConfiguration(GenApi::INodeMap &nodemap)
     {
-    public:
-        /// Apply trigger configuration.
-        static void ApplyConfiguration( GenApi::INodeMap& nodemap )
+        using namespace GenApi;
+        bool hardwareTrigger = false;
+
+        // Disable compression mode.
+        CConfigurationHelper::DisableCompression(nodemap);
+
+        // Disable GenDC streaming.
+        CConfigurationHelper::DisableGenDC(nodemap);
+
+        // Select image component.
+        CConfigurationHelper::SelectRangeComponent(nodemap);
+
+        // Disable all trigger types except the trigger type used for triggering the acquisition of
+        // frames.
         {
-            using namespace GenApi;
-            bool hardwareTrigger = false;
+            // Get required enumerations.
+            CEnumParameter triggerSelector(nodemap, "TriggerSelector");
+            CEnumParameter triggerMode(nodemap, "TriggerMode");
 
-            //Disable compression mode.
-            CConfigurationHelper::DisableCompression( nodemap );
-
-            //Disable GenDC streaming.
-            CConfigurationHelper::DisableGenDC( nodemap );
-
-            //Select image component.
-            CConfigurationHelper::SelectRangeComponent( nodemap );
-
-            // Disable all trigger types except the trigger type used for triggering the acquisition of
-            // frames.
+            // Check the available camera trigger mode(s) to select the appropriate one: acquisition start trigger mode
+            // (used by older cameras, i.e. for cameras supporting only the legacy image acquisition control mode;
+            // do not confuse with acquisition start command) or frame start trigger mode
+            // (used by newer cameras, i.e. for cameras using the standard image acquisition control mode;
+            // equivalent to the acquisition start trigger mode in the legacy image acquisition control mode).
+            String_t triggerName("FrameStart");
+            if (!triggerSelector.CanSetValue(triggerName))
             {
-                // Get required enumerations.
-                CEnumParameter triggerSelector( nodemap, "TriggerSelector" );
-                CEnumParameter triggerMode( nodemap, "TriggerMode" );
-
-                // Check the available camera trigger mode(s) to select the appropriate one: acquisition start trigger mode
-                // (used by older cameras, i.e. for cameras supporting only the legacy image acquisition control mode;
-                // do not confuse with acquisition start command) or frame start trigger mode
-                // (used by newer cameras, i.e. for cameras using the standard image acquisition control mode;
-                // equivalent to the acquisition start trigger mode in the legacy image acquisition control mode).
-                String_t triggerName( "FrameStart" );
-                if (!triggerSelector.CanSetValue( triggerName ))
+                triggerName = "AcquisitionStart";
+                if (!triggerSelector.CanSetValue(triggerName))
                 {
-                    triggerName = "AcquisitionStart";
-                    if (!triggerSelector.CanSetValue( triggerName ))
-                    {
-                        throw RUNTIME_EXCEPTION( "Could not select trigger. Neither FrameStart nor AcquisitionStart is available." );
-                    }
+                    throw RUNTIME_EXCEPTION("Could not select trigger. Neither FrameStart nor AcquisitionStart is available.");
                 }
+            }
 
-                // Get all enumeration entries of trigger selector.
-                StringList_t triggerSelectorEntries;
-                triggerSelector.GetSettableValues( triggerSelectorEntries );
-                
-                // Turn trigger mode off for all trigger selector entries except for the frame trigger given by triggerName.
-                for (StringList_t::const_iterator it = triggerSelectorEntries.begin(); it != triggerSelectorEntries.end(); ++it)
+            // Get all enumeration entries of trigger selector.
+            StringList_t triggerSelectorEntries;
+            triggerSelector.GetSettableValues(triggerSelectorEntries);
+
+            // Turn trigger mode off for all trigger selector entries except for the frame trigger given by triggerName.
+            for (StringList_t::const_iterator it = triggerSelectorEntries.begin(); it != triggerSelectorEntries.end(); ++it)
+            {
+                // Set trigger mode to off.
+                triggerSelector.SetValue(*it);
+
+                if (hardwareTrigger)
                 {
-                    // Set trigger mode to off.
-                    triggerSelector.SetValue( *it );
-                    
-                    if (hardwareTrigger)
+                    if (triggerName == *it)
                     {
-                        if (triggerName == *it)
-                        {
-                            // Activate trigger.
-                            triggerMode.SetValue( "On" );
+                        // Activate trigger.
+                        triggerMode.SetValue("On");
 
-                            // The trigger source must be set to 'Software'.
-                            // CEnumParameter( nodemap, "TriggerSource" ).SetValue( "Software" );
+                        // The trigger source must be set to 'Software'.
+                        // CEnumParameter( nodemap, "TriggerSource" ).SetValue( "Software" );
 
-                            //// Alternative hardware trigger configuration:
-                            //// This configuration can be copied and modified to create a hardware trigger configuration.
-                            //// Remove setting the 'TriggerSource' to 'Software' (see above) and
-                            //// use the commented lines as a starting point.
-                            //// The camera user's manual contains more information about available configurations.
-                            //// The Basler pylon Viewer tool can be used to test the selected settings first.
+                        //// Alternative hardware trigger configuration:
+                        //// This configuration can be copied and modified to create a hardware trigger configuration.
+                        //// Remove setting the 'TriggerSource' to 'Software' (see above) and
+                        //// use the commented lines as a starting point.
+                        //// The camera user's manual contains more information about available configurations.
+                        //// The Basler pylon Viewer tool can be used to test the selected settings first.
 
-                            //// The trigger source must be set to the trigger input, e.g. 'Line1'.
-                            CEnumParameter(nodemap, "TriggerSource").SetValue("Line4");
+                        //// The trigger source must be set to the trigger input, e.g. 'Line1'.
+                        CEnumParameter(nodemap, "TriggerSource").SetValue("Line4");
 
-                            ////The trigger activation must be set to e.g. 'RisingEdge'.
-                            CEnumParameter(nodemap, "TriggerActivation").SetValue("RisingEdge");
-                        }
-                        else
-                        {
-                            triggerMode.TrySetValue( "Off" );
-                        }
+                        ////The trigger activation must be set to e.g. 'RisingEdge'.
+                        CEnumParameter(nodemap, "TriggerActivation").SetValue("RisingEdge");
                     }
                     else
                     {
-                        triggerMode.TrySetValue( "Off" );
+                        triggerMode.TrySetValue("Off");
                     }
                 }
-                // Finally select the frame trigger type (resp. acquisition start type
-                // for older cameras). Issuing a software trigger will now trigger
-                // the acquisition of a frame.
-                triggerSelector.SetValue( triggerName );
+                else
+                {
+                    triggerMode.TrySetValue("Off");
+                }
             }
-
-            //Set acquisition mode to "continuous"
-            CEnumParameter( nodemap, "AcquisitionMode" ).SetValue( "Continuous" );
-            CFloatParameter( nodemap, "ExposureTime" ).SetValue(1850.0f);  // 1850.0=for max fps, 1904.0f = for 500 fps
+            // Finally select the frame trigger type (resp. acquisition start type
+            // for older cameras). Issuing a software trigger will now trigger
+            // the acquisition of a frame.
+            triggerSelector.SetValue(triggerName);
         }
 
-        //Set basic camera settings.
-        virtual void OnOpened( CInstantCamera& camera )
+        // Set acquisition mode to "continuous"
+        CEnumParameter(nodemap, "AcquisitionMode").SetValue("Continuous");
+        CFloatParameter(nodemap, "ExposureTime").SetValue(1850.0f); // 1850.0=for max fps, 1904.0f = for 500 fps
+    }
+
+    // Set basic camera settings.
+    virtual void OnOpened(CInstantCamera &camera)
+    {
+        try
         {
-            try
-            {
-                ApplyConfiguration( camera.GetNodeMap() );
-                // Probe max packet size
-                CConfigurationHelper::ProbePacketSize( camera.GetStreamGrabberNodeMap() );
-            }
-            catch (const GenericException& e)
-            {
-                throw RUNTIME_EXCEPTION( "Could not apply configuration. Pylon::GenericException caught in OnOpened method msg=%hs", e.what() );
-            }
-            catch (const std::exception& e)
-            {
-                throw RUNTIME_EXCEPTION( "Could not apply configuration. std::exception caught in OnOpened method msg=%hs", e.what() );
-            }
-            catch (...)
-            {
-                throw RUNTIME_EXCEPTION( "Could not apply configuration. Unknown exception caught in OnOpened method." );
-            }
+            ApplyConfiguration(camera.GetNodeMap());
+            // Probe max packet size
+            CConfigurationHelper::ProbePacketSize(camera.GetStreamGrabberNodeMap());
         }
-    };
+        catch (const GenericException &e)
+        {
+            throw RUNTIME_EXCEPTION("Could not apply configuration. Pylon::GenericException caught in OnOpened method msg=%hs", e.what());
+        }
+        catch (const std::exception &e)
+        {
+            throw RUNTIME_EXCEPTION("Could not apply configuration. std::exception caught in OnOpened method msg=%hs", e.what());
+        }
+        catch (...)
+        {
+            throw RUNTIME_EXCEPTION("Could not apply configuration. Unknown exception caught in OnOpened method.");
+        }
+    }
+};
 
-//image event handler
+// image event handler
 class MyImageEventHandler : public CImageEventHandler
 {
 public:
-    MyImageEventHandler(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width) :
-                        myqueue(camera_queue), close_signal(close_signal), height(height), width(width) {}
-    blocking_queue<CPylonImage>& myqueue;
-    bool& close_signal;
-    uint32_t& height;
-    uint32_t& width;
-    virtual void OnImagesSkipped( CInstantCamera& camera, size_t countOfSkippedImages )
+    MyImageEventHandler(blocking_queue<CPylonImage> &camera_queue, bool &close_signal, uint32_t &height, uint32_t &width) : myqueue(camera_queue), close_signal(close_signal), height(height), width(width) {}
+    blocking_queue<CPylonImage> &myqueue;
+    bool &close_signal;
+    uint32_t &height;
+    uint32_t &width;
+    virtual void OnImagesSkipped(CInstantCamera &camera, size_t countOfSkippedImages)
     {
         // std::cout << "OnImagesSkipped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
         // std::cout << countOfSkippedImages << " images have been skipped." << std::endl;
         // std::cout << std::endl;
     }
 
-    virtual void OnImageGrabbed( CInstantCamera& camera, const CGrabResultPtr& ptrGrabResult )
+    virtual void OnImageGrabbed(CInstantCamera &camera, const CGrabResultPtr &ptrGrabResult)
     {
         if (close_signal)
         {
@@ -295,8 +308,8 @@ public:
             // // std::cout << std::endl;
             // // Pylon::DisplayImage( 1, ptrGrabResult );
             // CImageFormatConverter formatConverter;
-	        // formatConverter.OutputPixelFormat= PixelType_BGR8packed;
-	        // // CPylonImage* pylonImage = new CPylonImage();
+            // formatConverter.OutputPixelFormat= PixelType_BGR8packed;
+            // // CPylonImage* pylonImage = new CPylonImage();
             // CPylonImage pylonImage;
             // formatConverter.Convert(pylonImage, ptrGrabResult);
             // cv::Mat myimage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*) pylonImage.GetBuffer());
@@ -314,7 +327,7 @@ public:
                 width = ptrGrabResult->GetWidth();
             }
             CImageFormatConverter formatConverter;
-	        formatConverter.OutputPixelFormat= PixelType_BGRA8packed;
+            formatConverter.OutputPixelFormat = PixelType_BGRA8packed;
             CPylonImage pylonImage;
             formatConverter.Convert(pylonImage, ptrGrabResult);
             // uint8_t* buffer = (uint8_t*) pylonImage.GetBuffer();
@@ -336,22 +349,23 @@ public:
     }
 };
 
-void BaslerCamera::init(blocking_queue<CPylonImage>& camera_queue, bool& close_signal, uint32_t& height, uint32_t& width)
+void BaslerCamera::init(blocking_queue<CPylonImage> &camera_queue, bool &close_signal, uint32_t &height, uint32_t &width)
 {
     PylonInitialize();
     try
     {
         camera.Attach(CTlFactory::GetInstance().CreateFirstDevice());
-        camera.RegisterConfiguration( new HardwareTriggerConfiguration, RegistrationMode_ReplaceAll, Cleanup_Delete );
-        camera.RegisterConfiguration( new CConfigurationEventPrinter, RegistrationMode_Append, Cleanup_Delete );
-        camera.RegisterImageEventHandler( new MyImageEventHandler(camera_queue, close_signal, height, width), RegistrationMode_Append, Cleanup_Delete );
+        camera.RegisterConfiguration(new HardwareTriggerConfiguration, RegistrationMode_ReplaceAll, Cleanup_Delete);
+        camera.RegisterConfiguration(new CConfigurationEventPrinter, RegistrationMode_Append, Cleanup_Delete);
+        camera.RegisterImageEventHandler(new MyImageEventHandler(camera_queue, close_signal, height, width), RegistrationMode_Append, Cleanup_Delete);
         camera.Open();
         is_open = true;
         std::cout << "basler camera initialized." << std::endl;
     }
-    catch (const GenericException& e)
+    catch (const GenericException &e)
     {
-        std::cerr << "An exception occurred." << std::endl << e.GetDescription() << std::endl;
+        std::cerr << "An exception occurred." << std::endl
+                  << e.GetDescription() << std::endl;
     }
 }
 
@@ -366,7 +380,7 @@ void BaslerCamera::acquire()
             // Start the grabbing using the grab loop thread, by setting the grabLoopType parameter
             // to GrabLoop_ProvidedByInstantCamera. The grab results are delivered to the image event handlers.
             // The GrabStrategy_OneByOne default grab strategy is used.
-            camera.StartGrabbing( GrabStrategy_LatestImageOnly, GrabLoop_ProvidedByInstantCamera );  // GrabStrategy_LatestImageOnly
+            camera.StartGrabbing(GrabStrategy_LatestImageOnly, GrabLoop_ProvidedByInstantCamera); // GrabStrategy_LatestImageOnly
             // Wait for user input to trigger the camera or exit the program.
             // The grabbing is stopped, the device is closed and destroyed automatically when the camera object goes out of scope.
 
@@ -404,13 +418,21 @@ void BaslerCamera::acquire()
         else
         {
             // See the documentation of CInstantCamera::CanWaitForFrameTriggerReady() for more information.
-            std::cout << std::endl << "This sample can only be used with cameras that can be queried whether they are ready to accept the next frame trigger." << std::endl;
+            std::cout << std::endl
+                      << "This sample can only be used with cameras that can be queried whether they are ready to accept the next frame trigger." << std::endl;
         }
     }
-    catch (const GenericException& e)
+    catch (const GenericException &e)
     {
-        std::cerr << "An exception occurred." << std::endl << e.GetDescription() << std::endl;
+        std::cerr << "An exception occurred." << std::endl
+                  << e.GetDescription() << std::endl;
     }
+}
+
+void BaslerCamera::balance_white()
+{
+    camera.LightSourcePreset.SetValue(LightSourcePreset_Off);
+    camera.BalanceWhiteAuto.SetValue(BalanceWhiteAuto_Once);
 }
 
 void BaslerCamera::kill()
@@ -422,43 +444,44 @@ void BaslerCamera::kill()
     is_open = false;
     std::cout << "basler camera killed." << std::endl;
 }
+
 #ifdef PYTHON_BINDINGS_BUILD
 
-void BaslerCamera::init_single()
+void BaslerCamera::init_single(float exposure_time)
 {
     PylonInitialize();
     try
     {
         camera.Attach(CTlFactory::GetInstance().CreateFirstDevice());
-        camera.RegisterConfiguration( new SingleFrameConfiguration, RegistrationMode_ReplaceAll, Cleanup_Delete );
+        camera.RegisterConfiguration(new SingleFrameConfiguration(exposure_time), RegistrationMode_ReplaceAll, Cleanup_Delete);
         camera.Open();
         is_open = true;
     }
-    catch (const GenericException& e)
+    catch (const GenericException &e)
     {
-        std::cerr << "An exception occurred." << std::endl << e.GetDescription() << std::endl;
+        std::cerr << "An exception occurred." << std::endl
+                  << e.GetDescription() << std::endl;
     }
 }
 
 nb::ndarray<nb::numpy, const uint8_t> BaslerCamera::capture_single()
 {
     CGrabResultPtr ptrGrabResult;
-    if(camera.GrabOne( 5000, ptrGrabResult))
+    if (camera.GrabOne(5000, ptrGrabResult))
     {
         CImageFormatConverter formatConverter;
-        formatConverter.OutputPixelFormat= PixelType_RGB8packed;
+        formatConverter.OutputPixelFormat = PixelType_RGB8packed;
         CPylonImage pylonImage;
         formatConverter.Convert(pylonImage, ptrGrabResult);
-        uint8_t* buffer = new uint8_t[pylonImage.GetImageSize()];
-        memcpy(buffer, (uint8_t*)pylonImage.GetBuffer(), pylonImage.GetImageSize());
+        uint8_t *buffer = new uint8_t[pylonImage.GetImageSize()];
+        memcpy(buffer, (uint8_t *)pylonImage.GetBuffer(), pylonImage.GetImageSize());
         size_t shape[3] = {pylonImage.GetHeight(), pylonImage.GetWidth(), 3};
-        return nb::ndarray<nb::numpy, const uint8_t>(buffer, 3, shape);   
+        return nb::ndarray<nb::numpy, const uint8_t>(buffer, 3, shape);
     }
     else
     {
         std::cout << "Error: " << std::hex << ptrGrabResult->GetErrorCode() << std::dec << " " << ptrGrabResult->GetErrorDescription() << std::endl;
         return nb::ndarray<nb::numpy, const uint8_t>();
     }
-    
 }
 #endif

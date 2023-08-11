@@ -14,12 +14,13 @@
 #include <nanobind/nanobind.h>
 namespace nb = nanobind;
 #endif
+#define DYNA_FRAME_HEIGHT 768
+#define DYNA_FRAME_WIDTH 1024
+
 class DynaFlashProjector
 {
 public:
-    DynaFlashProjector(const int width, const int height) : width(width),
-                                                            height(height),
-                                                            white_image(width, height, CV_8UC3, cv::Scalar(255, 255, 255)){};
+    DynaFlashProjector() : white_image(DYNA_FRAME_WIDTH, DYNA_FRAME_HEIGHT, CV_8UC3, cv::Scalar(255, 255, 255)){};
     ~DynaFlashProjector()
     {
         gracefully_close();
@@ -31,10 +32,10 @@ public:
     void kill() { gracefully_close(); };
     bool is_initialized() { return initialized; };
     void gracefully_close();
-    int get_width() { return width; };
-    int get_height() { return height; };
+    int get_width() { return DYNA_FRAME_WIDTH; };
+    int get_height() { return DYNA_FRAME_HEIGHT; };
 #ifdef PYTHON_BINDINGS_BUILD
-    void project(nb::ndarray<uint8_t, nb::shape<nb::any, nb::any, 3>,
+    void project(nb::ndarray<uint8_t, nb::shape<DYNA_FRAME_HEIGHT, DYNA_FRAME_WIDTH, 3>,
                              nb::c_contig, nb::device::cpu>
                      data)
     {
@@ -42,8 +43,6 @@ public:
     };
 #endif
 private:
-    int width;
-    int height;
     void print_version();
     void print_led_values();
     void set_led_values();
@@ -70,11 +69,11 @@ private:
 NB_MODULE(dynaflash, m)
 {
     nb::class_<DynaFlashProjector>(m, "projector")
-        .def(nb::init<const int, const int>(), nb::arg("width"), nb::arg("height"), "a class to control a dynaflash projector")
+        .def(nb::init<>(), "a class to control a dynaflash projector")
         .def("init", &DynaFlashProjector::init, "initializes the projector")
         .def("is_initialized", &DynaFlashProjector::is_initialized, "returns true if the projector is initialized")
         .def("kill", &DynaFlashProjector::kill, "frees the internal projector resources")
         .def("project_white", nb::overload_cast<>(&DynaFlashProjector::show), "projects a white image")
-        .def("project", &DynaFlashProjector::project, "projects an arbitrary buffer of size width*height*3");
+        .def("project", &DynaFlashProjector::project, "projects an arbitrary numpy array (height, width, 3)");
 }
 #endif

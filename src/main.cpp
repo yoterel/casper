@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
     // blocking_queue<std::vector<uint8_t>> projector_queue;
     blocking_queue<uint8_t *> projector_queue;
     BaslerCamera camera;
-    DynaFlashProjector projector(proj_width, proj_height);
+    DynaFlashProjector projector;
     if (use_projector)
     {
         if (!projector.init())

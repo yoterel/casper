@@ -244,7 +244,7 @@ int _tmain(int argc, _TCHAR *argv[])
 		/* ステータスの取得 */
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
 		int diff = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
-		// std::cout << "diff: " << diff << std::endl;
+		std::cout << "diff: " << diff << std::endl;
 		if (diff > 100)
 		{
 			continue;
