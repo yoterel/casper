@@ -41,6 +41,14 @@ target_include_directories(basler PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(basler PRIVATE pylon::pylon)
 target_link_libraries(basler PRIVATE ${OpenCV_LIBS})
 
+################ leap motion python bindings
+nanobind_add_module(leap 
+    src/leap.cpp
+)
+target_compile_definitions(leap PRIVATE PYTHON_BINDINGS_BUILD)
+target_include_directories(leap PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(leap PRIVATE LeapSDK::LeapC)
+
 ################ main application
 add_executable(ahand 
     src/main.cpp
