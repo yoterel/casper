@@ -3,6 +3,7 @@ import gsoup
 from pathlib import Path
 import basler
 import dynaflash
+import cv2
 
 
 def pix2pix(root_path):
@@ -52,10 +53,8 @@ def pix2pix(root_path):
 
 
 def acq_procam(root_path):
-    resource_path = Path(root_path, "resource")
+    # resource_path = Path(root_path, "resource")
     dst_path = Path(root_path, "debug", "calibration")
-    test_pattern = gsoup.load_image(
-        Path(resource_path, "XGA_colorbars.png"))
     proj_wh = (1024, 768)
     gray = gsoup.GrayCode()
     patterns = gray.encode(proj_wh)
@@ -65,13 +64,20 @@ def acq_procam(root_path):
     cam = basler.camera()
     cam.init(12682.0)
     cam.balance_white()
+    for i in range(100):
+        cam.capture()  # warmup
     cur_session = 0
     sessions = sorted([int(x.name) for x in Path(dst_path).glob("*")])
     if len(sessions) > 0:
         cur_session = sessions[-1] + 1
-    for i in range(100):
-        cam.capture()  # warmup
     while True:
+        # display current image
+        while (True):
+            frame = cam.capture()
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            cv2.imshow('frame', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
         text = input(
             "current # of sessions: {}, continue?".format(cur_session))
         if text == "q" or text == "n" or text == "no":
@@ -92,19 +98,38 @@ def acq_procam(root_path):
     cam.kill()
 
 
-def calibrate_procam(root_path):
+def calibrate_procam(root_path, force_calib=False):
     proj_wh = (1024, 768)
-    resource_path = Path(root_path, "resource")
     dst_path = Path(root_path, "debug", "calibration")
-    data = gsoup.calibrate_procam(proj_wh, dst_path, 10, 7, 10, 2.0, "from_below",
-                                  verbose=True, output_dir=Path(root_path, "debug", "calib_debug"), debug=True)
-    print("done")
-    # test_pattern = gsoup.load_image(
-    #     Path(resource_path, "uv.png"), resize_wh=proj_wh)[:, :, :3]
-    # proj = dynaflash.projector()
-    # proj.init()
-    # proj.project(test_pattern, False)
-    # proj.kill()
+    if Path(dst_path, "calibration.npz").exists() and not force_calib:
+        res = np.load(Path(dst_path, "calibration.npz"))
+        res = {k: res[k] for k in res.keys()}
+    else:
+        res = gsoup.calibrate_procam(proj_wh, dst_path, 10, 7, 10, 2.0, "lower_half",
+                                     verbose=True, output_dir=Path(root_path, "debug", "calib_debug"), debug=True)
+
+        np.savez(Path(dst_path, "calibration.npz"), **res)
+    test_pattern = gsoup.generate_checkerboard(proj_wh[1], proj_wh[0], 20)
+    test_pattern = np.repeat(test_pattern, 3, axis=-1).astype(np.uint8)*255
+    proj = dynaflash.projector()
+    proj.init()
+    proj.project_white()
+    cam = basler.camera()
+    cam.init(12682.0)
+    cam.balance_white()
+    for i in range(100):
+        cam.capture()  # warmup
+    proj.project(test_pattern)
+    image = cam.capture()
+    gsoup.save_image(image, Path(Path(root_path, "debug"), "orig.png"))
+    # cam_wh = image.shape[:2][::-1]
+    # newcameramtx, roi = cv2.getOptimalNewCameraMatrix(res["cam_intrinsics"], res["cam_distortion"], cam_wh, 1, (w,h))
+    undistorted = cv2.undistort(
+        image, res["cam_intrinsics"], res["cam_distortion"], None, None)
+    gsoup.save_image(undistorted, Path(
+        Path(root_path, "debug"), "undistorted.png"))
+    cam.kill()
+    proj.kill()
 
 
 def calibrate_leap_projector():
