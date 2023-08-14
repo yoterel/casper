@@ -17,8 +17,9 @@
 #define UnlockMutex LeaveCriticalSection
 
 #ifdef PYTHON_BINDINGS_BUILD
-#include <nanobind/ndarray.h>
+// #include <nanobind/ndarray.h>
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/vector.h>
 namespace nb = nanobind;
 #endif
 
@@ -48,7 +49,7 @@ public:
     void setDevice(const LEAP_DEVICE_INFO *deviceProps);
     int64_t LeapGetTime() { return LeapGetNow(); };
     void setFrame(const LEAP_TRACKING_EVENT *frame);
-    LEAP_TRACKING_EVENT *getFrame();
+    std::vector<float> *getFrame();
     bool IsConnected = false;
 #ifdef PYTHON_BINDINGS_BUILD
     LeapConnect(bool pollMode) : LeapConnect()

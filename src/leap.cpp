@@ -292,13 +292,31 @@ void LeapConnect::setFrame(const LEAP_TRACKING_EVENT *frame)
 }
 
 /** Returns a pointer to the cached tracking frame. */
-LEAP_TRACKING_EVENT *LeapConnect::getFrame()
+std::vector<float> *LeapConnect::getFrame()
 {
   LEAP_TRACKING_EVENT *currentFrame;
 
   LockMutex(&dataLock);
   currentFrame = lastFrame;
   UnlockMutex(&dataLock);
-
-  return currentFrame;
+  std::vector<float> *frame = new std::vector<float>();
+  for (uint32_t h = 0; h < currentFrame->nHands; h++)
+  {
+    LEAP_HAND *hand = &currentFrame->pHands[h];
+    for (uint32_t f = 0; f < 5; f++)
+    {
+      LEAP_DIGIT *finger = &hand->digits[f];
+      for (uint32_t b = 0; b < 4; b++)
+      {
+        LEAP_BONE *bone = &finger->bones[b];
+        frame->push_back(bone->prev_joint.x);
+        frame->push_back(bone->prev_joint.y);
+        frame->push_back(bone->prev_joint.z);
+        // frame->push_back(bone->next_joint.x);
+        // frame->push_back(bone->next_joint.y);
+        // frame->push_back(bone->next_joint.z);
+      }
+    }
+  }
+  return frame;
 }
