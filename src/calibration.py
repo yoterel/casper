@@ -5,6 +5,7 @@ import basler
 import dynaflash
 import leap
 import cv2
+import time
 
 
 def pix2pix(root_path):
@@ -133,16 +134,42 @@ def calibrate_procam(root_path, force_calib=False):
     proj.kill()
 
 
+def auto_trigger_leap(leapmotion):
+    state_counter = 0
+    cur_tip = np.array(leapmotion.get_index_tip())
+    tips = []
+    while True:
+        time.sleep(0.01)
+        new_tip = np.array(leapmotion.get_index_tip())
+        if len(cur_tip) != 0 and len(new_tip) != 0:
+            if np.linalg.norm(new_tip - cur_tip) < 10.0:
+                print("\r triggering..{}%".format(
+                    state_counter), end='')
+                state_counter += 1
+                tips.append(new_tip)
+                if state_counter > 100:
+                    print("triggered")
+                    return cur_tip, tips
+            else:
+                state_counter = 0
+                cur_tip = np.array(leapmotion.get_index_tip())
+                tips = []
+        else:
+            state_counter = 0
+            cur_tip = np.array(leapmotion.get_index_tip())
+            tips = []
+
+
 def acq_leap_projector(root_path):
     proj_wh = (1024, 768)
     dst_path = Path(root_path, "debug", "leap_calibration")
+    dst_path.mkdir(parents=True, exist_ok=True)
     test_pattern = gsoup.generate_checkerboard(proj_wh[1], proj_wh[0], 20)
     test_pattern = np.repeat(test_pattern, 3, axis=-1).astype(np.uint8)*255
     proj = dynaflash.projector()
     proj.init()
     proj.project(test_pattern)
     leapmotion = leap.device()
-    leapmotion.get_index_tip()
     tip_locations = []
     session = 0
     while True:
@@ -150,14 +177,21 @@ def acq_leap_projector(root_path):
             "current # of sessions: {}, continue?".format(session))
         if text == "q" or text == "n" or text == "no":
             break
+        new_loc_x = np.random.randint(0, 1024, size=(1,))
+        new_loc_y = np.random.randint(0, 768, size=(1,))
+        image = np.zeros((768, 1024, 3), dtype=np.uint8)
+        image[:, new_loc_x, :] = 255
+        image[new_loc_y, :, :] = 255
+        proj.project(image)
         tmp_locs = []
-        for i in range(100):
-            tmp_locs.append(leapmotion.get_index_tip())
-        tmp_locs = np.mean(tmp_locs, axis=0)
-        tip_locations.append(tmp_locs)
+        _, tips = auto_trigger_leap(leapmotion)
+        avg_tip = np.mean(tips, axis=0)
+        tip_locations.append(avg_tip)
         session += 1
     tip_locations = np.array(tip_locations)
     np.save(Path(dst_path, "calibration_data.npy"), tip_locations)
+    proj.kill()
+    leapmotion.kill()
 
 
 def calibrate_leap_projector(root_path, force_calib=False):
