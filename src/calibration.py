@@ -3,6 +3,7 @@ import gsoup
 from pathlib import Path
 import basler
 import dynaflash
+import leap
 import cv2
 
 
@@ -132,13 +133,55 @@ def calibrate_procam(root_path, force_calib=False):
     proj.kill()
 
 
-def calibrate_leap_projector():
-    pass
+def acq_leap_projector(root_path):
+    proj_wh = (1024, 768)
+    dst_path = Path(root_path, "debug", "leap_calibration")
+    test_pattern = gsoup.generate_checkerboard(proj_wh[1], proj_wh[0], 20)
+    test_pattern = np.repeat(test_pattern, 3, axis=-1).astype(np.uint8)*255
+    proj = dynaflash.projector()
+    proj.init()
+    proj.project(test_pattern)
+    leapmotion = leap.device()
+    leapmotion.get_index_tip()
+    tip_locations = []
+    session = 0
+    while True:
+        text = input(
+            "current # of sessions: {}, continue?".format(session))
+        if text == "q" or text == "n" or text == "no":
+            break
+        tmp_locs = []
+        for i in range(100):
+            tmp_locs.append(leapmotion.get_index_tip())
+        tmp_locs = np.mean(tmp_locs, axis=0)
+        tip_locations.append(tmp_locs)
+        session += 1
+    tip_locations = np.array(tip_locations)
+    np.save(Path(dst_path, "calibration_data.npy"), tip_locations)
+
+
+def calibrate_leap_projector(root_path, force_calib=False):
+    proj_wh = (1024, 768)
+    dst_path = Path(root_path, "debug", "leap_calibration")
+    if Path(dst_path, "leap_calibration.npz").exists() and not force_calib:
+        res = np.load(Path(dst_path, "calibration_results.npz"))
+        res = {k: res[k] for k in res.keys()}
+    else:
+        tip_locations = np.load(Path(dst_path, "calibration_data.npy"))
+        image_locations = None
+        procam_calib_res = np.load(
+            Path(root_path, "debug", "calibration", "calibration.npz"))
+        procam_calib_res = {k: procam_calib_res[k]
+                            for k in procam_calib_res.keys()}
+        res = cv2.solvePnP(tip_locations, image_locations,
+                           procam_calib_res["proj_intrinsics"], procam_calib_res["proj_dist"])
+        np.savez(Path(dst_path, "calibration_results.npz"), **res)
 
 
 if __name__ == "__main__":
     root_path = Path("C:/src/augmented_hands")
     # pix2pix(root_path)
     # acq_procam(root_path)
-    calibrate_procam(root_path)
-    # calibrate_leap_projector()
+    # calibrate_procam(root_path)
+    acq_leap_projector(root_path)
+    calibrate_leap_projector(root_path)
