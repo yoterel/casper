@@ -6,6 +6,15 @@ import dynaflash
 import leap
 import cv2
 import time
+from PIL import Image, ImageDraw
+
+
+def create_circle_image(width, height, loc, radii=10):
+    img = Image.new("RGB", (width, height), "black")
+    img1 = ImageDraw.Draw(img)
+    img1.ellipse([loc[0] - radii, loc[1] - radii, loc[0] + radii,
+                 loc[1] + radii], fill="black", outline="red")
+    return np.array(img)
 
 
 def pix2pix(root_path):
@@ -134,9 +143,19 @@ def calibrate_procam(root_path, force_calib=False):
     proj.kill()
 
 
-def auto_trigger_leap(leapmotion):
+def auto_trigger_leap(leapmotion, proj=None, loc2d=None, threshold=100):
+    """
+    auto triggers the leap if the tip of the hand is steady enough for a certain amount of time
+    :param leapmotion: leap device
+    :param threshold: every 10 ms holidng the tip steady will increase the counter by 1, if the counter reaches threshold, the function will return
+    :return: the tip location used for asserting no movement, and the list of tip locations acquired during countdown
+    """
     state_counter = 0
     cur_tip = np.array(leapmotion.get_index_tip())
+    if proj is not None and loc2d is not None:
+        orig_image = np.zeros((768, 1024, 3), dtype=np.uint8)
+        orig_image[:, loc2d[0], :] = 255
+        orig_image[loc2d[1], :, :] = 255
     tips = []
     while True:
         time.sleep(0.01)
@@ -145,18 +164,28 @@ def auto_trigger_leap(leapmotion):
             if np.linalg.norm(new_tip - cur_tip) < 10.0:
                 print("\r triggering..{}%".format(
                     state_counter), end='')
+                if proj is not None:
+                    image = create_circle_image(
+                        1024, 768, loc2d, 100-state_counter)
+                    image[:, loc2d[0], :] = 255
+                    image[loc2d[1], :, :] = 255
+                    proj.project(image)
                 state_counter += 1
                 tips.append(new_tip)
-                if state_counter > 100:
+                if state_counter > threshold:
                     print("triggered")
                     return cur_tip, tips
             else:
                 state_counter = 0
                 cur_tip = np.array(leapmotion.get_index_tip())
+                if proj is not None:
+                    proj.project(orig_image)
                 tips = []
         else:
             state_counter = 0
             cur_tip = np.array(leapmotion.get_index_tip())
+            if proj is not None:
+                proj.project(orig_image)
             tips = []
 
 
@@ -171,25 +200,29 @@ def acq_leap_projector(root_path):
     proj.project(test_pattern)
     leapmotion = leap.device()
     tip_locations = []
+    tip_locations_2d = []
     session = 0
-    while True:
-        text = input(
-            "current # of sessions: {}, continue?".format(session))
-        if text == "q" or text == "n" or text == "no":
-            break
+    while session < 10:
+        # text = input(
+        #     "current # of sessions: {}, continue?".format(session))
+        # if text == "q" or text == "n" or text == "no":
+        #     break
         new_loc_x = np.random.randint(0, 1024, size=(1,))
         new_loc_y = np.random.randint(0, 768, size=(1,))
+        loc_2d = np.array([new_loc_x, new_loc_y])
         image = np.zeros((768, 1024, 3), dtype=np.uint8)
         image[:, new_loc_x, :] = 255
         image[new_loc_y, :, :] = 255
         proj.project(image)
-        tmp_locs = []
-        _, tips = auto_trigger_leap(leapmotion)
+        _, tips = auto_trigger_leap(leapmotion, proj, loc_2d)
         avg_tip = np.mean(tips, axis=0)
         tip_locations.append(avg_tip)
+        tip_locations_2d.append(loc_2d)
         session += 1
     tip_locations = np.array(tip_locations)
-    np.save(Path(dst_path, "calibration_data.npy"), tip_locations)
+    tip_locations_2d = np.array(tip_locations_2d).astype(np.float32)
+    np.savez(Path(dst_path, "calibration_data.npz"),
+             tip_locations=tip_locations, tip_locations_2d=tip_locations_2d)
     proj.kill()
     leapmotion.kill()
 
@@ -197,19 +230,47 @@ def acq_leap_projector(root_path):
 def calibrate_leap_projector(root_path, force_calib=False):
     proj_wh = (1024, 768)
     dst_path = Path(root_path, "debug", "leap_calibration")
-    if Path(dst_path, "leap_calibration.npz").exists() and not force_calib:
-        res = np.load(Path(dst_path, "calibration_results.npz"))
-        res = {k: res[k] for k in res.keys()}
+    procam_calib_res = np.load(
+        Path(root_path, "debug", "calibration", "calibration.npz"))
+    procam_calib_res = {k: procam_calib_res[k]
+                        for k in procam_calib_res.keys()}
+    if Path(dst_path, "calibration_results.npy").exists() and not force_calib:
+        world2projector = np.load(Path(dst_path, "calibration_results.npy"))
     else:
-        tip_locations = np.load(Path(dst_path, "calibration_data.npy"))
-        image_locations = None
-        procam_calib_res = np.load(
-            Path(root_path, "debug", "calibration", "calibration.npz"))
-        procam_calib_res = {k: procam_calib_res[k]
-                            for k in procam_calib_res.keys()}
-        res = cv2.solvePnP(tip_locations, image_locations,
-                           procam_calib_res["proj_intrinsics"], procam_calib_res["proj_dist"])
-        np.savez(Path(dst_path, "calibration_results.npz"), **res)
+        res = np.load(Path(dst_path, "calibration_data.npz"))
+        res = {k: res[k] for k in res.keys()}
+        image_locations = res["tip_locations_2d"].squeeze().astype(np.float32)
+        success, rotation_vector, translation_vector = cv2.solvePnP(res["tip_locations"], image_locations,
+                                                                    procam_calib_res["proj_intrinsics"], procam_calib_res["proj_distortion"])
+        rot_mat, _ = cv2.Rodrigues(rotation_vector)
+        translation_vector = translation_vector.squeeze()
+        world2projector = gsoup.compose_rt(
+            rot_mat[None, ...], translation_vector[None, ...])[0]
+
+        np.save(Path(dst_path, "calibration_results.npy"), world2projector)
+
+    rot_vec, _ = cv2.Rodrigues(world2projector[:3, :3])
+    rot = rot_vec
+    trans = world2projector[:3, -1]
+    leapmotion = leap.device()
+    proj = dynaflash.projector()
+    proj.init()
+    counter = 0
+    while counter < 1000:
+        _, tips = auto_trigger_leap(leapmotion, threshold=1)
+        counter += 1
+        avg_tip = np.mean(tips, axis=0)
+
+        tip_2d, _ = cv2.projectPoints(avg_tip, rot, trans,
+                                      procam_calib_res["proj_intrinsics"], procam_calib_res["proj_distortion"])
+        tip_2d = tip_2d[0, 0, :].round()
+        if 0 <= tip_2d[0] < 1024 and 0 <= tip_2d[1] < 768:
+            image = np.zeros((768, 1024, 3), dtype=np.uint8)
+            image[:, int(tip_2d[0]), :] = 255
+            image[int(tip_2d[1]), :, :] = 255
+            proj.project(image)
+    proj.kill()
+    leapmotion.kill()
 
 
 if __name__ == "__main__":
@@ -217,5 +278,5 @@ if __name__ == "__main__":
     # pix2pix(root_path)
     # acq_procam(root_path)
     # calibrate_procam(root_path)
-    acq_leap_projector(root_path)
+    # acq_leap_projector(root_path)
     calibrate_leap_projector(root_path)
