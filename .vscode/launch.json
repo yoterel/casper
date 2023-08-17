@@ -65,10 +65,10 @@
             "console": "externalTerminal"
         },
         {
-            "name": "Python: cur file",
+            "name": "Python: calibrate",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "build/Release/calibration.py", //"${file}",
             "console": "integratedTerminal",
             "justMyCode": true
         }

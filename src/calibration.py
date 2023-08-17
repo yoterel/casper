@@ -234,8 +234,8 @@ def calibrate_leap_projector(root_path, force_calib=False):
         Path(root_path, "debug", "calibration", "calibration.npz"))
     procam_calib_res = {k: procam_calib_res[k]
                         for k in procam_calib_res.keys()}
-    if Path(dst_path, "calibration_results.npy").exists() and not force_calib:
-        world2projector = np.load(Path(dst_path, "calibration_results.npy"))
+    if Path(dst_path, "w2p.npy").exists() and not force_calib:
+        world2projector = np.load(Path(dst_path, "w2p.npy"))
     else:
         res = np.load(Path(dst_path, "calibration_data.npz"))
         res = {k: res[k] for k in res.keys()}
@@ -245,9 +245,9 @@ def calibrate_leap_projector(root_path, force_calib=False):
         rot_mat, _ = cv2.Rodrigues(rotation_vector)
         translation_vector = translation_vector.squeeze()
         world2projector = gsoup.compose_rt(
-            rot_mat[None, ...], translation_vector[None, ...])[0]
+            rot_mat[None, ...], translation_vector[None, ...], square=True)[0]
 
-        np.save(Path(dst_path, "calibration_results.npy"), world2projector)
+        np.save(Path(dst_path, "w2p.npy"), world2projector)
 
     rot_vec, _ = cv2.Rodrigues(world2projector[:3, :3])
     rot = rot_vec

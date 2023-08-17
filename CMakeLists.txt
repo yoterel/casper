@@ -14,7 +14,6 @@ find_package(Python 3.8 COMPONENTS Interpreter Development.Module REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
 find_package(OpenCV 4.6.0 EXACT REQUIRED)
 find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
-
 ################ nanobind
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
@@ -66,6 +65,7 @@ add_executable(ahand
     src/utils.cpp
     src/cuda/cuda2gl.cu
     src/image_process.cpp
+    src/cnpy.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
@@ -116,6 +116,9 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb"
 # freetype
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
 target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
+# zlib
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
+target_link_libraries(ahand PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp
@@ -202,3 +205,9 @@ add_custom_command(TARGET ahand
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${FREETYPE_DLLS}
                 $<TARGET_FILE_DIR:ahand>)
+# file(GLOB ZLIB_DLLS "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.3-bin/bin/*.dll") 
+# add_custom_command(TARGET ahand
+#                     POST_BUILD
+#                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#                     ${ZLIB_DLLS}
+#                     $<TARGET_FILE_DIR:ahand>)
