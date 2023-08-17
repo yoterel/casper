@@ -33,7 +33,7 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
 void initGLBuffers(unsigned int *pbo);
-void loadCalibrationResults(int &projector_intrinsics, int &camera_intrinsics, int &camera_distortion, glm::mat4 &p2w, glm::mat4 &c2w);
+void loadCalibrationResults(glm::mat3 &projector_intrinsics, glm::mat3 &camera_intrinsics, std::vector<double> &camera_distortion, glm::mat4 &p2w, glm::mat4 &c2w);
 // unsigned int setup_cube_buffers();
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
@@ -222,9 +222,9 @@ int main(int argc, char *argv[])
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer;
     // load calibration results if they exist
-    int projector_intrinsics;
-    int camera_intrinsics;
-    int camera_distortion;
+    glm::mat3 projector_intrinsics;
+    glm::mat3 camera_intrinsics;
+    std::vector<double> camera_distortion;
     glm::mat4 p2w;
     glm::mat4 c2w;
     loadCalibrationResults(projector_intrinsics, camera_intrinsics, camera_distortion, p2w, c2w);
@@ -630,13 +630,18 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     gl_camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }
 
-void loadCalibrationResults(int &projector_intrinsics, int &camera_intrinsics, int &camera_distortion, glm::mat4 &p2w, glm::mat4 &c2w)
+void loadCalibrationResults(glm::mat3 &projector_intrinsics, glm::mat3 &camera_intrinsics, std::vector<double> &camera_distortion, glm::mat4 &p2w, glm::mat4 &c2w)
 {
     cnpy::NpyArray arr = cnpy::npy_load("C:/src/augmented_hands/debug/leap_calibration/w2p.npy");
-    double *loaded_data = arr.data<double>();
-    glm::mat4 w2p = glm::make_mat4(loaded_data);
+    glm::mat4 w2p = glm::make_mat4(arr.data<double>());
     p2w = glm::inverse(w2p);
-    std::cout << "loaded data: " << loaded_data[0] << std::endl;
+    cnpy::npz_t my_npz = cnpy::npz_load("C:/src/augmented_hands/debug/calibration/calibration.npz");
+    projector_intrinsics = glm::make_mat3(my_npz["proj_intrinsics"].data<double>());
+    camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
+    camera_distortion = my_npz["cam_distortion"].as_vec<double>();
+    glm::mat4 c2p = glm::make_mat4(my_npz["proj_transform"].data<double>());
+    c2w = p2w * c2p;
+    std::cout << "loaded calibration data." << std::endl;
 }
 
 void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world, std::vector<glm::vec3> &skeleton_vertices, bool debug)
