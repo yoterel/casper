@@ -2,12 +2,11 @@
 #include "utils.h"
 #include "image_process.h"
 
-Canvas::Canvas(unsigned int srcWidth, unsigned int srcHeight, unsigned int dstWidth, unsigned int dstHeight, bool use_cuda) :
-    m_srcWidth(srcWidth),
-    m_srcHeight(srcHeight),
-    m_dstWidth(dstWidth),
-    m_dstHeight(dstHeight),
-    m_use_cuda(use_cuda)
+Canvas::Canvas(unsigned int srcWidth, unsigned int srcHeight, unsigned int dstWidth, unsigned int dstHeight, bool use_cuda) : m_srcWidth(srcWidth),
+                                                                                                                              m_srcHeight(srcHeight),
+                                                                                                                              m_dstWidth(dstWidth),
+                                                                                                                              m_dstHeight(dstHeight),
+                                                                                                                              m_use_cuda(use_cuda)
 {
     m_num_texels = m_srcWidth * m_srcHeight;
     m_num_values = m_num_texels * 4;
@@ -18,7 +17,8 @@ Canvas::Canvas(unsigned int srcWidth, unsigned int srcHeight, unsigned int dstWi
 
 void Canvas::Clear()
 {
-    if (m_PBO != 0) {
+    if (m_PBO != 0)
+    {
         if (m_use_cuda)
         {
             cudaGraphicsUnregisterResource(m_PBO_CUDA);
@@ -33,36 +33,43 @@ void Canvas::Clear()
     // #else
     // cudaFree(m_cuda_dest_resource);
     // #endif
-    if (m_VBO != 0) {
+    if (m_VBO != 0)
+    {
         glDeleteBuffers(1, &m_VBO);
         m_VBO = 0;
     }
-    if (m_EBO != 0) {
+    if (m_EBO != 0)
+    {
         glDeleteBuffers(1, &m_EBO);
         m_EBO = 0;
     }
-    if (m_VAO != 0) {
+    if (m_VAO != 0)
+    {
         glDeleteVertexArrays(1, &m_VAO);
         m_VAO = 0;
     }
-    if (m_texture_src != 0) {
+    if (m_texture_src != 0)
+    {
         glDeleteTextures(1, &m_texture_src);
         m_texture_src = 0;
     }
-    if (m_depth_buffer[0] != 0) {
+    if (m_depth_buffer[0] != 0)
+    {
         glDeleteRenderbuffers(2, m_depth_buffer);
         // m_depth_buffer = 0;
     }
-    if (m_FBO[0] != 0) {
+    if (m_FBO[0] != 0)
+    {
         glDeleteFramebuffers(2, m_FBO);
         // m_FBO = {0};
     }
-    if (m_pingpong_textures[0] != 0) {
+    if (m_pingpong_textures[0] != 0)
+    {
         glDeleteTextures(2, m_pingpong_textures);
         // m_texture_dst = 0;
     }
 }
-void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker, unsigned int texture, uint8_t* buffer, bool use_pbo)
+void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
 {
     if (use_pbo)
     {
@@ -70,7 +77,7 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker, unsigned
         // transfer data from memory to GPU texture (using PBO)
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
         glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
-        GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+        GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
         if (ptr)
         {
             memcpy(ptr, buffer, m_size_tex_data);
@@ -91,7 +98,7 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker, unsigned
         t1.stop();
     }
     t2.start();
-    // init jfa seeds 
+    // init jfa seeds
     glBindTexture(GL_TEXTURE_2D, texture);
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[0]);
     jfaInit.use();
@@ -113,7 +120,7 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker, unsigned
     glViewport(0, 0, m_dstWidth, m_dstHeight);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    
+
     /* sanity (render to screen)*/
     // debug.use();
     // debug.setInt("jfa", 0);
@@ -153,8 +160,8 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker, unsigned
         glEnable(GL_CULL_FACE);
         glEnable(GL_BLEND);
         glEnable(GL_DEPTH_TEST);
-        glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[(i+1)%2]);
-        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[i%2]);
+        glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[(i + 1) % 2]);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[i % 2]);
         // glViewport(0, 0, m_srcWidth, m_srcHeight);
         // glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -184,13 +191,13 @@ void Canvas::Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker, unsigned
     glEnable(GL_DEPTH_TEST);
     t2.stop();
 }
-void Canvas::Render(Shader& shader, uint8_t* buffer)
+void Canvas::Render(Shader &shader, uint8_t *buffer)
 {
     if (m_use_cuda)
     {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
         glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
-        GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+        GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
         if (ptr)
         {
             memcpy(ptr, buffer, m_size_tex_data);
@@ -207,7 +214,7 @@ void Canvas::Render(Shader& shader, uint8_t* buffer)
     {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
         glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
-        GLubyte* ptr = (GLubyte*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+        GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
         if (ptr)
         {
             memcpy(ptr, buffer, m_size_tex_data);
@@ -218,10 +225,10 @@ void Canvas::Render(Shader& shader, uint8_t* buffer)
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
         // glBindTexture(GL_TEXTURE_2D, m_texture_dst);
-        //glCheckError();
+        // glCheckError();
         // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_srcWidth, m_srcHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
         // glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
-        //glCheckError();
+        // glCheckError();
         // uint8_t* colorBuffer = new uint8_t[m_srcWidth*m_srcHeight*3];
         // glReadBuffer(GL_FRONT);
         // //glCheckError();
@@ -239,29 +246,29 @@ void Canvas::Render(Shader& shader, uint8_t* buffer)
     shader.setBool("flipVer", true);
     // draw texture on quad
     glDisable(GL_DEPTH_TEST);
-    //glCheckError();
+    // glCheckError();
     glDisable(GL_CULL_FACE);
-    //glCheckError();
+    // glCheckError();
     glDisable(GL_BLEND);
-    //glCheckError();
+    // glCheckError();
     glBindVertexArray(m_VAO);
-    //glCheckError();
+    // glCheckError();
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    //glCheckError();
+    // glCheckError();
     glEnable(GL_CULL_FACE);
-    //glCheckError();
+    // glCheckError();
     glEnable(GL_BLEND);
-    //glCheckError();
+    // glCheckError();
     glEnable(GL_DEPTH_TEST);
-    //glCheckError();
+    // glCheckError();
 }
 
 void Canvas::ProcesssWithCuda()
 {
-    uint8_t* out_data;
+    uint8_t *out_data;
     size_t num_bytes;
     cudaGraphicsMapResources(1, &m_PBO_CUDA, 0);
-    cudaGraphicsResourceGetMappedPointer((void**)&out_data,
+    cudaGraphicsResourceGetMappedPointer((void **)&out_data,
                                          &num_bytes,
                                          m_PBO_CUDA);
     // do work
@@ -277,19 +284,19 @@ void Canvas::initGLBuffers()
 
     // create buffer object
     glGenBuffers(1, &m_PBO);
-    //glCheckError();
+    // glCheckError();
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
-    //glCheckError();
+    // glCheckError();
     glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, data, GL_STREAM_DRAW);
-    //glCheckError();
+    // glCheckError();
     free(data);
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     if (m_use_cuda)
     {
         cudaGraphicsGLRegisterBuffer(&m_PBO_CUDA,
-                                        m_PBO,
-                                        cudaGraphicsMapFlagsWriteDiscard);
+                                     m_PBO,
+                                     cudaGraphicsMapFlagsWriteDiscard);
     }
 
     // #ifdef USE_TEXSUBIMAGE2D
@@ -300,7 +307,7 @@ void Canvas::initGLBuffers()
     //                                            cudaGraphicsMapFlagsNone));
     // #endif
     // texture dst from cuda processing
-    //glCheckError();
+    // glCheckError();
     // #else
     // if (m_use_cuda)
     // {
@@ -328,42 +335,41 @@ void Canvas::initGLBuffers()
     // texture to receive cuda processing
     // ---------
     glGenTextures(1, &m_texture_src);
-    //glCheckError();
-    glBindTexture(GL_TEXTURE_2D, m_texture_src); 
-    //glCheckError();
-    // glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA, m_srcWidth, m_srcHeight);
-     // set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	// set texture wrapping to GL_REPEAT (default wrapping method)
-    //glCheckError();
+    // glCheckError();
+    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    // glCheckError();
+    //  glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA, m_srcWidth, m_srcHeight);
+    //  set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // set texture wrapping to GL_REPEAT (default wrapping method)
+    // glCheckError();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    //glCheckError();
-    // set texture filtering parameters
+    // glCheckError();
+    //  set texture filtering parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    //glCheckError();
+    // glCheckError();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    //glCheckError();
-    // buffer data
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_srcWidth, m_srcHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-    // #ifndef USE_TEXTURE_RGBA8UI
-    // printf("Creating a Texture render target GL_RGBA16F\n");
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA/*GL_RGBA16F*/, m_srcWidth, m_srcHeight, 0, GL_BGRA/* GL_RGBA*/,
-                GL_UNSIGNED_BYTE, NULL);
-    //glCheckError();
-    // glGenerateMipmap(GL_TEXTURE_2D);
-    //glCheckError();
-    // #else
-    // printf("Creating a Texture render target GL_RGBA8UI\n");
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8UI, m_srcWidth, m_srcHeight, 0,
-    //             GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, NULL);
-    // #endif
-    // register this texture with CUDA
-    // if (m_use_cuda)
-    // {
-        // checkCudaErrors(cudaGraphicsGLRegisterImage(
-        // &m_cuda_tex_screen_resource, m_texture_src, GL_TEXTURE_2D,
-        // cudaGraphicsMapFlagsReadOnly));
+    // glCheckError();
+    //  buffer data
+    //  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_srcWidth, m_srcHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    //  #ifndef USE_TEXTURE_RGBA8UI
+    //  printf("Creating a Texture render target GL_RGBA16F\n");
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA /*GL_RGBA16F*/, m_srcWidth, m_srcHeight, 0, GL_BGRA /* GL_RGBA*/,
+                 GL_UNSIGNED_BYTE, NULL);
+    // glCheckError();
+    //  glGenerateMipmap(GL_TEXTURE_2D);
+    // glCheckError();
+    //  #else
+    //  printf("Creating a Texture render target GL_RGBA8UI\n");
+    //  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8UI, m_srcWidth, m_srcHeight, 0,
+    //              GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, NULL);
+    //  #endif
+    //  register this texture with CUDA
+    //  if (m_use_cuda)
+    //  {
+    //  checkCudaErrors(cudaGraphicsGLRegisterImage(
+    //  &m_cuda_tex_screen_resource, m_texture_src, GL_TEXTURE_2D,
+    //  cudaGraphicsMapFlagsReadOnly));
     // }
-    
 
     // create fbos
     glGenTextures(2, m_pingpong_textures);
@@ -371,37 +377,37 @@ void Canvas::initGLBuffers()
     glGenFramebuffers(2, m_FBO);
     for (int i = 0; i < 2; i++)
     {
-        //glCheckError();
+        // glCheckError();
         glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[i]);
-        //glCheckError();
-        // set the texture wrapping parameters
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
-        //glCheckError();
+        // glCheckError();
+        //  set the texture wrapping parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+        // glCheckError();
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        //glCheckError();
-        // set texture filtering parameters
+        // glCheckError();
+        //  set texture filtering parameters
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        //glCheckError();
+        // glCheckError();
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        //glCheckError();
-        // #ifdef USE_TEXSUBIMAGE2D
+        // glCheckError();
+        //  #ifdef USE_TEXSUBIMAGE2D
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_dstWidth, m_dstHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-        //glCheckError();
+        // glCheckError();
         glBindRenderbuffer(GL_RENDERBUFFER, m_depth_buffer[i]);
-        //glCheckError();
-        // allocate storage
+        // glCheckError();
+        //  allocate storage
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_dstWidth, m_dstHeight);
-        //glCheckError();
-        // clean up
+        // glCheckError();
+        //  clean up
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
-        //glCheckError();
-        //glCheckError();
+        // glCheckError();
+        // glCheckError();
         glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[i]);
-        //glCheckError();
+        // glCheckError();
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_pingpong_textures[i], 0);
-        //glCheckError();
+        // glCheckError();
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depth_buffer[i]);
-        //glCheckError();
+        // glCheckError();
         GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
         {
@@ -416,53 +422,52 @@ void Canvas::initGLBuffers()
     // ------------------------------------------------------------------
     float vertices[] = {
         // positions          // colors           // texture coords
-         1.0f,  1.0f, 0.0f,   1.0f, 1.0f, // top right
-         1.0f, -1.0f, 0.0f,   1.0f, 0.0f, // bottom right
-        -1.0f, -1.0f, 0.0f,   0.0f, 0.0f, // bottom left
-        -1.0f,  1.0f, 0.0f,   0.0f, 1.0f  // top left 
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f,   // top right
+        1.0f, -1.0f, 0.0f, 1.0f, 0.0f,  // bottom right
+        -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, // bottom left
+        -1.0f, 1.0f, 0.0f, 0.0f, 1.0f   // top left
     };
     unsigned int indices[] = {
         0, 1, 3, // first triangle
         1, 2, 3  // second triangle
     };
-    
+
     // unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &m_VAO);
-    //glCheckError();
+    // glCheckError();
     glGenBuffers(1, &m_VBO);
-    //glCheckError();
+    // glCheckError();
     glGenBuffers(1, &m_EBO);
-    //glCheckError();
+    // glCheckError();
 
     glBindVertexArray(m_VAO);
-    //glCheckError();
+    // glCheckError();
 
     glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    //glCheckError();
+    // glCheckError();
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    //glCheckError();
-
+    // glCheckError();
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
-    //glCheckError();
+    // glCheckError();
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-    //glCheckError();
+    // glCheckError();
 
     // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    //glCheckError();
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+    // glCheckError();
     glEnableVertexAttribArray(0);
-    //glCheckError();
-    // texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    //glCheckError();
+    // glCheckError();
+    //  texture coord attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
+    // glCheckError();
     glEnableVertexAttribArray(1);
-    //glCheckError();
+    // glCheckError();
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    //glCheckError();
+    // glCheckError();
 }
-void Canvas::getTimerValues(double& time0, double& time1, double& time2)
+void Canvas::getTimerValues(double &time0, double &time1, double &time2)
 {
     time0 = t0.averageLap();
     time1 = t1.averageLap();
@@ -476,10 +481,10 @@ void Canvas::resetTimers()
 }
 // #ifndef USE_TEXSUBIMAGE2D
 // void Canvas::initCUDABuffers() {
-  // set up vertex data parameter
+// set up vertex data parameter
 //   checkCudaErrors(cudaMalloc((void **)&m_cuda_dest_resource, m_size_tex_data));
-  // checkCudaErrors(cudaHostAlloc((void**)&cuda_dest_resource, size_tex_data,
-  // ));
+// checkCudaErrors(cudaHostAlloc((void**)&cuda_dest_resource, size_tex_data,
+// ));
 // }
 // #endif
 
@@ -566,7 +571,7 @@ void Canvas::resetTimers()
 //     // dim3 blockDim(16, 16);
 //     // dim3 gridDim((m_srcWidth + blockDim.x - 1) / blockDim.x, (m_srcHeight + blockDim.y - 1) / blockDim.y);
 //     // cudaSurfaceObject_t surface;
-    
+
 //     // checkCudaErrors(cudaGraphicsResourceGetMappedSurface(&surface, m_cudaTexture, 0, 0));
 //     // launch_cudaProcess(gridDim, blockDim, m_surface, m_srcWidth, m_srcHeight);
 //     // Unmap the CUDA graphics resource
