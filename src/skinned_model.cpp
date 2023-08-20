@@ -21,33 +21,37 @@
 
 void SkinnedModel::Clear()
 {
-    if (m_Buffers[0] != 0) {
-        glDeleteBuffers(sizeof(m_Buffers)/sizeof(m_Buffers[0]), m_Buffers);
+    if (m_Buffers[0] != 0)
+    {
+        glDeleteBuffers(sizeof(m_Buffers) / sizeof(m_Buffers[0]), m_Buffers);
     }
 
-    if (m_VAO != 0) {
+    if (m_VAO != 0)
+    {
         glDeleteVertexArrays(1, &m_VAO);
         m_VAO = 0;
     }
 
-    if (m_FBO != 0) {
+    if (m_FBO != 0)
+    {
         glDeleteFramebuffers(1, &m_FBO);
         m_FBO = 0;
     }
 
-    if (m_fbo_texture != 0) {
+    if (m_fbo_texture != 0)
+    {
         glDeleteTextures(1, &m_fbo_texture);
         m_fbo_texture = 0;
     }
 
-    if (m_fbo_depth_buffer != 0) {
+    if (m_fbo_depth_buffer != 0)
+    {
         glDeleteRenderbuffers(1, &m_fbo_depth_buffer);
         m_fbo_depth_buffer = 0;
     }
 }
 
-
-bool SkinnedModel::LoadMesh(const std::string& Filename)
+bool SkinnedModel::LoadMesh(const std::string &Filename)
 {
     // Release the previously loaded mesh (if it exists)
     Clear();
@@ -57,31 +61,33 @@ bool SkinnedModel::LoadMesh(const std::string& Filename)
     glBindVertexArray(m_VAO);
 
     // Create the buffers for the vertices attributes
-    glGenBuffers(sizeof(m_Buffers)/sizeof(m_Buffers[0]), m_Buffers);
+    glGenBuffers(sizeof(m_Buffers) / sizeof(m_Buffers[0]), m_Buffers);
 
     bool Ret = false;
 
     pScene = Importer.ReadFile(Filename.c_str(), ASSIMP_LOAD_FLAGS);
 
-    if (pScene) {
+    if (pScene)
+    {
         m_GlobalInverseTransform = AssimpGLMHelpers::ConvertMatrixToGLMFormat(pScene->mRootNode->mTransformation);
         m_GlobalInverseTransform = glm::inverse(m_GlobalInverseTransform);
         Ret = InitFromScene(pScene, Filename);
     }
-    else {
+    else
+    {
         std::cout << "Error parsing '" << Filename << "': '" << Importer.GetErrorString() << "'" << std::endl;
     }
 
     // Make sure the VAO is not changed from the outside
     glBindVertexArray(0);
-    bone_leap_map = 
+    bone_leap_map =
         {
             // {"Wrist", 0},
             {"Elbow", 1},
             {"thumb_meta", 3},
             {"thumb_a", 4},
             {"thumb_b", 5},
-            
+
             {"index_meta", 6},
             {"index_a", 7},
             {"index_b", 8},
@@ -100,12 +106,11 @@ bool SkinnedModel::LoadMesh(const std::string& Filename)
             {"pinky_meta", 18},
             {"pinky_a", 19},
             {"pinky_b", 20},
-            {"pinky_c", 21}
-        };
+            {"pinky_c", 21}};
     return Ret;
 }
 
-bool SkinnedModel::InitFromScene(const aiScene* pScene, const std::string& Filename)
+bool SkinnedModel::InitFromScene(const aiScene *pScene, const std::string &Filename)
 {
     m_Meshes.resize(pScene->mNumMeshes);
     m_Materials.resize(pScene->mNumMaterials);
@@ -119,7 +124,8 @@ bool SkinnedModel::InitFromScene(const aiScene* pScene, const std::string& Filen
 
     InitAllMeshes(pScene);
 
-    if (!InitMaterials(pScene, Filename)) {
+    if (!InitMaterials(pScene, Filename))
+    {
         return false;
     }
 
@@ -128,16 +134,17 @@ bool SkinnedModel::InitFromScene(const aiScene* pScene, const std::string& Filen
     return glGetError() == GL_NO_ERROR;
 }
 
-void SkinnedModel::CountVerticesAndIndices(const aiScene* pScene, unsigned int& NumVertices, unsigned int& NumIndices)
+void SkinnedModel::CountVerticesAndIndices(const aiScene *pScene, unsigned int &NumVertices, unsigned int &NumIndices)
 {
-    for (unsigned int i = 0 ; i < m_Meshes.size() ; i++) {
+    for (unsigned int i = 0; i < m_Meshes.size(); i++)
+    {
         m_Meshes[i].MaterialIndex = pScene->mMeshes[i]->mMaterialIndex;
         m_Meshes[i].NumIndices = pScene->mMeshes[i]->mNumFaces * 3;
         m_Meshes[i].BaseVertex = NumVertices;
         m_Meshes[i].BaseIndex = NumIndices;
 
         NumVertices += pScene->mMeshes[i]->mNumVertices;
-        NumIndices  += m_Meshes[i].NumIndices;
+        NumIndices += m_Meshes[i].NumIndices;
     }
 }
 
@@ -150,41 +157,47 @@ void SkinnedModel::ReserveSpace(unsigned int NumVertices, unsigned int NumIndice
     m_Bones.resize(NumVertices);
 }
 
-void SkinnedModel::InitAllMeshes(const aiScene* pScene)
+void SkinnedModel::InitAllMeshes(const aiScene *pScene)
 {
-    for (unsigned int i = 0 ; i < m_Meshes.size() ; i++) {
-        const aiMesh* paiMesh = pScene->mMeshes[i];
+    for (unsigned int i = 0; i < m_Meshes.size(); i++)
+    {
+        const aiMesh *paiMesh = pScene->mMeshes[i];
         InitSingleMesh(i, paiMesh);
     }
 }
 
-void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh* paiMesh)
+void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
 {
     const aiVector3D Zero3D(0.0f, 0.0f, 0.0f);
 
     // Populate the vertex attribute vectors
-    for (unsigned int i = 0 ; i < paiMesh->mNumVertices ; i++) {
+    for (unsigned int i = 0; i < paiMesh->mNumVertices; i++)
+    {
 
-        const aiVector3D& pPos      = paiMesh->mVertices[i];
+        const aiVector3D &pPos = paiMesh->mVertices[i];
         m_Positions.push_back(glm::vec3(pPos.x, pPos.y, pPos.z));
 
-        if (paiMesh->mNormals) {
-            const aiVector3D& pNormal   = paiMesh->mNormals[i];
+        if (paiMesh->mNormals)
+        {
+            const aiVector3D &pNormal = paiMesh->mNormals[i];
             m_Normals.push_back(glm::vec3(pNormal.x, pNormal.y, pNormal.z));
-        } else {
+        }
+        else
+        {
             aiVector3D Normal(0.0f, 1.0f, 0.0f);
             m_Normals.push_back(glm::vec3(Normal.x, Normal.y, Normal.z));
         }
 
-        const aiVector3D& pTexCoord = paiMesh->HasTextureCoords(0) ? paiMesh->mTextureCoords[0][i] : Zero3D;
+        const aiVector3D &pTexCoord = paiMesh->HasTextureCoords(0) ? paiMesh->mTextureCoords[0][i] : Zero3D;
         m_TexCoords.push_back(glm::vec2(pTexCoord.x, pTexCoord.y));
     }
 
     LoadMeshBones(MeshIndex, paiMesh);
 
     // Populate the index buffer
-    for (unsigned int i = 0 ; i < paiMesh->mNumFaces ; i++) {
-        const aiFace& Face = paiMesh->mFaces[i];
+    for (unsigned int i = 0; i < paiMesh->mNumFaces; i++)
+    {
+        const aiFace &Face = paiMesh->mFaces[i];
         //        printf("num indices %d\n", Face.mNumIndices);
         //        assert(Face.mNumIndices == 3);
         m_Indices.push_back(Face.mIndices[0]);
@@ -193,12 +206,14 @@ void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh* paiMesh)
     }
 }
 
-void SkinnedModel::LoadMeshBones(unsigned int MeshIndex, const aiMesh* pMesh)
+void SkinnedModel::LoadMeshBones(unsigned int MeshIndex, const aiMesh *pMesh)
 {
-    for (unsigned int i = 0 ; i < pMesh->mNumBones ; i++) {
+    for (unsigned int i = 0; i < pMesh->mNumBones; i++)
+    {
         LoadSingleBone(MeshIndex, pMesh->mBones[i]);
     }
-    for (unsigned int i=0; i < m_Bones.size() ; i++) {
+    for (unsigned int i = 0; i < m_Bones.size(); i++)
+    {
         float sum_weight = m_Bones[i].sum_weights();
         if (abs(sum_weight - 1.0f) > 0.01f)
         {
@@ -219,40 +234,44 @@ std::string SkinnedModel::getBoneName(unsigned int index)
     return m_BoneIndexToNameMap[index];
 }
 
-void SkinnedModel::LoadSingleBone(unsigned int MeshIndex, const aiBone* pBone)
+void SkinnedModel::LoadSingleBone(unsigned int MeshIndex, const aiBone *pBone)
 {
     int BoneId = GetBoneId(pBone);
 
-    if (BoneId == m_BoneInfo.size()) {
+    if (BoneId == m_BoneInfo.size())
+    {
         BoneInfo bi(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pBone->mOffsetMatrix));
         m_BoneInfo.push_back(bi);
     }
 
-    for (unsigned int i = 0 ; i < pBone->mNumWeights ; i++) {
-        const aiVertexWeight& vw = pBone->mWeights[i];
+    for (unsigned int i = 0; i < pBone->mNumWeights; i++)
+    {
+        const aiVertexWeight &vw = pBone->mWeights[i];
         unsigned int GlobalVertexID = m_Meshes[MeshIndex].BaseVertex + pBone->mWeights[i].mVertexId;
         m_Bones[GlobalVertexID].AddBoneData(BoneId, vw.mWeight);
     }
 }
 
-int SkinnedModel::GetBoneId(const aiBone* pBone)
+int SkinnedModel::GetBoneId(const aiBone *pBone)
 {
     int BoneIndex = 0;
     std::string BoneName(pBone->mName.C_Str());
 
-    if (m_BoneNameToIndexMap.find(BoneName) == m_BoneNameToIndexMap.end()) {
+    if (m_BoneNameToIndexMap.find(BoneName) == m_BoneNameToIndexMap.end())
+    {
         // Allocate an index for a new bone
         BoneIndex = (int)m_BoneNameToIndexMap.size();
         m_BoneNameToIndexMap[BoneName] = BoneIndex;
     }
-    else {
+    else
+    {
         BoneIndex = m_BoneNameToIndexMap[BoneName];
     }
 
     return BoneIndex;
 }
 
-bool SkinnedModel::InitMaterials(const aiScene* pScene, const std::string& Filename)
+bool SkinnedModel::InitMaterials(const aiScene *pScene, const std::string &Filename)
 {
     std::string Dir = GetDirFromFilename(Filename);
 
@@ -261,8 +280,9 @@ bool SkinnedModel::InitMaterials(const aiScene* pScene, const std::string& Filen
     printf("Num materials: %d\n", pScene->mNumMaterials);
 
     // Initialize the materials
-    for (unsigned int i = 0 ; i < pScene->mNumMaterials ; i++) {
-        const aiMaterial* pMaterial = pScene->mMaterials[i];
+    for (unsigned int i = 0; i < pScene->mNumMaterials; i++)
+    {
+        const aiMaterial *pMaterial = pScene->mMaterials[i];
 
         LoadTextures(Dir, pMaterial, i);
 
@@ -272,23 +292,26 @@ bool SkinnedModel::InitMaterials(const aiScene* pScene, const std::string& Filen
     return Ret;
 }
 
-void SkinnedModel::LoadTextures(const std::string& Dir, const aiMaterial* pMaterial, int index)
+void SkinnedModel::LoadTextures(const std::string &Dir, const aiMaterial *pMaterial, int index)
 {
     LoadDiffuseTexture(Dir, pMaterial, index);
     LoadSpecularTexture(Dir, pMaterial, index);
 }
 
-void SkinnedModel::LoadDiffuseTexture(const std::string& Dir, const aiMaterial* pMaterial, int index)
+void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *pMaterial, int index)
 {
     m_Materials[index].pDiffuse = NULL;
 
-    if (pMaterial->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
+    if (pMaterial->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+    {
         aiString Path;
 
-        if (pMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &Path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS) {
+        if (pMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &Path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS)
+        {
             std::string p(Path.data);
 
-            if (p.substr(0, 2) == ".\\") {
+            if (p.substr(0, 2) == ".\\")
+            {
                 p = p.substr(2, p.size() - 2);
             }
 
@@ -296,11 +319,13 @@ void SkinnedModel::LoadDiffuseTexture(const std::string& Dir, const aiMaterial* 
 
             m_Materials[index].pDiffuse = new Texture(GL_TEXTURE_2D, FullPath.c_str());
 
-            if (!m_Materials[index].pDiffuse->Load()) {
+            if (!m_Materials[index].pDiffuse->Load())
+            {
                 std::cout << "Error loading diffuse texture '" << FullPath << "'" << std::endl;
                 exit(1);
             }
-            else {
+            else
+            {
                 std::cout << "Loaded diffuse texture '" << FullPath << "'" << std::endl;
             }
         }
@@ -310,30 +335,37 @@ void SkinnedModel::LoadDiffuseTexture(const std::string& Dir, const aiMaterial* 
         if (m_externalTextureFileName != "")
         {
             m_Materials[index].pDiffuse = new Texture(GL_TEXTURE_2D, m_externalTextureFileName.c_str());
-            if (!m_Materials[index].pDiffuse->Load()) {
+            if (!m_Materials[index].pDiffuse->Load())
+            {
                 std::cout << "Error loading diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
                 exit(1);
             }
-            else {
+            else
+            {
                 std::cout << "Loaded diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
             }
         }
     }
 }
 
-void SkinnedModel::LoadSpecularTexture(const std::string& Dir, const aiMaterial* pMaterial, int index)
+void SkinnedModel::LoadSpecularTexture(const std::string &Dir, const aiMaterial *pMaterial, int index)
 {
     m_Materials[index].pSpecularExponent = NULL;
 
-    if (pMaterial->GetTextureCount(aiTextureType_SHININESS) > 0) {
+    if (pMaterial->GetTextureCount(aiTextureType_SHININESS) > 0)
+    {
         aiString Path;
 
-        if (pMaterial->GetTexture(aiTextureType_SHININESS, 0, &Path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS) {
+        if (pMaterial->GetTexture(aiTextureType_SHININESS, 0, &Path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS)
+        {
             std::string p(Path.data);
 
-            if (p == "C:\\\\") {
+            if (p == "C:\\\\")
+            {
                 p = "";
-            } else if (p.substr(0, 2) == ".\\") {
+            }
+            else if (p.substr(0, 2) == ".\\")
+            {
                 p = p.substr(2, p.size() - 2);
             }
 
@@ -341,39 +373,46 @@ void SkinnedModel::LoadSpecularTexture(const std::string& Dir, const aiMaterial*
 
             m_Materials[index].pSpecularExponent = new Texture(GL_TEXTURE_2D, FullPath.c_str());
 
-            if (!m_Materials[index].pSpecularExponent->Load()) {
+            if (!m_Materials[index].pSpecularExponent->Load())
+            {
                 printf("Error loading specular texture '%s'\n", FullPath.c_str());
                 exit(0);
             }
-            else {
+            else
+            {
                 printf("Loaded specular texture '%s'\n", FullPath.c_str());
             }
         }
     }
 }
 
-void SkinnedModel::LoadColors(const aiMaterial* pMaterial, int index)
+void SkinnedModel::LoadColors(const aiMaterial *pMaterial, int index)
 {
     aiColor3D AmbientColor(0.0f, 0.0f, 0.0f);
     glm::vec3 AllOnes(1.0f, 1.0f, 1.0f);
 
     int ShadingModel = 0;
-    if (pMaterial->Get(AI_MATKEY_SHADING_MODEL, ShadingModel) == AI_SUCCESS) {
+    if (pMaterial->Get(AI_MATKEY_SHADING_MODEL, ShadingModel) == AI_SUCCESS)
+    {
         printf("Shading model %d\n", ShadingModel);
     }
 
-    if (pMaterial->Get(AI_MATKEY_COLOR_AMBIENT, AmbientColor) == AI_SUCCESS) {
+    if (pMaterial->Get(AI_MATKEY_COLOR_AMBIENT, AmbientColor) == AI_SUCCESS)
+    {
         printf("Loaded ambient color [%f %f %f]\n", AmbientColor.r, AmbientColor.g, AmbientColor.b);
         m_Materials[index].AmbientColor.r = AmbientColor.r;
         m_Materials[index].AmbientColor.g = AmbientColor.g;
         m_Materials[index].AmbientColor.b = AmbientColor.b;
-    } else {
+    }
+    else
+    {
         m_Materials[index].AmbientColor = AllOnes;
     }
 
     aiColor3D DiffuseColor(0.0f, 0.0f, 0.0f);
 
-    if (pMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, DiffuseColor) == AI_SUCCESS) {
+    if (pMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, DiffuseColor) == AI_SUCCESS)
+    {
         printf("Loaded diffuse color [%f %f %f]\n", DiffuseColor.r, DiffuseColor.g, DiffuseColor.b);
         m_Materials[index].DiffuseColor.r = DiffuseColor.r;
         m_Materials[index].DiffuseColor.g = DiffuseColor.g;
@@ -382,7 +421,8 @@ void SkinnedModel::LoadColors(const aiMaterial* pMaterial, int index)
 
     aiColor3D SpecularColor(0.0f, 0.0f, 0.0f);
 
-    if (pMaterial->Get(AI_MATKEY_COLOR_SPECULAR, SpecularColor) == AI_SUCCESS) {
+    if (pMaterial->Get(AI_MATKEY_COLOR_SPECULAR, SpecularColor) == AI_SUCCESS)
+    {
         printf("Loaded specular color [%f %f %f]\n", SpecularColor.r, SpecularColor.g, SpecularColor.b);
         m_Materials[index].SpecularColor.r = SpecularColor.r;
         m_Materials[index].SpecularColor.g = SpecularColor.g;
@@ -411,58 +451,69 @@ void SkinnedModel::PopulateBuffers()
     glBufferData(GL_ARRAY_BUFFER, sizeof(m_Bones[0]) * m_Bones.size(), &m_Bones[0], GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(BONE_ID_LOCATION0);
-    glVertexAttribIPointer(BONE_ID_LOCATION0, MAX_NUM_BONES_PER_VERTEX-2, GL_INT, sizeof(VertexBoneData), (const GLvoid*)0);
-    
+    glVertexAttribIPointer(BONE_ID_LOCATION0, MAX_NUM_BONES_PER_VERTEX - 2, GL_INT, sizeof(VertexBoneData), (const GLvoid *)0);
+
     glEnableVertexAttribArray(BONE_ID_LOCATION1);
-    glVertexAttribIPointer(BONE_ID_LOCATION1, MAX_NUM_BONES_PER_VERTEX-4, GL_INT, sizeof(VertexBoneData), (const GLvoid*)((MAX_NUM_BONES_PER_VERTEX-2) * sizeof(unsigned int)));
-    
+    glVertexAttribIPointer(BONE_ID_LOCATION1, MAX_NUM_BONES_PER_VERTEX - 4, GL_INT, sizeof(VertexBoneData), (const GLvoid *)((MAX_NUM_BONES_PER_VERTEX - 2) * sizeof(unsigned int)));
+
     glEnableVertexAttribArray(BONE_WEIGHT_LOCATION0);
-    glVertexAttribPointer(BONE_WEIGHT_LOCATION0, MAX_NUM_BONES_PER_VERTEX-2, GL_FLOAT, GL_FALSE, sizeof(VertexBoneData),
-                          (const GLvoid*)(MAX_NUM_BONES_PER_VERTEX * sizeof(unsigned int)));
+    glVertexAttribPointer(BONE_WEIGHT_LOCATION0, MAX_NUM_BONES_PER_VERTEX - 2, GL_FLOAT, GL_FALSE, sizeof(VertexBoneData),
+                          (const GLvoid *)(MAX_NUM_BONES_PER_VERTEX * sizeof(unsigned int)));
 
     glEnableVertexAttribArray(BONE_WEIGHT_LOCATION1);
-    size_t offset = ((MAX_NUM_BONES_PER_VERTEX) * sizeof(unsigned int)) + ((MAX_NUM_BONES_PER_VERTEX-2) * sizeof(float));
-    glVertexAttribPointer(BONE_WEIGHT_LOCATION1, MAX_NUM_BONES_PER_VERTEX-4, GL_FLOAT, GL_FALSE, sizeof(VertexBoneData),
-                          (const GLvoid*)offset);
+    size_t offset = ((MAX_NUM_BONES_PER_VERTEX) * sizeof(unsigned int)) + ((MAX_NUM_BONES_PER_VERTEX - 2) * sizeof(float));
+    glVertexAttribPointer(BONE_WEIGHT_LOCATION1, MAX_NUM_BONES_PER_VERTEX - 4, GL_FLOAT, GL_FALSE, sizeof(VertexBoneData),
+                          (const GLvoid *)offset);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_Buffers[INDEX_BUFFER]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(m_Indices[0]) * m_Indices.size(), &m_Indices[0], GL_STATIC_DRAW);
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
+    /* camera texture */
+    glGenTextures(1, &m_cam_texture);
+    glBindTexture(GL_TEXTURE_2D, m_cam_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // GL_CLAMP_TO_EDGE
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT); // GL_CLAMP_TO_EDGE
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA /*GL_RGBA16F*/, m_camWidth, m_camHeight, 0, GL_BGRA /* GL_RGBA*/,
+                 GL_UNSIGNED_BYTE, NULL);
+    /* camera texture */
+
     glGenTextures(1, &m_fbo_texture);
     glGenRenderbuffers(1, &m_fbo_depth_buffer);
     glGenFramebuffers(1, &m_FBO);
-    //glCheckError();
+    // glCheckError();
     glBindTexture(GL_TEXTURE_2D, m_fbo_texture);
-    //glCheckError();
-    // set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
-    //glCheckError();
+    // glCheckError();
+    //  set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+    // glCheckError();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    //glCheckError();
-    // set texture filtering parameters
+    // glCheckError();
+    //  set texture filtering parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    //glCheckError();
+    // glCheckError();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    //glCheckError();
-    // #ifdef USE_TEXSUBIMAGE2D
+    // glCheckError();
+    //  #ifdef USE_TEXSUBIMAGE2D
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-    //glCheckError();
+    // glCheckError();
     glBindRenderbuffer(GL_RENDERBUFFER, m_fbo_depth_buffer);
-    //glCheckError();
-    // allocate storage
+    // glCheckError();
+    //  allocate storage
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_width, m_height);
-    //glCheckError();
-    // clean up
+    // glCheckError();
+    //  clean up
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    //glCheckError();
-    //glCheckError();
+    // glCheckError();
+    // glCheckError();
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
-    //glCheckError();
+    // glCheckError();
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_fbo_texture, 0);
-    //glCheckError();
+    // glCheckError();
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_fbo_depth_buffer);
-    //glCheckError();
+    // glCheckError();
     GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
     {
@@ -471,8 +522,15 @@ void SkinnedModel::PopulateBuffers()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& bones_to_world, glm::mat4 local_to_world, bool useFBO)
+void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
+                          glm::mat4 local_to_world, bool useFBO, uint8_t *buffer)
 {
+    if (buffer != NULL)
+    {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_cam_texture);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_camWidth, m_camHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
+    }
     if (useFBO)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
@@ -484,30 +542,37 @@ void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& 
     shader.use();
     shader.SetMaterial(this->GetMaterial());
     shader.SetTextureUnit(0);
+    shader.setInt("gProjSampler", 1);
+    // glActiveTexture(GL_TEXTURE1);
+    // glBindTexture(GL_TEXTURE_2D, m_cam_texture);
     std::vector<glm::mat4> Transforms;
     this->GetBoneTransforms(Transforms, bones_to_world, local_to_world);
-    for (unsigned int i = 0 ; i < Transforms.size() ; i++) {
+    for (unsigned int i = 0; i < Transforms.size(); i++)
+    {
         shader.SetBoneTransform(i, Transforms[i]);
     }
     glBindVertexArray(m_VAO);
 
-    for (unsigned int i = 0 ; i < m_Meshes.size() ; i++) {
+    for (unsigned int i = 0; i < m_Meshes.size(); i++)
+    {
         unsigned int MaterialIndex = m_Meshes[i].MaterialIndex;
 
         assert(MaterialIndex < m_Materials.size());
 
-        if (m_Materials[MaterialIndex].pDiffuse) {
+        if (m_Materials[MaterialIndex].pDiffuse)
+        {
             m_Materials[MaterialIndex].pDiffuse->Bind(GL_TEXTURE0);
         }
 
-        if (m_Materials[MaterialIndex].pSpecularExponent) {
+        if (m_Materials[MaterialIndex].pSpecularExponent)
+        {
             m_Materials[MaterialIndex].pSpecularExponent->Bind(GL_TEXTURE6);
         }
 
         glDrawElementsBaseVertex(GL_TRIANGLES,
                                  m_Meshes[i].NumIndices,
                                  GL_UNSIGNED_INT,
-                                 (void*)(sizeof(unsigned int) * m_Meshes[i].BaseIndex),
+                                 (void *)(sizeof(unsigned int) * m_Meshes[i].BaseIndex),
                                  m_Meshes[i].BaseVertex);
     }
 
@@ -519,11 +584,12 @@ void SkinnedModel::Render(SkinningShader& shader, const std::vector<glm::mat4>& 
     }
 }
 
-
-const Material& SkinnedModel::GetMaterial()
+const Material &SkinnedModel::GetMaterial()
 {
-    for (unsigned int i = 0 ; i < m_Materials.size() ; i++) {
-        if (m_Materials[i].AmbientColor != glm::vec3(0.0f, 0.0f, 0.0f)) {
+    for (unsigned int i = 0; i < m_Materials.size(); i++)
+    {
+        if (m_Materials[i].AmbientColor != glm::vec3(0.0f, 0.0f, 0.0f))
+        {
             return m_Materials[i];
         }
     }
@@ -534,20 +600,21 @@ const Material& SkinnedModel::GetMaterial()
 glm::vec3 SkinnedModel::getCenterOfMass()
 {
     glm::vec3 center_of_mass = glm::vec3(0.0f, 0.0f, 0.0f);
-    for (unsigned int i = 0 ; i < m_Positions.size() ; i++) {
+    for (unsigned int i = 0; i < m_Positions.size(); i++)
+    {
         center_of_mass += m_Positions[i];
     }
     center_of_mass /= (float)m_Positions.size();
     return center_of_mass;
 };
 
-void SkinnedModel::GetLocalToBoneTransforms(std::vector<glm::mat4>& Transforms, bool inverse, bool only_leap_bones)
+void SkinnedModel::GetLocalToBoneTransforms(std::vector<glm::mat4> &Transforms, bool inverse, bool only_leap_bones)
 {
     if (only_leap_bones)
     {
         Transforms.resize(bone_leap_map.size());
         int i = 0;
-        for (auto const& x : bone_leap_map)
+        for (auto const &x : bone_leap_map)
         {
             unsigned int bone_index = m_BoneNameToIndexMap[x.first];
             if (inverse)
@@ -560,7 +627,8 @@ void SkinnedModel::GetLocalToBoneTransforms(std::vector<glm::mat4>& Transforms, 
     else
     {
         Transforms.resize(m_BoneInfo.size());
-        for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
+        for (unsigned int i = 0; i < m_BoneInfo.size(); i++)
+        {
             if (inverse)
                 Transforms[i] = glm::inverse(m_BoneInfo[i].LocalToBoneTransform);
             else
@@ -569,27 +637,29 @@ void SkinnedModel::GetLocalToBoneTransforms(std::vector<glm::mat4>& Transforms, 
     }
 }
 
-void SkinnedModel::GetBoneFinalTransforms(std::vector<glm::mat4>& Transforms)
+void SkinnedModel::GetBoneFinalTransforms(std::vector<glm::mat4> &Transforms)
 {
     Transforms.resize(m_BoneInfo.size());
-    for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
+    for (unsigned int i = 0; i < m_BoneInfo.size(); i++)
+    {
         Transforms[i] = m_BoneInfo[i].FinalTransformation;
     }
 }
 
-void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4>& Transforms)
+void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4> &Transforms)
 {
     Transforms.resize(m_BoneInfo.size());
-    aiNode* pNode = pScene->mRootNode;
+    aiNode *pNode = pScene->mRootNode;
     std::string NodeName(pNode->mName.data);
     glm::mat4 NodeTransformation(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
     // glm::mat4 GlobalTransformation = ParentTransform * NodeTransformation;
-    if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end()) {
+    if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end())
+    {
         unsigned int BoneIndex = m_BoneNameToIndexMap[NodeName];
         Transforms[BoneIndex] = NodeTransformation;
     }
 }
-void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4>& Transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world)
+void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &Transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world)
 {
     Transforms.resize(m_BoneInfo.size());
     // default bind pose using bones
@@ -598,54 +668,61 @@ void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4>& Transforms, const s
     // }
     // default bind pose not using bones
     glm::mat4 iden = glm::mat4(1.0f);
-    for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
-        Transforms[i] = local_to_world*iden;
+    for (unsigned int i = 0; i < m_BoneInfo.size(); i++)
+    {
+        Transforms[i] = local_to_world * iden;
     }
-    // default bind pose 
+    // default bind pose
     // skin the mesh using the bone to world transforms from leap
     // offset matrix is local to bone matrix ("inverse bind pose")
     if (bones_to_world.size() > 0)
     {
-        for (auto const& x : bone_leap_map)
+        for (auto const &x : bone_leap_map)
         {
-            unsigned int bone_index = m_BoneNameToIndexMap[x.first];    
+            unsigned int bone_index = m_BoneNameToIndexMap[x.first];
             Transforms[bone_index] = bones_to_world[x.second] * m_BoneInfo[bone_index].LocalToBoneTransform;
         }
     }
 }
 
-void SkinnedModel::ReadNodeHierarchy(const aiNode* pNode, const glm::mat4& ParentTransform)
+void SkinnedModel::ReadNodeHierarchy(const aiNode *pNode, const glm::mat4 &ParentTransform)
 {
     std::string NodeName(pNode->mName.data);
     glm::mat4 NodeTransformation(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
     glm::mat4 GlobalTransformation = ParentTransform * NodeTransformation;
-    if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end()) {
+    if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end())
+    {
         unsigned int BoneIndex = m_BoneNameToIndexMap[NodeName];
         m_BoneInfo[BoneIndex].FinalTransformation = GlobalTransformation * m_BoneInfo[BoneIndex].LocalToBoneTransform;
     }
-    for (unsigned int i = 0 ; i < pNode->mNumChildren ; i++) {
+    for (unsigned int i = 0; i < pNode->mNumChildren; i++)
+    {
         ReadNodeHierarchy(pNode->mChildren[i], GlobalTransformation);
     }
 }
 
-std::string SkinnedModel::GetDirFromFilename(const std::string& Filename)
+std::string SkinnedModel::GetDirFromFilename(const std::string &Filename)
 {
     // Extract the directory part from the file name
     std::string::size_type SlashIndex;
     SlashIndex = Filename.find_last_of("\\");
 
-    if (SlashIndex == -1) {
+    if (SlashIndex == -1)
+    {
         SlashIndex = Filename.find_last_of("/");
     }
     std::string Dir;
 
-    if (SlashIndex == std::string::npos) {
+    if (SlashIndex == std::string::npos)
+    {
         Dir = ".";
     }
-    else if (SlashIndex == 0) {
+    else if (SlashIndex == 0)
+    {
         Dir = "/";
     }
-    else {
+    else
+    {
         Dir = Filename.substr(0, SlashIndex);
     }
     return Dir;

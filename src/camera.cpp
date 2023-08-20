@@ -90,7 +90,7 @@ public:
 class SingleFrameConfiguration : public CConfigurationEventHandler
 {
 public:
-    SingleFrameConfiguration(float exposure_time) : m_exposure_time(exposure_time)
+    SingleFrameConfiguration(float exposure_time)
     {
         if (exposure_time < 1850.0)
         {
@@ -102,6 +102,7 @@ public:
             std::cout << "exposure time cannot be greater than 15000.0, setting to 15000.0" << std::endl;
             exposure_time = 15000.0;
         }
+        m_exposure_time = exposure_time;
     }
     /// Apply acquire single frame configuration.
     static void ApplyConfiguration(GenApi::INodeMap &nodemap, float exposure_time)
@@ -157,11 +158,26 @@ private:
 class HardwareTriggerConfiguration : public CConfigurationEventHandler
 {
 public:
+    HardwareTriggerConfiguration(float exposureTime, bool hardwareTrigger)
+    {
+        if (exposureTime < 1850.0)
+        {
+            std::cout << "exposure time cannot be less than 1850.0, setting to 1850.0" << std::endl;
+            exposureTime = 1850.0;
+        }
+        if (exposureTime > 15000.0)
+        {
+            std::cout << "exposure time cannot be greater than 15000.0, setting to 15000.0" << std::endl;
+            exposureTime = 15000.0;
+        }
+        m_exposure_time = exposureTime;
+        m_hardwareTrigger = hardwareTrigger;
+    }
     /// Apply trigger configuration.
-    static void ApplyConfiguration(GenApi::INodeMap &nodemap)
+    static void ApplyConfiguration(GenApi::INodeMap &nodemap, float exposure_time, bool hardwareTrigger)
     {
         using namespace GenApi;
-        bool hardwareTrigger = false;
+        // bool hardwareTrigger = false;
 
         // Disable compression mode.
         CConfigurationHelper::DisableCompression(nodemap);
@@ -245,7 +261,7 @@ public:
 
         // Set acquisition mode to "continuous"
         CEnumParameter(nodemap, "AcquisitionMode").SetValue("Continuous");
-        CFloatParameter(nodemap, "ExposureTime").SetValue(1850.0f); // 1850.0=for max fps, 1904.0f = for 500 fps
+        CFloatParameter(nodemap, "ExposureTime").SetValue(exposure_time); // 1850.0=for max fps, 1904.0f = for 500 fps
     }
 
     // Set basic camera settings.
@@ -253,7 +269,7 @@ public:
     {
         try
         {
-            ApplyConfiguration(camera.GetNodeMap());
+            ApplyConfiguration(camera.GetNodeMap(), m_exposure_time, m_hardwareTrigger);
             // Probe max packet size
             CConfigurationHelper::ProbePacketSize(camera.GetStreamGrabberNodeMap());
         }
@@ -270,6 +286,10 @@ public:
             throw RUNTIME_EXCEPTION("Could not apply configuration. Unknown exception caught in OnOpened method.");
         }
     }
+
+private:
+    float m_exposure_time;
+    bool m_hardwareTrigger;
 };
 
 // image event handler
@@ -349,13 +369,14 @@ public:
     }
 };
 
-void BaslerCamera::init(blocking_queue<CPylonImage> &camera_queue, bool &close_signal, uint32_t &height, uint32_t &width)
+void BaslerCamera::init(blocking_queue<CPylonImage> &camera_queue, bool &close_signal,
+                        uint32_t height, uint32_t width, float exposureTime, bool hardwareTrigger)
 {
     PylonInitialize();
     try
     {
         camera.Attach(CTlFactory::GetInstance().CreateFirstDevice());
-        camera.RegisterConfiguration(new HardwareTriggerConfiguration, RegistrationMode_ReplaceAll, Cleanup_Delete);
+        camera.RegisterConfiguration(new HardwareTriggerConfiguration(exposureTime, hardwareTrigger), RegistrationMode_ReplaceAll, Cleanup_Delete);
         camera.RegisterConfiguration(new CConfigurationEventPrinter, RegistrationMode_Append, Cleanup_Delete);
         camera.RegisterImageEventHandler(new MyImageEventHandler(camera_queue, close_signal, height, width), RegistrationMode_Append, Cleanup_Delete);
         camera.Open();

@@ -9,6 +9,7 @@ layout (location = 5) in vec4 Weights0;
 layout (location = 6) in vec2 Weights1;
 
 out vec2 TexCoord0;
+out vec2 ProjTexCoord0;
 //out vec3 Normal0;
 //out vec3 LocalPos0;
 flat out ivec4 BoneIDs00;
@@ -19,6 +20,7 @@ out vec3 ourColor;
 const int MAX_BONES = 50;
 
 uniform mat4 gTransform;
+uniform mat4 gProjectorTransform;
 uniform mat4 gBones[MAX_BONES];
 uniform int gDisplayBoneIndex;
 void main()
@@ -34,6 +36,9 @@ void main()
     vec4 PosL = BoneTransform * vec4(Position, 1.0);
     gl_Position = gTransform * PosL;
     TexCoord0 = TexCoord;
+    vec4 proj_pos = gProjectorTransform * PosL;
+    ProjTexCoord0 = (vec2(proj_pos.x / proj_pos.w, proj_pos.y / proj_pos.w) + vec2(1.0, 1.0)) * vec2(0.5, 0.5);
+    ProjTexCoord0 = vec2(ProjTexCoord0.x, 1-ProjTexCoord0.y);
     //Normal0 = Normal;
     //LocalPos0 = Position;
     BoneIDs00 = BoneIDs0;

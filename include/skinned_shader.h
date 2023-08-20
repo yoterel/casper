@@ -17,15 +17,14 @@ public:
     float DiffuseIntensity = 0.0f;
 };
 
-
 class DirectionalLight : public BaseLight
 {
 public:
     glm::vec3 WorldDirection = glm::vec3(0.0f, 0.0f, 0.0f);
 
-    void CalcLocalDirection(const glm::mat4& worldTransform);
+    void CalcLocalDirection(const glm::mat4 &worldTransform);
 
-    const glm::vec3& GetLocalDirection() const { return LocalDirection; }
+    const glm::vec3 &GetLocalDirection() const { return LocalDirection; }
 
 private:
     glm::vec3 LocalDirection = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -38,19 +37,18 @@ struct LightAttenuation
     float Exp = 0.0f;
 };
 
-
-class PointLight: public BaseLight
+class PointLight : public BaseLight
 {
 public:
     glm::vec3 WorldPosition = glm::vec3(0.0f, 0.0f, 0.0f);
     LightAttenuation Attenuation;
 
-    void CalcLocalPosition(const glm::mat4& worldTransform)
+    void CalcLocalPosition(const glm::mat4 &worldTransform)
     {
         LocalPosition = glm::vec3(glm::inverse(worldTransform) * glm::vec4(WorldPosition, 1.0f));
     };
 
-    const glm::vec3& GetLocalPosition() const { return LocalPosition; }
+    const glm::vec3 &GetLocalPosition() const { return LocalPosition; }
 
 private:
     glm::vec3 LocalPosition = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -62,42 +60,39 @@ public:
     glm::vec3 WorldDirection = glm::vec3(0.0f, 0.0f, 0.0f);
     float Cutoff = 0.0f;
 
-    void CalcLocalDirectionAndPosition(const glm::mat4& worldTransform);
+    void CalcLocalDirectionAndPosition(const glm::mat4 &worldTransform);
 
-    const glm::vec3& GetLocalDirection() const { return LocalDirection; }
+    const glm::vec3 &GetLocalDirection() const { return LocalDirection; }
 
 private:
     glm::vec3 LocalDirection = glm::vec3(0.0f, 0.0f, 0.0f);
-
-
 };
-
 
 class SkinningShader : public Shader
 {
 public:
-
     static const unsigned int MAX_POINT_LIGHTS = 2;
     static const unsigned int MAX_SPOT_LIGHTS = 2;
 
-    SkinningShader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr);
+    SkinningShader(const char *vertexPath, const char *fragmentPath, const char *geometryPath = nullptr);
 
-    void SetWorldTransform(const glm::mat4& worldTransform);
+    void SetWorldTransform(const glm::mat4 &worldTransform);
+    void SetProjectorTransform(const glm::mat4 &worldTransform);
     void SetDisplayBoneIndex(unsigned int DisplayBoneIndex);
     void SetTextureUnit(unsigned int TextureUnit);
     void SetSpecularExponentTextureUnit(unsigned int TextureUnit);
-    void SetDirectionalLight(const DirectionalLight& Light);
-    void SetPointLights(unsigned int NumLights, const PointLight* pLights);
-    void SetSpotLights(unsigned int NumLights, const SpotLight* pLights);
-    void SetCameraLocalPos(const glm::vec3& CameraLocalPos);
-    void SetMaterial(const Material& material);
-    void SetBoneTransform(unsigned int Index, const glm::mat4& Transform);
-    GLint GetUniformLocation(const char* pUniformName);
+    void SetDirectionalLight(const DirectionalLight &Light);
+    void SetPointLights(unsigned int NumLights, const PointLight *pLights);
+    void SetSpotLights(unsigned int NumLights, const SpotLight *pLights);
+    void SetCameraLocalPos(const glm::vec3 &CameraLocalPos);
+    void SetMaterial(const Material &material);
+    void SetBoneTransform(unsigned int Index, const glm::mat4 &Transform);
+    GLint GetUniformLocation(const char *pUniformName);
     // void SetDisplayBoneIndex(uint DisplayBoneIndex);
-    
-private:
 
+private:
     GLuint worldTransformLoc;
+    GLuint projectorTransformLoc;
     GLuint samplerLoc;
     GLuint samplerSpecularExponentLoc;
     GLuint CameraLocalPosLoc;
@@ -105,20 +100,23 @@ private:
     GLuint NumSpotLightsLocation;
     GLuint displayBoneIndexLocation;
 
-    struct {
+    struct
+    {
         GLuint AmbientColor;
         GLuint DiffuseColor;
         GLuint SpecularColor;
     } materialLoc;
 
-    struct {
+    struct
+    {
         GLuint Color;
         GLuint AmbientIntensity;
         GLuint Direction;
         GLuint DiffuseIntensity;
     } dirLightLoc;
 
-    struct {
+    struct
+    {
         GLuint Color;
         GLuint AmbientIntensity;
         GLuint Position;
@@ -132,14 +130,16 @@ private:
         } Atten;
     } PointLightsLocation[MAX_POINT_LIGHTS];
 
-struct {
+    struct
+    {
         GLuint Color;
         GLuint AmbientIntensity;
         GLuint DiffuseIntensity;
         GLuint Position;
         GLuint Direction;
         GLuint Cutoff;
-        struct {
+        struct
+        {
             GLuint Constant;
             GLuint Linear;
             GLuint Exp;
@@ -148,5 +148,4 @@ struct {
     GLuint m_boneLocation[MAX_BONES];
 };
 
-
-#endif  /* SKINNED_SHADER_H */
+#endif /* SKINNED_SHADER_H */

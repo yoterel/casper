@@ -33,7 +33,7 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
 void initGLBuffers(unsigned int *pbo);
-void loadCalibrationResults(glm::mat3 &projector_intrinsics, glm::mat3 &camera_intrinsics, std::vector<double> &camera_distortion, glm::mat4 &p2w, glm::mat4 &c2w);
+void loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc);
 // unsigned int setup_cube_buffers();
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
@@ -50,7 +50,9 @@ const unsigned int proj_height = 768;
 const unsigned int cam_height = 540;
 const unsigned int cam_width = 720;
 // "fixed" camera
-GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+// GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+GLCamera gl_camera;
+GLCamera gl_projector;
 // "orbit" camera
 // GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 float lastX = proj_width / 2.0f;
@@ -156,7 +158,8 @@ int main(int argc, char *argv[])
     SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
                               "C:/src/augmented_hands/resource/uv.png",
                               //   "C:/src/augmented_hands/resource/wood.jpg",
-                              proj_width, proj_height);
+                              proj_width, proj_height,
+                              cam_width, cam_height);
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     n_bones = skinnedModel.NumBones();
     glm::vec3 coa = skinnedModel.getCenterOfMass();
@@ -222,12 +225,18 @@ int main(int argc, char *argv[])
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer;
     // load calibration results if they exist
-    glm::mat3 projector_intrinsics;
-    glm::mat3 camera_intrinsics;
+    glm::mat4 vproj_project;
+    glm::mat4 vcam_project;
     std::vector<double> camera_distortion;
-    glm::mat4 p2w;
-    glm::mat4 c2w;
-    loadCalibrationResults(projector_intrinsics, camera_intrinsics, camera_distortion, p2w, c2w);
+    glm::mat4 w2vp;
+    glm::mat4 w2vc;
+    loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc);
+    gl_camera = GLCamera(w2vc, vcam_project);
+    gl_projector = GLCamera(w2vp, vproj_project);
+    // GLCamera gl_camera2 = GLCamera(glm::vec3(0.0f, 10.0f, 39.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    // GLCamera gl_camera_old = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+    // glm::mat4 test1 = gl_camera.GetViewMatrix();
+    // glm::mat4 test2 = gl_camera_old.GetViewMatrix();
     // actual thread loops
     // image producer
     if (producer_is_fake)
@@ -236,7 +245,7 @@ int main(int argc, char *argv[])
         cam_height = 540;
         cam_width = 720;
         producer = std::thread([&camera_queue, &close_signal, &cam_height, &cam_width]() { //, &projector
-            CPylonImage image = CPylonImage::Create(PixelType_RGB8packed, cam_width, cam_height);
+            CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
             Timer t_block;
             t_block.start();
             while (!close_signal)
@@ -254,7 +263,10 @@ int main(int argc, char *argv[])
     else
     {
         /* camera producer */
-        camera.init(camera_queue, close_signal, cam_height, cam_width);
+        camera.init(camera_queue, close_signal, cam_height, cam_width, 10000.0f);
+        projector.show();
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        // camera.balance_white();
         camera.acquire();
     }
     // image consumer
@@ -350,8 +362,12 @@ int main(int argc, char *argv[])
         std::modf(glfwGetTime(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         getLeapFrame(leap, targetFrameTime, bones_to_world, skeleton_vertices, debug_mode);
-        glm::mat4 view_transform = gl_camera.GetViewMatrix();
-        glm::mat4 projection_transform = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 500.0f); // (float)proj_width / (float)proj_height
+        glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
+        glm::mat4 vproj_view_transform = gl_projector.getViewMatrix();
+        glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
+        glm::mat4 vproj_projection_transform = gl_projector.getProjectionMatrix();
+        // glm::mat4 test = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 500.0f); // (float)proj_width / (float)proj_height
+        // glm::mat4 projector_projection_transform = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 500.0f); // (float)proj_width / (float)proj_height
         t1.stop();
         if (bones_to_world.size() > 0)
         {
@@ -364,9 +380,9 @@ int main(int argc, char *argv[])
                 glBufferData(GL_ARRAY_BUFFER, sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
                 n_skeleton_primitives = skeleton_vertices.size();
                 vcolorShader.use();
-                vcolorShader.setMat4("projection", projection_transform);
-                vcolorShader.setMat4("view", view_transform);
-                vcolorShader.setMat4("model", mm_to_cm);
+                vcolorShader.setMat4("projection", vcam_projection_transform);
+                vcolorShader.setMat4("view", vcam_view_transform);
+                // vcolorShader.setMat4("model", mm_to_cm);
                 glBindVertexArray(skeletonVAO);
                 glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
                 // draws global coordinate system gizmo
@@ -393,31 +409,41 @@ int main(int argc, char *argv[])
                     glDrawArrays(GL_LINES, 0, 6);
                 }
                 // draw debug info
-                glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-                glm::vec3 palm_normal(palm_normal_hom);
-                palm_normal = glm::normalize(palm_normal);
-                text.Render(textShader, std::format("palm normal: {:.02f}, {:.02f}, {:.02f}, {:.02f}", palm_normal.x, palm_normal.y, palm_normal.z, glm::l2Norm(palm_normal)), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                // glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+                // glm::vec3 palm_normal(palm_normal_hom);
+                // palm_normal = glm::normalize(palm_normal);
             }
             // draw skinned mesh
             skinnedShader.use();
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShader.SetWorldTransform(projection_transform * view_transform);
-            skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld);
-            unsigned int slow_tracker_texture = skinnedModel.GetFBOTexture();
-            t2.stop();
-            // canvas.Render(canvasShader, buffer);
-            canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
+            skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
+            skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+            bool use_FBO = false;
+            if (use_FBO)
+            {
+                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
+                unsigned int slow_tracker_texture = skinnedModel.GetFBOTexture();
+                t2.stop();
+                // canvas.Render(canvasShader, buffer);
+                canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
+            }
+            else
+            {
+                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
+                t2.stop();
+            }
         }
         if (debug_mode)
         {
-            glm::vec3 cam_pos = gl_camera.GetPos();
-            glm::vec3 cam_forward = glm::normalize(-cam_pos);
-            text.Render(textShader, std::format("camera pos: {:.02f}, {:.02f}, {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("camera forward: {:.02f}, {:.02f}, {:.02f}", cam_forward.x, cam_forward.y, cam_forward.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            glm::vec3 cam_pos = gl_camera.getPos();
+            glm::vec3 proj_pos = gl_projector.getPos();
             t3.start();
             text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             t3.stop();
+            text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_camera.Zoom), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            // text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         }
 
         // send result to projector queue
@@ -566,17 +592,17 @@ void processInput(GLFWwindow *window)
         glfwSetWindowShouldClose(window, true);
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        gl_camera.ProcessKeyboard(FORWARD, deltaTime);
+        gl_camera.processKeyboard(FORWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        gl_camera.ProcessKeyboard(BACKWARD, deltaTime);
+        gl_camera.processKeyboard(BACKWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        gl_camera.ProcessKeyboard(LEFT, deltaTime);
+        gl_camera.processKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        gl_camera.ProcessKeyboard(RIGHT, deltaTime);
+        gl_camera.processKeyboard(RIGHT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-        gl_camera.ProcessKeyboard(UP, deltaTime);
+        gl_camera.processKeyboard(UP, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-        gl_camera.ProcessKeyboard(DOWN, deltaTime);
+        gl_camera.processKeyboard(DOWN, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
     {
         space_pressed_flag = true;
@@ -620,28 +646,74 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
     lastX = xpos;
     lastY = ypos;
 
-    gl_camera.ProcessMouseMovement(xoffset, yoffset);
+    gl_camera.processMouseMovement(xoffset, yoffset);
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
 // ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
-    gl_camera.ProcessMouseScroll(static_cast<float>(yoffset));
+    gl_camera.processMouseScroll(static_cast<float>(yoffset));
 }
 
-void loadCalibrationResults(glm::mat3 &projector_intrinsics, glm::mat3 &camera_intrinsics, std::vector<double> &camera_distortion, glm::mat4 &p2w, glm::mat4 &c2w)
+void loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc)
 {
+    // vp = virtual projector
+    // vc = virtual camera
+    glm::mat4 flipYZ = glm::mat4(1.0f);
+    flipYZ[1][1] = -1.0f;
+    flipYZ[2][2] = -1.0f;
     cnpy::NpyArray arr = cnpy::npy_load("C:/src/augmented_hands/debug/leap_calibration/w2p.npy");
-    glm::mat4 w2p = glm::make_mat4(arr.data<double>());
-    p2w = glm::inverse(w2p);
+    w2vc = glm::make_mat4(arr.data<double>());
+    glm::mat4 vc2w = glm::inverse(w2vc);
     cnpy::npz_t my_npz = cnpy::npz_load("C:/src/augmented_hands/debug/calibration/calibration.npz");
-    projector_intrinsics = glm::make_mat3(my_npz["proj_intrinsics"].data<double>());
-    camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
+
+    float ffar = 500.0f;
+    float nnear = 1.0f;
+    glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
+    float vpfx = camera_intrinsics[0][0];
+    float vpfy = camera_intrinsics[1][1];
+    float vpcx = camera_intrinsics[0][2];
+    float vpcy = camera_intrinsics[1][2];
+    vproj_project = glm::mat4(0.0);
+    vproj_project[0][0] = 2 * vpfx / cam_width;
+    vproj_project[0][2] = (cam_width - 2 * vpcx) / cam_width;
+    vproj_project[1][1] = -2 * vpfy / cam_height;
+    vproj_project[1][2] = -(cam_height - 2 * vpcy) / cam_height;
+    vproj_project[2][2] = -(ffar + nnear) / (ffar - nnear);
+    vproj_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
+    vproj_project[3][2] = -1.0f;
+
+    glm::mat3 projector_intrinsics = glm::make_mat3(my_npz["proj_intrinsics"].data<double>());
+    float vcfx = projector_intrinsics[0][0];
+    float vcfy = projector_intrinsics[1][1];
+    float vccx = projector_intrinsics[0][2];
+    float vccy = projector_intrinsics[1][2];
+    vcam_project = glm::mat4(0.0);
+    vcam_project[0][0] = 2 * vcfx / proj_width;
+    vcam_project[0][2] = (proj_width - 2 * vccx) / proj_width;
+    vcam_project[1][1] = -2 * vcfy / proj_height;
+    vcam_project[1][2] = -(proj_height - 2 * vccy) / proj_height;
+
+    vcam_project[2][2] = -(ffar + nnear) / (ffar - nnear);
+    vcam_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
+    vcam_project[3][2] = -1.0f;
+
     camera_distortion = my_npz["cam_distortion"].as_vec<double>();
-    glm::mat4 c2p = glm::make_mat4(my_npz["proj_transform"].data<double>());
-    c2w = p2w * c2p;
-    std::cout << "loaded calibration data." << std::endl;
+    glm::mat4 vp2vc = glm::make_mat4(my_npz["proj_transform"].data<double>()); // this is a real projector to camera transform
+    glm::mat4 vp2w = vp2vc * vc2w;                                             // since glm uses column major, we multiply from the left...
+    vp2w = flipYZ * vp2w;
+    // vp2w[0][3] *= 0.1f;
+    // vp2w[1][3] *= 0.1f;
+    // vp2w[2][3] *= 0.1f;
+    w2vp = glm::inverse(vp2w);
+    w2vp = glm::transpose(w2vp);
+    vc2w = flipYZ * vc2w;
+    // w2vc[0][3] *= 0.1f;
+    // w2vc[1][3] *= 0.1f;
+    // w2vc[2][3] *= 0.1f;
+    w2vc = glm::inverse(vc2w);
+    w2vc = glm::transpose(w2vc);
 }
 
 void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world, std::vector<glm::vec3> &skeleton_vertices, bool debug)
@@ -656,6 +728,7 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
+    // glm::mat4 mm_to_cm = glm::mat4(1.0f);
     glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
     // Get the buffer size needed to hold the tracking data
     if (LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + leap_time_delay, &targetFrameSize) == eLeapRS_Success)

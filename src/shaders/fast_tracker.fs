@@ -14,11 +14,10 @@ void main()
     vec2 FlippedTexCoord = vec2(TexCoord.x, 1-TexCoord.y);
     vec3 col = texture(cam_image, FlippedTexCoord).rgb;
     float avg = (col.r + col.g + col.b) * 0.333333;
-    // FragColor = texture(src, loc.xy / resolution);
-    if (avg > 0.0) {
+    // FragColor = texture(src, loc.xy / resolution);  // full frame jump flood
+    if (avg > 0.0) { // only pixels that are not black jumpy flood
         FragColor = texture(src, loc.xy / resolution);
     } else {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     }
-    
 }
