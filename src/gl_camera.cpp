@@ -31,9 +31,9 @@ GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection) : MovementSpeed(
     // flipYZ[1][1] = -1.0f;
     // flipYZ[2][2] = -1.0f;
     // glm::mat4 openglMatrix = flipYZ * world2local; // negate Y and Z columns (glm uses column major so need to left multiply)
-    // world2local[3][0] *= 0.1f;
-    // world2local[3][1] *= 0.1f;
-    // world2local[3][2] *= 0.1f;
+    world2local[3][0] *= 0.1f;
+    world2local[3][1] *= 0.1f;
+    world2local[3][2] *= 0.1f;
     // viewMatrix = glm::transpose(openglMatrix);
     viewMatrix = world2local;
     projectionMatrix = projection;

@@ -263,7 +263,7 @@ int main(int argc, char *argv[])
     else
     {
         /* camera producer */
-        camera.init(camera_queue, close_signal, cam_height, cam_width, 10000.0f);
+        camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f * 2.0f);
         projector.show();
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
         // camera.balance_white();
@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
                 vcolorShader.use();
                 vcolorShader.setMat4("projection", vcam_projection_transform);
                 vcolorShader.setMat4("view", vcam_view_transform);
-                // vcolorShader.setMat4("model", mm_to_cm);
+                vcolorShader.setMat4("model", mm_to_cm);
                 glBindVertexArray(skeletonVAO);
                 glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
                 // draws global coordinate system gizmo
@@ -678,7 +678,7 @@ void loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, s
     vproj_project = glm::mat4(0.0);
     vproj_project[0][0] = 2 * vpfx / cam_width;
     vproj_project[0][2] = (cam_width - 2 * vpcx) / cam_width;
-    vproj_project[1][1] = -2 * vpfy / cam_height;
+    vproj_project[1][1] = 2 * vpfy / cam_height;
     vproj_project[1][2] = -(cam_height - 2 * vpcy) / cam_height;
     vproj_project[2][2] = -(ffar + nnear) / (ffar - nnear);
     vproj_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
@@ -692,7 +692,7 @@ void loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, s
     vcam_project = glm::mat4(0.0);
     vcam_project[0][0] = 2 * vcfx / proj_width;
     vcam_project[0][2] = (proj_width - 2 * vccx) / proj_width;
-    vcam_project[1][1] = -2 * vcfy / proj_height;
+    vcam_project[1][1] = 2 * vcfy / proj_height;
     vcam_project[1][2] = -(proj_height - 2 * vccy) / proj_height;
 
     vcam_project[2][2] = -(ffar + nnear) / (ffar - nnear);
