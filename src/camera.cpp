@@ -369,7 +369,7 @@ public:
     }
 };
 
-void BaslerCamera::init(blocking_queue<CPylonImage> &camera_queue, bool &close_signal,
+bool BaslerCamera::init(blocking_queue<CPylonImage> &camera_queue, bool &close_signal,
                         uint32_t height, uint32_t width, float exposureTime, bool hardwareTrigger)
 {
     PylonInitialize();
@@ -382,11 +382,13 @@ void BaslerCamera::init(blocking_queue<CPylonImage> &camera_queue, bool &close_s
         camera.Open();
         is_open = true;
         std::cout << "basler camera initialized." << std::endl;
+        return true;
     }
     catch (const GenericException &e)
     {
         std::cerr << "An exception occurred." << std::endl
                   << e.GetDescription() << std::endl;
+        return false;
     }
 }
 

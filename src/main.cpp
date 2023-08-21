@@ -33,28 +33,23 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
 void initGLBuffers(unsigned int *pbo);
-void loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc);
+bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc);
 // unsigned int setup_cube_buffers();
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
-// settings
+// global settings
 bool debug_mode = false;
+bool freecam_mode = false;
 bool use_cuda = false;
 bool producer_is_fake = false;
 bool use_pbo = false;
 bool use_projector = true;
 bool use_screen = true;
-// init state
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_height = 540;
 const unsigned int cam_width = 720;
-// "fixed" camera
-// GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
-GLCamera gl_camera;
-GLCamera gl_projector;
-// "orbit" camera
-// GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+// global state
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
@@ -69,18 +64,28 @@ glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
+// GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
+GLCamera gl_camera;
+GLCamera gl_projector;
+// GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
 
 int main(int argc, char *argv[])
 {
-    if (checkCmdLineFlag(argc, (const char **)argv, "cuda"))
-    {
-        std::cout << "Using CUDA..." << std::endl;
-        use_cuda = true;
-    }
+    /* parse cmd line options */
     if (checkCmdLineFlag(argc, (const char **)argv, "debug"))
     {
         std::cout << "Debug mode on..." << std::endl;
         debug_mode = true;
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "freecam"))
+    {
+        std::cout << "Freecam mode on..." << std::endl;
+        freecam_mode = true;
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "cuda"))
+    {
+        std::cout << "Using CUDA..." << std::endl;
+        use_cuda = true;
     }
     if (checkCmdLineFlag(argc, (const char **)argv, "fake_cam"))
     {
@@ -104,7 +109,7 @@ int main(int argc, char *argv[])
     }
     Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc;
     t_app.start();
-    // init GLFW
+    /* init GLFW */
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -143,7 +148,7 @@ int main(int argc, char *argv[])
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    // setup buffers
+    /* setup global GL buffers */
     unsigned int skeletonVAO, skeletonVBO;
     setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
     unsigned int gizmoVAO, gizmoVBO;
@@ -160,8 +165,8 @@ int main(int argc, char *argv[])
                               //   "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height,
                               cam_width, cam_height);
-    Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     n_bones = skinnedModel.NumBones();
+    Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     glm::vec3 coa = skinnedModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
     glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
@@ -174,25 +179,23 @@ int main(int argc, char *argv[])
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     Text text("C:/src/augmented_hands/resource/arial.ttf");
-    // setup shaders
-    Shader canvasShader;
-    // Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
-    // Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
+    /* setup shaders*/
     Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
     Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
     Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
     Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
+    Shader canvasShader;
     if (use_cuda)
         canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
     else
         canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
     Shader vcolorShader("C:/src/augmented_hands/src/shaders/color_by_vertex.vs", "C:/src/augmented_hands/src/shaders/color_by_vertex.fs");
+    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
     Shader textShader("C:/src/augmented_hands/src/shaders/text.vs", "C:/src/augmented_hands/src/shaders/text.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
-    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
-    // more inits
+    /* more inits */
     NPP_wrapper::printfNPPinfo();
     double previousTime = glfwGetTime();
     double currentFrame = glfwGetTime();
@@ -230,18 +233,42 @@ int main(int argc, char *argv[])
     std::vector<double> camera_distortion;
     glm::mat4 w2vp;
     glm::mat4 w2vc;
-    loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc);
-    gl_camera = GLCamera(w2vc, vcam_project);
-    gl_projector = GLCamera(w2vp, vproj_project);
+    if (loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc) && !freecam_mode)
+    {
+        std::cout << "Using calibration data for camera and projector settings" << std::endl;
+        gl_camera = GLCamera(w2vc, vcam_project);
+        gl_projector = GLCamera(w2vp, vproj_project);
+    }
+    else
+    {
+        std::cout << "Using hard-coded values for camera and projector settings" << std::endl;
+        // controlled
+        gl_camera = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
+        gl_projector = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
+        // fixed
+        // gl_camera = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+        // gl_projector = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+    }
+    // setup virtual camera and projector
     // GLCamera gl_camera2 = GLCamera(glm::vec3(0.0f, 10.0f, 39.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-    // GLCamera gl_camera_old = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
     // glm::mat4 test1 = gl_camera.GetViewMatrix();
     // glm::mat4 test2 = gl_camera_old.GetViewMatrix();
     // actual thread loops
     // image producer
-    if (producer_is_fake)
+    if (camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f * 2.0f) && !producer_is_fake)
+    {
+        /* real producer */
+        std::cout << "using real camera to produce images" << std::endl;
+        projector.show();
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        // camera.balance_white();
+        camera.acquire();
+    }
+    else
     {
         /* fake producer */
+        std::cout << "using fake camera to produce images" << std::endl;
+        producer_is_fake = true;
         cam_height = 540;
         cam_width = 720;
         producer = std::thread([&camera_queue, &close_signal, &cam_height, &cam_width]() { //, &projector
@@ -259,15 +286,6 @@ int main(int argc, char *argv[])
             }
             std::cout << "Producer finish" << std::endl;
         });
-    }
-    else
-    {
-        /* camera producer */
-        camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f * 2.0f);
-        projector.show();
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        // camera.balance_white();
-        camera.acquire();
     }
     // image consumer
     consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
@@ -656,17 +674,27 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     gl_camera.processMouseScroll(static_cast<float>(yoffset));
 }
 
-void loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc)
+bool loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc)
 {
     // vp = virtual projector
     // vc = virtual camera
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
     flipYZ[2][2] = -1.0f;
-    cnpy::NpyArray arr = cnpy::npy_load("C:/src/augmented_hands/debug/leap_calibration/w2p.npy");
+    cnpy::NpyArray arr;
+    cnpy::npz_t my_npz;
+    try
+    {
+        arr = cnpy::npy_load("C:/src/augmented_hands/debug/leap_calibration/w2p.npy");
+        my_npz = cnpy::npz_load("C:/src/augmented_hands/debug/calibration/calibration.npz");
+    }
+    catch (std::runtime_error &e)
+    {
+        std::cout << e.what() << std::endl;
+        return false;
+    }
     w2vc = glm::make_mat4(arr.data<double>());
     glm::mat4 vc2w = glm::inverse(w2vc);
-    cnpy::npz_t my_npz = cnpy::npz_load("C:/src/augmented_hands/debug/calibration/calibration.npz");
 
     float ffar = 500.0f;
     float nnear = 1.0f;
@@ -714,6 +742,7 @@ void loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, s
     // w2vc[2][3] *= 0.1f;
     w2vc = glm::inverse(vc2w);
     w2vc = glm::transpose(w2vc);
+    return true;
 }
 
 void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world, std::vector<glm::vec3> &skeleton_vertices, bool debug)

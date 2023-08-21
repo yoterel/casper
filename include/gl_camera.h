@@ -24,7 +24,7 @@ enum Camera_Mode
     FIXED_CAMERA
 };
 // Default camera values
-const float YAW = -90.0f;
+const float YAW = 180.0f;
 const float PITCH = 0.0f;
 const float SPEED = 10.0f;
 const float SENSITIVITY = 0.1f;
@@ -34,9 +34,8 @@ const float ZOOM = 45.0f;
 class GLCamera
 {
 public:
-    GLCamera(glm::vec3 position, glm::vec3 up);
+    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode);
     GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front);
-    GLCamera(glm::vec3 position, glm::vec3 up, float yaw, float pitch);
     GLCamera(glm::mat4 world2local, glm::mat4 projection);
     GLCamera(){};
     GLCamera(GLCamera &s)
@@ -57,6 +56,7 @@ public:
     }
     GLCamera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw, float pitch);
     glm::mat4 getViewMatrix();
+    glm::mat4 getLocal2WorldMatrix();
     glm::mat4 getProjectionMatrix();
     glm::vec3 getPos();
     void processKeyboard(Camera_Movement direction, float deltaTime);
