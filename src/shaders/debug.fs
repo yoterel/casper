@@ -12,5 +12,5 @@ void main()
     // FragColor = texture(src, col.xy / resolution);
 	// FragColor = vec4(col.x / resolution.x, col.y / resolution.y, col.z, 1.0);
 	// FragColor = texture(src, TexCoord);
-	FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+	FragColor = vec4(1.0, 0.0, 1.0, 1.0);
 }

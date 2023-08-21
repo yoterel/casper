@@ -54,7 +54,7 @@ void Canvas::Clear()
         // m_texture_dst = 0;
     }
 }
-void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, bool use_pbo)
+void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_pbo)
 {
     if (use_pbo)
     {
@@ -77,7 +77,8 @@ void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, bool use_pbo)
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
     }
     shader.setInt("src", 0);
-    m_quad.render();
+    quad.render();
+    // m_quad.render();
 }
 void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
 {

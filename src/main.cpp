@@ -487,20 +487,12 @@ int main(int argc, char *argv[])
             }
             else
             {
-                // skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
+                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
                 t2.stop();
             }
         }
         if (debug_mode)
         {
-            // draw camera input to near plane of vproj frustrum
-            debugShader.use();
-            debugShader.setBool("flipVer", false);
-            debugShader.setMat4("projection", vproj_projection_transform);
-            debugShader.setMat4("view", vproj_view_transform);
-            debugShader.setMat4("model", glm::mat4(1.0f));
-            // debugShader.setMat4("model", mm_to_cm);
-            canvas.RenderBuffer(debugShader, buffer);
             // draws global coordinate system gizmo at origin
             vcolorShader.use();
             vcolorShader.setMat4("projection", flycam_projection_transform);
@@ -542,6 +534,19 @@ int main(int argc, char *argv[])
             glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * frustumVerticesData.size(), frustumVerticesData.data(), GL_STATIC_DRAW);
             glBindVertexArray(frustrumVAO);
             glDrawArrays(GL_LINES, 0, static_cast<int>(frustumVerticesData.size()));
+            // draw camera input to near plane of vproj frustrum
+            debugShader.use();
+            debugShader.setBool("flipVer", false);
+            debugShader.setMat4("projection", flycam_projection_transform);
+            debugShader.setMat4("view", flycam_view_transform);
+            debugShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
+            std::vector<glm::vec3> nearVerts(4);
+            nearVerts[0] = frustumVerticesData[0];
+            nearVerts[1] = frustumVerticesData[2];
+            nearVerts[2] = frustumVerticesData[4];
+            nearVerts[3] = frustumVerticesData[6];
+            Quad nearQuad(nearVerts);
+            canvas.RenderBuffer(debugShader, buffer, nearQuad);
             // draws text
             glm::vec3 cam_pos = gl_flycamera.getPos();
             glm::vec3 cam_front = gl_flycamera.getFront();
