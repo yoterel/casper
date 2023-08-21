@@ -32,9 +32,10 @@ void processInput(GLFWwindow *window);
 void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world, std::vector<glm::vec3> &skeleton_vertices, bool debug);
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
+void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO);
+void setup_frustrum_buffers(unsigned int &VAO, unsigned int &VBO);
 void initGLBuffers(unsigned int *pbo);
 bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc);
-// unsigned int setup_cube_buffers();
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
 // global settings
@@ -53,7 +54,7 @@ const unsigned int cam_width = 720;
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
-double deltaTime = 0.0;
+float deltaTime = 0.0f;
 double lastFrame = 0.0;
 unsigned int fps = 0;
 float ms_per_frame = 0;
@@ -65,6 +66,7 @@ bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
 // GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
+GLCamera gl_flycamera;
 GLCamera gl_camera;
 GLCamera gl_projector;
 // GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
@@ -153,6 +155,10 @@ int main(int argc, char *argv[])
     setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
     unsigned int gizmoVAO, gizmoVBO;
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
+    unsigned int cubeVAO, cubeVBO;
+    setup_cube_buffers(cubeVAO, cubeVBO);
+    unsigned int frustrumVAO, frustrumVBO;
+    setup_frustrum_buffers(frustrumVAO, frustrumVBO);
     unsigned int pbo[2] = {0};
     if (use_pbo)
     {
@@ -179,6 +185,41 @@ int main(int argc, char *argv[])
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     Text text("C:/src/augmented_hands/resource/arial.ttf");
+    std::array<glm::vec3, 28> frustumCornerVertices{
+        {// near
+         {-1.0f, -1.0f, -1.0f},
+         {1.0f, -1.0f, -1.0f},
+         {1.0f, -1.0f, -1.0f},
+         {1.0f, 1.0f, -1.0f},
+         {1.0f, 1.0f, -1.0f},
+         {-1.0f, 1.0f, -1.0f},
+         {-1.0f, 1.0f, -1.0f},
+         {-1.0f, -1.0f, -1.0f},
+         // far
+         {-1.0f, -1.0f, 1.0f},
+         {1.0f, -1.0f, 1.0f},
+         {1.0f, -1.0f, 1.0f},
+         {1.0f, 1.0f, 1.0f},
+         {1.0f, 1.0f, 1.0f},
+         {-1.0f, 1.0f, 1.0f},
+         {-1.0f, 1.0f, 1.0f},
+         {-1.0f, -1.0f, 1.0f},
+         // connect
+         {-1.0f, -1.0f, 1.0f},
+         {-1.0f, -1.0f, -1.0f},
+         {1.0f, -1.0f, 1.0f},
+         {1.0f, -1.0f, -1.0f},
+         {1.0f, 1.0f, 1.0f},
+         {1.0f, 1.0f, -1.0f},
+         {-1.0f, 1.0f, 1.0f},
+         {-1.0f, 1.0f, -1.0f},
+         // hat
+         {-1.0f, 1.0f, -1.0f},
+         {0.0f, 1.5f, -1.0f},
+         {0.0f, 1.5f, -1.0f},
+         {1.0f, 1.0f, -1.0f}}};
+
+    std::array<glm::vec3, 56> frustumVerticesData;
     /* setup shaders*/
     Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
     Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
@@ -233,28 +274,33 @@ int main(int argc, char *argv[])
     std::vector<double> camera_distortion;
     glm::mat4 w2vp;
     glm::mat4 w2vc;
-    if (loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc) && !freecam_mode)
+    if (loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc))
     {
-        std::cout << "Using calibration data for camera and projector settings" << std::endl;
-        gl_camera = GLCamera(w2vc, vcam_project);
-        gl_projector = GLCamera(w2vp, vproj_project);
+        std::cout << "Using calibration data for camera and projector settings (fixed camera)" << std::endl;
+        gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA);
+        gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FIXED_CAMERA);
+        if (freecam_mode)
+            // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
+            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
+        else
+            gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA);
     }
     else
     {
-        std::cout << "Using hard-coded values for camera and projector settings" << std::endl;
+        std::cout << "Using hard-coded values for camera and projector settings (freecam)" << std::endl;
         // controlled
-        gl_camera = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
-        gl_projector = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
+        gl_camera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
+        gl_projector = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
+        if (freecam_mode)
+            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
+        else
+            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
         // fixed
         // gl_camera = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
         // gl_projector = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
     }
-    // setup virtual camera and projector
-    // GLCamera gl_camera2 = GLCamera(glm::vec3(0.0f, 10.0f, 39.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-    // glm::mat4 test1 = gl_camera.GetViewMatrix();
-    // glm::mat4 test2 = gl_camera_old.GetViewMatrix();
-    // actual thread loops
-    // image producer
+    /* actual thread loops */
+    /* image producer (real camera = virtual projector) */
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f * 2.0f) && !producer_is_fake)
     {
         /* real producer */
@@ -287,7 +333,7 @@ int main(int argc, char *argv[])
             std::cout << "Producer finish" << std::endl;
         });
     }
-    // image consumer
+    // image consumer (real projector = virtual camera)
     consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
         uint8_t *image;
         // std::vector<uint8_t> image;
@@ -304,7 +350,7 @@ int main(int argc, char *argv[])
         }
         std::cout << "Consumer finish" << std::endl;
     });
-    // main loop
+    /* main loop */
     while (!glfwWindowShouldClose(window))
     {
         t_misc.start();
@@ -313,7 +359,7 @@ int main(int argc, char *argv[])
         currentFrame = glfwGetTime();
         std::modf(currentFrame, &whole);
         LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
-        deltaTime = currentFrame - lastFrame;
+        deltaTime = static_cast<float>(currentFrame - lastFrame);
         lastFrame = currentFrame;
         frameCount++;
         // stats display
@@ -351,7 +397,6 @@ int main(int argc, char *argv[])
             t_misc.reset();
             canvas.resetTimers();
         }
-
         // input
         processInput(window);
         // render
@@ -381,11 +426,11 @@ int main(int argc, char *argv[])
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         getLeapFrame(leap, targetFrameTime, bones_to_world, skeleton_vertices, debug_mode);
         glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
-        glm::mat4 vproj_view_transform = gl_projector.getViewMatrix();
         glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
+        glm::mat4 vproj_view_transform = gl_projector.getViewMatrix();
         glm::mat4 vproj_projection_transform = gl_projector.getProjectionMatrix();
-        // glm::mat4 test = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 500.0f); // (float)proj_width / (float)proj_height
-        // glm::mat4 projector_projection_transform = glm::perspective(glm::radians(gl_camera.Zoom), 1.0f, 1.0f, 500.0f); // (float)proj_width / (float)proj_height
+        glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
+        glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
         t1.stop();
         if (bones_to_world.size() > 0)
         {
@@ -398,15 +443,11 @@ int main(int argc, char *argv[])
                 glBufferData(GL_ARRAY_BUFFER, sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
                 n_skeleton_primitives = skeleton_vertices.size();
                 vcolorShader.use();
-                vcolorShader.setMat4("projection", vcam_projection_transform);
-                vcolorShader.setMat4("view", vcam_view_transform);
+                vcolorShader.setMat4("projection", flycam_projection_transform);
+                vcolorShader.setMat4("view", flycam_view_transform);
                 vcolorShader.setMat4("model", mm_to_cm);
                 glBindVertexArray(skeletonVAO);
                 glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
-                // draws global coordinate system gizmo
-                vcolorShader.setMat4("model", glm::mat4(1.0f));
-                glBindVertexArray(gizmoVAO);
-                glDrawArrays(GL_LINES, 0, 6);
                 // draw circle oriented like hand palm from leap motion
                 // glBindVertexArray(circleVAO);
                 // vcolorShader.setMat4("model", bones_to_world[0]);
@@ -434,7 +475,7 @@ int main(int argc, char *argv[])
             // draw skinned mesh
             skinnedShader.use();
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
+            skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
             skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
             bool use_FBO = false;
             if (use_FBO)
@@ -453,15 +494,59 @@ int main(int argc, char *argv[])
         }
         if (debug_mode)
         {
-            glm::vec3 cam_pos = gl_camera.getPos();
+            // draws global coordinate system gizmo at origin
+            vcolorShader.use();
+            vcolorShader.setMat4("projection", flycam_projection_transform);
+            vcolorShader.setMat4("view", flycam_view_transform);
+            vcolorShader.setMat4("model", glm::mat4(3.0f));
+            glBindVertexArray(gizmoVAO);
+            glDrawArrays(GL_LINES, 0, 6);
+            // draws cube at world origin
+            glDisable(GL_CULL_FACE);
+            vcolorShader.setMat4("model", glm::mat4(1.0f));
+            glBindVertexArray(cubeVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+            glEnable(GL_CULL_FACE);
+            // draws frustrum of projector (=vcam)
+            vcolorShader.use();
+            vcolorShader.setMat4("projection", flycam_projection_transform);
+            vcolorShader.setMat4("view", flycam_view_transform);
+            vcolorShader.setMat4("model", glm::mat4(1.0f));
+            glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+            for (int i = 0; i < frustumVerticesData.size(); i += 2)
+            {
+                glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i / 2], 1.0f);
+                frustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
+                frustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
+            }
+            glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
+            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * frustumVerticesData.size(), frustumVerticesData.data(), GL_STATIC_DRAW);
+            glBindVertexArray(frustrumVAO);
+            glDrawArrays(GL_LINES, 0, static_cast<int>(frustumVerticesData.size()));
+            // draws frustrum of camera (=vproj)
+            glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+            for (int i = 0; i < frustumVerticesData.size(); i += 2)
+            {
+                glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(frustumCornerVertices[i / 2], 1.0f);
+                frustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
+                frustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
+            }
+            glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
+            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * frustumVerticesData.size(), frustumVerticesData.data(), GL_STATIC_DRAW);
+            glBindVertexArray(frustrumVAO);
+            glDrawArrays(GL_LINES, 0, static_cast<int>(frustumVerticesData.size()));
+            // draws text
+            glm::vec3 cam_pos = gl_flycamera.getPos();
+            glm::vec3 cam_front = gl_flycamera.getFront();
             glm::vec3 proj_pos = gl_projector.getPos();
             t3.start();
             text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             t3.stop();
-            text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_camera.Zoom), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_flycamera.Zoom), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("vcamera front: {:.02f}, {:.02f}, {:.02f}", cam_front.x, cam_front.y, cam_front.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             // text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         }
 
         // send result to projector queue
@@ -610,17 +695,17 @@ void processInput(GLFWwindow *window)
         glfwSetWindowShouldClose(window, true);
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        gl_camera.processKeyboard(FORWARD, deltaTime);
+        gl_flycamera.processKeyboard(FORWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        gl_camera.processKeyboard(BACKWARD, deltaTime);
+        gl_flycamera.processKeyboard(BACKWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        gl_camera.processKeyboard(LEFT, deltaTime);
+        gl_flycamera.processKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        gl_camera.processKeyboard(RIGHT, deltaTime);
+        gl_flycamera.processKeyboard(RIGHT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-        gl_camera.processKeyboard(UP, deltaTime);
+        gl_flycamera.processKeyboard(UP, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-        gl_camera.processKeyboard(DOWN, deltaTime);
+        gl_flycamera.processKeyboard(DOWN, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
     {
         space_pressed_flag = true;
@@ -664,17 +749,20 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
     lastX = xpos;
     lastY = ypos;
 
-    gl_camera.processMouseMovement(xoffset, yoffset);
+    gl_flycamera.processMouseMovement(xoffset, yoffset);
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
 // ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
-    gl_camera.processMouseScroll(static_cast<float>(yoffset));
+    gl_flycamera.processMouseScroll(static_cast<float>(yoffset));
 }
 
-bool loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc)
+bool loadCalibrationResults(glm::mat4 &vcam_project,
+                            glm::mat4 &vproj_project,
+                            std::vector<double> &camera_distortion,
+                            glm::mat4 &w2vp, glm::mat4 &w2vc)
 {
     // vp = virtual projector
     // vc = virtual camera
@@ -696,7 +784,7 @@ bool loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, s
     w2vc = glm::make_mat4(arr.data<double>());
     glm::mat4 vc2w = glm::inverse(w2vc);
 
-    float ffar = 500.0f;
+    float ffar = 100.0f;
     float nnear = 1.0f;
     glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
     float vpfx = camera_intrinsics[0][0];
@@ -711,7 +799,7 @@ bool loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, s
     vproj_project[2][2] = -(ffar + nnear) / (ffar - nnear);
     vproj_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
     vproj_project[3][2] = -1.0f;
-
+    vproj_project = glm::transpose(vproj_project);
     glm::mat3 projector_intrinsics = glm::make_mat3(my_npz["proj_intrinsics"].data<double>());
     float vcfx = projector_intrinsics[0][0];
     float vcfy = projector_intrinsics[1][1];
@@ -726,7 +814,7 @@ bool loadCalibrationResults(glm::mat4 &vcam_project, glm::mat4 &vproj_project, s
     vcam_project[2][2] = -(ffar + nnear) / (ffar - nnear);
     vcam_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
     vcam_project[3][2] = -1.0f;
-
+    vcam_project = glm::transpose(vcam_project);
     camera_distortion = my_npz["cam_distortion"].as_vec<double>();
     glm::mat4 vp2vc = glm::make_mat4(my_npz["proj_transform"].data<double>()); // this is a real projector to camera transform
     glm::mat4 vp2w = vp2vc * vc2w;                                             // since glm uses column major, we multiply from the left...
@@ -892,71 +980,116 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
 // // canvasShader.setInt("camera_texture", 0);
 // // canvasShader.setFloat("threshold", bg_thresh);
 // glm::mat4 canvas_projection_mat = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
+void setup_frustrum_buffers(unsigned int &VAO, unsigned int &VBO)
+{
+    float vertices[] = {
+        // frame near
+        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        // frame far
+        -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        // connect frames
+        -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        // hat
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        0.0f, 1.5f, -1.0f, 1.0f, 1.0f, 1.0f,
+        0.0f, 1.5f, -1.0f, 1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f};
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
 
-//     unsigned int setup_cube_buffers()
-// {
-//     // set up vertex data (and buffer(s)) and configure vertex attributes
-//     // ------------------------------------------------------------------
-//     // ------------------------------------------------------------------
-//     float vertices[] = {
-//     -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
-//      0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-//     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-//     -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-//      0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-//      0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-//      0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-//     -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
-//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+    // color attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+}
+void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO)
+{
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    float vertices[] = {
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, 0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
 
-//     -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-//     -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-//     -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+        0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+        -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f,
 
-//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-//      0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-//      0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-//      0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, 0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
 
-//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-//      0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
-//      0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-//      0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-//     -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-//     -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+        0.5f, 0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
 
-//     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-//      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-//      0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-//     -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
-//     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
-//     };
-//     unsigned int VBO, VAO;
-//     glGenVertexArrays(1, &VAO);
-//     glGenBuffers(1, &VBO);
-//     glBindVertexArray(VAO);
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+        0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
 
-//     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-//     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+        -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f};
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
 
-//     // position attribute
-//     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-//     glEnableVertexAttribArray(0);
-//     // texture coord attribute
-//     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-//     glEnableVertexAttribArray(1);
-//     return VAO;
-// }
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+    // color coord attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+}
 
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
 // {

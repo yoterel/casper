@@ -24,7 +24,7 @@ enum Camera_Mode
     FIXED_CAMERA
 };
 // Default camera values
-const float YAW = 180.0f;
+const float YAW = -90.0f;
 const float PITCH = 0.0f;
 const float SPEED = 10.0f;
 const float SENSITIVITY = 0.1f;
@@ -35,8 +35,8 @@ class GLCamera
 {
 public:
     GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode);
+    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode);
     GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front);
-    GLCamera(glm::mat4 world2local, glm::mat4 projection);
     GLCamera(){};
     GLCamera(GLCamera &s)
     {
@@ -50,7 +50,7 @@ public:
         MovementSpeed = s.MovementSpeed;
         MouseSensitivity = s.MouseSensitivity;
         Zoom = s.Zoom;
-        mode = s.mode;
+        m_mode = s.m_mode;
         viewMatrix = s.viewMatrix;
         projectionMatrix = s.projectionMatrix;
     }
@@ -59,6 +59,7 @@ public:
     glm::mat4 getLocal2WorldMatrix();
     glm::mat4 getProjectionMatrix();
     glm::vec3 getPos();
+    glm::vec3 getFront();
     void processKeyboard(Camera_Movement direction, float deltaTime);
     void processMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch = true);
     void processMouseScroll(float yoffset);
@@ -77,7 +78,7 @@ private:
     glm::vec3 Up;
     glm::vec3 Right;
     glm::vec3 WorldUp;
-    Camera_Mode mode;
+    Camera_Mode m_mode;
     glm::mat4 viewMatrix;
     glm::mat4 projectionMatrix;
     void updateCameraVectors();

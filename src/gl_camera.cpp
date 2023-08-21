@@ -7,12 +7,11 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode) 
                                                                                   Pitch(PITCH)
 {
     projectionMatrix = glm::perspective(glm::radians(Zoom), 1.0f, 1.0f, 500.0f);
-    if (mode == Camera_Mode::FIXED_CAMERA)
+    m_mode = mode;
+    if (m_mode == Camera_Mode::FIXED_CAMERA)
     {
         glm::vec3 front = glm::normalize(at - eye);
         Front = glm::normalize(front);
-        // Pitch = asin(Front.y);
-        // Yaw = atan2(Front.x, Front.z);
         Position = eye;
         WorldUp = up;
         Right = glm::normalize(glm::cross(Front, WorldUp)); // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
@@ -21,6 +20,9 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode) 
     }
     else
     {
+        glm::vec3 front = glm::normalize(at - eye);
+        Pitch = glm::degrees(asin(front.y));
+        Yaw = glm::degrees(atan2(front.z, front.x));
         Position = eye;
         WorldUp = up;
         updateCameraVectors();
@@ -29,7 +31,7 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode) 
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front) : MovementSpeed(SPEED),
                                                                         MouseSensitivity(SENSITIVITY),
                                                                         Zoom(ZOOM),
-                                                                        mode(Camera_Mode::FIXED_CAMERA)
+                                                                        m_mode(Camera_Mode::FIXED_CAMERA)
 {
     projectionMatrix = glm::perspective(glm::radians(Zoom), 1.0f, 1.0f, 500.0f);
     Front = glm::normalize(front);
@@ -41,7 +43,10 @@ GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front) : Movement
     Up = glm::normalize(glm::cross(Right, Front));
     viewMatrix = glm::lookAt(Position, Position + Front, Up);
 }
-GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection) : MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM), mode(Camera_Mode::FIXED_CAMERA)
+GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode) : MovementSpeed(SPEED),
+                                                                                    MouseSensitivity(SENSITIVITY),
+                                                                                    Zoom(ZOOM),
+                                                                                    m_mode(mode)
 {
     projectionMatrix = projection;
     // glm::mat4 flipYZ = glm::mat4(1.0f);
@@ -53,6 +58,13 @@ GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection) : MovementSpeed(
     world2local[3][2] *= 0.1f;
     // viewMatrix = glm::transpose(openglMatrix);
     viewMatrix = world2local;
+    glm::mat4 local2world = getLocal2WorldMatrix();
+    glm::vec3 front = glm::vec3(local2world[2][0], local2world[2][1], local2world[2][2]);
+    Pitch = glm::degrees(asin(front.y));
+    Yaw = glm::degrees(atan2(front.z, front.x));
+    Position = glm::vec3(local2world[3][0], local2world[3][1], local2world[3][2]);
+    WorldUp = glm::vec3(local2world[1][0], local2world[1][1], local2world[1][2]);
+    updateCameraVectors();
     // std::cout << "OpenCV matrix: " << std::endl;
     // Position = glm::vec3(openglMatrix[0][3] / 10, openglMatrix[1][3] / 10, openglMatrix[2][3] / 10);
     // Right = glm::vec3(openglMatrix[0][0], openglMatrix[1][0], openglMatrix[2][0]);
@@ -81,6 +93,13 @@ glm::vec3 GLCamera::getPos()
     glm::mat4 local2world = getLocal2WorldMatrix();
     return glm::vec3(local2world[3][0], local2world[3][1], local2world[3][2]);
 }
+
+glm::vec3 GLCamera::getFront()
+{
+    glm::mat4 local2world = getLocal2WorldMatrix();
+    return glm::vec3(local2world[2][0], local2world[2][1], local2world[2][2]);
+}
+
 // processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
 void GLCamera::processKeyboard(Camera_Movement direction, float deltaTime)
 {
@@ -106,7 +125,7 @@ void GLCamera::processKeyboard(Camera_Movement direction, float deltaTime)
 // processes input received from a mouse input system. Expects the offset value in both the x and y direction.
 void GLCamera::processMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch)
 {
-    if (mode == Camera_Mode::FREE_CAMERA)
+    if (m_mode == Camera_Mode::FREE_CAMERA)
     {
         xoffset *= MouseSensitivity;
         yoffset *= MouseSensitivity;
@@ -141,7 +160,7 @@ void GLCamera::processMouseScroll(float yoffset)
 // calculates the front vector from the Camera's (updated) Euler Angles
 void GLCamera::updateCameraVectors()
 {
-    switch (mode)
+    switch (m_mode)
     {
     case Camera_Mode::ORBIT_CAMERA:
     {
