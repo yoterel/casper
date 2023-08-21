@@ -4,11 +4,13 @@
 #include "shader.h"
 #include "timer.h"
 #include "opencv2/opencv.hpp"
-//GL includes
+// GL includes
 #include <glad/glad.h>
 // CUDA includes
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
+#include "quad.h"
+#include "fbo.h"
 // #define USE_TEXSUBIMAGE2D
 // #define USE_TEXTURE_RGBA8UI
 extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
@@ -23,12 +25,14 @@ public:
     Canvas(unsigned int m_srcWidth, unsigned int m_srcHeight,
            unsigned int m_dstWidth, unsigned int m_dstHeight,
            bool use_cuda);
-    ~Canvas(){ Clear(); };
-    void Render(Shader& shader, uint8_t* buffer);
-    void Render(Shader& jfaInit, Shader& jfa, Shader& fast_tracker,
-                unsigned int texture, uint8_t* buffer, bool use_pbo = true);
-    void getTimerValues(double& time0, double& time1, double& time2);
+    ~Canvas() { Clear(); };
+    void Render(Shader &shader, uint8_t *buffer);
+    void Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker,
+                unsigned int texture, uint8_t *buffer, bool use_pbo = true);
+    void RenderBuffer(Shader &shader, uint8_t *buffer, bool use_pbo = true);
+    void getTimerValues(double &time0, double &time1, double &time2);
     void resetTimers();
+
 private:
     void initGLBuffers();
     // void CreateTexture();
@@ -36,25 +40,23 @@ private:
     void ProcesssWithCuda();
     void ProcesssWithGL();
     bool m_use_cuda;
-    unsigned int m_VAO = 0;
-    unsigned int m_VBO = 0;
-    unsigned int m_EBO = 0;
-    unsigned int m_depth_buffer[2] = { 0 };
-    unsigned int m_FBO[2] = { 0 };
-    unsigned int m_pingpong_textures[2] = { 0 };
+    Quad m_quad = Quad();
+    unsigned int m_depth_buffer[2] = {0};
+    unsigned int m_FBO[2] = {0};
+    unsigned int m_pingpong_textures[2] = {0};
     // unsigned int m_texture_dst;  // create texture that will receive the result of CUDA
-    unsigned int m_texture_src;  // create texture for blitting onto the screen
+    unsigned int m_texture_src; // create texture for blitting onto the screen
     float bg_thresh = 0.05f;
     unsigned int m_srcWidth, m_srcHeight;
     unsigned int m_dstWidth, m_dstHeight;
     // #ifdef USE_TEXSUBIMAGE2D
     unsigned int m_PBO = 0;
-    struct cudaGraphicsResource* m_PBO_CUDA = NULL;
+    struct cudaGraphicsResource *m_PBO_CUDA = NULL;
     // #else
     unsigned int *m_cuda_dest_resource = NULL;
-    struct cudaGraphicsResource* m_cuda_tex_result_resource = NULL;
+    struct cudaGraphicsResource *m_cuda_tex_result_resource = NULL;
     // #endif
-    struct cudaGraphicsResource* m_cuda_tex_screen_resource = NULL;
+    struct cudaGraphicsResource *m_cuda_tex_screen_resource = NULL;
     unsigned int m_size_tex_data;
     unsigned int m_num_texels;
     unsigned int m_num_values;

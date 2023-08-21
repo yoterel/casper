@@ -66,6 +66,8 @@ add_executable(ahand
     src/cuda/cuda2gl.cu
     src/image_process.cpp
     src/cnpy.cpp
+    src/fbo.cpp
+    src/quad.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)

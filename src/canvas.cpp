@@ -33,21 +33,6 @@ void Canvas::Clear()
     // #else
     // cudaFree(m_cuda_dest_resource);
     // #endif
-    if (m_VBO != 0)
-    {
-        glDeleteBuffers(1, &m_VBO);
-        m_VBO = 0;
-    }
-    if (m_EBO != 0)
-    {
-        glDeleteBuffers(1, &m_EBO);
-        m_EBO = 0;
-    }
-    if (m_VAO != 0)
-    {
-        glDeleteVertexArrays(1, &m_VAO);
-        m_VAO = 0;
-    }
     if (m_texture_src != 0)
     {
         glDeleteTextures(1, &m_texture_src);
@@ -68,6 +53,31 @@ void Canvas::Clear()
         glDeleteTextures(2, m_pingpong_textures);
         // m_texture_dst = 0;
     }
+}
+void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, bool use_pbo)
+{
+    if (use_pbo)
+    {
+        // transfer data from memory to GPU texture (using PBO)
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
+        glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
+        GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+        if (ptr)
+        {
+            memcpy(ptr, buffer, m_size_tex_data);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
+        }
+        glBindTexture(GL_TEXTURE_2D, m_texture_src);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
+    else
+    {
+        glBindTexture(GL_TEXTURE_2D, m_texture_src);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
+    }
+    shader.setInt("src", 0);
+    m_quad.render();
 }
 void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
 {
@@ -107,14 +117,7 @@ void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned
     glViewport(0, 0, m_dstWidth, m_dstHeight);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
-    glBindVertexArray(m_VAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
+    m_quad.render();
     glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[1]);
     glViewport(0, 0, m_dstWidth, m_dstHeight);
@@ -152,14 +155,7 @@ void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned
         jfa.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
         jfa.setInt("pass", i);
         jfa.setInt("numPasses", numPasses);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-        glDisable(GL_BLEND);
-        glBindVertexArray(m_VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        glEnable(GL_CULL_FACE);
-        glEnable(GL_BLEND);
-        glEnable(GL_DEPTH_TEST);
+        m_quad.render();
         glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[(i + 1) % 2]);
         glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[i % 2]);
         // glViewport(0, 0, m_srcWidth, m_srcHeight);
@@ -181,14 +177,7 @@ void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned
     fast_tracker.setInt("cam_image", 2);
     fast_tracker.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
     fast_tracker.setBool("flipVer", false);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
-    glBindVertexArray(m_VAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
+    m_quad.render();
     t2.stop();
 }
 void Canvas::Render(Shader &shader, uint8_t *buffer)
@@ -245,22 +234,7 @@ void Canvas::Render(Shader &shader, uint8_t *buffer)
     shader.setFloat("threshold", bg_thresh);
     shader.setBool("flipVer", true);
     // draw texture on quad
-    glDisable(GL_DEPTH_TEST);
-    // glCheckError();
-    glDisable(GL_CULL_FACE);
-    // glCheckError();
-    glDisable(GL_BLEND);
-    // glCheckError();
-    glBindVertexArray(m_VAO);
-    // glCheckError();
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    // glCheckError();
-    glEnable(GL_CULL_FACE);
-    // glCheckError();
-    glEnable(GL_BLEND);
-    // glCheckError();
-    glEnable(GL_DEPTH_TEST);
-    // glCheckError();
+    m_quad.render();
 }
 
 void Canvas::ProcesssWithCuda()
@@ -415,56 +389,6 @@ void Canvas::initGLBuffers()
         }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
-    // glCheckError();
-
-    // set up vertex data (and buffer(s)) and configure vertex attributes
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
-    float vertices[] = {
-        // positions          // colors           // texture coords
-        1.0f, 1.0f, 0.0f, 1.0f, 1.0f,   // top right
-        1.0f, -1.0f, 0.0f, 1.0f, 0.0f,  // bottom right
-        -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, // bottom left
-        -1.0f, 1.0f, 0.0f, 0.0f, 1.0f   // top left
-    };
-    unsigned int indices[] = {
-        0, 1, 3, // first triangle
-        1, 2, 3  // second triangle
-    };
-
-    // unsigned int VBO, VAO, EBO;
-    glGenVertexArrays(1, &m_VAO);
-    // glCheckError();
-    glGenBuffers(1, &m_VBO);
-    // glCheckError();
-    glGenBuffers(1, &m_EBO);
-    // glCheckError();
-
-    glBindVertexArray(m_VAO);
-    // glCheckError();
-
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    // glCheckError();
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    // glCheckError();
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
-    // glCheckError();
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-    // glCheckError();
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
-    // glCheckError();
-    glEnableVertexAttribArray(0);
-    // glCheckError();
-    //  texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
-    // glCheckError();
-    glEnableVertexAttribArray(1);
-    // glCheckError();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
     // glCheckError();
 }
 void Canvas::getTimerValues(double &time0, double &time1, double &time2)

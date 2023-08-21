@@ -14,6 +14,7 @@
 #include "assimp_helpers.h"
 #include "material.h"
 #include "skinned_shader.h"
+#include "fbo.h"
 
 #define INVALID_MATERIAL 0xFFFFFFFF
 #define ASSIMP_LOAD_FLAGS (aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices)
@@ -112,6 +113,7 @@ public:
         m_height = proj_height;
         m_camHeight = cam_height;
         m_camWidth = cam_width;
+        m_fbo = FBO(m_width, m_height);
         bool success = LoadMesh(Filename);
         if (!success)
         {
@@ -137,7 +139,7 @@ public:
     void GetBoneTransformRelativeToParent(std::vector<glm::mat4> &Transforms);
     unsigned int GetFBOTexture()
     {
-        return m_fbo_texture;
+        return m_fbo.getTexture();
     };
 
 private:
@@ -169,7 +171,8 @@ private:
     unsigned int m_camWidth, m_camHeight;
     unsigned int m_VAO = 0;
     unsigned int m_Buffers[NUM_BUFFERS] = {0};
-    unsigned int m_FBO, m_fbo_depth_buffer, m_fbo_texture;
+    // unsigned int m_FBO, m_fbo_depth_buffer, m_fbo_texture;
+    FBO m_fbo;
     unsigned int m_cam_texture;
 
     Assimp::Importer Importer;

@@ -59,7 +59,7 @@ GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode
     // viewMatrix = glm::transpose(openglMatrix);
     viewMatrix = world2local;
     glm::mat4 local2world = getLocal2WorldMatrix();
-    glm::vec3 front = glm::vec3(local2world[2][0], local2world[2][1], local2world[2][2]);
+    glm::vec3 front = glm::vec3(-local2world[2][0], -local2world[2][1], -local2world[2][2]);
     Pitch = glm::degrees(asin(front.y));
     Yaw = glm::degrees(atan2(front.z, front.x));
     Position = glm::vec3(local2world[3][0], local2world[3][1], local2world[3][2]);

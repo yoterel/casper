@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
     glm::mat4 w2vc;
     if (loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc))
     {
-        std::cout << "Using calibration data for camera and projector settings (fixed camera)" << std::endl;
+        std::cout << "Using calibration data for camera and projector settings" << std::endl;
         gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA);
         gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FIXED_CAMERA);
         if (freecam_mode)
@@ -287,21 +287,17 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cout << "Using hard-coded values for camera and projector settings (freecam)" << std::endl;
-        // controlled
+        std::cout << "Using hard-coded values for camera and projector settings" << std::endl;
         gl_camera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
         gl_projector = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
         if (freecam_mode)
             gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
         else
             gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
-        // fixed
-        // gl_camera = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
-        // gl_projector = GLCamera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
     }
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f * 2.0f) && !producer_is_fake)
+    if (camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f * 3) && !producer_is_fake)
     {
         /* real producer */
         std::cout << "using real camera to produce images" << std::endl;
@@ -354,8 +350,6 @@ int main(int argc, char *argv[])
     while (!glfwWindowShouldClose(window))
     {
         t_misc.start();
-        // per-frame time logic
-        // --------------------
         currentFrame = glfwGetTime();
         std::modf(currentFrame, &whole);
         LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
@@ -365,7 +359,6 @@ int main(int argc, char *argv[])
         // stats display
         if (currentFrame - previousTime >= 1.0)
         {
-            // Display the frame count here any way you want.
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
             double tpbo, ttex, tproc;
@@ -399,10 +392,10 @@ int main(int argc, char *argv[])
         }
         // input
         processInput(window);
-        // render
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         t_misc.stop();
         t0.start();
+        // retrieve camera image
         CPylonImage pylonImage = camera_queue.pop();
         uint8_t *buffer = (uint8_t *)pylonImage.GetBuffer();
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
@@ -422,9 +415,12 @@ int main(int argc, char *argv[])
         // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t0.stop();
         t1.start();
+        // sync leap clock
         std::modf(glfwGetTime(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+        // get leap frame
         getLeapFrame(leap, targetFrameTime, bones_to_world, skeleton_vertices, debug_mode);
+        // get view & projection transforms
         glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
         glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
         glm::mat4 vproj_view_transform = gl_projector.getViewMatrix();
@@ -432,6 +428,7 @@ int main(int argc, char *argv[])
         glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
         glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
         t1.stop();
+        // process leap frame
         if (bones_to_world.size() > 0)
         {
             t2.start();
@@ -440,11 +437,12 @@ int main(int argc, char *argv[])
             {
                 // draw skeleton vertices
                 glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-                glBufferData(GL_ARRAY_BUFFER, sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
-                n_skeleton_primitives = skeleton_vertices.size();
+                glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
+                n_skeleton_primitives = skeleton_vertices.size() / 2;
                 vcolorShader.use();
                 vcolorShader.setMat4("projection", flycam_projection_transform);
                 vcolorShader.setMat4("view", flycam_view_transform);
+                // vcolorShader.setMat4("model", glm::mat4(1.0f));
                 vcolorShader.setMat4("model", mm_to_cm);
                 glBindVertexArray(skeletonVAO);
                 glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
@@ -455,15 +453,16 @@ int main(int argc, char *argv[])
                 // draw skeleton bones (as gizmos representing their local coordinate system)
                 std::vector<glm::mat4> BoneToLocalTransforms;
                 skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
-                // in bind pose
+                glBindVertexArray(gizmoVAO);
                 for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
                 {
+                    // in bind pose
                     vcolorShader.setMat4("model", LocalToWorld * BoneToLocalTransforms[i]);
                     glDrawArrays(GL_LINES, 0, 6);
                 }
-                // in leap motion pose
                 for (unsigned int i = 0; i < bones_to_world.size(); i++)
                 {
+                    // in leap motion pose
                     vcolorShader.setMat4("model", bones_to_world[i]);
                     glDrawArrays(GL_LINES, 0, 6);
                 }
@@ -488,12 +487,20 @@ int main(int argc, char *argv[])
             }
             else
             {
-                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
+                // skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
                 t2.stop();
             }
         }
         if (debug_mode)
         {
+            // draw camera input to near plane of vproj frustrum
+            debugShader.use();
+            debugShader.setBool("flipVer", false);
+            debugShader.setMat4("projection", vproj_projection_transform);
+            debugShader.setMat4("view", vproj_view_transform);
+            debugShader.setMat4("model", glm::mat4(1.0f));
+            // debugShader.setMat4("model", mm_to_cm);
+            canvas.RenderBuffer(debugShader, buffer);
             // draws global coordinate system gizmo at origin
             vcolorShader.use();
             vcolorShader.setMat4("projection", flycam_projection_transform);
