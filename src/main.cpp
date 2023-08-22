@@ -224,6 +224,7 @@ int main(int argc, char *argv[])
     Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
     Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
     Shader textureShader("C:/src/augmented_hands/src/shaders/color_by_texture.vs", "C:/src/augmented_hands/src/shaders/color_by_texture.fs");
+    Shader lineShader("C:/src/augmented_hands/src/shaders/line_shader.vs", "C:/src/augmented_hands/src/shaders/line_shader.fs");
     Shader canvasShader;
     if (use_cuda)
         canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
@@ -296,7 +297,8 @@ int main(int argc, char *argv[])
     }
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f) && !producer_is_fake)
+    float exposure = 1850.0f;
+    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
     {
         /* real producer */
         std::cout << "using real camera to produce images" << std::endl;
@@ -508,35 +510,34 @@ int main(int argc, char *argv[])
             glDrawArrays(GL_TRIANGLES, 0, 36);
             glEnable(GL_CULL_FACE);
             // draws frustrum of projector (=vcam)
-            std::array<glm::vec3, 56> vprojFrustumVerticesData;
-            vcolorShader.use();
-            vcolorShader.setMat4("projection", flycam_projection_transform);
-            vcolorShader.setMat4("view", flycam_view_transform);
-            vcolorShader.setMat4("model", glm::mat4(1.0f));
+            std::vector<glm::vec3> vprojFrustumVerticesData(28);
+            lineShader.use();
+            lineShader.setMat4("projection", flycam_projection_transform);
+            lineShader.setMat4("view", flycam_view_transform);
+            lineShader.setMat4("model", glm::mat4(1.0f));
+            lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
             glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-            for (int i = 0; i < vprojFrustumVerticesData.size(); i += 2)
+            for (int i = 0; i < frustumCornerVertices.size(); ++i)
             {
-                glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i / 2], 1.0f);
+                glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
                 vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
-                vprojFrustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
             }
             glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
             glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vprojFrustumVerticesData.size(), vprojFrustumVerticesData.data(), GL_STATIC_DRAW);
             glBindVertexArray(frustrumVAO);
-            glDrawArrays(GL_LINES, 0, static_cast<int>(vprojFrustumVerticesData.size()));
+            glDrawArrays(GL_LINES, 0, 28);
             // draws frustrum of camera (=vproj)
-            std::array<glm::vec3, 56> vcamFrustumVerticesData;
+            std::vector<glm::vec3> vcamFrustumVerticesData(28);
             glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-            for (int i = 0; i < vcamFrustumVerticesData.size(); i += 2)
+            for (int i = 0; i < frustumCornerVertices.size(); ++i)
             {
-                glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(frustumCornerVertices[i / 2], 1.0f);
+                glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
                 vcamFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
-                vcamFrustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
             }
             glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
             glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vcamFrustumVerticesData.size(), vcamFrustumVerticesData.data(), GL_STATIC_DRAW);
             glBindVertexArray(frustrumVAO);
-            glDrawArrays(GL_LINES, 0, static_cast<int>(vcamFrustumVerticesData.size()));
+            glDrawArrays(GL_LINES, 0, 28);
             // draw camera input to near plane of vproj frustrum
             std::vector<glm::vec3> vprojNearVerts(4);
             textureShader.use();
@@ -546,9 +547,9 @@ int main(int argc, char *argv[])
             textureShader.setMat4("model", glm::mat4(1.0f));
             textureShader.setBool("binary", true);
             vprojNearVerts[0] = vprojFrustumVerticesData[0];
-            vprojNearVerts[1] = vprojFrustumVerticesData[4];
-            vprojNearVerts[2] = vprojFrustumVerticesData[8];
-            vprojNearVerts[3] = vprojFrustumVerticesData[12];
+            vprojNearVerts[1] = vprojFrustumVerticesData[2];
+            vprojNearVerts[2] = vprojFrustumVerticesData[4];
+            vprojNearVerts[3] = vprojFrustumVerticesData[6];
             Quad vcamNearQuad(vprojNearVerts);
             canvas.RenderBuffer(textureShader, buffer, vcamNearQuad);
             // draw projector output to near plane of vcam frustrum
@@ -562,9 +563,9 @@ int main(int argc, char *argv[])
             {
                 std::vector<glm::vec3> vcamNearVerts(4);
                 vcamNearVerts[0] = vcamFrustumVerticesData[0];
-                vcamNearVerts[1] = vcamFrustumVerticesData[4];
-                vcamNearVerts[2] = vcamFrustumVerticesData[8];
-                vcamNearVerts[3] = vcamFrustumVerticesData[12];
+                vcamNearVerts[1] = vcamFrustumVerticesData[2];
+                vcamNearVerts[2] = vcamFrustumVerticesData[4];
+                vcamNearVerts[3] = vcamFrustumVerticesData[6];
                 Quad vprovNearQuad(vcamNearVerts);
                 canvas.RenderTexture(textureShader, skinnedModel.m_fbo.getTexture(), vprovNearQuad);
             }
@@ -705,6 +706,7 @@ void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO)
     // color attribute
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 }
 
 void initGLBuffers(unsigned int *pbo)
@@ -1003,37 +1005,37 @@ void setup_frustrum_buffers(unsigned int &VAO, unsigned int &VBO)
 {
     float vertices[] = {
         // frame near
-        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, -1.0f,
+        1.0f, 1.0f, -1.0f,
+        1.0f, 1.0f, -1.0f,
+        -1.0f, 1.0f, -1.0f,
+        -1.0f, 1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
         // frame far
-        -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, -1.0f, 1.0f,
+        1.0f, -1.0f, 1.0f,
+        1.0f, -1.0f, 1.0f,
+        1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 1.0f,
+        -1.0f, -1.0f, 1.0f,
         // connect frames
-        -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, -1.0f, 1.0f,
+        -1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, 1.0f,
+        1.0f, -1.0f, -1.0f,
+        1.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, -1.0f,
+        -1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, -1.0f,
         // hat
-        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
-        0.0f, 1.5f, -1.0f, 1.0f, 1.0f, 1.0f,
-        0.0f, 1.5f, -1.0f, 1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f};
+        -1.0f, 1.0f, -1.0f,
+        0.0f, 1.5f, -1.0f,
+        0.0f, 1.5f, -1.0f,
+        1.0f, 1.0f, -1.0f};
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glBindVertexArray(VAO);
@@ -1042,11 +1044,9 @@ void setup_frustrum_buffers(unsigned int &VAO, unsigned int &VBO)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
-    // color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 }
 void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO)
 {
@@ -1108,6 +1108,7 @@ void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO)
     // color coord attribute
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 }
 
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
