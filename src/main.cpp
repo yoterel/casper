@@ -513,6 +513,7 @@ int main(int argc, char *argv[])
             glBindVertexArray(gizmoVAO);
             glDrawArrays(GL_LINES, 0, 6);
             // draws cube at world origin
+            glEnable(GL_DEPTH_TEST);
             glDisable(GL_CULL_FACE);
             vcolorShader.setMat4("model", glm::mat4(1.0f));
             glBindVertexArray(cubeVAO);
