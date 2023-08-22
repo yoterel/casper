@@ -6,7 +6,8 @@ Canvas::Canvas(unsigned int srcWidth, unsigned int srcHeight, unsigned int dstWi
                                                                                                                               m_srcHeight(srcHeight),
                                                                                                                               m_dstWidth(dstWidth),
                                                                                                                               m_dstHeight(dstHeight),
-                                                                                                                              m_use_cuda(use_cuda)
+                                                                                                                              m_use_cuda(use_cuda),
+                                                                                                                              m_quad(-1.0f)
 {
     m_num_texels = m_srcWidth * m_srcHeight;
     m_num_values = m_num_texels * 4;

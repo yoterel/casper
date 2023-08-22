@@ -41,7 +41,7 @@ private:
     void ProcesssWithCuda();
     void ProcesssWithGL();
     bool m_use_cuda;
-    Quad m_quad = Quad(-1.0f);
+    Quad m_quad;
     unsigned int m_depth_buffer[2] = {0};
     unsigned int m_FBO[2] = {0};
     unsigned int m_pingpong_textures[2] = {0};

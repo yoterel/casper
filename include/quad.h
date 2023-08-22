@@ -6,19 +6,16 @@
 class Quad
 {
 public:
-    Quad(float depth = 0.0f);
+    Quad(float depth);
     Quad(std::vector<glm::vec3> &vertices);
     ~Quad();
-    Quad(Quad &s) // copy constructor
-    {
-        m_VBO = s.m_VBO;
-        m_VAO = s.m_VAO;
-    }
     void render();
+    Quad(const Quad &) = delete;
+    Quad &operator=(const Quad &) = delete;
 
 private:
     void init(std::vector<float> &verts);
-    unsigned int m_VBO;
-    unsigned int m_VAO;
+    unsigned int m_VBO = 0;
+    unsigned int m_VAO = 0;
 };
 #endif

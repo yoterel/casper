@@ -92,7 +92,7 @@ void saveImage(std::string filepath, unsigned int texture, unsigned int width, u
     unsigned int nrChannels = 4;
     GLsizei stride = nrChannels * width;
     FBO fbo(width, height);
-    Quad quad = Quad();
+    Quad quad(0.0f);
     shader.use();
     shader.setInt("src", 0);
     shader.setBool("flipVer", false);

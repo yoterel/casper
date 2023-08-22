@@ -296,7 +296,7 @@ int main(int argc, char *argv[])
     }
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f * 3) && !producer_is_fake)
+    if (camera.init(camera_queue, close_signal, cam_height, cam_width, 1850.0f) && !producer_is_fake)
     {
         /* real producer */
         std::cout << "using real camera to produce images" << std::endl;

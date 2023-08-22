@@ -7,6 +7,8 @@ class FBO
 public:
     FBO(unsigned int width, unsigned int height);
     ~FBO();
+    FBO(const FBO &) = delete;
+    FBO &operator=(const FBO &) = delete;
     void init();
     void bind(bool clear = true);
     void unbind();
@@ -15,8 +17,8 @@ public:
 
 private:
     unsigned int m_width, m_height;
-    unsigned int m_texture;
-    unsigned int m_depthBuffer;
-    unsigned int m_FBO;
+    unsigned int m_texture = 0;
+    unsigned int m_depthBuffer = 0;
+    unsigned int m_FBO = 0;
 };
 #endif
