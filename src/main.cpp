@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
         std::cout << "No screen mode is on" << std::endl;
         use_screen = false;
     }
-    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc;
+    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug1, t_debug2;
     t_app.start();
     /* init GLFW */
     glfwInit();
@@ -151,13 +151,17 @@ int main(int argc, char *argv[])
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     /* setup global GL buffers */
-    unsigned int skeletonVAO, skeletonVBO;
+    unsigned int skeletonVAO = 0;
+    unsigned int skeletonVBO = 0;
     setup_skeleton_hand_buffers(skeletonVAO, skeletonVBO);
-    unsigned int gizmoVAO, gizmoVBO;
+    unsigned int gizmoVAO = 0;
+    unsigned int gizmoVBO = 0;
     setup_gizmo_buffers(gizmoVAO, gizmoVBO);
-    unsigned int cubeVAO, cubeVBO;
+    unsigned int cubeVAO = 0;
+    unsigned int cubeVBO = 0;
     setup_cube_buffers(cubeVAO, cubeVBO);
-    unsigned int frustrumVAO, frustrumVBO;
+    unsigned int frustrumVAO = 0;
+    unsigned int frustrumVBO = 0;
     setup_frustrum_buffers(frustrumVAO, frustrumVBO);
     unsigned int pbo[2] = {0};
     if (use_pbo)
@@ -241,7 +245,7 @@ int main(int argc, char *argv[])
     double previousTime = glfwGetTime();
     double currentFrame = glfwGetTime();
     double whole = 0.0;
-    int frameCount = 0;
+    long frameCount = 0;
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     std::vector<glm::vec3> skeleton_vertices;
@@ -370,11 +374,11 @@ int main(int argc, char *argv[])
             std::cout << "wait for cam time: " << t0.averageLap() << std::endl;
             std::cout << "leap frame time: " << t1.averageLap() << std::endl;
             std::cout << "skinning time: " << t2.averageLap() << std::endl;
-            std::cout << "render text: " << t3.averageLap() << std::endl;
+            std::cout << "debug info: " << t_debug1.averageLap() + t_debug2.averageLap() << std::endl;
             std::cout << "canvas pbo time: " << tpbo << std::endl;
             std::cout << "canvas tex transfer time: " << ttex << std::endl;
             std::cout << "canvas process time: " << tproc << std::endl;
-            // std::cout << "Processing time: " << t2.averageLap() << std::endl;
+            std::cout << "swap buffers time: " << t3.averageLap() << std::endl;
             std::cout << "GPU->CPU time: " << t4.averageLap() << std::endl;
             // std::cout << "project time: " << t4.averageLap() << std::endl;
             std::cout << "cam q size: " << camera_queue.size() << std::endl;
@@ -390,6 +394,8 @@ int main(int argc, char *argv[])
             t5.reset();
             t_misc.reset();
             canvas.resetTimers();
+            t_debug1.reset();
+            t_debug2.reset();
         }
         // input
         processInput(window);
@@ -436,6 +442,7 @@ int main(int argc, char *argv[])
             glm::mat4 LocalToWorld = bones_to_world[0] * rotx * coa_transform;
             if (debug_mode)
             {
+                t_debug1.start();
                 // draw skeleton vertices
                 glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
                 glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
@@ -471,6 +478,7 @@ int main(int argc, char *argv[])
                 // glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
                 // glm::vec3 palm_normal(palm_normal_hom);
                 // palm_normal = glm::normalize(palm_normal);
+                t_debug1.stop();
             }
             // draw skinned mesh
             skinnedShader.use();
@@ -496,6 +504,7 @@ int main(int argc, char *argv[])
         }
         if (debug_mode)
         {
+            t_debug2.start();
             // draws global coordinate system gizmo at origin
             vcolorShader.use();
             vcolorShader.setMat4("projection", flycam_projection_transform);
@@ -573,24 +582,25 @@ int main(int argc, char *argv[])
             glm::vec3 cam_pos = gl_flycamera.getPos();
             glm::vec3 cam_front = gl_flycamera.getFront();
             glm::vec3 proj_pos = gl_projector.getPos();
-            t3.start();
+
             text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            t3.stop();
             text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_flycamera.Zoom), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             text.Render(textShader, std::format("vcamera front: {:.02f}, {:.02f}, {:.02f}", cam_front.x, cam_front.y, cam_front.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
             text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            t_debug2.stop();
             // text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
         }
 
         // send result to projector queue
         glReadBuffer(GL_FRONT);
-        if (use_pbo)
+        if (use_pbo) // something fishy going on here. using pbo collapses program after a while
         {
             t4.start();
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
             t4.stop();
+
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(frameCount + 1) % 2]);
             GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
             if (src)
@@ -624,8 +634,10 @@ int main(int argc, char *argv[])
         // stride += (stride % 4) ? (4 - stride % 4) : 0;
         // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
         // swap buffers and poll IO events
+        t3.start();
         glfwSwapBuffers(window);
         glfwPollEvents();
+        t3.stop();
     }
     // cleanup
     close_signal = true;
