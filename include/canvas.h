@@ -31,6 +31,7 @@ public:
                 unsigned int texture, uint8_t *buffer, bool use_pbo = true);
     void RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_pbo = true);
     void RenderTexture(Shader &shader, unsigned int texture, Quad &quad);
+    void RenderTexture(Shader &shader, unsigned int texture);
     void getTimerValues(double &time0, double &time1, double &time2);
     void resetTimers();
 

@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
             "args": [
-                ""
+                // "-freecam"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -71,8 +71,7 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "-debug",
-                "-freecam",
-                "-pbo"
+                "-freecam"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

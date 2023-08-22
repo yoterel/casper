@@ -85,10 +85,23 @@ void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_
 void Canvas::RenderTexture(Shader &shader, unsigned int texture, Quad &quad)
 {
     glBindTexture(GL_TEXTURE_2D, texture);
+    shader.use();
     shader.setInt("src", 0);
     quad.render();
     glBindTexture(GL_TEXTURE_2D, 0);
 }
+
+void Canvas::RenderTexture(Shader &shader, unsigned int texture)
+{
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    shader.use();
+    shader.setInt("src", 0);
+    shader.setBool("flipVer", false);
+    m_quad.render();
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
 {
     if (use_pbo)

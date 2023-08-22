@@ -490,8 +490,11 @@ int main(int argc, char *argv[])
             {
                 skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
                 // skinnedModel.m_fbo.saveColorToFile("test1.png");
-                // unsigned int slow_tracker_texture = skinnedModel.m_fbo.getTexture();
-                // saveImage("test2.png", slow_tracker_texture, proj_width, proj_height, canvasShader);
+                if (!debug_mode)
+                {
+                    canvas.RenderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
+                }
+                // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
                 t2.stop();
                 // canvas.Render(canvasShader, buffer);
                 // canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
