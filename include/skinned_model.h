@@ -106,14 +106,13 @@ class SkinnedModel
 public:
     SkinnedModel(const std::string &Filename, const std::string &ExternalTextureFileName = "",
                  const unsigned int proj_width = 0, const unsigned int proj_height = 0,
-                 const unsigned int cam_width = 0, const unsigned int cam_height = 0)
+                 const unsigned int cam_width = 0, const unsigned int cam_height = 0) : m_fbo(proj_width, proj_height)
     {
         m_externalTextureFileName = ExternalTextureFileName;
         m_width = proj_width;
         m_height = proj_height;
         m_camHeight = cam_height;
         m_camWidth = cam_width;
-        m_fbo = FBO(m_width, m_height);
         bool success = LoadMesh(Filename);
         if (!success)
         {
@@ -122,7 +121,10 @@ public:
             exit(1);
         }
     };
-    ~SkinnedModel() { Clear(); };
+    ~SkinnedModel()
+    {
+        Clear();
+    };
     bool LoadMesh(const std::string &Filename);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                 glm::mat4 local_to_world, bool useFBO = true, uint8_t *buffer = NULL);
@@ -137,10 +139,7 @@ public:
     void GetLocalToBoneTransforms(std::vector<glm::mat4> &Transforms, bool inverse = false, bool only_leap_bones = false);
     void GetBoneFinalTransforms(std::vector<glm::mat4> &Transforms);
     void GetBoneTransformRelativeToParent(std::vector<glm::mat4> &Transforms);
-    unsigned int GetFBOTexture()
-    {
-        return m_fbo.getTexture();
-    };
+    FBO m_fbo;
 
 private:
     void Clear();
@@ -172,7 +171,6 @@ private:
     unsigned int m_VAO = 0;
     unsigned int m_Buffers[NUM_BUFFERS] = {0};
     // unsigned int m_FBO, m_fbo_depth_buffer, m_fbo_texture;
-    FBO m_fbo;
     unsigned int m_cam_texture;
 
     Assimp::Importer Importer;

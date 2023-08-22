@@ -187,14 +187,14 @@ int main(int argc, char *argv[])
     Text text("C:/src/augmented_hands/resource/arial.ttf");
     std::array<glm::vec3, 28> frustumCornerVertices{
         {// near
+         {-1.0f, 1.0f, -1.0f},
+         {-1.0f, -1.0f, -1.0f},
          {-1.0f, -1.0f, -1.0f},
          {1.0f, -1.0f, -1.0f},
          {1.0f, -1.0f, -1.0f},
          {1.0f, 1.0f, -1.0f},
          {1.0f, 1.0f, -1.0f},
          {-1.0f, 1.0f, -1.0f},
-         {-1.0f, 1.0f, -1.0f},
-         {-1.0f, -1.0f, -1.0f},
          // far
          {-1.0f, -1.0f, 1.0f},
          {1.0f, -1.0f, 1.0f},
@@ -218,13 +218,12 @@ int main(int argc, char *argv[])
          {0.0f, 1.5f, -1.0f},
          {0.0f, 1.5f, -1.0f},
          {1.0f, 1.0f, -1.0f}}};
-
-    std::array<glm::vec3, 56> frustumVerticesData;
     /* setup shaders*/
     Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
     Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
     Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
     Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
+    Shader textureShader("C:/src/augmented_hands/src/shaders/color_by_texture.vs", "C:/src/augmented_hands/src/shaders/color_by_texture.fs");
     Shader canvasShader;
     if (use_cuda)
         canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
@@ -476,14 +475,16 @@ int main(int argc, char *argv[])
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
             skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-            bool use_FBO = false;
+            bool use_FBO = true;
             if (use_FBO)
             {
                 skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
-                unsigned int slow_tracker_texture = skinnedModel.GetFBOTexture();
+                // skinnedModel.m_fbo.saveColorToFile("test1.png");
+                // unsigned int slow_tracker_texture = skinnedModel.m_fbo.getTexture();
+                // saveImage("test2.png", slow_tracker_texture, proj_width, proj_height, canvasShader);
                 t2.stop();
                 // canvas.Render(canvasShader, buffer);
-                canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
+                // canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
             }
             else
             {
@@ -507,46 +508,66 @@ int main(int argc, char *argv[])
             glDrawArrays(GL_TRIANGLES, 0, 36);
             glEnable(GL_CULL_FACE);
             // draws frustrum of projector (=vcam)
+            std::array<glm::vec3, 56> vprojFrustumVerticesData;
             vcolorShader.use();
             vcolorShader.setMat4("projection", flycam_projection_transform);
             vcolorShader.setMat4("view", flycam_view_transform);
             vcolorShader.setMat4("model", glm::mat4(1.0f));
             glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-            for (int i = 0; i < frustumVerticesData.size(); i += 2)
+            for (int i = 0; i < vprojFrustumVerticesData.size(); i += 2)
             {
                 glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i / 2], 1.0f);
-                frustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
-                frustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
+                vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
+                vprojFrustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
             }
             glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
-            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * frustumVerticesData.size(), frustumVerticesData.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vprojFrustumVerticesData.size(), vprojFrustumVerticesData.data(), GL_STATIC_DRAW);
             glBindVertexArray(frustrumVAO);
-            glDrawArrays(GL_LINES, 0, static_cast<int>(frustumVerticesData.size()));
+            glDrawArrays(GL_LINES, 0, static_cast<int>(vprojFrustumVerticesData.size()));
             // draws frustrum of camera (=vproj)
+            std::array<glm::vec3, 56> vcamFrustumVerticesData;
             glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-            for (int i = 0; i < frustumVerticesData.size(); i += 2)
+            for (int i = 0; i < vcamFrustumVerticesData.size(); i += 2)
             {
                 glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(frustumCornerVertices[i / 2], 1.0f);
-                frustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
-                frustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
+                vcamFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
+                vcamFrustumVerticesData[i + 1] = glm::vec3(1.0f, 1.0f, 1.0f);
             }
             glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
-            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * frustumVerticesData.size(), frustumVerticesData.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vcamFrustumVerticesData.size(), vcamFrustumVerticesData.data(), GL_STATIC_DRAW);
             glBindVertexArray(frustrumVAO);
-            glDrawArrays(GL_LINES, 0, static_cast<int>(frustumVerticesData.size()));
+            glDrawArrays(GL_LINES, 0, static_cast<int>(vcamFrustumVerticesData.size()));
             // draw camera input to near plane of vproj frustrum
-            debugShader.use();
-            debugShader.setBool("flipVer", false);
-            debugShader.setMat4("projection", flycam_projection_transform);
-            debugShader.setMat4("view", flycam_view_transform);
-            debugShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
-            std::vector<glm::vec3> nearVerts(4);
-            nearVerts[0] = frustumVerticesData[0];
-            nearVerts[1] = frustumVerticesData[2];
-            nearVerts[2] = frustumVerticesData[4];
-            nearVerts[3] = frustumVerticesData[6];
-            Quad nearQuad(nearVerts);
-            canvas.RenderBuffer(debugShader, buffer, nearQuad);
+            std::vector<glm::vec3> vprojNearVerts(4);
+            textureShader.use();
+            textureShader.setBool("flipVer", false);
+            textureShader.setMat4("projection", flycam_projection_transform);
+            textureShader.setMat4("view", flycam_view_transform);
+            textureShader.setMat4("model", glm::mat4(1.0f));
+            textureShader.setBool("binary", true);
+            vprojNearVerts[0] = vprojFrustumVerticesData[0];
+            vprojNearVerts[1] = vprojFrustumVerticesData[4];
+            vprojNearVerts[2] = vprojFrustumVerticesData[8];
+            vprojNearVerts[3] = vprojFrustumVerticesData[12];
+            Quad vcamNearQuad(vprojNearVerts);
+            canvas.RenderBuffer(textureShader, buffer, vcamNearQuad);
+            // draw projector output to near plane of vcam frustrum
+            textureShader.use();
+            textureShader.setBool("flipVer", false);
+            textureShader.setMat4("projection", flycam_projection_transform);
+            textureShader.setMat4("view", flycam_view_transform);
+            textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
+            textureShader.setBool("binary", false);
+            if (bones_to_world.size() > 0)
+            {
+                std::vector<glm::vec3> vcamNearVerts(4);
+                vcamNearVerts[0] = vcamFrustumVerticesData[0];
+                vcamNearVerts[1] = vcamFrustumVerticesData[4];
+                vcamNearVerts[2] = vcamFrustumVerticesData[8];
+                vcamNearVerts[3] = vcamFrustumVerticesData[12];
+                Quad vprovNearQuad(vcamNearVerts);
+                canvas.RenderTexture(textureShader, skinnedModel.m_fbo.getTexture(), vprovNearQuad);
+            }
             // draws text
             glm::vec3 cam_pos = gl_flycamera.getPos();
             glm::vec3 cam_front = gl_flycamera.getFront();
@@ -955,20 +976,6 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
         }
     }
 }
-// void saveImage(char* filepath, GLFWwindow* w) {
-//     int width, height;
-//     glfwGetFramebufferSize(w, &width, &height);
-//     GLsizei nrChannels = 3;
-//     GLsizei stride = nrChannels * width;
-//     stride += (stride % 4) ? (4 - stride % 4) : 0;
-//     GLsizei bufferSize = stride * height;
-//     std::vector<char> buffer(bufferSize);
-//     glPixelStorei(GL_PACK_ALIGNMENT, 4);
-//     glReadBuffer(GL_FRONT);
-//     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer.data());
-//     // stbi_flip_vertically_on_write(true);
-//     // stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
-// }
 // // create transformation matrices
 // glm::mat4 canvas_model_mat = glm::mat4(1.0f);
 // glm::mat4 skeleton_model_mat = glm::mat4(1.0f);

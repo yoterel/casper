@@ -1,23 +1,16 @@
 #ifndef FBO_H
 #define FBO_H
+#include <string>
 
 class FBO
 {
 public:
-    FBO(){};
     FBO(unsigned int width, unsigned int height);
     ~FBO();
-    FBO(FBO &s) // copy constructor
-    {
-        m_width = s.m_width;
-        m_height = s.m_height;
-        m_texture = s.m_texture;
-        m_depthBuffer = s.m_depthBuffer;
-        m_FBO = s.m_FBO;
-    }
     void init();
-    void bind();
+    void bind(bool clear = true);
     void unbind();
+    void saveColorToFile(std::string filepath);
     unsigned int getTexture() { return m_texture; };
 
 private:

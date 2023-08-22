@@ -78,7 +78,15 @@ void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_
     }
     shader.setInt("src", 0);
     quad.render();
-    // m_quad.render();
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void Canvas::RenderTexture(Shader &shader, unsigned int texture, Quad &quad)
+{
+    glBindTexture(GL_TEXTURE_2D, texture);
+    shader.setInt("src", 0);
+    quad.render();
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
 {
@@ -315,7 +323,7 @@ void Canvas::initGLBuffers()
     // glCheckError();
     //  glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA, m_srcWidth, m_srcHeight);
     //  set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // GL_REPEAT
     // glCheckError();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     // glCheckError();
@@ -328,7 +336,7 @@ void Canvas::initGLBuffers()
     //  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_srcWidth, m_srcHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
     //  #ifndef USE_TEXTURE_RGBA8UI
     //  printf("Creating a Texture render target GL_RGBA16F\n");
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA /*GL_RGBA16F*/, m_srcWidth, m_srcHeight, 0, GL_BGRA /* GL_RGBA*/,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_srcWidth, m_srcHeight, 0, GL_BGRA,
                  GL_UNSIGNED_BYTE, NULL);
     // glCheckError();
     //  glGenerateMipmap(GL_TEXTURE_2D);
