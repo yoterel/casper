@@ -7,7 +7,8 @@ Canvas::Canvas(unsigned int srcWidth, unsigned int srcHeight, unsigned int dstWi
                                                                                                                               m_dstWidth(dstWidth),
                                                                                                                               m_dstHeight(dstHeight),
                                                                                                                               m_use_cuda(use_cuda),
-                                                                                                                              m_quad(-1.0f)
+                                                                                                                              m_quad(0.0f),
+                                                                                                                              m_fbo(dstWidth, dstHeight)
 {
     m_num_texels = m_srcWidth * m_srcHeight;
     m_num_values = m_num_texels * 4;
@@ -55,6 +56,7 @@ void Canvas::Clear()
         // m_texture_dst = 0;
     }
 }
+
 void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_pbo)
 {
     if (use_pbo)
@@ -80,6 +82,20 @@ void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_
     shader.setInt("src", 0);
     quad.render();
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+unsigned int Canvas::RenderBufferToFBO(Shader &shader, Quad &quad)
+{
+    // saveImage("test.png", m_texture_src, m_dstWidth, m_dstHeight, shader);
+    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    m_fbo.bind();
+    shader.use();
+    shader.setInt("src", 0);
+    quad.render();
+    m_fbo.unbind();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    // m_fbo.saveColorToFile("test.png");
+    return m_fbo.getTexture();
 }
 
 void Canvas::RenderTexture(Shader &shader, unsigned int texture, Quad &quad)

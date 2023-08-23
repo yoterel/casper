@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
         std::cout << "No screen mode is on" << std::endl;
         use_screen = false;
     }
-    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug1, t_debug2;
+    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug, t_debug1, t_debug2;
     t_app.start();
     /* init GLFW */
     glfwInit();
@@ -227,6 +227,7 @@ int main(int argc, char *argv[])
     Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
     Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
     Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
+    Shader debugShader2("C:/src/augmented_hands/src/shaders/debug2.vs", "C:/src/augmented_hands/src/shaders/debug2.fs");
     Shader textureShader("C:/src/augmented_hands/src/shaders/color_by_texture.vs", "C:/src/augmented_hands/src/shaders/color_by_texture.fs");
     Shader lineShader("C:/src/augmented_hands/src/shaders/line_shader.vs", "C:/src/augmented_hands/src/shaders/line_shader.fs");
     Shader canvasShader;
@@ -374,7 +375,7 @@ int main(int argc, char *argv[])
             std::cout << "wait for cam time: " << t0.averageLap() << std::endl;
             std::cout << "leap frame time: " << t1.averageLap() << std::endl;
             std::cout << "skinning time: " << t2.averageLap() << std::endl;
-            std::cout << "debug info: " << t_debug1.averageLap() + t_debug2.averageLap() << std::endl;
+            std::cout << "debug info: " << t_debug.averageLap() << std::endl;
             std::cout << "canvas pbo time: " << tpbo << std::endl;
             std::cout << "canvas tex transfer time: " << ttex << std::endl;
             std::cout << "canvas process time: " << tproc << std::endl;
@@ -394,6 +395,7 @@ int main(int argc, char *argv[])
             t5.reset();
             t_misc.reset();
             canvas.resetTimers();
+            t_debug.reset();
             t_debug1.reset();
             t_debug2.reset();
         }
@@ -434,52 +436,13 @@ int main(int argc, char *argv[])
         glm::mat4 vproj_projection_transform = gl_projector.getProjectionMatrix();
         glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
         glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
+        glm::mat4 LocalToWorld = glm::mat4(1.0f);
         t1.stop();
         // process leap frame
         if (bones_to_world.size() > 0)
         {
             t2.start();
-            glm::mat4 LocalToWorld = bones_to_world[0] * rotx * coa_transform;
-            if (debug_mode)
-            {
-                t_debug1.start();
-                // draw skeleton vertices
-                glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-                glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
-                n_skeleton_primitives = skeleton_vertices.size() / 2;
-                vcolorShader.use();
-                vcolorShader.setMat4("projection", flycam_projection_transform);
-                vcolorShader.setMat4("view", flycam_view_transform);
-                // vcolorShader.setMat4("model", glm::mat4(1.0f));
-                vcolorShader.setMat4("model", mm_to_cm);
-                glBindVertexArray(skeletonVAO);
-                glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
-                // draw circle oriented like hand palm from leap motion
-                // glBindVertexArray(circleVAO);
-                // vcolorShader.setMat4("model", bones_to_world[0]);
-                // glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
-                // draw skeleton bones (as gizmos representing their local coordinate system)
-                std::vector<glm::mat4> BoneToLocalTransforms;
-                skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
-                glBindVertexArray(gizmoVAO);
-                for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
-                {
-                    // in bind pose
-                    vcolorShader.setMat4("model", LocalToWorld * BoneToLocalTransforms[i]);
-                    glDrawArrays(GL_LINES, 0, 6);
-                }
-                for (unsigned int i = 0; i < bones_to_world.size(); i++)
-                {
-                    // in leap motion pose
-                    vcolorShader.setMat4("model", bones_to_world[i]);
-                    glDrawArrays(GL_LINES, 0, 6);
-                }
-                // draw debug info
-                // glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-                // glm::vec3 palm_normal(palm_normal_hom);
-                // palm_normal = glm::normalize(palm_normal);
-                t_debug1.stop();
-            }
+            LocalToWorld = bones_to_world[0] * rotx * coa_transform;
             // draw skinned mesh
             skinnedShader.use();
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
@@ -488,10 +451,10 @@ int main(int argc, char *argv[])
             bool use_FBO = true;
             if (use_FBO)
             {
-                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
                 // skinnedModel.m_fbo.saveColorToFile("test1.png");
                 if (!debug_mode)
                 {
+                    skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
                     canvas.RenderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
                 }
                 // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
@@ -507,93 +470,212 @@ int main(int argc, char *argv[])
         }
         if (debug_mode)
         {
-            t_debug2.start();
-            // draws global coordinate system gizmo at origin
-            vcolorShader.use();
-            vcolorShader.setMat4("projection", flycam_projection_transform);
-            vcolorShader.setMat4("view", flycam_view_transform);
-            vcolorShader.setMat4("model", glm::mat4(3.0f));
-            glBindVertexArray(gizmoVAO);
-            glDrawArrays(GL_LINES, 0, 6);
-            // draws cube at world origin
-            glEnable(GL_DEPTH_TEST);
-            glDisable(GL_CULL_FACE);
-            vcolorShader.setMat4("model", glm::mat4(1.0f));
-            glBindVertexArray(cubeVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-            glEnable(GL_CULL_FACE);
-            // draws frustrum of projector (=vcam)
-            std::vector<glm::vec3> vprojFrustumVerticesData(28);
-            lineShader.use();
-            lineShader.setMat4("projection", flycam_projection_transform);
-            lineShader.setMat4("view", flycam_view_transform);
-            lineShader.setMat4("model", glm::mat4(1.0f));
-            lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
-            glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-            for (int i = 0; i < frustumCornerVertices.size(); ++i)
-            {
-                glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
-                vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
-            }
-            glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
-            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vprojFrustumVerticesData.size(), vprojFrustumVerticesData.data(), GL_STATIC_DRAW);
-            glBindVertexArray(frustrumVAO);
-            glDrawArrays(GL_LINES, 0, 28);
-            // draws frustrum of camera (=vproj)
-            std::vector<glm::vec3> vcamFrustumVerticesData(28);
-            glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-            for (int i = 0; i < frustumCornerVertices.size(); ++i)
-            {
-                glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
-                vcamFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
-            }
-            glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
-            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vcamFrustumVerticesData.size(), vcamFrustumVerticesData.data(), GL_STATIC_DRAW);
-            glBindVertexArray(frustrumVAO);
-            glDrawArrays(GL_LINES, 0, 28);
-            // draw camera input to near plane of vproj frustrum
-            std::vector<glm::vec3> vprojNearVerts(4);
-            textureShader.use();
-            textureShader.setBool("flipVer", false);
-            textureShader.setMat4("projection", flycam_projection_transform);
-            textureShader.setMat4("view", flycam_view_transform);
-            textureShader.setMat4("model", glm::mat4(1.0f));
-            textureShader.setBool("binary", true);
-            vprojNearVerts[0] = vprojFrustumVerticesData[0];
-            vprojNearVerts[1] = vprojFrustumVerticesData[2];
-            vprojNearVerts[2] = vprojFrustumVerticesData[4];
-            vprojNearVerts[3] = vprojFrustumVerticesData[6];
-            Quad vcamNearQuad(vprojNearVerts);
-            canvas.RenderBuffer(textureShader, buffer, vcamNearQuad);
-            // draw projector output to near plane of vcam frustrum
-            textureShader.use();
-            textureShader.setBool("flipVer", false);
-            textureShader.setMat4("projection", flycam_projection_transform);
-            textureShader.setMat4("view", flycam_view_transform);
-            textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
-            textureShader.setBool("binary", false);
+            t_debug.start();
             if (bones_to_world.size() > 0)
             {
+                // draw skeleton vertices
+                {
+                    glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
+                    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
+                    n_skeleton_primitives = skeleton_vertices.size() / 2;
+                    vcolorShader.use();
+                    vcolorShader.setMat4("projection", flycam_projection_transform);
+                    vcolorShader.setMat4("view", flycam_view_transform);
+                    vcolorShader.setMat4("model", mm_to_cm); // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    glBindVertexArray(skeletonVAO);
+                    glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
+                }
+                // draw circle oriented like hand palm from leap motion
+                {
+                    // vcolorShader.use();
+                    // vcolorShader.setMat4("projection", flycam_projection_transform);
+                    // vcolorShader.setMat4("view", flycam_view_transform);
+                    // vcolorShader.setMat4("model", mm_to_cm); // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    // glBindVertexArray(circleVAO);
+                    // vcolorShader.setMat4("model", bones_to_world[0]);
+                    // glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
+                }
+                // draw skeleton bones (as gizmos representing their local coordinate system)
+                {
+                    vcolorShader.use();
+                    vcolorShader.setMat4("projection", flycam_projection_transform);
+                    vcolorShader.setMat4("view", flycam_view_transform);
+                    std::vector<glm::mat4> BoneToLocalTransforms;
+                    skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                    glBindVertexArray(gizmoVAO);
+                    for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
+                    {
+                        // in bind pose
+                        vcolorShader.setMat4("model", LocalToWorld * BoneToLocalTransforms[i]);
+                        glDrawArrays(GL_LINES, 0, 6);
+                    }
+                    for (unsigned int i = 0; i < bones_to_world.size(); i++)
+                    {
+                        // in leap motion pose
+                        vcolorShader.setMat4("model", bones_to_world[i]);
+                        glDrawArrays(GL_LINES, 0, 6);
+                    }
+                }
+                // draw palm normal
+                {
+                    // glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+                    // glm::vec3 palm_normal(palm_normal_hom);
+                    // palm_normal = glm::normalize(palm_normal);
+                }
+            }
+            // draws global coordinate system gizmo at origin
+            {
+                vcolorShader.use();
+                vcolorShader.setMat4("projection", flycam_projection_transform);
+                vcolorShader.setMat4("view", flycam_view_transform);
+                vcolorShader.setMat4("model", glm::mat4(3.0f));
+                glBindVertexArray(gizmoVAO);
+                glDrawArrays(GL_LINES, 0, 6);
+            }
+            // draws cube at world origin
+            {
+                vcolorShader.use();
+                vcolorShader.setMat4("projection", flycam_projection_transform);
+                vcolorShader.setMat4("view", flycam_view_transform);
+                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                glEnable(GL_DEPTH_TEST);
+                glDisable(GL_CULL_FACE);
+                glBindVertexArray(cubeVAO);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+                glEnable(GL_CULL_FACE);
+            }
+            // draws frustrum of projector (=vcam)
+            {
+                std::vector<glm::vec3> vprojFrustumVerticesData(28);
+                lineShader.use();
+                lineShader.setMat4("projection", flycam_projection_transform);
+                lineShader.setMat4("view", flycam_view_transform);
+                lineShader.setMat4("model", glm::mat4(1.0f));
+                lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
+                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+                for (int i = 0; i < frustumCornerVertices.size(); ++i)
+                {
+                    glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
+                    vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
+                }
+                glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
+                glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vprojFrustumVerticesData.size(), vprojFrustumVerticesData.data(), GL_STATIC_DRAW);
+                glBindVertexArray(frustrumVAO);
+                glDrawArrays(GL_LINES, 0, 28);
+            }
+            // draws frustrum of camera (=vproj)
+            {
+                std::vector<glm::vec3> vcamFrustumVerticesData(28);
+                lineShader.use();
+                lineShader.setMat4("projection", flycam_projection_transform);
+                lineShader.setMat4("view", flycam_view_transform);
+                lineShader.setMat4("model", glm::mat4(1.0f));
+                lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
+                glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+                for (int i = 0; i < frustumCornerVertices.size(); ++i)
+                {
+                    glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
+                    vcamFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
+                }
+                glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
+                glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vcamFrustumVerticesData.size(), vcamFrustumVerticesData.data(), GL_STATIC_DRAW);
+                glBindVertexArray(frustrumVAO);
+                glDrawArrays(GL_LINES, 0, 28);
+                std::vector<glm::vec3> vcam_mid_frustrum = {{-1.0f, 1.0f, 0.7f},
+                                                            {-1.0f, -1.0f, 0.7f},
+                                                            {1.0f, -1.0f, 0.7f},
+                                                            {1.0f, 1.0f, 0.7f}};
+                for (int i = 0; i < vcam_mid_frustrum.size(); ++i)
+                {
+                    glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(vcam_mid_frustrum[i], 1.0f);
+                    unprojected /= unprojected.w;
+                    vcam_mid_frustrum[i] = unprojected;
+                }
+                Quad vcamMidQuad(vcam_mid_frustrum);
+            }
+            // draw camera input to near plane of vproj frustrum
+            {
+                std::vector<glm::vec3> vprojFrustumVerticesData(28);
+                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+                for (int i = 0; i < frustumCornerVertices.size(); ++i)
+                {
+                    glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
+                    vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
+                }
+                std::vector<glm::vec3> vprojNearVerts(4);
+                textureShader.use();
+                textureShader.setBool("flipVer", false);
+                textureShader.setMat4("projection", flycam_projection_transform);
+                textureShader.setMat4("view", flycam_view_transform);
+                textureShader.setMat4("model", glm::mat4(1.0f));
+                textureShader.setBool("binary", true);
+                vprojNearVerts[0] = vprojFrustumVerticesData[0];
+                vprojNearVerts[1] = vprojFrustumVerticesData[2];
+                vprojNearVerts[2] = vprojFrustumVerticesData[4];
+                vprojNearVerts[3] = vprojFrustumVerticesData[6];
+                Quad vprojNearQuad(vprojNearVerts);
+                canvas.RenderBuffer(textureShader, buffer, vprojNearQuad);
+            }
+            // draw projector output to near plane of vcam frustrum
+            {
+                std::vector<glm::vec3> near_frustrum = {{-1.0f, 1.0f, -1.0f},
+                                                        {-1.0f, -1.0f, -1.0f},
+                                                        {1.0f, -1.0f, -1.0f},
+                                                        {1.0f, 1.0f, -1.0f}};
+                std::vector<glm::vec3> mid_frustrum = {{-1.0f, 1.0f, 0.7f},
+                                                       {-1.0f, -1.0f, 0.7f},
+                                                       {1.0f, -1.0f, 0.7f},
+                                                       {1.0f, 1.0f, 0.7f}};
                 std::vector<glm::vec3> vcamNearVerts(4);
-                vcamNearVerts[0] = vcamFrustumVerticesData[0];
-                vcamNearVerts[1] = vcamFrustumVerticesData[2];
-                vcamNearVerts[2] = vcamFrustumVerticesData[4];
-                vcamNearVerts[3] = vcamFrustumVerticesData[6];
-                Quad vprovNearQuad(vcamNearVerts);
-                canvas.RenderTexture(textureShader, skinnedModel.m_fbo.getTexture(), vprovNearQuad);
+                std::vector<glm::vec3> vcamMidVerts(4);
+                std::vector<glm::vec3> vprojNearVerts(4);
+                std::vector<glm::vec3> vprojMidVerts(4);
+                // unproject points
+                glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+                for (int i = 0; i < mid_frustrum.size(); ++i)
+                {
+                    glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                    vcamMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                    unprojected = vcamUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                    vcamNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                    unprojected = vprojUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                    vprojMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                    unprojected = vprojUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                    vprojNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                }
+                Quad vcamNearQuad(vcamNearVerts);
+                Quad vcamMidQuad(vcamMidVerts);
+                Quad vprojNearQuad(vprojNearVerts);
+                Quad vprojMidQuad(vprojMidVerts);
+
+                debugShader2.use();
+                debugShader2.setBool("flipVer", false);
+                debugShader2.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
+                debugShader2.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
+                debugShader2.setBool("binary", true);
+                unsigned int tex = canvas.RenderBufferToFBO(debugShader2, vcamMidQuad);
+                textureShader.use();
+                textureShader.setBool("flipVer", false);
+                textureShader.setMat4("projection", flycam_projection_transform);
+                textureShader.setMat4("view", flycam_view_transform);
+                textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
+                textureShader.setBool("binary", false);
+                canvas.RenderTexture(textureShader, tex /*skinnedModel.m_fbo.getTexture()*/, vcamNearQuad);
             }
             // draws text
-            glm::vec3 cam_pos = gl_flycamera.getPos();
-            glm::vec3 cam_front = gl_flycamera.getFront();
-            glm::vec3 proj_pos = gl_projector.getPos();
-
-            text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_flycamera.Zoom), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("vcamera front: {:.02f}, {:.02f}, {:.02f}", cam_front.x, cam_front.y, cam_front.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-            t_debug2.stop();
-            // text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            {
+                glm::vec3 cam_pos = gl_flycamera.getPos();
+                glm::vec3 cam_front = gl_flycamera.getFront();
+                glm::vec3 proj_pos = gl_projector.getPos();
+                text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+                text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_flycamera.Zoom), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+                text.Render(textShader, std::format("vcamera front: {:.02f}, {:.02f}, {:.02f}", cam_front.x, cam_front.y, cam_front.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+                text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+                text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+                // text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+            }
+            t_debug.stop();
         }
 
         // send result to projector queue

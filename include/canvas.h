@@ -30,6 +30,7 @@ public:
     void Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker,
                 unsigned int texture, uint8_t *buffer, bool use_pbo = true);
     void RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_pbo = true);
+    unsigned int RenderBufferToFBO(Shader &shader, Quad &quad);
     void RenderTexture(Shader &shader, unsigned int texture, Quad &quad);
     void RenderTexture(Shader &shader, unsigned int texture);
     void getTimerValues(double &time0, double &time1, double &time2);
@@ -43,6 +44,7 @@ private:
     void ProcesssWithGL();
     bool m_use_cuda;
     Quad m_quad;
+    FBO m_fbo;
     unsigned int m_depth_buffer[2] = {0};
     unsigned int m_FBO[2] = {0};
     unsigned int m_pingpong_textures[2] = {0};
