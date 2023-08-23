@@ -446,15 +446,15 @@ int main(int argc, char *argv[])
             // draw skinned mesh
             skinnedShader.use();
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+            skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
             skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
             bool use_FBO = true;
             if (use_FBO)
             {
                 // skinnedModel.m_fbo.saveColorToFile("test1.png");
+                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
                 if (!debug_mode)
                 {
-                    skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
                     canvas.RenderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
                 }
                 // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
@@ -649,19 +649,19 @@ int main(int argc, char *argv[])
                 Quad vprojNearQuad(vprojNearVerts);
                 Quad vprojMidQuad(vprojMidVerts);
 
-                debugShader2.use();
-                debugShader2.setBool("flipVer", false);
-                debugShader2.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
-                debugShader2.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
-                debugShader2.setBool("binary", true);
-                unsigned int tex = canvas.RenderBufferToFBO(debugShader2, vcamMidQuad);
+                // debugShader2.use();
+                // debugShader2.setBool("flipVer", false);
+                // debugShader2.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
+                // debugShader2.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
+                // debugShader2.setBool("binary", true);
+                // unsigned int tex = canvas.RenderBufferToFBO(debugShader2, vcamMidQuad);
                 textureShader.use();
                 textureShader.setBool("flipVer", false);
                 textureShader.setMat4("projection", flycam_projection_transform);
                 textureShader.setMat4("view", flycam_view_transform);
                 textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
                 textureShader.setBool("binary", false);
-                canvas.RenderTexture(textureShader, tex /*skinnedModel.m_fbo.getTexture()*/, vcamNearQuad);
+                canvas.RenderTexture(textureShader, skinnedModel.m_fbo.getTexture() /*tex*/, vcamNearQuad);
             }
             // draws text
             {

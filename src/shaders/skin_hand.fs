@@ -33,11 +33,11 @@ void main()
     //     // proj_col.w = 1.0;
         proj_col = vec4(1.0, 1.0, 1.0, 1.0);
     } else {
-        proj_col = vec4(1.0, 0.0, 0.0, 1.0);
+        proj_col = vec4(0.0, 0.0, 0.0, 1.0);
     //     // proj_col.w = 0.0;
     }
     // finalColor = vec4(ourColor, 0.9); // boneweight debug
     vec4 diffuse_color = texture(gSampler, TexCoord0);  // diffuse texture
     // finalColor.w = 1.0;
-    FragColor = diffuse_color;  // * diffuse_color * vec4(1.0, 1.0, 1.0, proj_col.w);
+    FragColor = max(diffuse_color, proj_col);  // * diffuse_color * vec4(1.0, 1.0, 1.0, proj_col.w);
 }
