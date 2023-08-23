@@ -827,18 +827,37 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        gl_flycamera.processKeyboard(FORWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        gl_flycamera.processKeyboard(BACKWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        gl_flycamera.processKeyboard(LEFT, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        gl_flycamera.processKeyboard(RIGHT, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-        gl_flycamera.processKeyboard(UP, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-        gl_flycamera.processKeyboard(DOWN, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    {
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            gl_camera.processKeyboard(FORWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            gl_camera.processKeyboard(BACKWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            gl_camera.processKeyboard(LEFT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            gl_camera.processKeyboard(RIGHT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            gl_camera.processKeyboard(UP, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            gl_camera.processKeyboard(DOWN, deltaTime);
+    }
+    else
+    {
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(FORWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(BACKWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(LEFT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(RIGHT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(UP, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(DOWN, deltaTime);
+    }
+
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
     {
         space_pressed_flag = true;
