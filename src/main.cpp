@@ -261,7 +261,7 @@ int main(int argc, char *argv[])
     // blocking_queue<std::vector<uint8_t>> projector_queue;
     blocking_queue<uint8_t *> projector_queue;
     BaslerCamera camera;
-    DynaFlashProjector projector;
+    DynaFlashProjector projector(true, false);
     if (use_projector)
     {
         if (!projector.init())
@@ -282,13 +282,19 @@ int main(int argc, char *argv[])
     if (loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc))
     {
         std::cout << "Using calibration data for camera and projector settings" << std::endl;
-        gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA);
-        gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FIXED_CAMERA);
         if (freecam_mode)
+        {
             // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
             gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
+            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
+            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA);
+        }
         else
+        {
+            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
+            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FIXED_CAMERA);
             gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA);
+        }
     }
     else
     {
@@ -844,18 +850,36 @@ void processInput(GLFWwindow *window)
     }
     else
     {
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-            gl_flycamera.processKeyboard(FORWARD, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            gl_flycamera.processKeyboard(BACKWARD, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            gl_flycamera.processKeyboard(LEFT, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            gl_flycamera.processKeyboard(RIGHT, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-            gl_flycamera.processKeyboard(UP, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-            gl_flycamera.processKeyboard(DOWN, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+        {
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+                gl_projector.processKeyboard(FORWARD, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+                gl_projector.processKeyboard(BACKWARD, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+                gl_projector.processKeyboard(LEFT, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+                gl_projector.processKeyboard(RIGHT, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+                gl_projector.processKeyboard(UP, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+                gl_projector.processKeyboard(DOWN, deltaTime);
+        }
+        else
+        {
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+                gl_flycamera.processKeyboard(FORWARD, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+                gl_flycamera.processKeyboard(BACKWARD, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+                gl_flycamera.processKeyboard(LEFT, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+                gl_flycamera.processKeyboard(RIGHT, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+                gl_flycamera.processKeyboard(UP, deltaTime);
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+                gl_flycamera.processKeyboard(DOWN, deltaTime);
+        }
     }
 
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)

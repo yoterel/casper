@@ -71,7 +71,8 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "-debug",
-                "-freecam"
+                "-freecam",
+                "no_proj",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
