@@ -34,9 +34,9 @@ const float ZOOM = 45.0f;
 class GLCamera
 {
 public:
-    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode);
-    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode);
-    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front);
+    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height);
+    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height);
+    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height);
     GLCamera(){};
     GLCamera(GLCamera &s)
     {
@@ -70,6 +70,8 @@ public:
     float MovementSpeed;
     float MouseSensitivity;
     float Zoom;
+    float m_width;
+    float m_height;
 
 private:
     // camera Attributes

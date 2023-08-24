@@ -60,6 +60,8 @@ unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
 bool space_pressed_flag = false;
+bool shift_modifier = false;
+bool ctrl_modifier = false;
 unsigned int n_bones = 0;
 glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 bool hand_in_frame = false;
@@ -255,8 +257,8 @@ int main(int argc, char *argv[])
     bool close_signal = false;
     int leap_time_delay = 50000; // us
     uint8_t *colorBuffer = new uint8_t[image_size];
-    uint32_t cam_height = 0;
-    uint32_t cam_width = 0;
+    // uint32_t cam_height = 0;
+    // uint32_t cam_width = 0;
     blocking_queue<CPylonImage> camera_queue;
     // blocking_queue<std::vector<uint8_t>> projector_queue;
     blocking_queue<uint8_t *> projector_queue;
@@ -285,26 +287,43 @@ int main(int argc, char *argv[])
         if (freecam_mode)
         {
             // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
-            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
-            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
-            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA);
+            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                    glm::vec3(0.0f, 0.0f, 0.0f),
+                                    glm::vec3(0.0f, 1.0f, 0.0f),
+                                    Camera_Mode::FREE_CAMERA,
+                                    proj_width,
+                                    proj_height);
+            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height);
+            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height);
         }
         else
         {
-            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
-            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FIXED_CAMERA);
-            gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA);
+            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height);
+            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FIXED_CAMERA, cam_width, cam_height);
+            gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
         }
     }
     else
     {
         std::cout << "Using hard-coded values for camera and projector settings" << std::endl;
-        gl_camera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
-        gl_projector = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
+        gl_camera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                             glm::vec3(0.0f, 0.0f, 0.0f),
+                             glm::vec3(0.0f, 1.0f, 0.0f),
+                             Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
+        gl_projector = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
+                                glm::vec3(0.0f, 0.0f, 0.0f),
+                                glm::vec3(0.0f, -1.0f, 0.0f),
+                                Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
         if (freecam_mode)
-            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FREE_CAMERA);
+            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                    glm::vec3(0.0f, 0.0f, 0.0f),
+                                    glm::vec3(0.0f, 1.0f, 0.0f),
+                                    Camera_Mode::FREE_CAMERA, proj_width, proj_height);
         else
-            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), Camera_Mode::FIXED_CAMERA);
+            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                    glm::vec3(0.0f, 0.0f, 0.0f),
+                                    glm::vec3(0.0f, 1.0f, 0.0f),
+                                    Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
     }
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
@@ -323,9 +342,9 @@ int main(int argc, char *argv[])
         /* fake producer */
         std::cout << "using fake camera to produce images" << std::endl;
         producer_is_fake = true;
-        cam_height = 540;
-        cam_width = 720;
-        producer = std::thread([&camera_queue, &close_signal, &cam_height, &cam_width]() { //, &projector
+        // cam_height = 540;
+        // cam_width = 720;
+        producer = std::thread([&camera_queue, &close_signal]() { //, &projector
             CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
             Timer t_block;
             t_block.start();
@@ -674,12 +693,12 @@ int main(int argc, char *argv[])
                 glm::vec3 cam_pos = gl_flycamera.getPos();
                 glm::vec3 cam_front = gl_flycamera.getFront();
                 glm::vec3 proj_pos = gl_projector.getPos();
-                text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-                text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_flycamera.Zoom), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-                text.Render(textShader, std::format("vcamera front: {:.02f}, {:.02f}, {:.02f}", cam_front.x, cam_front.y, cam_front.z), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-                text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-                text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
-                // text.Render(textShader, std::format("bone index: {}, id: {}", displayBoneIndex, skinnedModel.getBoneName(displayBoneIndex)), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f));
+                text.Render(textShader, std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps), 25.0f, 150.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                text.Render(textShader, std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_flycamera.Zoom), 25.0f, 125.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                text.Render(textShader, std::format("vcamera front: {:.02f}, {:.02f}, {:.02f}", cam_front.x, cam_front.y, cam_front.z), 25.0f, 100.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                text.Render(textShader, std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom), 25.0f, 75.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                text.Render(textShader, std::format("hand visible? {}", bones_to_world.size() > 0 ? "yes" : "no"), 25.0f, 50.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                text.Render(textShader, std::format("modifiers : shift: {}, ctrl: {}", shift_modifier ? "on" : "off", ctrl_modifier ? "on" : "off"), 25.0f, 25.0f, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
             }
             t_debug.stop();
         }
@@ -832,9 +851,11 @@ void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-
+    bool mod = false;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
     {
+        mod = true;
+        shift_modifier = true;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             gl_camera.processKeyboard(FORWARD, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -850,50 +871,56 @@ void processInput(GLFWwindow *window)
     }
     else
     {
-        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-        {
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                gl_projector.processKeyboard(FORWARD, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                gl_projector.processKeyboard(BACKWARD, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-                gl_projector.processKeyboard(LEFT, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-                gl_projector.processKeyboard(RIGHT, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-                gl_projector.processKeyboard(UP, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-                gl_projector.processKeyboard(DOWN, deltaTime);
-        }
-        else
-        {
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                gl_flycamera.processKeyboard(FORWARD, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                gl_flycamera.processKeyboard(BACKWARD, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-                gl_flycamera.processKeyboard(LEFT, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-                gl_flycamera.processKeyboard(RIGHT, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-                gl_flycamera.processKeyboard(UP, deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-                gl_flycamera.processKeyboard(DOWN, deltaTime);
-        }
+        shift_modifier = false;
     }
-
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
     {
-        space_pressed_flag = true;
+        mod = true;
+        ctrl_modifier = true;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            gl_projector.processKeyboard(FORWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            gl_projector.processKeyboard(BACKWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            gl_projector.processKeyboard(LEFT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            gl_projector.processKeyboard(RIGHT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            gl_projector.processKeyboard(UP, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            gl_projector.processKeyboard(DOWN, deltaTime);
     }
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    else
     {
-        if (space_pressed_flag)
-        {
-            space_pressed_flag = false;
-            displayBoneIndex = (displayBoneIndex + 1) % n_bones;
-        }
+        ctrl_modifier = false;
     }
+    if (!mod)
+    {
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(FORWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(BACKWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(LEFT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(RIGHT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(UP, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            gl_flycamera.processKeyboard(DOWN, deltaTime);
+    }
+    // if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    // {
+    //     space_pressed_flag = true;
+    // }
+    // if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    // {
+    //     if (space_pressed_flag)
+    //     {
+    //         space_pressed_flag = false;
+    //         displayBoneIndex = (displayBoneIndex + 1) % n_bones;
+    //     }
+    // }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -932,7 +959,17 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 // ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
-    gl_flycamera.processMouseScroll(static_cast<float>(yoffset));
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    {
+        gl_camera.processMouseScroll(static_cast<float>(yoffset));
+    }
+    else
+    {
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+            gl_projector.processMouseScroll(static_cast<float>(yoffset));
+        else
+            gl_flycamera.processMouseScroll(static_cast<float>(yoffset));
+    }
 }
 
 bool loadCalibrationResults(glm::mat4 &vcam_project,
@@ -986,7 +1023,6 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     vcam_project[0][2] = (proj_width - 2 * vccx) / proj_width;
     vcam_project[1][1] = 2 * vcfy / proj_height;
     vcam_project[1][2] = -(proj_height - 2 * vccy) / proj_height;
-
     vcam_project[2][2] = -(ffar + nnear) / (ffar - nnear);
     vcam_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
     vcam_project[3][2] = -1.0f;
