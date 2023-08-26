@@ -468,30 +468,57 @@ int main(int argc, char *argv[])
         {
             t2.start();
             LocalToWorld = bones_to_world[0] * rotx * coa_transform;
-            // draw skinned mesh
-            skinnedShader.use();
-            skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
-            skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-            bool use_FBO = true;
-            if (use_FBO)
+            bool project_camera_footage = false;
+            if (project_camera_footage)
             {
-                // skinnedModel.m_fbo.saveColorToFile("test1.png");
-                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
-                if (!debug_mode)
-                {
-                    canvas.RenderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
-                }
-                // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
-                t2.stop();
-                // canvas.Render(canvasShader, buffer);
-                // canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
+                /* debug */
+                canvasShader.use();
+                canvasShader.setBool("flipVer", false);
+                canvasShader.setBool("binary", true);
+                Quad defaultQuad(-1.0f);
+                canvas.RenderBuffer(canvasShader, buffer, defaultQuad);
+                std::vector<glm::vec3> screenVerts = {{-30.0, 30.0, 30.0f},
+                                                      {-30.0, -30.0, 30.0f},
+                                                      {30.0, -30.0, 30.0f},
+                                                      {30.0, 30.0, 30.0f}};
+                glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+                Quad screen(screenVerts);
+                debugShader2.use();
+                debugShader2.setBool("flipVer", false);
+                debugShader2.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
+                debugShader2.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
+                debugShader2.setBool("binary", true);
+                unsigned int tex = canvas.RenderBufferToFBO(debugShader2, screen);
+                textureShader.setBool("binary", false);
+                canvas.RenderTexture(textureShader, tex);
+                /* debug */
             }
             else
             {
-                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
-                t2.stop();
+                // draw skinned mesh
+                skinnedShader.use();
+                skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
+                skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
+                if (!debug_mode)
+                {
+                    // skinnedModel.m_fbo.saveColorToFile("test1.png");
+                    canvas.RenderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
+                }
             }
+            // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
+            t2.stop();
+
+            // canvas.Render(canvasShader, buffer);
+            // canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
+            // }
+            // else
+            // {
+            //     skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
+            //     t2.stop();
+            // }
         }
         if (debug_mode)
         {
