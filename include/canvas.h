@@ -25,26 +25,28 @@ public:
     Canvas(unsigned int m_srcWidth, unsigned int m_srcHeight,
            unsigned int m_dstWidth, unsigned int m_dstHeight,
            bool use_cuda);
-    ~Canvas() { Clear(); };
-    void Render(Shader &shader, uint8_t *buffer);
-    void Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker,
+    ~Canvas() { clear(); };
+    void render(Shader &shader, uint8_t *buffer);
+    void render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker,
                 unsigned int texture, uint8_t *buffer, bool use_pbo = true);
-    void RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_pbo = true);
-    unsigned int RenderBufferToFBO(Shader &shader, Quad &quad);
-    void RenderTexture(Shader &shader, unsigned int texture, Quad &quad);
-    void RenderTexture(Shader &shader, unsigned int texture);
+    void uploadBufferToTexture(uint8_t *buffer, bool use_pbo = true);
+    void renderBuffer(Shader &shader, Quad &quad);
+    unsigned int renderToFBO(Shader &shader, Quad &quad);
+    void renderTexture(Shader &shader, unsigned int texture, Quad &quad);
+    void renderTexture(Shader &shader, unsigned int texture);
     void getTimerValues(double &time0, double &time1, double &time2);
     void resetTimers();
 
 private:
     void initGLBuffers();
     // void CreateTexture();
-    void Clear();
-    void ProcesssWithCuda();
-    void ProcesssWithGL();
+    void clear();
+    void processsWithCuda();
+    void processsWithGL();
     bool m_use_cuda;
     Quad m_quad;
     FBO m_fbo;
+    // FBO m_fbo_RG;
     unsigned int m_depth_buffer[2] = {0};
     unsigned int m_FBO[2] = {0};
     unsigned int m_pingpong_textures[2] = {0};

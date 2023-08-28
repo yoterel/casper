@@ -17,7 +17,7 @@ Canvas::Canvas(unsigned int srcWidth, unsigned int srcHeight, unsigned int dstWi
     // initCUDABuffers();
 }
 
-void Canvas::Clear()
+void Canvas::clear()
 {
     if (m_PBO != 0)
     {
@@ -57,7 +57,29 @@ void Canvas::Clear()
     }
 }
 
-void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_pbo)
+void Canvas::renderBuffer(Shader &shader, Quad &quad)
+{
+    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    shader.setInt("src", 0);
+    quad.render();
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+unsigned int Canvas::renderToFBO(Shader &shader, Quad &quad)
+{
+    // saveImage("test.png", m_texture_src, m_dstWidth, m_dstHeight, shader);
+    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    m_fbo.bind();
+    shader.use();
+    shader.setInt("src", 0);
+    quad.render();
+    m_fbo.unbind();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    // m_fbo.saveColorToFile("test.png");
+    return m_fbo.getTexture();
+}
+
+void Canvas::uploadBufferToTexture(uint8_t *buffer, bool use_pbo)
 {
     if (use_pbo)
     {
@@ -79,35 +101,20 @@ void Canvas::RenderBuffer(Shader &shader, uint8_t *buffer, Quad &quad, bool use_
         glBindTexture(GL_TEXTURE_2D, m_texture_src);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
     }
-    shader.setInt("src", 0);
-    quad.render();
-    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-unsigned int Canvas::RenderBufferToFBO(Shader &shader, Quad &quad)
+void Canvas::renderTexture(Shader &shader, unsigned int texture, Quad &quad)
 {
-    // saveImage("test.png", m_texture_src, m_dstWidth, m_dstHeight, shader);
-    glBindTexture(GL_TEXTURE_2D, m_texture_src);
-    m_fbo.bind();
-    shader.use();
-    shader.setInt("src", 0);
-    quad.render();
-    m_fbo.unbind();
-    glBindTexture(GL_TEXTURE_2D, 0);
-    // m_fbo.saveColorToFile("test.png");
-    return m_fbo.getTexture();
-}
-
-void Canvas::RenderTexture(Shader &shader, unsigned int texture, Quad &quad)
-{
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
     shader.use();
     shader.setInt("src", 0);
+    shader.setBool("flipVer", false);
     quad.render();
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Canvas::RenderTexture(Shader &shader, unsigned int texture)
+void Canvas::renderTexture(Shader &shader, unsigned int texture)
 {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -118,7 +125,7 @@ void Canvas::RenderTexture(Shader &shader, unsigned int texture)
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
+void Canvas::render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
 {
     if (use_pbo)
     {
@@ -219,7 +226,7 @@ void Canvas::Render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned
     m_quad.render();
     t2.stop();
 }
-void Canvas::Render(Shader &shader, uint8_t *buffer)
+void Canvas::render(Shader &shader, uint8_t *buffer)
 {
     if (m_use_cuda)
     {
@@ -232,7 +239,7 @@ void Canvas::Render(Shader &shader, uint8_t *buffer)
             glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
         }
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        ProcesssWithCuda();
+        processsWithCuda();
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
         glBindTexture(GL_TEXTURE_2D, m_texture_src);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
@@ -276,7 +283,7 @@ void Canvas::Render(Shader &shader, uint8_t *buffer)
     m_quad.render();
 }
 
-void Canvas::ProcesssWithCuda()
+void Canvas::processsWithCuda()
 {
     uint8_t *out_data;
     size_t num_bytes;
@@ -353,9 +360,9 @@ void Canvas::initGLBuffers()
     // glCheckError();
     //  glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA, m_srcWidth, m_srcHeight);
     //  set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // GL_REPEAT
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); // GL_REPEAT, GL_CLAMP_TO_BORDER
     // glCheckError();
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     // glCheckError();
     //  set texture filtering parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

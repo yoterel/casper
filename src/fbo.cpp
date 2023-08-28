@@ -4,7 +4,7 @@
 #include <vector>
 #include "stb_image_write.h"
 
-FBO::FBO(unsigned int width, unsigned int height) : m_width(width), m_height(height)
+FBO::FBO(unsigned int width, unsigned int height, unsigned int channels) : m_width(width), m_height(height), m_channels(channels)
 {
     init();
 }
@@ -41,7 +41,29 @@ void FBO::init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    if (m_channels == 4)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    }
+    else
+    {
+        if (m_channels == 3)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+        }
+        else
+        {
+            if (m_channels == 2)
+            {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RG, m_width, m_height, 0, GL_RG, GL_FLOAT, 0);
+            }
+            else
+            {
+                std::cout << "FBO ERROR: Unsupported number of channels." << std::endl;
+                exit(1);
+            }
+        }
+    }
 
     glBindRenderbuffer(GL_RENDERBUFFER, m_depthBuffer);
     //  allocate storage

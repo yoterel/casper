@@ -37,7 +37,7 @@ void main()
     gl_Position = gTransform * PosL;
     TexCoord0 = TexCoord;
     vec4 proj_pos = gProjectorTransform * PosL;
-    ProjTexCoord0 = (vec2(proj_pos.x / proj_pos.w, proj_pos.y / proj_pos.w) + vec2(1.0, 1.0)) * vec2(0.5, 0.5);
+    ProjTexCoord0 = (vec2(proj_pos.x / 50.0, proj_pos.y / 50.0) + vec2(1.0, 1.0)) * vec2(0.5, 0.5);
     ProjTexCoord0 = vec2(ProjTexCoord0.x, 1-ProjTexCoord0.y);
     //Normal0 = Normal;
     //LocalPos0 = Position;

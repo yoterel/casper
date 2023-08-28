@@ -62,13 +62,17 @@ void Quad::init(std::vector<float> &verts)
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
-void Quad::render()
+void Quad::render(bool wireFrame)
 {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
+    if (wireFrame)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glBindVertexArray(m_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+    if (wireFrame)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);

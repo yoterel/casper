@@ -1,7 +1,6 @@
 #version 330
 out vec4 FragColor;
 
-in vec2 TexCoord;
 in vec2 ProjTexCoord;
 
 uniform sampler2D src;
@@ -9,7 +8,9 @@ uniform bool binary;
 
 void main()
 {
-    vec3 col = texture(src, ProjTexCoord).rgb;
+    float u = (ProjTexCoord.x + 1) * 0.5;
+    float v = (ProjTexCoord.y + 1) * 0.5;
+    vec3 col = texture(src, vec2(u, v)).rgb;
     if (binary)
     {
         float avg = (col.r + col.g + col.b) * 0.333333;

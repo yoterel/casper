@@ -26,7 +26,7 @@ enum Camera_Mode
 // Default camera values
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 10.0f;
+const float SPEED = 2.0f;
 const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
 
@@ -34,9 +34,9 @@ const float ZOOM = 45.0f;
 class GLCamera
 {
 public:
-    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height);
-    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height);
-    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height);
+    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height, float speed = SPEED);
+    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height, float speed = SPEED);
+    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height, float speed = SPEED);
     GLCamera(){};
     GLCamera(GLCamera &s)
     {

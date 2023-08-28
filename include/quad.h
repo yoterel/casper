@@ -9,7 +9,7 @@ public:
     Quad(float depth);
     Quad(std::vector<glm::vec3> &vertices);
     ~Quad();
-    void render();
+    void render(bool wireFrame = false);
     Quad(const Quad &) = delete;
     Quad &operator=(const Quad &) = delete;
 

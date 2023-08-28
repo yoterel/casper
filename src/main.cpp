@@ -48,8 +48,8 @@ bool use_projector = true;
 bool use_screen = true;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
-const unsigned int cam_height = 540;
 const unsigned int cam_width = 720;
+const unsigned int cam_height = 540;
 // global state
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
@@ -229,9 +229,10 @@ int main(int argc, char *argv[])
     Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
     Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
     Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
-    Shader debugShader2("C:/src/augmented_hands/src/shaders/debug2.vs", "C:/src/augmented_hands/src/shaders/debug2.fs");
+    Shader projectorShader("C:/src/augmented_hands/src/shaders/projector_shader.vs", "C:/src/augmented_hands/src/shaders/projector_shader.fs");
     Shader textureShader("C:/src/augmented_hands/src/shaders/color_by_texture.vs", "C:/src/augmented_hands/src/shaders/color_by_texture.fs");
     Shader lineShader("C:/src/augmented_hands/src/shaders/line_shader.vs", "C:/src/augmented_hands/src/shaders/line_shader.fs");
+    Shader coordShader("C:/src/augmented_hands/src/shaders/coords.vs", "C:/src/augmented_hands/src/shaders/coords.fs");
     Shader canvasShader;
     if (use_cuda)
         canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
@@ -287,12 +288,13 @@ int main(int argc, char *argv[])
         if (freecam_mode)
         {
             // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
-            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+            gl_flycamera = GLCamera(glm::vec3(-5.0f, 20.0f, 40.0f),
                                     glm::vec3(0.0f, 0.0f, 0.0f),
                                     glm::vec3(0.0f, 1.0f, 0.0f),
                                     Camera_Mode::FREE_CAMERA,
                                     proj_width,
-                                    proj_height);
+                                    proj_height,
+                                    10.0f);
             gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height);
             gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height);
         }
@@ -318,7 +320,7 @@ int main(int argc, char *argv[])
             gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
                                     glm::vec3(0.0f, 0.0f, 0.0f),
                                     glm::vec3(0.0f, 1.0f, 0.0f),
-                                    Camera_Mode::FREE_CAMERA, proj_width, proj_height);
+                                    Camera_Mode::FREE_CAMERA, proj_width, proj_height, 10.0f);
         else
             gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
                                     glm::vec3(0.0f, 0.0f, 0.0f),
@@ -471,28 +473,30 @@ int main(int argc, char *argv[])
             bool project_camera_footage = false;
             if (project_camera_footage)
             {
-                /* debug */
-                canvasShader.use();
-                canvasShader.setBool("flipVer", false);
-                canvasShader.setBool("binary", true);
-                Quad defaultQuad(-1.0f);
-                canvas.RenderBuffer(canvasShader, buffer, defaultQuad);
-                std::vector<glm::vec3> screenVerts = {{-30.0, 30.0, 30.0f},
-                                                      {-30.0, -30.0, 30.0f},
-                                                      {30.0, -30.0, 30.0f},
-                                                      {30.0, 30.0, 30.0f}};
-                glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-                Quad screen(screenVerts);
-                debugShader2.use();
-                debugShader2.setBool("flipVer", false);
-                debugShader2.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
-                debugShader2.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
-                debugShader2.setBool("binary", true);
-                unsigned int tex = canvas.RenderBufferToFBO(debugShader2, screen);
-                textureShader.setBool("binary", false);
-                canvas.RenderTexture(textureShader, tex);
-                /* debug */
+                if (!debug_mode)
+                {
+                    canvas.uploadBufferToTexture(buffer);
+                    // canvasShader.use();
+                    // canvasShader.setBool("flipVer", false);
+                    // canvasShader.setBool("binary", true);
+                    // Quad defaultQuad(-1.0f);
+                    // canvas.RenderBuffer(canvasShader, buffer, defaultQuad);
+                    std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, -10.0f},
+                                                          {-100.0, -100.0, -10.0f},
+                                                          {100.0, -100.0, -10.0f},
+                                                          {100.0, 100.0, -10.0f}};
+                    // glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+                    // glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+                    Quad screen(screenVerts);
+                    projectorShader.use();
+                    projectorShader.setBool("flipVer", false);
+                    projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+                    projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                    projectorShader.setBool("binary", true);
+                    unsigned int tex = canvas.renderToFBO(projectorShader, screen);
+                    canvasShader.setBool("binary", false);
+                    canvas.renderTexture(canvasShader, tex);
+                }
             }
             else
             {
@@ -505,7 +509,7 @@ int main(int argc, char *argv[])
                 if (!debug_mode)
                 {
                     // skinnedModel.m_fbo.saveColorToFile("test1.png");
-                    canvas.RenderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
+                    canvas.renderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
                 }
             }
             // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
@@ -523,6 +527,49 @@ int main(int argc, char *argv[])
         if (debug_mode)
         {
             t_debug.start();
+            // setup some vertices
+            std::vector<glm::vec3> near_frustrum = {{-1.0f, 1.0f, -1.0f},
+                                                    {-1.0f, -1.0f, -1.0f},
+                                                    {1.0f, -1.0f, -1.0f},
+                                                    {1.0f, 1.0f, -1.0f}};
+            std::vector<glm::vec3> mid_frustrum = {{-1.0f, 1.0f, 0.7f},
+                                                   {-1.0f, -1.0f, 0.7f},
+                                                   {1.0f, -1.0f, 0.7f},
+                                                   {1.0f, 1.0f, 0.7f}};
+            std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, -10.0f},
+                                                  {-100.0, -100.0, -10.0f},
+                                                  {100.0, -100.0, -10.0f},
+                                                  {100.0, 100.0, -10.0f}};
+            std::vector<glm::vec3> vcamNearVerts(4);
+            std::vector<glm::vec3> vcamMidVerts(4);
+            std::vector<glm::vec3> vprojNearVerts(4);
+            std::vector<glm::vec3> vprojMidVerts(4);
+            std::vector<glm::vec3> vcamScreenVerts(4);
+            std::vector<glm::vec3> vprojScreenVerts(4);
+            // unproject points
+            glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+            glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+            for (int i = 0; i < mid_frustrum.size(); ++i)
+            {
+                glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                vcamMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = vcamUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                vcamNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = vprojUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                vprojMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = vprojUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                vprojNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                glm::vec4 projected = vcam_projection_transform * vcam_view_transform * glm::vec4(screenVerts[i], 1.0f);
+                vcamScreenVerts[i] = glm::vec3(projected) / projected.w;
+                projected = vproj_projection_transform * vproj_view_transform * glm::vec4(screenVerts[i], 1.0f);
+                vprojScreenVerts[i] = glm::vec3(projected) / projected.w;
+            }
+            Quad vcamNearQuad(vcamNearVerts);
+            Quad vcamMidQuad(vcamMidVerts);
+            Quad vprojNearQuad(vprojNearVerts);
+            Quad vprojMidQuad(vprojMidVerts);
+            Quad screen(screenVerts);
+            canvas.uploadBufferToTexture(buffer);
             if (bones_to_world.size() > 0)
             {
                 // draw skeleton vertices
@@ -580,9 +627,18 @@ int main(int argc, char *argv[])
                 vcolorShader.use();
                 vcolorShader.setMat4("projection", flycam_projection_transform);
                 vcolorShader.setMat4("view", flycam_view_transform);
-                vcolorShader.setMat4("model", glm::mat4(3.0f));
+                vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
                 glBindVertexArray(gizmoVAO);
                 glDrawArrays(GL_LINES, 0, 6);
+            }
+            // draws a screen somewhere
+            {
+                lineShader.use();
+                lineShader.setMat4("projection", flycam_projection_transform);
+                lineShader.setMat4("view", flycam_view_transform);
+                lineShader.setMat4("model", glm::mat4(1.0f));
+                lineShader.setVec3("color", glm::vec3(0.0f, 1.0f, 0.0f));
+                screen.render(true);
             }
             // draws cube at world origin
             {
@@ -595,6 +651,26 @@ int main(int argc, char *argv[])
                 glBindVertexArray(cubeVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
                 glEnable(GL_CULL_FACE);
+            }
+            // draw camera input to near plane of vproj frustrum
+            {
+                // directly render camera input
+                textureShader.use();
+                textureShader.setBool("flipVer", false);
+                textureShader.setMat4("projection", flycam_projection_transform);
+                textureShader.setMat4("view", flycam_view_transform);
+                textureShader.setMat4("model", glm::mat4(1.0f));
+                textureShader.setBool("binary", false);
+                canvas.renderBuffer(textureShader, vprojNearQuad);
+                // project camera input like a projector onto scene
+                // projectorShader.use();
+                // projectorShader.setBool("flipVer", false);
+                // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                // projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                // projectorShader.setBool("binary", false);
+                // canvas.renderBuffer(projectorShader, screen);
+                // unsigned int tex = skinnedModel.GetMaterial().pDiffuse->GetTexture();
+                // canvas.renderTexture(projectorShader, tex, screen);
             }
             // draws frustrum of projector (=vcam)
             {
@@ -633,87 +709,43 @@ int main(int argc, char *argv[])
                 glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * vcamFrustumVerticesData.size(), vcamFrustumVerticesData.data(), GL_STATIC_DRAW);
                 glBindVertexArray(frustrumVAO);
                 glDrawArrays(GL_LINES, 0, 28);
-                std::vector<glm::vec3> vcam_mid_frustrum = {{-1.0f, 1.0f, 0.7f},
-                                                            {-1.0f, -1.0f, 0.7f},
-                                                            {1.0f, -1.0f, 0.7f},
-                                                            {1.0f, 1.0f, 0.7f}};
-                for (int i = 0; i < vcam_mid_frustrum.size(); ++i)
-                {
-                    glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(vcam_mid_frustrum[i], 1.0f);
-                    unprojected /= unprojected.w;
-                    vcam_mid_frustrum[i] = unprojected;
-                }
-                Quad vcamMidQuad(vcam_mid_frustrum);
-            }
-            // draw camera input to near plane of vproj frustrum
-            {
-                std::vector<glm::vec3> vprojFrustumVerticesData(28);
-                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-                for (int i = 0; i < frustumCornerVertices.size(); ++i)
-                {
-                    glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
-                    vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
-                }
-                std::vector<glm::vec3> vprojNearVerts(4);
-                textureShader.use();
-                textureShader.setBool("flipVer", false);
-                textureShader.setMat4("projection", flycam_projection_transform);
-                textureShader.setMat4("view", flycam_view_transform);
-                textureShader.setMat4("model", glm::mat4(1.0f));
-                textureShader.setBool("binary", true);
-                vprojNearVerts[0] = vprojFrustumVerticesData[0];
-                vprojNearVerts[1] = vprojFrustumVerticesData[2];
-                vprojNearVerts[2] = vprojFrustumVerticesData[4];
-                vprojNearVerts[3] = vprojFrustumVerticesData[6];
-                Quad vprojNearQuad(vprojNearVerts);
-                canvas.RenderBuffer(textureShader, buffer, vprojNearQuad);
             }
             // draw projector output to near plane of vcam frustrum
             {
-                std::vector<glm::vec3> near_frustrum = {{-1.0f, 1.0f, -1.0f},
-                                                        {-1.0f, -1.0f, -1.0f},
-                                                        {1.0f, -1.0f, -1.0f},
-                                                        {1.0f, 1.0f, -1.0f}};
-                std::vector<glm::vec3> mid_frustrum = {{-1.0f, 1.0f, 0.7f},
-                                                       {-1.0f, -1.0f, 0.7f},
-                                                       {1.0f, -1.0f, 0.7f},
-                                                       {1.0f, 1.0f, 0.7f}};
-                std::vector<glm::vec3> vcamNearVerts(4);
-                std::vector<glm::vec3> vcamMidVerts(4);
-                std::vector<glm::vec3> vprojNearVerts(4);
-                std::vector<glm::vec3> vprojMidVerts(4);
-                // unproject points
-                glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-                for (int i = 0; i < mid_frustrum.size(); ++i)
+                bool use_camera_footage = false;
+                if (use_camera_footage)
                 {
-                    glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
-                    vcamMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                    unprojected = vcamUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
-                    vcamNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                    unprojected = vprojUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
-                    vprojMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                    unprojected = vprojUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
-                    vprojNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                    projectorShader.use();
+                    projectorShader.setBool("flipVer", false);
+                    projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+                    projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                    projectorShader.setBool("binary", false);
+                    // unsigned int tex = skinnedModel.GetMaterial().pDiffuse->GetTexture();
+                    unsigned int tex = canvas.renderToFBO(projectorShader, screen);
+                    textureShader.use();
+                    textureShader.setBool("flipVer", false);
+                    textureShader.setMat4("projection", flycam_projection_transform);
+                    textureShader.setMat4("view", flycam_view_transform);
+                    textureShader.setMat4("model", glm::mat4(1.0f));
+                    textureShader.setBool("binary", false);
+                    canvas.renderTexture(textureShader, tex, vcamNearQuad);
                 }
-                Quad vcamNearQuad(vcamNearVerts);
-                Quad vcamMidQuad(vcamMidVerts);
-                Quad vprojNearQuad(vprojNearVerts);
-                Quad vprojMidQuad(vprojMidVerts);
-
-                // debugShader2.use();
-                // debugShader2.setBool("flipVer", false);
-                // debugShader2.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
-                // debugShader2.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
-                // debugShader2.setBool("binary", true);
-                // unsigned int tex = canvas.RenderBufferToFBO(debugShader2, vcamMidQuad);
-                textureShader.use();
-                textureShader.setBool("flipVer", false);
-                textureShader.setMat4("projection", flycam_projection_transform);
-                textureShader.setMat4("view", flycam_view_transform);
-                textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
-                textureShader.setBool("binary", false);
-                canvas.RenderTexture(textureShader, skinnedModel.m_fbo.getTexture() /*tex*/, vcamNearQuad);
+                else
+                {
+                    // projectorShader.use();
+                    // projectorShader.setBool("flipVer", false);
+                    // projectorShader.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
+                    // projectorShader.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
+                    // projectorShader.setBool("binary", true);
+                    // unsigned int tex = canvas.RenderBufferToFBO(projectorShader, vcamMidQuad);
+                    textureShader.use();
+                    textureShader.setBool("flipVer", false);
+                    textureShader.setMat4("projection", flycam_projection_transform);
+                    textureShader.setMat4("view", flycam_view_transform);
+                    textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
+                    textureShader.setBool("binary", false);
+                    canvas.renderTexture(textureShader, skinnedModel.m_fbo.getTexture() /*tex*/, vcamNearQuad);
+                }
             }
             // draws text
             {
@@ -978,21 +1010,34 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 
     lastX = xpos;
     lastY = ypos;
-
-    gl_flycamera.processMouseMovement(xoffset, yoffset);
+    if (shift_modifier)
+    {
+        gl_camera.processMouseMovement(xoffset, yoffset);
+    }
+    else
+    {
+        if (ctrl_modifier)
+        {
+            gl_projector.processMouseMovement(xoffset, yoffset);
+        }
+        else
+        {
+            gl_flycamera.processMouseMovement(xoffset, yoffset);
+        }
+    }
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
 // ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    if (shift_modifier)
     {
         gl_camera.processMouseScroll(static_cast<float>(yoffset));
     }
     else
     {
-        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+        if (ctrl_modifier)
             gl_projector.processMouseScroll(static_cast<float>(yoffset));
         else
             gl_flycamera.processMouseScroll(static_cast<float>(yoffset));

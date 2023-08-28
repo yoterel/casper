@@ -1,15 +1,15 @@
 #include "gl_camera.h"
 
 GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
-                   float width, float height) : MovementSpeed(SPEED),
-                                                MouseSensitivity(SENSITIVITY),
-                                                Zoom(ZOOM),
-                                                Yaw(YAW),
-                                                Pitch(PITCH),
-                                                m_width(width),
-                                                m_height(height)
+                   float width, float height, float speed) : MovementSpeed(speed),
+                                                             MouseSensitivity(SENSITIVITY),
+                                                             Zoom(ZOOM),
+                                                             Yaw(YAW),
+                                                             Pitch(PITCH),
+                                                             m_width(width),
+                                                             m_height(height)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), 1.0f, 1.0f, 500.0f);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 500.0f);
     m_mode = mode;
     if (m_mode == Camera_Mode::FIXED_CAMERA)
     {
@@ -32,14 +32,14 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
     }
 }
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
-                   float width, float height) : MovementSpeed(SPEED),
-                                                MouseSensitivity(SENSITIVITY),
-                                                Zoom(ZOOM),
-                                                m_mode(Camera_Mode::FIXED_CAMERA),
-                                                m_width(width),
-                                                m_height(height)
+                   float width, float height, float speed) : MovementSpeed(speed),
+                                                             MouseSensitivity(SENSITIVITY),
+                                                             Zoom(ZOOM),
+                                                             m_mode(Camera_Mode::FIXED_CAMERA),
+                                                             m_width(width),
+                                                             m_height(height)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), 1.0f, 1.0f, 500.0f);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 500.0f);
     Front = glm::normalize(front);
     // Pitch = asin(Front.y);
     // Yaw = atan2(Front.x, Front.z);
@@ -50,11 +50,11 @@ GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
     viewMatrix = glm::lookAt(Position, Position + Front, Up);
 }
 GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode,
-                   float width, float height) : MovementSpeed(SPEED),
-                                                MouseSensitivity(SENSITIVITY),
-                                                m_mode(mode),
-                                                m_width(width),
-                                                m_height(height)
+                   float width, float height, float speed) : MovementSpeed(speed),
+                                                             MouseSensitivity(SENSITIVITY),
+                                                             m_mode(mode),
+                                                             m_width(width),
+                                                             m_height(height)
 {
     projectionMatrix = projection;
     Zoom = glm::degrees(2 * atan(1.0f / projection[1][1]));
