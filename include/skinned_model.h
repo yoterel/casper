@@ -127,7 +127,7 @@ public:
     };
     bool LoadMesh(const std::string &Filename);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                glm::mat4 local_to_world, bool useFBO = true, uint8_t *buffer = NULL);
+                glm::mat4 local_to_world, unsigned int camTex, bool useFBO = true);
     const Material &GetMaterial();
     void GetBoneTransforms(std::vector<glm::mat4> &Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world);
     glm::vec3 getCenterOfMass();
@@ -171,7 +171,7 @@ private:
     unsigned int m_VAO = 0;
     unsigned int m_Buffers[NUM_BUFFERS] = {0};
     // unsigned int m_FBO, m_fbo_depth_buffer, m_fbo_texture;
-    unsigned int m_cam_texture;
+    // unsigned int m_cam_texture;
 
     Assimp::Importer Importer;
     const aiScene *pScene = NULL;

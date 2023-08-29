@@ -67,8 +67,16 @@ void Canvas::renderBuffer(Shader &shader, Quad &quad)
 
 unsigned int Canvas::renderToFBO(Shader &shader, Quad &quad)
 {
-    // saveImage("test.png", m_texture_src, m_dstWidth, m_dstHeight, shader);
-    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    m_fbo.bind();
+    quad.render();
+    m_fbo.unbind();
+    return m_fbo.getTexture();
+}
+
+unsigned int Canvas::renderToFBO(unsigned int tex, Shader &shader, Quad &quad)
+{
+    // saveImage("test.png", tex, m_dstWidth, m_dstHeight, shader);
+    glBindTexture(GL_TEXTURE_2D, tex);
     m_fbo.bind();
     shader.use();
     shader.setInt("src", 0);
@@ -79,34 +87,11 @@ unsigned int Canvas::renderToFBO(Shader &shader, Quad &quad)
     return m_fbo.getTexture();
 }
 
-void Canvas::uploadBufferToTexture(uint8_t *buffer, bool use_pbo)
+void Canvas::renderTexture(unsigned int tex, Shader &shader, Quad &quad)
 {
-    if (use_pbo)
-    {
-        // transfer data from memory to GPU texture (using PBO)
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
-        glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
-        GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-        if (ptr)
-        {
-            memcpy(ptr, buffer, m_size_tex_data);
-            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
-        }
-        glBindTexture(GL_TEXTURE_2D, m_texture_src);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    }
-    else
-    {
-        glBindTexture(GL_TEXTURE_2D, m_texture_src);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
-    }
-}
-
-void Canvas::renderTexture(Shader &shader, unsigned int texture, Quad &quad)
-{
+    // saveImage("test.png", tex, m_dstWidth, m_dstHeight, shader);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, tex);
     shader.use();
     shader.setInt("src", 0);
     shader.setBool("flipVer", false);
@@ -114,13 +99,10 @@ void Canvas::renderTexture(Shader &shader, unsigned int texture, Quad &quad)
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Canvas::renderTexture(Shader &shader, unsigned int texture)
+void Canvas::renderTexture(unsigned int tex, Shader &shader)
 {
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    shader.use();
-    shader.setInt("src", 0);
-    shader.setBool("flipVer", false);
+    glBindTexture(GL_TEXTURE_2D, tex);
     m_quad.render();
     glBindTexture(GL_TEXTURE_2D, 0);
 }

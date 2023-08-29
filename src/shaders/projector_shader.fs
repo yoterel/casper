@@ -3,14 +3,14 @@ out vec4 FragColor;
 
 in vec2 ProjTexCoord;
 
-uniform sampler2D src;
+uniform sampler2D projTexture;
 uniform bool binary;
 
 void main()
 {
     float u = (ProjTexCoord.x + 1) * 0.5;
     float v = (ProjTexCoord.y + 1) * 0.5;
-    vec3 col = texture(src, vec2(u, v)).rgb;
+    vec3 col = texture(projTexture, vec2(u, v)).rgb;
     if (binary)
     {
         float avg = (col.r + col.g + col.b) * 0.333333;

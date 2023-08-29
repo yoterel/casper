@@ -22,19 +22,24 @@ struct Material
 };
 uniform Material gMaterial;
 uniform sampler2D gSampler;
-uniform sampler2D gProjSampler;
+
+uniform sampler2D projTexture;
+uniform bool binary;
 // uniform int gDisplayBoneIndex;
 
 void main()
 {
-    vec4 proj_col = texture(gProjSampler, ProjTexCoord0);
-    float avg = (proj_col.r + proj_col.g + proj_col.b) * 0.333333;
-    if (avg > 0.0) {
-    //     // proj_col.w = 1.0;
-        proj_col = vec4(1.0, 1.0, 1.0, 1.0);
-    } else {
-        proj_col = vec4(0.0, 0.0, 0.0, 1.0);
-    //     // proj_col.w = 0.0;
+    float u = (ProjTexCoord0.x + 1.0) * 0.5;
+    float v = (ProjTexCoord0.y + 1.0) * 0.5;
+    vec4 proj_col = vec4(texture(projTexture, vec2(u, 1-v)).rgb, 1.0);
+    if (binary)
+    {
+        float avg = (proj_col.r + proj_col.g + proj_col.b) * 0.333333;
+        if (avg > 0.0) {
+            proj_col = vec4(1.0, 1.0, 1.0, 1.0);
+        } else {
+            proj_col = vec4(0.0, 0.0, 0.0, 1.0);
+        }
     }
     // finalColor = vec4(ourColor, 0.9); // boneweight debug
     vec4 diffuse_color = texture(gSampler, TexCoord0);  // diffuse texture

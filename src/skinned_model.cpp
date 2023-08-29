@@ -299,9 +299,9 @@ void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *
 
             std::string FullPath = Dir + "/" + p;
 
-            m_Materials[index].pDiffuse = new Texture(GL_TEXTURE_2D, FullPath.c_str());
+            m_Materials[index].pDiffuse = new Texture(FullPath.c_str(), GL_TEXTURE_2D);
 
-            if (!m_Materials[index].pDiffuse->Load())
+            if (!m_Materials[index].pDiffuse->init())
             {
                 std::cout << "Error loading diffuse texture '" << FullPath << "'" << std::endl;
                 exit(1);
@@ -316,8 +316,8 @@ void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *
     {
         if (m_externalTextureFileName != "")
         {
-            m_Materials[index].pDiffuse = new Texture(GL_TEXTURE_2D, m_externalTextureFileName.c_str());
-            if (!m_Materials[index].pDiffuse->Load())
+            m_Materials[index].pDiffuse = new Texture(m_externalTextureFileName.c_str(), GL_TEXTURE_2D);
+            if (!m_Materials[index].pDiffuse->init())
             {
                 std::cout << "Error loading diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
                 exit(1);
@@ -353,9 +353,9 @@ void SkinnedModel::LoadSpecularTexture(const std::string &Dir, const aiMaterial 
 
             std::string FullPath = Dir + "/" + p;
 
-            m_Materials[index].pSpecularExponent = new Texture(GL_TEXTURE_2D, FullPath.c_str());
+            m_Materials[index].pSpecularExponent = new Texture(FullPath.c_str(), GL_TEXTURE_2D);
 
-            if (!m_Materials[index].pSpecularExponent->Load())
+            if (!m_Materials[index].pSpecularExponent->init())
             {
                 printf("Error loading specular texture '%s'\n", FullPath.c_str());
                 exit(0);
@@ -452,26 +452,22 @@ void SkinnedModel::PopulateBuffers()
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     /* camera texture */
-    glGenTextures(1, &m_cam_texture);
-    glBindTexture(GL_TEXTURE_2D, m_cam_texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // GL_CLAMP_TO_EDGE
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT); // GL_CLAMP_TO_EDGE
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA /*GL_RGBA16F*/, m_camWidth, m_camHeight, 0, GL_BGRA /* GL_RGBA*/,
-                 GL_UNSIGNED_BYTE, NULL);
+    // glGenTextures(1, &m_cam_texture);
+    // glBindTexture(GL_TEXTURE_2D, m_cam_texture);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // GL_CLAMP_TO_EDGE
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT); // GL_CLAMP_TO_EDGE
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA /*GL_RGBA16F*/, m_camWidth, m_camHeight, 0, GL_BGRA /* GL_RGBA*/,
+    //              GL_UNSIGNED_BYTE, NULL);
     /* camera texture */
 }
 
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                          glm::mat4 local_to_world, bool useFBO, uint8_t *buffer)
+                          glm::mat4 local_to_world, unsigned int camTex, bool useFBO)
 {
-    if (buffer != NULL)
-    {
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_cam_texture);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_camWidth, m_camHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
-    }
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, camTex);
     if (useFBO)
     {
         m_fbo.bind();
@@ -480,7 +476,7 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
     shader.use();
     shader.SetMaterial(this->GetMaterial());
     shader.SetTextureUnit(0);
-    shader.setInt("gProjSampler", 1);
+    shader.setInt("projTexture", 1);
     // glActiveTexture(GL_TEXTURE1);
     // glBindTexture(GL_TEXTURE_2D, m_cam_texture);
     std::vector<glm::mat4> Transforms;
@@ -499,12 +495,12 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
 
         if (m_Materials[MaterialIndex].pDiffuse)
         {
-            m_Materials[MaterialIndex].pDiffuse->Bind(GL_TEXTURE0);
+            m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
         }
 
         if (m_Materials[MaterialIndex].pSpecularExponent)
         {
-            m_Materials[MaterialIndex].pSpecularExponent->Bind(GL_TEXTURE6);
+            m_Materials[MaterialIndex].pSpecularExponent->bind(GL_TEXTURE6);
         }
 
         glDrawElementsBaseVertex(GL_TRIANGLES,

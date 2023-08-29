@@ -258,6 +258,8 @@ int main(int argc, char *argv[])
     bool close_signal = false;
     int leap_time_delay = 50000; // us
     uint8_t *colorBuffer = new uint8_t[image_size];
+    Texture camTexture = Texture();
+    camTexture.init(cam_width, cam_height, 4);
     // uint32_t cam_height = 0;
     // uint32_t cam_width = 0;
     blocking_queue<CPylonImage> camera_queue;
@@ -434,6 +436,7 @@ int main(int argc, char *argv[])
         // retrieve camera image
         CPylonImage pylonImage = camera_queue.pop();
         uint8_t *buffer = (uint8_t *)pylonImage.GetBuffer();
+        camTexture.load(buffer, false); // todo: why does PBO not work?
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
         // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
         // NPP_wrapper::distanceTransform(buffer, output, cam_width, cam_height);
@@ -470,12 +473,12 @@ int main(int argc, char *argv[])
         {
             t2.start();
             LocalToWorld = bones_to_world[0] * rotx * coa_transform;
-            bool project_camera_footage = false;
-            if (project_camera_footage)
+            bool project_to_screen = false;
+            if (project_to_screen)
             {
                 if (!debug_mode)
                 {
-                    canvas.uploadBufferToTexture(buffer);
+                    // canvas.uploadBufferToTexture(buffer);
                     // canvasShader.use();
                     // canvasShader.setBool("flipVer", false);
                     // canvasShader.setBool("binary", true);
@@ -492,24 +495,35 @@ int main(int argc, char *argv[])
                     projectorShader.setBool("flipVer", false);
                     projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
                     projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                    projectorShader.setBool("binary", true);
+                    projectorShader.setBool("binary", false);
+                    projectorShader.setInt("projTexture", 0);
+                    camTexture.bind();
+                    // skinnedModel.GetMaterial().pDiffuse->bind();
                     unsigned int tex = canvas.renderToFBO(projectorShader, screen);
+                    canvasShader.use();
                     canvasShader.setBool("binary", false);
-                    canvas.renderTexture(canvasShader, tex);
+                    canvasShader.setBool("flipVer", false);
+                    canvasShader.setInt("src", 0);
+                    canvas.renderTexture(tex, canvasShader);
                 }
             }
             else
             {
-                // draw skinned mesh
+                // render skinned mesh
                 skinnedShader.use();
                 skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                 skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
                 skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, true, buffer);
+                skinnedShader.setBool("binary", true);
+                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), true);
                 if (!debug_mode)
                 {
                     // skinnedModel.m_fbo.saveColorToFile("test1.png");
-                    canvas.renderTexture(canvasShader, skinnedModel.m_fbo.getTexture());
+                    canvasShader.use();
+                    canvasShader.setBool("binary", false);
+                    canvasShader.setBool("flipVer", false);
+                    canvasShader.setInt("src", 0);
+                    canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
                 }
             }
             // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
@@ -569,7 +583,69 @@ int main(int argc, char *argv[])
             Quad vprojNearQuad(vprojNearVerts);
             Quad vprojMidQuad(vprojMidVerts);
             Quad screen(screenVerts);
-            canvas.uploadBufferToTexture(buffer);
+            // draws global coordinate system gizmo at origin
+            {
+                vcolorShader.use();
+                vcolorShader.setMat4("projection", flycam_projection_transform);
+                vcolorShader.setMat4("view", flycam_view_transform);
+                vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
+                glBindVertexArray(gizmoVAO);
+                glDrawArrays(GL_LINES, 0, 6);
+            }
+            // draws a screen somewhere
+            {
+                lineShader.use();
+                lineShader.setMat4("projection", flycam_projection_transform);
+                lineShader.setMat4("view", flycam_view_transform);
+                lineShader.setMat4("model", glm::mat4(1.0f));
+                lineShader.setVec3("color", glm::vec3(0.0f, 1.0f, 0.0f));
+                screen.render(true);
+            }
+            // draws cube at world origin
+            {
+                vcolorShader.use();
+                vcolorShader.setMat4("projection", flycam_projection_transform);
+                vcolorShader.setMat4("view", flycam_view_transform);
+                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                glEnable(GL_DEPTH_TEST);
+                glDisable(GL_CULL_FACE);
+                glBindVertexArray(cubeVAO);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+                glEnable(GL_CULL_FACE);
+            }
+            // draw camera input to near plane of vproj frustrum
+            {
+                bool project_to_screen = true;
+                if (project_to_screen)
+                {
+                    // project camera input or any other texture onto scene
+                    projectorShader.use();
+                    projectorShader.setBool("flipVer", false);
+                    projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                    projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                    projectorShader.setBool("binary", false);
+                    camTexture.bind();
+                    // skinnedModel.GetMaterial().pDiffuse->bind();
+                    projectorShader.setInt("projTexture", 0);
+                    screen.render();
+                    // canvas.renderBuffer(projectorShader, screen);
+                    // unsigned int tex = skinnedModel.GetMaterial().pDiffuse->GetTexture();
+                    // canvas.renderTexture(projectorShader, tex, screen);
+                }
+                else
+                {
+                    // directly render camera input or any other texture
+                    textureShader.use();
+                    textureShader.setBool("flipVer", false);
+                    textureShader.setMat4("projection", flycam_projection_transform);
+                    textureShader.setMat4("view", flycam_view_transform);
+                    textureShader.setMat4("model", glm::mat4(1.0f));
+                    textureShader.setBool("binary", false);
+                    textureShader.setInt("src", 0);
+                    camTexture.bind();
+                    vprojNearQuad.render();
+                }
+            }
             if (bones_to_world.size() > 0)
             {
                 // draw skeleton vertices
@@ -621,56 +697,15 @@ int main(int argc, char *argv[])
                     // glm::vec3 palm_normal(palm_normal_hom);
                     // palm_normal = glm::normalize(palm_normal);
                 }
-            }
-            // draws global coordinate system gizmo at origin
-            {
-                vcolorShader.use();
-                vcolorShader.setMat4("projection", flycam_projection_transform);
-                vcolorShader.setMat4("view", flycam_view_transform);
-                vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
-                glBindVertexArray(gizmoVAO);
-                glDrawArrays(GL_LINES, 0, 6);
-            }
-            // draws a screen somewhere
-            {
-                lineShader.use();
-                lineShader.setMat4("projection", flycam_projection_transform);
-                lineShader.setMat4("view", flycam_view_transform);
-                lineShader.setMat4("model", glm::mat4(1.0f));
-                lineShader.setVec3("color", glm::vec3(0.0f, 1.0f, 0.0f));
-                screen.render(true);
-            }
-            // draws cube at world origin
-            {
-                vcolorShader.use();
-                vcolorShader.setMat4("projection", flycam_projection_transform);
-                vcolorShader.setMat4("view", flycam_view_transform);
-                vcolorShader.setMat4("model", glm::mat4(1.0f));
-                glEnable(GL_DEPTH_TEST);
-                glDisable(GL_CULL_FACE);
-                glBindVertexArray(cubeVAO);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
-                glEnable(GL_CULL_FACE);
-            }
-            // draw camera input to near plane of vproj frustrum
-            {
-                // directly render camera input
-                textureShader.use();
-                textureShader.setBool("flipVer", false);
-                textureShader.setMat4("projection", flycam_projection_transform);
-                textureShader.setMat4("view", flycam_view_transform);
-                textureShader.setMat4("model", glm::mat4(1.0f));
-                textureShader.setBool("binary", false);
-                canvas.renderBuffer(textureShader, vprojNearQuad);
-                // project camera input like a projector onto scene
-                // projectorShader.use();
-                // projectorShader.setBool("flipVer", false);
-                // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                // projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                // projectorShader.setBool("binary", false);
-                // canvas.renderBuffer(projectorShader, screen);
-                // unsigned int tex = skinnedModel.GetMaterial().pDiffuse->GetTexture();
-                // canvas.renderTexture(projectorShader, tex, screen);
+                // draw skinned mesh in 3D
+                {
+                    skinnedShader.use();
+                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    skinnedShader.setBool("binary", true);
+                    skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
+                }
             }
             // draws frustrum of projector (=vcam)
             {
@@ -712,40 +747,42 @@ int main(int argc, char *argv[])
             }
             // draw projector output to near plane of vcam frustrum
             {
-                bool use_camera_footage = false;
-                if (use_camera_footage)
-                {
-                    projectorShader.use();
-                    projectorShader.setBool("flipVer", false);
-                    projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-                    projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                    projectorShader.setBool("binary", false);
-                    // unsigned int tex = skinnedModel.GetMaterial().pDiffuse->GetTexture();
-                    unsigned int tex = canvas.renderToFBO(projectorShader, screen);
-                    textureShader.use();
-                    textureShader.setBool("flipVer", false);
-                    textureShader.setMat4("projection", flycam_projection_transform);
-                    textureShader.setMat4("view", flycam_view_transform);
-                    textureShader.setMat4("model", glm::mat4(1.0f));
-                    textureShader.setBool("binary", false);
-                    canvas.renderTexture(textureShader, tex, vcamNearQuad);
-                }
-                else
-                {
-                    // projectorShader.use();
-                    // projectorShader.setBool("flipVer", false);
-                    // projectorShader.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
-                    // projectorShader.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
-                    // projectorShader.setBool("binary", true);
-                    // unsigned int tex = canvas.RenderBufferToFBO(projectorShader, vcamMidQuad);
-                    textureShader.use();
-                    textureShader.setBool("flipVer", false);
-                    textureShader.setMat4("projection", flycam_projection_transform);
-                    textureShader.setMat4("view", flycam_view_transform);
-                    textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
-                    textureShader.setBool("binary", false);
-                    canvas.renderTexture(textureShader, skinnedModel.m_fbo.getTexture() /*tex*/, vcamNearQuad);
-                }
+                textureShader.use();
+                textureShader.setBool("flipVer", false);
+                textureShader.setMat4("projection", flycam_projection_transform);
+                textureShader.setMat4("view", flycam_view_transform);
+                textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
+                textureShader.setBool("binary", false);
+                canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, vcamNearQuad);
+                // if (projector_only)
+                // {
+                //     projectorShader.use();
+                //     projectorShader.setBool("flipVer", false);
+                //     projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+                //     projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                //     projectorShader.setBool("binary", false);
+                //     projectorShader.setInt("projTexture", 0);
+                //     // unsigned int tex = skinnedModel.GetMaterial().pDiffuse->GetTexture();
+                //     // camTexture.bind();
+                //     skinnedModel.GetMaterial().pDiffuse->bind();
+                //     unsigned int tex = canvas.renderToFBO(projectorShader, screen);
+                //     textureShader.use();
+                //     textureShader.setBool("flipVer", false);
+                //     textureShader.setMat4("projection", flycam_projection_transform);
+                //     textureShader.setMat4("view", flycam_view_transform);
+                //     textureShader.setMat4("model", glm::mat4(1.0f));
+                //     textureShader.setBool("binary", false);
+                //     canvas.renderTexture(tex, textureShader, vcamNearQuad);
+                // }
+                // else
+                // {
+                // projectorShader.use();
+                // projectorShader.setBool("flipVer", false);
+                // projectorShader.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
+                // projectorShader.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
+                // projectorShader.setBool("binary", true);
+                // unsigned int tex = canvas.RenderBufferToFBO(projectorShader, vcamMidQuad);
+                // }
             }
             // draws text
             {

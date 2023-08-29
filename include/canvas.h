@@ -29,11 +29,11 @@ public:
     void render(Shader &shader, uint8_t *buffer);
     void render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker,
                 unsigned int texture, uint8_t *buffer, bool use_pbo = true);
-    void uploadBufferToTexture(uint8_t *buffer, bool use_pbo = true);
     void renderBuffer(Shader &shader, Quad &quad);
+    unsigned int renderToFBO(unsigned int tex, Shader &shader, Quad &quad);
     unsigned int renderToFBO(Shader &shader, Quad &quad);
-    void renderTexture(Shader &shader, unsigned int texture, Quad &quad);
-    void renderTexture(Shader &shader, unsigned int texture);
+    void renderTexture(unsigned int texture, Shader &shader, Quad &quad);
+    void renderTexture(unsigned int texture, Shader &shader);
     void getTimerValues(double &time0, double &time1, double &time2);
     void resetTimers();
 

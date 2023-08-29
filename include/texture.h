@@ -8,40 +8,45 @@
 class Texture
 {
 public:
-    Texture(GLenum TextureTarget, const std::string& FileName);
+    Texture(const std::string &FileName, GLenum TextureTarget = GL_TEXTURE_2D);
 
-    Texture(GLenum TextureTarget);
+    Texture(GLenum TextureTarget = GL_TEXTURE_2D);
 
     // Should be called once to load the texture
-    bool Load();
+    bool init();
 
-    void Load(uint32_t BufferSize, void* pData);
+    bool init(const std::string &Filename);
 
-    void Load(const std::string& Filename);
+    bool init(void *pData, uint32_t bufferSize);
 
-    void LoadRaw(int Width, int Height, int BPP, unsigned char* pData);
+    void init(int width, int height, int bpp = 4);
+
+    void initRaw(unsigned char *pData, int width, int height, int bpp = 4);
 
     // Must be called at least once for the specific texture unit
-    void Bind(GLenum TextureUnit);
+    void bind(GLenum TextureUnit = GL_TEXTURE0);
 
-    void GetImageSize(int& ImageWidth, int& ImageHeight)
+    void load(uint8_t *buffer, bool use_pbo = true);
+
+    void getImageSize(int &ImageWidth, int &ImageHeight)
     {
         ImageWidth = m_imageWidth;
         ImageHeight = m_imageHeight;
     }
 
-    GLuint GetTexture() const { return m_textureObj; }
+    GLuint getTexture() const { return m_textureObj; }
 
 private:
-    void LoadInternal(void* image_data);
+    void initInternal(void *image_data, unsigned int color_format = GL_BGRA);
 
     std::string m_fileName;
     GLenum m_textureTarget;
     GLuint m_textureObj;
+    GLuint m_PBO;
     int m_imageWidth = 0;
     int m_imageHeight = 0;
     int m_imageBPP = 0;
+    int m_sizeTexData = 0;
 };
 
-
-#endif  /* TEXTURE_H */
+#endif /* TEXTURE_H */
