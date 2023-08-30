@@ -63,6 +63,7 @@ bool space_pressed_flag = false;
 bool shift_modifier = false;
 bool ctrl_modifier = false;
 unsigned int n_bones = 0;
+float screen_z = -10.0f;
 glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
@@ -290,15 +291,17 @@ int main(int argc, char *argv[])
         if (freecam_mode)
         {
             // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
-            gl_flycamera = GLCamera(glm::vec3(-5.0f, 20.0f, 40.0f),
+            // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 10.0f);
+            gl_flycamera = GLCamera(glm::vec3(7.0f, -15.0f, 108.0f),
                                     glm::vec3(0.0f, 0.0f, 0.0f),
-                                    glm::vec3(0.0f, 1.0f, 0.0f),
+                                    glm::vec3(0.0f, -1.0f, 0.0f),
                                     Camera_Mode::FREE_CAMERA,
                                     proj_width,
                                     proj_height,
-                                    10.0f);
-            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height);
-            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height);
+                                    10.0f,
+                                    true);
+            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 2.0f, true);
+            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height, 2.0f, true);
         }
         else
         {
@@ -484,10 +487,10 @@ int main(int argc, char *argv[])
                     // canvasShader.setBool("binary", true);
                     // Quad defaultQuad(-1.0f);
                     // canvas.RenderBuffer(canvasShader, buffer, defaultQuad);
-                    std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, -10.0f},
-                                                          {-100.0, -100.0, -10.0f},
-                                                          {100.0, -100.0, -10.0f},
-                                                          {100.0, 100.0, -10.0f}};
+                    std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, screen_z},
+                                                          {-100.0, -100.0, screen_z},
+                                                          {100.0, -100.0, screen_z},
+                                                          {100.0, 100.0, screen_z}};
                     // glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
                     // glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
                     Quad screen(screenVerts);
@@ -550,10 +553,10 @@ int main(int argc, char *argv[])
                                                    {-1.0f, -1.0f, 0.7f},
                                                    {1.0f, -1.0f, 0.7f},
                                                    {1.0f, 1.0f, 0.7f}};
-            std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, -10.0f},
-                                                  {-100.0, -100.0, -10.0f},
-                                                  {100.0, -100.0, -10.0f},
-                                                  {100.0, 100.0, -10.0f}};
+            std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, screen_z},
+                                                  {-100.0, -100.0, screen_z},
+                                                  {100.0, -100.0, screen_z},
+                                                  {100.0, 100.0, screen_z}};
             std::vector<glm::vec3> vcamNearVerts(4);
             std::vector<glm::vec3> vcamMidVerts(4);
             std::vector<glm::vec3> vprojNearVerts(4);
@@ -594,12 +597,12 @@ int main(int argc, char *argv[])
             }
             // draws a screen somewhere
             {
-                lineShader.use();
-                lineShader.setMat4("projection", flycam_projection_transform);
-                lineShader.setMat4("view", flycam_view_transform);
-                lineShader.setMat4("model", glm::mat4(1.0f));
-                lineShader.setVec3("color", glm::vec3(0.0f, 1.0f, 0.0f));
-                screen.render(true);
+                // lineShader.use();
+                // lineShader.setMat4("projection", flycam_projection_transform);
+                // lineShader.setMat4("view", flycam_view_transform);
+                // lineShader.setMat4("model", glm::mat4(1.0f));
+                // lineShader.setVec3("color", glm::vec3(0.0f, 1.0f, 0.0f));
+                // screen.render(true);
             }
             // draws cube at world origin
             {
@@ -615,7 +618,7 @@ int main(int argc, char *argv[])
             }
             // draw camera input to near plane of vproj frustrum
             {
-                bool project_to_screen = true;
+                bool project_to_screen = false;
                 if (project_to_screen)
                 {
                     // project camera input or any other texture onto scene
@@ -1004,6 +1007,10 @@ void processInput(GLFWwindow *window)
             gl_flycamera.processKeyboard(UP, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
             gl_flycamera.processKeyboard(DOWN, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+            screen_z += 10.0f * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS)
+            screen_z -= 10.0f * deltaTime;
     }
     // if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
     // {
@@ -1106,7 +1113,7 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     w2vc = glm::make_mat4(arr.data<double>());
     glm::mat4 vc2w = glm::inverse(w2vc);
 
-    float ffar = 100.0f;
+    float ffar = 300.0f;
     float nnear = 1.0f;
     glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
     float vpfx = camera_intrinsics[0][0];

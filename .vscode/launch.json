@@ -72,7 +72,7 @@
             "args": [
                 "-debug",
                 "-freecam",
-                "no_proj",
+                "-no_proj",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

@@ -299,6 +299,8 @@ std::vector<float> LeapConnect::getIndexTip()
     currentFrame = lastFrame;
     UnlockMutex(&dataLock);
     std::vector<float> tip;
+    if (NULL == currentFrame)
+        return tip;
     for (uint32_t h = 0; h < currentFrame->nHands; h++)
     {
         LEAP_HAND *hand = &currentFrame->pHands[h];

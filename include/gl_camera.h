@@ -34,9 +34,9 @@ const float ZOOM = 45.0f;
 class GLCamera
 {
 public:
-    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height, float speed = SPEED);
-    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height, float speed = SPEED);
-    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height, float speed = SPEED);
+    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height, float speed = SPEED, bool inverted = false);
+    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height, float speed = SPEED, bool inverted = false);
+    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height, float speed = SPEED, bool inverted = false);
     GLCamera(){};
     GLCamera(GLCamera &s)
     {
@@ -53,8 +53,10 @@ public:
         m_mode = s.m_mode;
         viewMatrix = s.viewMatrix;
         projectionMatrix = s.projectionMatrix;
+        m_width = s.m_width;
+        m_height = s.m_height;
+        m_inverted = s.m_inverted;
     }
-    GLCamera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw, float pitch);
     glm::mat4 getViewMatrix();
     glm::mat4 getLocal2WorldMatrix();
     glm::mat4 getProjectionMatrix();
@@ -81,6 +83,7 @@ private:
     glm::vec3 Right;
     glm::vec3 WorldUp;
     Camera_Mode m_mode;
+    bool m_inverted;
     glm::mat4 viewMatrix;
     glm::mat4 projectionMatrix;
     void updateCameraVectors();

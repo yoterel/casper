@@ -17,6 +17,50 @@ def create_circle_image(width, height, loc, radii=10):
     return np.array(img)
 
 
+def reconstruct(root_path):
+    calib_res_path = Path(root_path, "debug", "calibration")
+    res = np.load(Path(calib_res_path, "calibration.npz"))
+    calib_res = {k: res[k] for k in res.keys()}
+    cam_int, cam_dist,\
+        proj_int, proj_dist,\
+        proj_transform = calib_res["cam_intrinsics"], calib_res["cam_distortion"],\
+        calib_res["proj_intrinsics"], calib_res["proj_distortion"],\
+        calib_res["proj_transform"]
+    mode = "ij"
+    output_path = Path(root_path, "debug", "reconstruct")
+    resource_path = Path(root_path, "resource")
+    proj_wh = (1024, 768)
+    gray = gsoup.GrayCode()
+    patterns = gray.encode(proj_wh)
+    proj = dynaflash.projector()
+    proj.init()
+    proj.project_white()
+    cam = basler.camera()
+    cam.init(12682.0)
+    cam.balance_white()
+    for i in range(100):
+        cam.capture()  # warmup
+    captures = []
+    for i, pattern in enumerate(patterns):
+        print("pattern", i)
+        pattern = np.repeat(pattern, 3, axis=-1)
+        proj.project(pattern)
+        image = cam.capture()
+        captures.append(image)
+    proj.kill()
+    cam.kill()
+    captures = np.array(captures)
+    gsoup.save_images(captures, Path(output_path, "captures"))
+    forward, fg = gray.decode(
+        captures, proj_wh, output_dir=Path(output_path, "decode"), debug=True, mode=mode)
+    cam_transform = np.eye(4)
+    proj_transform = cam_transform @ np.linalg.inv(proj_transform)
+    pc = gsoup.reconstruct_pointcloud(
+        forward, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode=mode, color_image=captures[-2])
+    gsoup.save_pointcloud(pc[:, :3], Path(
+        output_path, "points.ply"), vertex_colors=pc[:, 3:].astype(np.uint8))
+
+
 def pix2pix(root_path):
     output_path = Path(root_path, "debug", "pix2pix")
     resource_path = Path(root_path, "resource")
@@ -207,8 +251,10 @@ def acq_leap_projector(root_path):
         #     "current # of sessions: {}, continue?".format(session))
         # if text == "q" or text == "n" or text == "no":
         #     break
-        new_loc_x = np.random.randint(0, 1024, size=(1,))
-        new_loc_y = np.random.randint(0, 768, size=(1,))
+        # new_loc_x = np.random.randint(0, 1024, size=(1,))
+        # new_loc_y = np.random.randint(0, 768, size=(1,))
+        new_loc_x = np.random.randint(200, 824, size=(1,))
+        new_loc_y = np.random.randint(1, 668, size=(1,))
         loc_2d = np.array([new_loc_x, new_loc_y])
         image = np.zeros((768, 1024, 3), dtype=np.uint8)
         image[:, new_loc_x, :] = 255
@@ -278,5 +324,6 @@ if __name__ == "__main__":
     # pix2pix(root_path)
     # acq_procam(root_path)
     # calibrate_procam(root_path)
-    # acq_leap_projector(root_path)
-    calibrate_leap_projector(root_path)
+    acq_leap_projector(root_path)
+    # calibrate_leap_projector(root_path)
+    # reconstruct(root_path)

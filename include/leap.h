@@ -31,6 +31,7 @@ public:
         OpenConnection();
         while (!IsConnected)
         {
+            std::cout << "Leap: waiting for connection..." << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
         LeapSetPolicyFlags(connectionHandle,
