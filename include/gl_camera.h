@@ -58,8 +58,10 @@ public:
         m_inverted = s.m_inverted;
     }
     glm::mat4 getViewMatrix();
+    void setViewMatrix(glm::mat4 newViewMatrix);
     glm::mat4 getLocal2WorldMatrix();
     glm::mat4 getProjectionMatrix();
+    void setProjectionMatrix(glm::mat4 newProjectionMatrix);
     glm::vec3 getPos();
     glm::vec3 getFront();
     void processKeyboard(Camera_Movement direction, float deltaTime);

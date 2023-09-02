@@ -135,6 +135,7 @@ void SkinnedModel::ReserveSpace(unsigned int NumVertices, unsigned int NumIndice
     m_Positions.reserve(NumVertices);
     m_Normals.reserve(NumVertices);
     m_TexCoords.reserve(NumVertices);
+    m_VertColors.reserve(NumVertices);
     m_Indices.reserve(NumIndices);
     m_Bones.resize(NumVertices);
 }
@@ -151,6 +152,7 @@ void SkinnedModel::InitAllMeshes(const aiScene *pScene)
 void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
 {
     const aiVector3D Zero3D(0.0f, 0.0f, 0.0f);
+    const aiColor4D Zero4D(0.0f, 0.0f, 0.0f, 1.0f);
 
     // Populate the vertex attribute vectors
     for (unsigned int i = 0; i < paiMesh->mNumVertices; i++)
@@ -172,6 +174,9 @@ void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
 
         const aiVector3D &pTexCoord = paiMesh->HasTextureCoords(0) ? paiMesh->mTextureCoords[0][i] : Zero3D;
         m_TexCoords.push_back(glm::vec2(pTexCoord.x, pTexCoord.y));
+
+        const aiColor4D &pVertColor = paiMesh->HasVertexColors(0) ? paiMesh->mColors[0][i] : Zero4D;
+        m_VertColors.push_back(glm::vec3(pVertColor.r, pVertColor.g, pVertColor.b));
     }
 
     LoadMeshBones(MeshIndex, paiMesh);
@@ -190,6 +195,8 @@ void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
 
 void SkinnedModel::LoadMeshBones(unsigned int MeshIndex, const aiMesh *pMesh)
 {
+    if (pMesh->mNumBones == 0)
+        return;
     for (unsigned int i = 0; i < pMesh->mNumBones; i++)
     {
         LoadSingleBone(MeshIndex, pMesh->mBones[i]);
@@ -200,7 +207,7 @@ void SkinnedModel::LoadMeshBones(unsigned int MeshIndex, const aiMesh *pMesh)
         if (abs(sum_weight - 1.0f) > 0.01f)
         {
             std::cout << "vertex " << i << " has sum of weights " << sum_weight << std::endl;
-            assert(false);
+            exit(1);
         }
     }
     for (std::map<std::string, unsigned int>::iterator i = m_BoneNameToIndexMap.begin(); i != m_BoneNameToIndexMap.end(); ++i)
@@ -419,6 +426,11 @@ void SkinnedModel::PopulateBuffers()
     glEnableVertexAttribArray(POSITION_LOCATION);
     glVertexAttribPointer(POSITION_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
+    glBindBuffer(GL_ARRAY_BUFFER, m_Buffers[VERTEX_COLOR_VB]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(m_VertColors[0]) * m_VertColors.size(), &m_VertColors[0], GL_STATIC_DRAW);
+    glEnableVertexAttribArray(VERTEX_COLOR_LOCATION);
+    glVertexAttribPointer(VERTEX_COLOR_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
     glBindBuffer(GL_ARRAY_BUFFER, m_Buffers[TEXCOORD_VB]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(m_TexCoords[0]) * m_TexCoords.size(), &m_TexCoords[0], GL_STATIC_DRAW);
     glEnableVertexAttribArray(TEX_COORD_LOCATION);
@@ -461,6 +473,52 @@ void SkinnedModel::PopulateBuffers()
     // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA /*GL_RGBA16F*/, m_camWidth, m_camHeight, 0, GL_BGRA /* GL_RGBA*/,
     //              GL_UNSIGNED_BYTE, NULL);
     /* camera texture */
+}
+
+void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
+{
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, camTex);
+    if (useFBO)
+    {
+        m_fbo.bind();
+        glEnable(GL_DEPTH_TEST);
+    }
+    shader.use();
+    shader.setInt("src", 0);
+    shader.setInt("projTexture", 1);
+    glBindVertexArray(m_VAO);
+
+    for (unsigned int i = 0; i < m_Meshes.size(); i++)
+    {
+        unsigned int MaterialIndex = m_Meshes[i].MaterialIndex;
+
+        assert(MaterialIndex < m_Materials.size());
+
+        if (m_Materials[MaterialIndex].pDiffuse)
+        {
+            m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
+        }
+
+        if (m_Materials[MaterialIndex].pSpecularExponent)
+        {
+            m_Materials[MaterialIndex].pSpecularExponent->bind(GL_TEXTURE6);
+        }
+
+        glDrawElementsBaseVertex(GL_TRIANGLES,
+                                 m_Meshes[i].NumIndices,
+                                 GL_UNSIGNED_INT,
+                                 (void *)(sizeof(unsigned int) * m_Meshes[i].BaseIndex),
+                                 m_Meshes[i].BaseVertex);
+    }
+
+    // Make sure the VAO is not changed from the outside
+    glBindVertexArray(0);
+    if (useFBO)
+    {
+        m_fbo.unbind();
+        glDisable(GL_DEPTH_TEST);
+    }
 }
 
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,

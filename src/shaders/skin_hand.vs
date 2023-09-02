@@ -1,12 +1,13 @@
 #version 330
 
 layout (location = 0) in vec3 Position;
-layout (location = 1) in vec2 TexCoord;
-layout (location = 2) in vec3 Normal;
-layout (location = 3) in ivec4 BoneIDs0;
-layout (location = 4) in ivec2 BoneIDs1;
-layout (location = 5) in vec4 Weights0;
-layout (location = 6) in vec2 Weights1;
+layout (location = 1) in vec3 VertColor;
+layout (location = 2) in vec2 TexCoord;
+layout (location = 3) in vec3 Normal;
+layout (location = 4) in ivec4 BoneIDs0;
+layout (location = 5) in ivec2 BoneIDs1;
+layout (location = 6) in vec4 Weights0;
+layout (location = 7) in vec2 Weights1;
 
 out vec2 TexCoord0;
 out vec2 ProjTexCoord0;
@@ -37,7 +38,7 @@ void main()
     gl_Position = gTransform * PosL;
     TexCoord0 = TexCoord;
     vec4 proj_pos = gProjectorTransform * PosL;
-    ProjTexCoord0 = vec2(proj_pos.x / 50.0, proj_pos.y / 50.0);
+    ProjTexCoord0 = vec2(proj_pos.x / proj_pos.w, proj_pos.y / proj_pos.w);
     //ProjTexCoord0 = vec2(ProjTexCoord0.x, 1-ProjTexCoord0.y);
     //Normal0 = Normal;
     //LocalPos0 = Position;

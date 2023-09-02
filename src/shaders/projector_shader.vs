@@ -15,6 +15,6 @@ void main()
 	if (flipVer)
 		ProjTexCoord = vec2(proj_pos.x / proj_pos.w, 1 - (proj_pos.y / proj_pos.w));
 	else
-		ProjTexCoord = vec2(proj_pos.x / 50.26, proj_pos.y / 50.26);  // proj_pos.w
+		ProjTexCoord = vec2(proj_pos.x / proj_pos.w, proj_pos.y / proj_pos.w);  // proj_pos.w
     
 }

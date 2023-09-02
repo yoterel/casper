@@ -20,12 +20,13 @@
 #define ASSIMP_LOAD_FLAGS (aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices)
 #define MAX_NUM_BONES_PER_VERTEX 6
 #define POSITION_LOCATION 0
-#define TEX_COORD_LOCATION 1
-#define NORMAL_LOCATION 2
-#define BONE_ID_LOCATION0 3
-#define BONE_ID_LOCATION1 4
-#define BONE_WEIGHT_LOCATION0 5
-#define BONE_WEIGHT_LOCATION1 6
+#define VERTEX_COLOR_LOCATION 1
+#define TEX_COORD_LOCATION 2
+#define NORMAL_LOCATION 3
+#define BONE_ID_LOCATION0 4
+#define BONE_ID_LOCATION1 5
+#define BONE_WEIGHT_LOCATION0 6
+#define BONE_WEIGHT_LOCATION1 7
 
 enum BUFFER_TYPE
 {
@@ -34,7 +35,8 @@ enum BUFFER_TYPE
     TEXCOORD_VB = 2,
     NORMAL_VB = 3,
     BONE_VB = 4,
-    NUM_BUFFERS = 5
+    VERTEX_COLOR_VB = 5,
+    NUM_BUFFERS = 6
 };
 
 struct BasicMeshEntry
@@ -126,6 +128,7 @@ public:
         Clear();
     };
     bool LoadMesh(const std::string &Filename);
+    void Render(Shader &shader, unsigned int camTex, bool useFBO);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                 glm::mat4 local_to_world, unsigned int camTex, bool useFBO = true);
     const Material &GetMaterial();
@@ -183,6 +186,7 @@ private:
     std::vector<glm::vec3> m_Positions;
     std::vector<glm::vec3> m_Normals;
     std::vector<glm::vec2> m_TexCoords;
+    std::vector<glm::vec3> m_VertColors;
     std::vector<unsigned int> m_Indices;
     std::vector<VertexBoneData> m_Bones;
 

@@ -17,7 +17,7 @@ public:
 
 private:
     unsigned int m_width, m_height, m_channels;
-    unsigned int m_texture = 0;
+    unsigned int m_texture = 0; // todo: change to texture class
     unsigned int m_depthBuffer = 0;
     unsigned int m_FBO = 0;
 };

@@ -90,14 +90,24 @@ glm::mat4 GLCamera::getViewMatrix() // world to local
     return viewMatrix;
 }
 
+void GLCamera::setViewMatrix(glm::mat4 newViewMatrix) // world to local
+{
+    viewMatrix = newViewMatrix;
+}
+
+glm::mat4 GLCamera::getProjectionMatrix() // world to local
+{
+    return projectionMatrix;
+}
+
+void GLCamera::setProjectionMatrix(glm::mat4 newwProjectionMatrix) // world to local
+{
+    projectionMatrix = newwProjectionMatrix;
+}
+
 glm::mat4 GLCamera::getLocal2WorldMatrix()
 {
     return glm::inverse(viewMatrix);
-}
-
-glm::mat4 GLCamera::getProjectionMatrix()
-{
-    return projectionMatrix;
 }
 
 glm::vec3 GLCamera::getPos()
