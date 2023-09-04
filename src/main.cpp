@@ -64,7 +64,6 @@ bool shift_modifier = false;
 bool ctrl_modifier = false;
 unsigned int n_bones = 0;
 float screen_z = -10.0f;
-glm::mat4 cur_palm_orientation = glm::mat4(1.0f);
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
@@ -190,8 +189,8 @@ int main(int argc, char *argv[])
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
 
     // glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
-    glm::mat4 mm_to_cm = glm::mat4(1.0f);
-    glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
+    // glm::mat4 mm_to_cm = glm::mat4(1.0f);
+    // glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 flip_y = glm::mat4(1.0f);
@@ -624,7 +623,7 @@ int main(int argc, char *argv[])
                     vcolorShader.use();
                     vcolorShader.setMat4("projection", flycam_projection_transform);
                     vcolorShader.setMat4("view", flycam_view_transform);
-                    vcolorShader.setMat4("model", mm_to_cm); // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    vcolorShader.setMat4("model", glm::mat4(1.0f)); // vcolorShader.setMat4("model", glm::mat4(1.0f));
                     glBindVertexArray(skeletonVAO);
                     glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
                 }
@@ -659,20 +658,23 @@ int main(int argc, char *argv[])
                         glDrawArrays(GL_LINES, 0, 6);
                     }
                 }
-                // draw palm normal
+                // draw gizmo for palm orientation
                 {
-                    // glm::vec4 palm_normal_hom = cur_palm_orientation * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-                    // glm::vec3 palm_normal(palm_normal_hom);
-                    // palm_normal = glm::normalize(palm_normal);
+                    vcolorShader.use();
+                    vcolorShader.setMat4("projection", flycam_projection_transform);
+                    vcolorShader.setMat4("view", flycam_view_transform);
+                    vcolorShader.setMat4("model", glm::scale(bones_to_world[0], glm::vec3(10.0f, 10.0f, 10.0f)));
+                    glBindVertexArray(gizmoVAO);
+                    glDrawArrays(GL_LINES, 0, 6);
                 }
                 // draw skinned mesh in 3D
                 {
-                    // skinnedShader.use();
-                    // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                    // skinnedShader.setBool("binary", true);
-                    // skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
+                    skinnedShader.use();
+                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    skinnedShader.setBool("binary", true);
+                    skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
                 }
             }
             // draws frustrum of projector (=vcam)
@@ -1134,8 +1136,8 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     // glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
-    glm::mat4 mm_to_cm = glm::mat4(1.0f);
-    glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
+    // glm::mat4 mm_to_cm = glm::mat4(1.0f);
+    // glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
     // Get the buffer size needed to hold the tracking data
     if (LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + leap_time_delay, &targetFrameSize) == eLeapRS_Success)
     {
@@ -1181,17 +1183,9 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
                                                                    hand->palm.orientation.y,
                                                                    hand->palm.orientation.z));
 
-                palm_orientation = palm_orientation * flip_z * flip_y;
-                cur_palm_orientation = palm_orientation;
+                // palm_orientation = palm_orientation; // * flip_z * flip_y;
                 glm::mat4 palm_trans = glm::translate(glm::mat4(1.0f), palm_pos);
-                // if (debug)
-                // {
-                //     bones_to_world.push_back(palm_trans*roty*palm_orientation);
-                // }
-                // else
-                // {
-                bones_to_world.push_back(mm_to_cm * palm_trans * palm_orientation * cm_to_mm);
-                // }
+                bones_to_world.push_back(palm_trans * palm_orientation);
                 LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
                 LEAP_VECTOR arm_j2 = hand->arm.next_joint;
                 skeleton_vertices.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
@@ -1205,7 +1199,7 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
                 // rot = palm_orientation * rot;
                 glm::vec3 translate = glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z);
                 glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                bones_to_world.push_back(mm_to_cm * trans * rot * cm_to_mm);
+                bones_to_world.push_back(trans * rot);
                 for (uint32_t f = 0; f < 5; f++)
                 {
                     LEAP_DIGIT finger = hand->digits[f];
@@ -1223,7 +1217,7 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
                                                               finger.bones[b].rotation.z));
                         glm::vec3 translate = glm::vec3(joint1.x, joint1.y, joint1.z);
                         glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                        bones_to_world.push_back(mm_to_cm * trans * rot * roty * flip_z * flip_y * cm_to_mm);
+                        bones_to_world.push_back(trans * rot * roty * flip_z * flip_y);
                     }
                 }
             }

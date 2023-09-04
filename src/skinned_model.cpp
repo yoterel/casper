@@ -477,6 +477,9 @@ void SkinnedModel::PopulateBuffers()
 
 void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
 {
+    shader.use();
+    shader.setInt("src", 0);
+    shader.setInt("projTexture", 1);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, camTex);
     if (useFBO)
@@ -484,9 +487,6 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
         m_fbo.bind();
         glEnable(GL_DEPTH_TEST);
     }
-    shader.use();
-    shader.setInt("src", 0);
-    shader.setInt("projTexture", 1);
     glBindVertexArray(m_VAO);
 
     for (unsigned int i = 0; i < m_Meshes.size(); i++)
@@ -524,6 +524,10 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                           glm::mat4 local_to_world, unsigned int camTex, bool useFBO)
 {
+    shader.use();
+    shader.SetMaterial(this->GetMaterial());
+    shader.setInt("src", 0);
+    shader.setInt("projTexture", 1);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, camTex);
     if (useFBO)
@@ -531,10 +535,6 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
         m_fbo.bind();
         glEnable(GL_DEPTH_TEST);
     }
-    shader.use();
-    shader.SetMaterial(this->GetMaterial());
-    shader.SetTextureUnit(0);
-    shader.setInt("projTexture", 1);
     // glActiveTexture(GL_TEXTURE1);
     // glBindTexture(GL_TEXTURE_2D, m_cam_texture);
     std::vector<glm::mat4> Transforms;

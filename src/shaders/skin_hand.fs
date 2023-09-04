@@ -20,8 +20,8 @@ struct Material
     vec3 DiffuseColor;
     vec3 SpecularColor;
 };
-uniform Material gMaterial;
-uniform sampler2D gSampler;
+uniform Material material;
+uniform sampler2D src;
 
 uniform sampler2D projTexture;
 uniform bool binary;
@@ -42,7 +42,7 @@ void main()
         }
     }
     // finalColor = vec4(ourColor, 0.9); // boneweight debug
-    vec4 diffuse_color = texture(gSampler, TexCoord0);  // diffuse texture
+    vec4 diffuse_color = texture(src, TexCoord0);  // diffuse texture
     // finalColor.w = 1.0;
     FragColor = diffuse_color * proj_col;  // * diffuse_color * vec4(1.0, 1.0, 1.0, proj_col.w);
 }
