@@ -1,8 +1,11 @@
 #version 330 core
 layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoord;
+layout (location = 1) in vec3 aVertColor;
+//layout (location = 2) in vec2 aTexCoord;
 
+out vec3 VertColor;
 out vec2 ProjTexCoord;
+//out vec2 TexCoord;
 uniform mat4 camTransform; // camera w2c
 uniform mat4 projTransform; // projector w2c
 uniform bool flipVer;  // should projector output flip input?
@@ -16,5 +19,6 @@ void main()
 		ProjTexCoord = vec2(proj_pos.x / proj_pos.w, 1 - (proj_pos.y / proj_pos.w));
 	else
 		ProjTexCoord = vec2(proj_pos.x / proj_pos.w, proj_pos.y / proj_pos.w);  // proj_pos.w
-    
+    VertColor = aVertColor;
+	//TexCoord = vec2(aTexCoord.x, aTexCoord.y);
 }

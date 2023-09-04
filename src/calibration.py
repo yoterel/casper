@@ -26,6 +26,9 @@ def reconstruct(root_path):
         proj_transform = calib_res["cam_intrinsics"], calib_res["cam_distortion"],\
         calib_res["proj_intrinsics"], calib_res["proj_distortion"],\
         calib_res["proj_transform"]
+    leap_calib_res_path = Path(root_path, "debug", "leap_calibration")
+    world2projector = np.load(Path(leap_calib_res_path, "w2p.npy"))
+    c2w = np.linalg.inv(world2projector) @ proj_transform
     mode = "ij"
     output_path = Path(root_path, "debug", "reconstruct")
     resource_path = Path(root_path, "resource")
@@ -53,8 +56,9 @@ def reconstruct(root_path):
     gsoup.save_images(captures, Path(output_path, "captures"))
     forward, fg = gray.decode(
         captures, proj_wh, output_dir=Path(output_path, "decode"), debug=True, mode=mode)
-    cam_transform = np.eye(4)
-    proj_transform = cam_transform @ np.linalg.inv(proj_transform)
+    cam_transform = c2w  # np.eye(4)
+    # cam_transform @ np.linalg.inv(proj_transform)
+    proj_transform = np.linalg.inv(world2projector)
     pc = gsoup.reconstruct_pointcloud(
         forward, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode=mode, color_image=captures[-2])
     gsoup.save_pointcloud(pc[:, :3], Path(
@@ -160,7 +164,7 @@ def calibrate_procam(root_path, force_calib=False):
         res = np.load(Path(dst_path, "calibration.npz"))
         res = {k: res[k] for k in res.keys()}
     else:
-        res = gsoup.calibrate_procam(proj_wh, dst_path, 10, 7, 10, 2.0, "lower_half",
+        res = gsoup.calibrate_procam(proj_wh, dst_path, 10, 7, 10, 20.0, "lower_half",
                                      verbose=True, output_dir=Path(root_path, "debug", "calib_debug"), debug=True)
 
         np.savez(Path(dst_path, "calibration.npz"), **res)
@@ -324,6 +328,10 @@ if __name__ == "__main__":
     # pix2pix(root_path)
     # acq_procam(root_path)
     # calibrate_procam(root_path)
-    acq_leap_projector(root_path)
+    # acq_leap_projector(root_path)
     # calibrate_leap_projector(root_path)
     # reconstruct(root_path)
+    # v, f, vc = gsoup.load_mesh(
+    #     "C:/src/augmented_hands/resource/reconst2.ply", return_vert_color=True)
+    # v1, vc1 = gsoup.load_pointcloud(
+    #     "C:/src/augmented_hands/debug/reconstruct/points.ply", return_vert_color=True)

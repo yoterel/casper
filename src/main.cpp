@@ -188,9 +188,10 @@ int main(int argc, char *argv[])
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     glm::vec3 coa = skinnedModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
-    glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
+
+    // glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
+    glm::mat4 mm_to_cm = glm::mat4(1.0f);
     glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
-    glm::mat4 timesTwenty = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 flip_y = glm::mat4(1.0f);
@@ -298,13 +299,13 @@ int main(int argc, char *argv[])
         {
             // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
             // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 10.0f);
-            gl_flycamera = GLCamera(glm::vec3(7.0f, -15.0f, 108.0f),
+            gl_flycamera = GLCamera(glm::vec3(70.0f, -150.0f, 1008.0f),
                                     glm::vec3(0.0f, 0.0f, 0.0f),
                                     glm::vec3(0.0f, -1.0f, 0.0f),
                                     Camera_Mode::FREE_CAMERA,
                                     proj_width,
                                     proj_height,
-                                    10.0f,
+                                    100.0f,
                                     true);
             gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 2.0f, true);
             gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height, 2.0f, true);
@@ -481,59 +482,29 @@ int main(int argc, char *argv[])
         if (bones_to_world.size() > 0)
         {
             t2.start();
-            LocalToWorld = bones_to_world[0] * rotx * coa_transform;
-            bool project_to_screen = false;
-            if (project_to_screen)
+            LocalToWorld = bones_to_world[0];
+            /* render skinned mesh */
+            // skinnedShader.use();
+            // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+            // skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
+            // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+            // skinnedShader.setBool("binary", true);
+            // skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), true);
+            /* render another mesh */
+            projectorShader.use();
+            projectorShader.setBool("flipVer", false);
+            projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+            projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+            projectorShader.setBool("binary", true);
+            dinosaur.Render(projectorShader, camTexture.getTexture(), true);
+            if (!debug_mode)
             {
-                if (!debug_mode)
-                {
-                    // canvas.uploadBufferToTexture(buffer);
-                    // canvasShader.use();
-                    // canvasShader.setBool("flipVer", false);
-                    // canvasShader.setBool("binary", true);
-                    // Quad defaultQuad(-1.0f);
-                    // canvas.RenderBuffer(canvasShader, buffer, defaultQuad);
-                    std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, screen_z},
-                                                          {-100.0, -100.0, screen_z},
-                                                          {100.0, -100.0, screen_z},
-                                                          {100.0, 100.0, screen_z}};
-                    // glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-                    // glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-                    Quad screen(screenVerts);
-                    projectorShader.use();
-                    projectorShader.setBool("flipVer", false);
-                    projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-                    projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                    projectorShader.setBool("binary", false);
-                    projectorShader.setInt("projTexture", 0);
-                    camTexture.bind();
-                    // skinnedModel.GetMaterial().pDiffuse->bind();
-                    unsigned int tex = canvas.renderToFBO(projectorShader, screen);
-                    canvasShader.use();
-                    canvasShader.setBool("binary", false);
-                    canvasShader.setBool("flipVer", false);
-                    canvasShader.setInt("src", 0);
-                    canvas.renderTexture(tex, canvasShader);
-                }
-            }
-            else
-            {
-                // render skinned mesh
-                skinnedShader.use();
-                skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
-                skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                skinnedShader.setBool("binary", true);
-                skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), true);
-                if (!debug_mode)
-                {
-                    // skinnedModel.m_fbo.saveColorToFile("test1.png");
-                    canvasShader.use();
-                    canvasShader.setBool("binary", false);
-                    canvasShader.setBool("flipVer", false);
-                    canvasShader.setInt("src", 0);
-                    canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
-                }
+                // skinnedModel.m_fbo.saveColorToFile("test1.png");
+                canvasShader.use();
+                canvasShader.setBool("binary", false);
+                canvasShader.setBool("flipVer", false);
+                canvasShader.setInt("src", 0);
+                canvas.renderTexture(dinosaur.m_fbo.getTexture(), canvasShader);
             }
             // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
             t2.stop();
@@ -594,32 +565,14 @@ int main(int argc, char *argv[])
             Quad screen(screenVerts);
             // draws some mesh
             {
-                // projectorShader.use();
-                // projectorShader.setBool("flipVer", false);
-                // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                // projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                // projectorShader.setBool("binary", true);
-                // skinnedModelStatic.Render(projectorShader, camTexture.getTexture() /*skinnedModel.GetMaterial().pDiffuse->getTexture()*/, false);
-                vcolorShader.use();
-                vcolorShader.setMat4("projection", flycam_projection_transform);
-                vcolorShader.setMat4("view", flycam_view_transform);
-                glm::mat4 test = glm::inverse(w2vp);
-                test[3][0] *= 0.1f;
-                test[3][1] *= 0.1f;
-                test[3][2] *= 0.1f;
-                test[2][0] *= -1.0f;
-                test[2][1] *= -1.0f;
-                test[2][2] *= -1.0f;
-                test[2][3] *= -1.0f;
-                test[1][0] *= -1.0f;
-                test[1][1] *= -1.0f;
-                test[1][2] *= -1.0f;
-                test[1][3] *= -1.0f;
-                vcolorShader.setMat4("model", test);
-                dinosaur.Render(vcolorShader, camTexture.getTexture(), false);
-                vcolorShader.setMat4("projection", vcam_projection_transform);
-                vcolorShader.setMat4("view", vcam_view_transform);
-                dinosaur.Render(vcolorShader, camTexture.getTexture(), true);
+                projectorShader.use();
+                projectorShader.setBool("flipVer", false);
+                projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                projectorShader.setBool("binary", true);
+                dinosaur.Render(projectorShader, camTexture.getTexture(), false);
+                projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+                dinosaur.Render(projectorShader, camTexture.getTexture(), true);
                 textureShader.use();
                 textureShader.setBool("flipVer", false);
                 textureShader.setMat4("projection", flycam_projection_transform);
@@ -627,6 +580,7 @@ int main(int argc, char *argv[])
                 textureShader.setMat4("model", glm::mat4(1.0f));
                 textureShader.setBool("binary", false);
                 textureShader.setInt("src", 0);
+                glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
                 vcamNearQuad.render();
             }
@@ -653,7 +607,7 @@ int main(int argc, char *argv[])
                 vcolorShader.use();
                 vcolorShader.setMat4("projection", flycam_projection_transform);
                 vcolorShader.setMat4("view", flycam_view_transform);
-                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f)));
                 glEnable(GL_DEPTH_TEST);
                 glDisable(GL_CULL_FACE);
                 glBindVertexArray(cubeVAO);
@@ -713,12 +667,12 @@ int main(int argc, char *argv[])
                 }
                 // draw skinned mesh in 3D
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                    skinnedShader.setBool("binary", true);
-                    skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
+                    // skinnedShader.use();
+                    // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    // skinnedShader.setBool("binary", true);
+                    // skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
                 }
             }
             // draws frustrum of projector (=vcam)
@@ -774,45 +728,15 @@ int main(int argc, char *argv[])
             }
             // draw projector output to near plane of vcam frustrum
             {
-                textureShader.use();
-                textureShader.setBool("flipVer", false);
-                textureShader.setMat4("projection", flycam_projection_transform);
-                textureShader.setMat4("view", flycam_view_transform);
-                textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
-                textureShader.setBool("binary", false);
-                textureShader.setInt("src", 0);
-                glBindTexture(GL_TEXTURE_2D, skinnedModel.m_fbo.getTexture());
-                vcamNearQuad.render();
-                // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, vcamNearQuad);
-                // if (projector_only)
-                // {
-                //     projectorShader.use();
-                //     projectorShader.setBool("flipVer", false);
-                //     projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-                //     projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                //     projectorShader.setBool("binary", false);
-                //     projectorShader.setInt("projTexture", 0);
-                //     // unsigned int tex = skinnedModel.GetMaterial().pDiffuse->GetTexture();
-                //     // camTexture.bind();
-                //     skinnedModel.GetMaterial().pDiffuse->bind();
-                //     unsigned int tex = canvas.renderToFBO(projectorShader, screen);
-                //     textureShader.use();
-                //     textureShader.setBool("flipVer", false);
-                //     textureShader.setMat4("projection", flycam_projection_transform);
-                //     textureShader.setMat4("view", flycam_view_transform);
-                //     textureShader.setMat4("model", glm::mat4(1.0f));
-                //     textureShader.setBool("binary", false);
-                //     canvas.renderTexture(tex, textureShader, vcamNearQuad);
-                // }
-                // else
-                // {
-                // projectorShader.use();
-                // projectorShader.setBool("flipVer", false);
-                // projectorShader.setMat4("vcamTransform", vcam_projection_transform * vcam_view_transform);
-                // projectorShader.setMat4("vprojTransform", vproj_projection_transform * vproj_view_transform);
-                // projectorShader.setBool("binary", true);
-                // unsigned int tex = canvas.RenderBufferToFBO(projectorShader, vcamMidQuad);
-                // }
+                // textureShader.use();
+                // textureShader.setBool("flipVer", false);
+                // textureShader.setMat4("projection", flycam_projection_transform);
+                // textureShader.setMat4("view", flycam_view_transform);
+                // textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
+                // textureShader.setBool("binary", false);
+                // textureShader.setInt("src", 0);
+                // glBindTexture(GL_TEXTURE_2D, skinnedModel.m_fbo.getTexture());
+                // vcamNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, vcamNearQuad);
             }
             // draws text
             {
@@ -1150,7 +1074,7 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     w2vc = glm::make_mat4(arr.data<double>());
     glm::mat4 vc2w = glm::inverse(w2vc);
 
-    float ffar = 300.0f;
+    float ffar = 1000.0f;
     float nnear = 1.0f;
     glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
     float vpfx = camera_intrinsics[0][0];
@@ -1181,7 +1105,7 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     vcam_project[3][2] = -1.0f;
     vcam_project = glm::transpose(vcam_project);
     camera_distortion = my_npz["cam_distortion"].as_vec<double>();
-    glm::mat4 vp2vc = glm::make_mat4(my_npz["proj_transform"].data<double>()); // this is a real projector to camera transform
+    glm::mat4 vp2vc = glm::make_mat4(my_npz["proj_transform"].data<double>()); // this is the camera to projector transform
     glm::mat4 vp2w = vp2vc * vc2w;                                             // since glm uses column major, we multiply from the left...
     vp2w = flipYZ * vp2w;
     // vp2w[0][3] *= 0.1f;
@@ -1209,8 +1133,8 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
-    glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
-    // glm::mat4 mm_to_cm = glm::mat4(1.0f);
+    // glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
+    glm::mat4 mm_to_cm = glm::mat4(1.0f);
     glm::mat4 cm_to_mm = glm::inverse(mm_to_cm);
     // Get the buffer size needed to hold the tracking data
     if (LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + leap_time_delay, &targetFrameSize) == eLeapRS_Success)
@@ -1281,7 +1205,7 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
                 // rot = palm_orientation * rot;
                 glm::vec3 translate = glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z);
                 glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                bones_to_world.push_back(mm_to_cm * trans * rot * roty * flip_z * flip_y * cm_to_mm);
+                bones_to_world.push_back(mm_to_cm * trans * rot * cm_to_mm);
                 for (uint32_t f = 0; f < 5; f++)
                 {
                     LEAP_DIGIT finger = hand->digits[f];

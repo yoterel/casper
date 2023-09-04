@@ -10,7 +10,7 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
                                                                             m_height(height),
                                                                             m_inverted(inverted)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 500.0f);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 1500.0f);
     m_mode = mode;
     if (m_mode == Camera_Mode::FIXED_CAMERA)
     {
@@ -65,9 +65,9 @@ GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode
     // flipYZ[1][1] = -1.0f;
     // flipYZ[2][2] = -1.0f;
     // glm::mat4 openglMatrix = flipYZ * world2local; // negate Y and Z columns (glm uses column major so need to left multiply)
-    world2local[3][0] *= 0.1f;
-    world2local[3][1] *= 0.1f;
-    world2local[3][2] *= 0.1f;
+    // world2local[3][0] *= 0.1f;
+    // world2local[3][1] *= 0.1f;
+    // world2local[3][2] *= 0.1f;
     // viewMatrix = glm::transpose(openglMatrix);
     viewMatrix = world2local;
     glm::mat4 local2world = getLocal2WorldMatrix();
