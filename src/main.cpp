@@ -67,6 +67,7 @@ float screen_z = -10.0f;
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
+cv::Mat white_image(cam_height, cam_width, CV_8UC4, cv::Scalar(255, 255, 255, 255));
 // GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
 GLCamera gl_flycamera;
 GLCamera gl_camera;
@@ -172,7 +173,7 @@ int main(int argc, char *argv[])
     }
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
-    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand_Arm.fbx",
+    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
                               "C:/src/augmented_hands/resource/uv.png",
                               //   "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height,
@@ -439,7 +440,15 @@ int main(int argc, char *argv[])
         t0.start();
         // retrieve camera image
         CPylonImage pylonImage = camera_queue.pop();
-        uint8_t *buffer = (uint8_t *)pylonImage.GetBuffer();
+        uint8_t *buffer;
+        if (producer_is_fake)
+        {
+            buffer = white_image.data;
+        }
+        else
+        {
+            buffer = (uint8_t *)pylonImage.GetBuffer();
+        }
         camTexture.load(buffer, false); // todo: why does PBO not work?
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
         // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
@@ -548,24 +557,24 @@ int main(int argc, char *argv[])
             Quad vprojMidQuad(vprojMidVerts);
             // draws some mesh (lit by camera input)
             {
-                projectorShader.use();
-                projectorShader.setBool("flipVer", false);
-                projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                projectorShader.setBool("binary", true);
-                dinosaur.Render(projectorShader, camTexture.getTexture(), false);
-                projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-                dinosaur.Render(projectorShader, camTexture.getTexture(), true);
-                textureShader.use();
-                textureShader.setBool("flipVer", false);
-                textureShader.setMat4("projection", flycam_projection_transform);
-                textureShader.setMat4("view", flycam_view_transform);
-                textureShader.setMat4("model", glm::mat4(1.0f));
-                textureShader.setBool("binary", false);
-                textureShader.setInt("src", 0);
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
-                vcamNearQuad.render();
+                // projectorShader.use();
+                // projectorShader.setBool("flipVer", false);
+                // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                // projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                // projectorShader.setBool("binary", true);
+                // dinosaur.Render(projectorShader, camTexture.getTexture(), false);
+                // projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+                // dinosaur.Render(projectorShader, camTexture.getTexture(), true);
+                // textureShader.use();
+                // textureShader.setBool("flipVer", false);
+                // textureShader.setMat4("projection", flycam_projection_transform);
+                // textureShader.setMat4("view", flycam_view_transform);
+                // textureShader.setMat4("model", glm::mat4(1.0f));
+                // textureShader.setBool("binary", false);
+                // textureShader.setInt("src", 0);
+                // glActiveTexture(GL_TEXTURE0);
+                // glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
+                // vcamNearQuad.render();
             }
             // draws global coordinate system gizmo at origin
             {
@@ -592,15 +601,15 @@ int main(int argc, char *argv[])
             {
                 // draw skeleton as red lines
                 {
-                    glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-                    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
-                    n_skeleton_primitives = skeleton_vertices.size() / 2;
-                    vcolorShader.use();
-                    vcolorShader.setMat4("projection", flycam_projection_transform);
-                    vcolorShader.setMat4("view", flycam_view_transform);
-                    vcolorShader.setMat4("model", glm::mat4(1.0f)); // vcolorShader.setMat4("model", glm::mat4(1.0f));
-                    glBindVertexArray(skeletonVAO);
-                    glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
+                    // glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
+                    // glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
+                    // n_skeleton_primitives = skeleton_vertices.size() / 2;
+                    // vcolorShader.use();
+                    // vcolorShader.setMat4("projection", flycam_projection_transform);
+                    // vcolorShader.setMat4("view", flycam_view_transform);
+                    // vcolorShader.setMat4("model", glm::mat4(1.0f)); // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    // glBindVertexArray(skeletonVAO);
+                    // glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
                 }
                 // draw circle oriented like hand palm from leap motion
                 {
@@ -645,12 +654,12 @@ int main(int argc, char *argv[])
                 }
                 // draw skinned mesh in 3D
                 {
-                    // skinnedShader.use();
-                    // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                    // skinnedShader.setBool("binary", true);
-                    // skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
+                    skinnedShader.use();
+                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    skinnedShader.setBool("binary", true);
+                    skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
                 }
             }
             // draws frustrum of projector (=vcam)

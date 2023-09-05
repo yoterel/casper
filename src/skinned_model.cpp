@@ -62,9 +62,22 @@ bool SkinnedModel::LoadMesh(const std::string &Filename)
 
     // Make sure the VAO is not changed from the outside
     glBindVertexArray(0);
+    // bone_leap_map =
+    // {
+    //     {"L_Wrist", 0},
+    //     {"Elbow", 1},
+
+    //     {"L_thumb_Proximal", 3},
+    //     {"L_thumb_a", 4},
+    //     {"L_thumb_b", 5},
+
+    //     {"L_index_Proximal", 6},
+    //     {"index_b", 7},
+    //     {"index_c", 8},
+    // };
     bone_leap_map =
         {
-            // {"Wrist", 0},
+            {"Wrist", 0},
             {"Elbow", 1},
             {"thumb_meta", 3},
             {"thumb_a", 4},
