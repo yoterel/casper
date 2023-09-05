@@ -147,6 +147,27 @@ void SkinnedModel::InitAllMeshes(const aiScene *pScene)
         const aiMesh *paiMesh = pScene->mMeshes[i];
         InitSingleMesh(i, paiMesh);
     }
+    // assert that all vertices have weights that sums to roughly one
+    for (unsigned int i = 0; i < m_Meshes.size(); i++)
+    {
+        const aiMesh *paiMesh = pScene->mMeshes[i];
+        if (paiMesh->mNumBones == 0)
+            continue;
+        for (unsigned int i = 0; i < m_Bones.size(); i++)
+        {
+            float sum_weight = m_Bones[i].sum_weights();
+            if (abs(sum_weight - 1.0f) > 0.01f)
+            {
+                std::cout << "vertex " << i << " has sum of weights " << sum_weight << std::endl;
+                exit(1);
+            }
+        }
+    }
+    // flip map
+    for (std::map<std::string, unsigned int>::iterator i = m_BoneNameToIndexMap.begin(); i != m_BoneNameToIndexMap.end(); ++i)
+        m_BoneIndexToNameMap[i->second] = i->first;
+    glm::mat4 iden = glm::mat4(1.0f);
+    ReadNodeHierarchy(pScene->mRootNode, iden);
 }
 
 void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
@@ -201,19 +222,6 @@ void SkinnedModel::LoadMeshBones(unsigned int MeshIndex, const aiMesh *pMesh)
     {
         LoadSingleBone(MeshIndex, pMesh->mBones[i]);
     }
-    for (unsigned int i = 0; i < m_Bones.size(); i++)
-    {
-        float sum_weight = m_Bones[i].sum_weights();
-        if (abs(sum_weight - 1.0f) > 0.01f)
-        {
-            std::cout << "vertex " << i << " has sum of weights " << sum_weight << std::endl;
-            exit(1);
-        }
-    }
-    for (std::map<std::string, unsigned int>::iterator i = m_BoneNameToIndexMap.begin(); i != m_BoneNameToIndexMap.end(); ++i)
-        m_BoneIndexToNameMap[i->second] = i->first;
-    glm::mat4 iden = glm::mat4(1.0f);
-    ReadNodeHierarchy(pScene->mRootNode, iden);
 }
 
 std::string SkinnedModel::getBoneName(unsigned int index)
@@ -290,48 +298,46 @@ void SkinnedModel::LoadTextures(const std::string &Dir, const aiMaterial *pMater
 void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *pMaterial, int index)
 {
     m_Materials[index].pDiffuse = NULL;
-
-    if (pMaterial->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+    if (m_externalTextureFileName != "") // bypass model texture
     {
-        aiString Path;
-
-        if (pMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &Path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS)
+        m_Materials[index].pDiffuse = new Texture(m_externalTextureFileName.c_str(), GL_TEXTURE_2D);
+        if (!m_Materials[index].pDiffuse->init())
         {
-            std::string p(Path.data);
-
-            if (p.substr(0, 2) == ".\\")
-            {
-                p = p.substr(2, p.size() - 2);
-            }
-
-            std::string FullPath = Dir + "/" + p;
-
-            m_Materials[index].pDiffuse = new Texture(FullPath.c_str(), GL_TEXTURE_2D);
-
-            if (!m_Materials[index].pDiffuse->init())
-            {
-                std::cout << "Error loading diffuse texture '" << FullPath << "'" << std::endl;
-                exit(1);
-            }
-            else
-            {
-                std::cout << "Loaded diffuse texture '" << FullPath << "'" << std::endl;
-            }
+            std::cout << "Error loading diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
+            exit(1);
+        }
+        else
+        {
+            std::cout << "Loaded diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
         }
     }
     else
     {
-        if (m_externalTextureFileName != "")
+        if (pMaterial->GetTextureCount(aiTextureType_DIFFUSE) > 0)
         {
-            m_Materials[index].pDiffuse = new Texture(m_externalTextureFileName.c_str(), GL_TEXTURE_2D);
-            if (!m_Materials[index].pDiffuse->init())
+            aiString Path;
+
+            if (pMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &Path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS)
             {
-                std::cout << "Error loading diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
-                exit(1);
-            }
-            else
-            {
-                std::cout << "Loaded diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
+                std::string p(Path.data);
+
+                if (p.substr(0, 2) == ".\\")
+                {
+                    p = p.substr(2, p.size() - 2);
+                }
+
+                std::string FullPath = Dir + "/" + p;
+
+                m_Materials[index].pDiffuse = new Texture(FullPath.c_str(), GL_TEXTURE_2D);
+
+                if (!m_Materials[index].pDiffuse->init())
+                {
+                    std::cout << "Error loading diffuse texture '" << FullPath << "'" << std::endl;
+                }
+                else
+                {
+                    std::cout << "Loaded diffuse texture '" << FullPath << "'" << std::endl;
+                }
             }
         }
     }

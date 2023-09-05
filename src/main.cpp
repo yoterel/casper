@@ -172,16 +172,11 @@ int main(int argc, char *argv[])
     }
     // unsigned int circleVAO, circleVBO;
     // setup_circle_buffers(circleVAO, circleVBO);
-    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
+    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand_Arm.fbx",
                               "C:/src/augmented_hands/resource/uv.png",
                               //   "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height,
                               cam_width, cam_height);
-    SkinnedModel skinnedModelStatic("C:/src/augmented_hands/resource/GenericHand.fbx",
-                                    "C:/src/augmented_hands/resource/uv.png",
-                                    //   "C:/src/augmented_hands/resource/wood.jpg",
-                                    proj_width, proj_height,
-                                    cam_width, cam_height);
     SkinnedModel dinosaur("C:/src/augmented_hands/resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = skinnedModel.NumBones();
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
@@ -529,16 +524,10 @@ int main(int argc, char *argv[])
                                                    {-1.0f, -1.0f, 0.7f},
                                                    {1.0f, -1.0f, 0.7f},
                                                    {1.0f, 1.0f, 0.7f}};
-            std::vector<glm::vec3> screenVerts = {{-100.0, 100.0, screen_z},
-                                                  {-100.0, -100.0, screen_z},
-                                                  {100.0, -100.0, screen_z},
-                                                  {100.0, 100.0, screen_z}};
             std::vector<glm::vec3> vcamNearVerts(4);
             std::vector<glm::vec3> vcamMidVerts(4);
             std::vector<glm::vec3> vprojNearVerts(4);
             std::vector<glm::vec3> vprojMidVerts(4);
-            std::vector<glm::vec3> vcamScreenVerts(4);
-            std::vector<glm::vec3> vprojScreenVerts(4);
             // unproject points
             glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
             glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
@@ -552,17 +541,12 @@ int main(int argc, char *argv[])
                 vprojMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
                 unprojected = vprojUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
                 vprojNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                glm::vec4 projected = vcam_projection_transform * vcam_view_transform * glm::vec4(screenVerts[i], 1.0f);
-                vcamScreenVerts[i] = glm::vec3(projected) / projected.w;
-                projected = vproj_projection_transform * vproj_view_transform * glm::vec4(screenVerts[i], 1.0f);
-                vprojScreenVerts[i] = glm::vec3(projected) / projected.w;
             }
             Quad vcamNearQuad(vcamNearVerts);
             Quad vcamMidQuad(vcamMidVerts);
             Quad vprojNearQuad(vprojNearVerts);
             Quad vprojMidQuad(vprojMidVerts);
-            Quad screen(screenVerts);
-            // draws some mesh
+            // draws some mesh (lit by camera input)
             {
                 projectorShader.use();
                 projectorShader.setBool("flipVer", false);
@@ -592,15 +576,6 @@ int main(int argc, char *argv[])
                 glBindVertexArray(gizmoVAO);
                 glDrawArrays(GL_LINES, 0, 6);
             }
-            // draws a screen somewhere
-            {
-                // lineShader.use();
-                // lineShader.setMat4("projection", flycam_projection_transform);
-                // lineShader.setMat4("view", flycam_view_transform);
-                // lineShader.setMat4("model", glm::mat4(1.0f));
-                // lineShader.setVec3("color", glm::vec3(0.0f, 1.0f, 0.0f));
-                // screen.render(true);
-            }
             // draws cube at world origin
             {
                 vcolorShader.use();
@@ -615,7 +590,7 @@ int main(int argc, char *argv[])
             }
             if (bones_to_world.size() > 0)
             {
-                // draw skeleton vertices
+                // draw skeleton as red lines
                 {
                     glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
                     glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
@@ -637,7 +612,7 @@ int main(int argc, char *argv[])
                     // vcolorShader.setMat4("model", bones_to_world[0]);
                     // glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
                 }
-                // draw skeleton bones (as gizmos representing their local coordinate system)
+                // draw bones local coordinates as gizmos
                 {
                     vcolorShader.use();
                     vcolorShader.setMat4("projection", flycam_projection_transform);
@@ -645,6 +620,7 @@ int main(int argc, char *argv[])
                     std::vector<glm::mat4> BoneToLocalTransforms;
                     skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
                     glBindVertexArray(gizmoVAO);
+                    glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
                     for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
                     {
                         // in bind pose
@@ -654,7 +630,7 @@ int main(int argc, char *argv[])
                     for (unsigned int i = 0; i < bones_to_world.size(); i++)
                     {
                         // in leap motion pose
-                        vcolorShader.setMat4("model", bones_to_world[i]);
+                        vcolorShader.setMat4("model", bones_to_world[i] * scaler);
                         glDrawArrays(GL_LINES, 0, 6);
                     }
                 }
@@ -669,12 +645,12 @@ int main(int argc, char *argv[])
                 }
                 // draw skinned mesh in 3D
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                    skinnedShader.setBool("binary", true);
-                    skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
+                    // skinnedShader.use();
+                    // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    // skinnedShader.setBool("binary", true);
+                    // skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, camTexture.getTexture(), false);
                 }
             }
             // draws frustrum of projector (=vcam)
@@ -737,7 +713,7 @@ int main(int argc, char *argv[])
                 // textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
                 // textureShader.setBool("binary", false);
                 // textureShader.setInt("src", 0);
-                // glBindTexture(GL_TEXTURE_2D, skinnedModel.m_fbo.getTexture());
+                // glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
                 // vcamNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, vcamNearQuad);
             }
             // draws text
@@ -960,10 +936,6 @@ void processInput(GLFWwindow *window)
             gl_flycamera.processKeyboard(UP, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
             gl_flycamera.processKeyboard(DOWN, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
-            screen_z += 10.0f * deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS)
-            screen_z -= 10.0f * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_KP_0) == GLFW_PRESS)
         {
             gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
@@ -975,18 +947,18 @@ void processInput(GLFWwindow *window)
             gl_flycamera.setProjectionMatrix(gl_projector.getProjectionMatrix());
         }
     }
-    // if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-    // {
-    //     space_pressed_flag = true;
-    // }
-    // if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
-    // {
-    //     if (space_pressed_flag)
-    //     {
-    //         space_pressed_flag = false;
-    //         displayBoneIndex = (displayBoneIndex + 1) % n_bones;
-    //     }
-    // }
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    {
+        space_pressed_flag = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    {
+        if (space_pressed_flag)
+        {
+            space_pressed_flag = false;
+            displayBoneIndex = (displayBoneIndex + 1) % n_bones;
+        }
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -1175,31 +1147,29 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector
                 LEAP_HAND *hand = &interpolatedFrame->pHands[h];
                 if (hand->type == eLeapHandType_Right)
                     continue;
+                // palm
                 glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
                                                hand->palm.position.y,
                                                hand->palm.position.z);
                 glm::mat4 palm_orientation = glm::toMat4(glm::quat(hand->palm.orientation.w,
                                                                    hand->palm.orientation.x,
                                                                    hand->palm.orientation.y,
-                                                                   hand->palm.orientation.z));
-
-                // palm_orientation = palm_orientation; // * flip_z * flip_y;
-                glm::mat4 palm_trans = glm::translate(glm::mat4(1.0f), palm_pos);
-                bones_to_world.push_back(palm_trans * palm_orientation);
+                                                                   hand->palm.orientation.z)); // palm_orientation = palm_orientation; // * flip_z * flip_y;
+                bones_to_world.push_back(glm::translate(glm::mat4(1.0f), palm_pos) * palm_orientation);
+                // arm
                 LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
                 LEAP_VECTOR arm_j2 = hand->arm.next_joint;
                 skeleton_vertices.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
                 skeleton_vertices.push_back(red);
                 skeleton_vertices.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
                 skeleton_vertices.push_back(red);
-                glm::mat4 rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
-                                                      hand->arm.rotation.x,
-                                                      hand->arm.rotation.y,
-                                                      hand->arm.rotation.z));
-                // rot = palm_orientation * rot;
-                glm::vec3 translate = glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z);
-                glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                bones_to_world.push_back(trans * rot);
+                glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
+                                                          hand->arm.rotation.x,
+                                                          hand->arm.rotation.y,
+                                                          hand->arm.rotation.z));
+                glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
+                bones_to_world.push_back(arm_translate * arm_rot);
+                // fingers
                 for (uint32_t f = 0; f < 5; f++)
                 {
                     LEAP_DIGIT finger = hand->digits[f];

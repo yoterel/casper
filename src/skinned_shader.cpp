@@ -214,7 +214,8 @@ void SkinningShader::SetBoneTransform(unsigned int Index, const glm::mat4 &Trans
     assert(Index < MAX_BONES);
     if (Index >= MAX_BONES)
     {
-        return;
+        std::cout << "Error: Index >= MAX_BONES" << std::endl;
+        exit(1);
     }
     // Transform.Print();
     glUniformMatrix4fv(m_boneLocation[Index], 1, GL_FALSE, (const GLfloat *)glm::value_ptr(Transform));

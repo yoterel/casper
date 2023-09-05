@@ -188,13 +188,12 @@ private:
     std::vector<glm::vec2> m_TexCoords;
     std::vector<glm::vec3> m_VertColors;
     std::vector<unsigned int> m_Indices;
-    std::vector<VertexBoneData> m_Bones;
+    std::vector<VertexBoneData> m_Bones; // per vertex bone data
 
-    std::map<std::string, unsigned int> m_BoneNameToIndexMap;
-    std::map<unsigned int, std::string> m_BoneIndexToNameMap;
-    std::map<unsigned int, std::string> leap_bone_map;
-    std::map<std::string, unsigned int> bone_leap_map;
+    std::map<std::string, unsigned int> m_BoneNameToIndexMap; // maps a bone name in loaded mesh to its index
+    std::map<unsigned int, std::string> m_BoneIndexToNameMap; // inverse of above
+    std::map<std::string, unsigned int> bone_leap_map;        // maps bone names from the map above to their leapmotion index
 
-    std::vector<BoneInfo> m_BoneInfo;
+    std::vector<BoneInfo> m_BoneInfo; // per bone info
     glm::mat4 m_GlobalInverseTransform;
 };
