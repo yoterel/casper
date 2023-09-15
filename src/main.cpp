@@ -633,7 +633,7 @@ int main(int argc, char *argv[])
                     std::vector<glm::mat4> BoneToLocalTransforms;
                     skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
                     glBindVertexArray(gizmoVAO);
-                    glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+                    // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
                     for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
                     {
                         // in bind pose
@@ -643,7 +643,7 @@ int main(int argc, char *argv[])
                     for (unsigned int i = 0; i < bones_to_world.size(); i++)
                     {
                         // in leap motion pose
-                        vcolorShader.setMat4("model", bones_to_world[i] * scaler);
+                        vcolorShader.setMat4("model", bones_to_world[i]);
                         glDrawArrays(GL_LINES, 0, 6);
                     }
                 }
@@ -652,7 +652,7 @@ int main(int argc, char *argv[])
                     vcolorShader.use();
                     vcolorShader.setMat4("projection", flycam_projection_transform);
                     vcolorShader.setMat4("view", flycam_view_transform);
-                    vcolorShader.setMat4("model", glm::scale(bones_to_world[0], glm::vec3(10.0f, 10.0f, 10.0f)));
+                    vcolorShader.setMat4("model", bones_to_world[0]);
                     glBindVertexArray(gizmoVAO);
                     glDrawArrays(GL_LINES, 0, 6);
                 }
