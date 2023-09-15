@@ -93,8 +93,8 @@ struct VertexBoneData
 
 struct BoneInfo
 {
-    glm::mat4 LocalToBoneTransform;
-    glm::mat4 FinalTransformation;
+    glm::mat4 LocalToBoneTransform; // from local space to bone space
+    glm::mat4 FinalTransformation;  // from bone space to root space
 
     BoneInfo(const glm::mat4 &l2b_transform)
     {
@@ -130,9 +130,9 @@ public:
     bool LoadMesh(const std::string &Filename);
     void Render(Shader &shader, unsigned int camTex, bool useFBO);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                glm::mat4 local_to_world, unsigned int camTex, bool useFBO = true);
+                glm::mat4 local_to_world, unsigned int camTex, bool useFBO = true, bool use_bones = false);
     const Material &GetMaterial();
-    void GetBoneTransforms(std::vector<glm::mat4> &Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world);
+    void GetBoneTransforms(std::vector<glm::mat4> &Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world, const bool use_bones = false);
     glm::vec3 getCenterOfMass();
     std::string getBoneName(unsigned int index);
     unsigned int NumBones() const

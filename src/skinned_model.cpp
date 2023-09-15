@@ -62,19 +62,6 @@ bool SkinnedModel::LoadMesh(const std::string &Filename)
 
     // Make sure the VAO is not changed from the outside
     glBindVertexArray(0);
-    // bone_leap_map =
-    // {
-    //     {"L_Wrist", 0},
-    //     {"Elbow", 1},
-
-    //     {"L_thumb_Proximal", 3},
-    //     {"L_thumb_a", 4},
-    //     {"L_thumb_b", 5},
-
-    //     {"L_index_Proximal", 6},
-    //     {"index_b", 7},
-    //     {"index_c", 8},
-    // };
     bone_leap_map =
         {
             {"Wrist", 0},
@@ -541,7 +528,7 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
 }
 
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                          glm::mat4 local_to_world, unsigned int camTex, bool useFBO)
+                          glm::mat4 local_to_world, unsigned int camTex, bool useFBO, bool use_bones)
 {
     shader.use();
     shader.SetMaterial(this->GetMaterial());
@@ -557,7 +544,7 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
     // glActiveTexture(GL_TEXTURE1);
     // glBindTexture(GL_TEXTURE_2D, m_cam_texture);
     std::vector<glm::mat4> Transforms;
-    this->GetBoneTransforms(Transforms, bones_to_world, local_to_world);
+    this->GetBoneTransforms(Transforms, bones_to_world, local_to_world, use_bones);
     for (unsigned int i = 0; i < Transforms.size(); i++)
     {
         shader.SetBoneTransform(i, Transforms[i]);
@@ -671,20 +658,27 @@ void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4> &Tran
         Transforms[BoneIndex] = NodeTransformation;
     }
 }
-void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &Transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world)
+void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &Transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world, const bool use_bones)
 {
     Transforms.resize(m_BoneInfo.size());
-    // default bind pose using bones
-    // for (unsigned int i = 0 ; i < m_BoneInfo.size() ; i++) {
-    //     Transforms[i] = m_BoneInfo[i].FinalTransformation;
-    // }
-    // default bind pose not using bones
-    glm::mat4 iden = glm::mat4(1.0f);
-    for (unsigned int i = 0; i < m_BoneInfo.size(); i++)
+    if (use_bones)
     {
-        Transforms[i] = local_to_world * iden;
+        // default bind pose using bones
+        // "FinalTransfomation" was obtained with read node hierarchy
+        for (unsigned int i = 0; i < m_BoneInfo.size(); i++)
+        {
+            Transforms[i] = local_to_world * m_BoneInfo[i].FinalTransformation;
+        }
     }
-    // default bind pose
+    else
+    {
+        // default bind pose not using bones
+        glm::mat4 iden = glm::mat4(1.0f);
+        for (unsigned int i = 0; i < m_BoneInfo.size(); i++)
+        {
+            Transforms[i] = local_to_world * iden;
+        }
+    }
     // skin the mesh using the bone to world transforms from leap
     // offset matrix is local to bone matrix ("inverse bind pose")
     if (bones_to_world.size() > 0)
@@ -699,6 +693,8 @@ void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &Transforms, const s
 
 void SkinnedModel::ReadNodeHierarchy(const aiNode *pNode, const glm::mat4 &ParentTransform)
 {
+    // if the mesh is in bind pose, this is expected to set all FinalTransformation to identity
+    // because mTransformation is child to parent transform (e.g. bone to local for root), and local to bone cancles it out.
     std::string NodeName(pNode->mName.data);
     glm::mat4 NodeTransformation(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
     glm::mat4 GlobalTransformation = ParentTransform * NodeTransformation;
