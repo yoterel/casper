@@ -239,6 +239,7 @@ int main(int argc, char *argv[])
     Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
     Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
     Shader projectorShader("C:/src/augmented_hands/src/shaders/projector_shader.vs", "C:/src/augmented_hands/src/shaders/projector_shader.fs");
+    Shader projectorOnlyShader("C:/src/augmented_hands/src/shaders/projector_only.vs", "C:/src/augmented_hands/src/shaders/projector_only.fs");
     Shader textureShader("C:/src/augmented_hands/src/shaders/color_by_texture.vs", "C:/src/augmented_hands/src/shaders/color_by_texture.fs");
     Shader lineShader("C:/src/augmented_hands/src/shaders/line_shader.vs", "C:/src/augmented_hands/src/shaders/line_shader.fs");
     Shader coordShader("C:/src/augmented_hands/src/shaders/coords.vs", "C:/src/augmented_hands/src/shaders/coords.fs");
@@ -340,6 +341,24 @@ int main(int argc, char *argv[])
                                     glm::vec3(0.0f, 1.0f, 0.0f),
                                     Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
     }
+    std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
+                                           {-1.0f, -1.0f, 1.0f},
+                                           {1.0f, -1.0f, 1.0f},
+                                           {1.0f, 1.0f, 1.0f}};
+    std::vector<glm::vec3> vcamFarVerts(4);
+    // unproject points
+    glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
+    glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
+    glm::mat4 vproj_view_transform = gl_projector.getViewMatrix();
+    glm::mat4 vproj_projection_transform = gl_projector.getProjectionMatrix();
+    glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+    glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+    for (int i = 0; i < far_frustrum.size(); ++i)
+    {
+        glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
+        vcamFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
+    }
+    Quad vcamFarQuad(vcamFarVerts);
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
     float exposure = 1850.0f;
@@ -507,11 +526,17 @@ int main(int argc, char *argv[])
             if (!debug_mode)
             {
                 // skinnedModel.m_fbo.saveColorToFile("test1.png");
-                canvasShader.use();
-                canvasShader.setBool("binary", false);
-                canvasShader.setBool("flipVer", false);
-                canvasShader.setInt("src", 0);
-                canvas.renderTexture(dinosaur.m_fbo.getTexture(), canvasShader);
+                // canvasShader.use();
+                // canvasShader.setBool("binary", false);
+                // canvasShader.setBool("flipVer", false);
+                // canvasShader.setInt("src", 0);
+                // canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
+                projectorOnlyShader.use();
+                projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+                projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                projectorOnlyShader.setBool("binary", true);
+                unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
+                canvas.render(jfaInitShader, jfaShader, fastTrackerShader, skinnedModel.m_fbo.getTexture(), warped_cam, true);
             }
             // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
             t2.stop();
@@ -537,8 +562,13 @@ int main(int argc, char *argv[])
                                                    {-1.0f, -1.0f, 0.7f},
                                                    {1.0f, -1.0f, 0.7f},
                                                    {1.0f, 1.0f, 0.7f}};
+            std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
+                                                   {-1.0f, -1.0f, 1.0f},
+                                                   {1.0f, -1.0f, 1.0f},
+                                                   {1.0f, 1.0f, 1.0f}};
             std::vector<glm::vec3> vcamNearVerts(4);
             std::vector<glm::vec3> vcamMidVerts(4);
+            std::vector<glm::vec3> vcamFarVerts(4);
             std::vector<glm::vec3> vprojNearVerts(4);
             std::vector<glm::vec3> vprojMidVerts(4);
             // unproject points
@@ -550,6 +580,8 @@ int main(int argc, char *argv[])
                 vcamMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
                 unprojected = vcamUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
                 vcamNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = vcamUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
+                vcamFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
                 unprojected = vprojUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
                 vprojMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
                 unprojected = vprojUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
@@ -557,10 +589,21 @@ int main(int argc, char *argv[])
             }
             Quad vcamNearQuad(vcamNearVerts);
             Quad vcamMidQuad(vcamMidVerts);
+            Quad vcamFarQuad(vcamFarVerts);
             Quad vprojNearQuad(vprojNearVerts);
             Quad vprojMidQuad(vprojMidVerts);
             // draws some mesh (lit by camera input)
             {
+                /* quad at vcam far plane, shined by vproj (and corrected) */
+                projectorOnlyShader.use();
+                projectorOnlyShader.setBool("flipVer", false);
+                projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                projectorOnlyShader.setBool("binary", true);
+                camTexture.bind();
+                projectorOnlyShader.setInt("src", 0);
+                vcamFarQuad.render();
+                /* dinosaur */
                 // projectorShader.use();
                 // projectorShader.setBool("flipVer", false);
                 // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);

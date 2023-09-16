@@ -28,7 +28,7 @@ public:
     ~Canvas() { clear(); };
     void render(Shader &shader, uint8_t *buffer);
     void render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker,
-                unsigned int texture, uint8_t *buffer, bool use_pbo = true);
+                unsigned int texture, unsigned int cam_texture, bool use_pbo = true);
     void renderBuffer(Shader &shader, Quad &quad);
     unsigned int renderToFBO(unsigned int tex, Shader &shader, Quad &quad);
     unsigned int renderToFBO(Shader &shader, Quad &quad);

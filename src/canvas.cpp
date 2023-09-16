@@ -76,6 +76,7 @@ unsigned int Canvas::renderToFBO(Shader &shader, Quad &quad)
 unsigned int Canvas::renderToFBO(unsigned int tex, Shader &shader, Quad &quad)
 {
     // saveImage("test.png", tex, m_dstWidth, m_dstHeight, shader);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
     m_fbo.bind();
     shader.use();
@@ -107,34 +108,34 @@ void Canvas::renderTexture(unsigned int tex, Shader &shader)
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Canvas::render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, uint8_t *buffer, bool use_pbo)
+void Canvas::render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned int texture, unsigned int cam_texture, bool use_pbo)
 {
-    if (use_pbo)
-    {
-        t0.start();
-        // transfer data from memory to GPU texture (using PBO)
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
-        glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
-        GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-        if (ptr)
-        {
-            memcpy(ptr, buffer, m_size_tex_data);
-            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
-        }
-        t0.stop();
-        t1.start();
-        glBindTexture(GL_TEXTURE_2D, m_texture_src);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        t1.stop();
-    }
-    else
-    {
-        t1.start();
-        glBindTexture(GL_TEXTURE_2D, m_texture_src);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
-        t1.stop();
-    }
+    // if (use_pbo)
+    // {
+    //     t0.start();
+    //     // transfer data from memory to GPU texture (using PBO)
+    //     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
+    //     glBufferData(GL_PIXEL_UNPACK_BUFFER, m_size_tex_data, 0, GL_STREAM_DRAW);
+    //     GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+    //     if (ptr)
+    //     {
+    //         memcpy(ptr, buffer, m_size_tex_data);
+    //         glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
+    //     }
+    //     t0.stop();
+    //     t1.start();
+    //     glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    //     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+    //     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    //     t1.stop();
+    // }
+    // else
+    // {
+    //     t1.start();
+    //     glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    //     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_srcWidth, m_srcHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
+    //     t1.stop();
+    // }
     t2.start();
     // init jfa seeds
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -198,7 +199,7 @@ void Canvas::render(Shader &jfaInit, Shader &jfa, Shader &fast_tracker, unsigned
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, texture);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_texture_src);
+    glBindTexture(GL_TEXTURE_2D, cam_texture);
     fast_tracker.use();
     fast_tracker.setInt("jfa", 0);
     fast_tracker.setInt("src", 1);
