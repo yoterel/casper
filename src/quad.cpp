@@ -1,6 +1,8 @@
 #include "quad.h"
 #include <glad/glad.h>
 #include <iostream>
+#include <glm/gtx/normal.hpp>
+#include <glm/gtx/norm.hpp>
 
 Quad::Quad(std::vector<glm::vec3> &vertices)
 {
@@ -14,6 +16,14 @@ Quad::Quad(std::vector<glm::vec3> &vertices)
         vertices[2].x, vertices[2].y, vertices[2].z, 1.0f, 0.0f, // bottom right
         vertices[3].x, vertices[3].y, vertices[3].z, 1.0f, 1.0f  // top right
     };
+    glm::vec3 normal1 = glm::triangleNormal(vertices[0], vertices[1], vertices[2]);
+    glm::vec3 normal2 = glm::triangleNormal(vertices[0], vertices[2], vertices[3]);
+    if (!(glm::length2(normal1 - normal2) < EPISILON * EPISILON))
+    {
+        std::cout << "Warning: Quad is not planar!" << std::endl;
+        exit(1);
+    }
+    m_normal = normal1;
     this->init(verts);
 }
 Quad::Quad(float depth)
@@ -46,6 +56,7 @@ Quad::~Quad()
 void Quad::init(std::vector<float> &verts)
 {
     // unsigned int VBO, VAO, EBO;
+
     glGenVertexArrays(1, &m_VAO);
     glGenBuffers(1, &m_VBO);
 

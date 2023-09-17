@@ -4,7 +4,7 @@
 // const int MAX_SPOT_LIGHTS = 2;
 
 in vec2 TexCoord0;
-in vec2 ProjTexCoord0;
+in vec3 ProjTexCoord0;
 // in vec3 Normal0;
 // in vec3 LocalPos0;
 flat in ivec4 BoneIDs00;
@@ -29,8 +29,8 @@ uniform bool binary;
 
 void main()
 {
-    float u = (ProjTexCoord0.x + 1.0) * 0.5;
-    float v = (ProjTexCoord0.y + 1.0) * 0.5;
+    float u = (ProjTexCoord0.x / ProjTexCoord0.z + 1.0) * 0.5;
+    float v = (ProjTexCoord0.y / ProjTexCoord0.z + 1.0) * 0.5;
     vec4 proj_col = vec4(texture(projTexture, vec2(u, 1-v)).rgb, 1.0);
     if (binary)
     {

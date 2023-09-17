@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/normal.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "queue.h"
@@ -50,6 +51,7 @@ const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
 const unsigned int cam_height = 540;
+float exposure = 1850.0f;
 // global state
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
@@ -93,7 +95,7 @@ int main(int argc, char *argv[])
         std::cout << "Using CUDA..." << std::endl;
         use_cuda = true;
     }
-    if (checkCmdLineFlag(argc, (const char **)argv, "fake_cam"))
+    if (checkCmdLineFlag(argc, (const char **)argv, "fakecam"))
     {
         std::cout << "Fake camera on..." << std::endl;
         producer_is_fake = true;
@@ -123,6 +125,9 @@ int main(int argc, char *argv[])
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
     GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
+    int secondary_screen_x, secondary_screen_y;
+    glfwGetMonitorPos(monitors[1], &secondary_screen_x, &secondary_screen_y);
+    glfwSetWindowPos(window, secondary_screen_x + 100, secondary_screen_y + 100);
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -309,8 +314,8 @@ int main(int argc, char *argv[])
                                     proj_height,
                                     100.0f,
                                     true);
-            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 2.0f, true);
-            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height, 2.0f, true);
+            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 50.0f, true);
+            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height, 50.0f, true);
         }
         else
         {
@@ -358,10 +363,14 @@ int main(int argc, char *argv[])
         glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
         vcamFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
     }
+    glm::vec3 normal = glm::triangleNormal(vcamFarVerts[0], vcamFarVerts[1], vcamFarVerts[2]);
+    for (int i = 0; i < far_frustrum.size(); ++i)
+    {
+        vcamFarVerts[i] += 0.1f * normal;
+    }
     Quad vcamFarQuad(vcamFarVerts);
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    float exposure = 1850.0f;
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
     {
         /* real producer */
@@ -535,6 +544,7 @@ int main(int argc, char *argv[])
                 projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
                 projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
                 projectorOnlyShader.setBool("binary", true);
+                projectorOnlyShader.setBool("src", 0);
                 unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
                 canvas.render(jfaInitShader, jfaShader, fastTrackerShader, skinnedModel.m_fbo.getTexture(), warped_cam, true);
             }
@@ -594,12 +604,13 @@ int main(int argc, char *argv[])
             Quad vprojMidQuad(vprojMidVerts);
             // draws some mesh (lit by camera input)
             {
-                /* quad at vcam far plane, shined by vproj (and corrected) */
+                /* quad at vcam far plane, shined by vproj (perspective corrected) */
                 projectorOnlyShader.use();
                 projectorOnlyShader.setBool("flipVer", false);
                 projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
                 projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
                 projectorOnlyShader.setBool("binary", true);
+                // skinnedModel.GetMaterial().pDiffuse->bind();
                 camTexture.bind();
                 projectorOnlyShader.setInt("src", 0);
                 vcamFarQuad.render();
@@ -709,7 +720,7 @@ int main(int argc, char *argv[])
                     skinnedModel.Render(skinnedShader, bones_to_world, rotx, camTexture.getTexture(), false, space_modifier);
                 }
             }
-            // draws frustrum of projector (=vcam)
+            // draws frustrum of camera (=vproj)
             {
                 std::vector<glm::vec3> vprojFrustumVerticesData(28);
                 lineShader.use();
@@ -728,7 +739,7 @@ int main(int argc, char *argv[])
                 glBindVertexArray(frustrumVAO);
                 glDrawArrays(GL_LINES, 0, 28);
             }
-            // draws frustrum of camera (=vproj)
+            // draws frustrum of projector (=vcam)
             {
                 std::vector<glm::vec3> vcamFrustumVerticesData(28);
                 lineShader.use();

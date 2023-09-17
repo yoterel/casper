@@ -1,7 +1,7 @@
 #version 330
 out vec4 FragColor;
 
-in vec2 ProjTexCoord;
+in vec3 ProjTexCoord;
 //uniform sampler2D src;
 uniform sampler2D src;
 uniform bool binary;
@@ -10,8 +10,8 @@ void main()
 {
     // vec3 vertColor = VertColor;
     //vec3 texColor = texture(src, TexCoord).rgb;
-    float u = (ProjTexCoord.x + 1.0) * 0.5;
-    float v = (ProjTexCoord.y + 1.0) * 0.5;
+    float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
+    float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
     vec3 projColor = texture(src, vec2(u, 1-v)).rgb;
     if (binary)
     {
