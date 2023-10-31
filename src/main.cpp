@@ -595,7 +595,8 @@ int main(int argc, char *argv[])
                 projectorOnlyShader.setBool("flipVer", false);
                 projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
                 projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                projectorOnlyShader.setBool("binary", true);
+                // projectorOnlyShader.setBool("binary", false);
+                // skinnedModel.GetMaterial().pDiffuse->bind();
                 camTexture.bind();
                 projectorOnlyShader.setInt("src", 0);
                 vcamFarQuad.render();
