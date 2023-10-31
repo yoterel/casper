@@ -1,7 +1,7 @@
 #include "gl_camera.h"
 
 GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
-                   float width, float height, float speed, bool inverted) : MovementSpeed(speed),
+                   float width, float height, float far, float speed, bool inverted) : MovementSpeed(speed),
                                                                             MouseSensitivity(SENSITIVITY),
                                                                             Zoom(ZOOM),
                                                                             Yaw(YAW),
@@ -10,7 +10,7 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
                                                                             m_height(height),
                                                                             m_inverted(inverted)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 1500.0f);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, far);
     m_mode = mode;
     if (m_mode == Camera_Mode::FIXED_CAMERA)
     {
@@ -33,7 +33,7 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
     }
 }
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
-                   float width, float height, float speed, bool inverted) : MovementSpeed(speed),
+                   float width, float height, float far, float speed, bool inverted) : MovementSpeed(speed),
                                                                             MouseSensitivity(SENSITIVITY),
                                                                             Zoom(ZOOM),
                                                                             m_mode(Camera_Mode::FIXED_CAMERA),
