@@ -19,6 +19,9 @@ public:
     void txt2img(const std::string prompt);
     void img2img() {};
 private:
+    // std::string base64_decode(const std::string& input);
+    // bool is_base64(unsigned char c) {return (isalnum(c) || (c == '+') || (c == '/'));};
+    // std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 };
 
 #endif /* DIFFUSE_H */
