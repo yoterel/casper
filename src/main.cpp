@@ -179,12 +179,12 @@ int main(int argc, char *argv[])
     //                        //   "C:/src/augmented_hands/resource/wood.jpg",
     //                        proj_width, proj_height,
     //                        cam_width, cam_height);
-    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
-                              "C:/src/augmented_hands/resource/uv.png",
+    SkinnedModel skinnedModel("../../resource/GenericHand.fbx",
+                              "../../resource/uv.png",
                               //   "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height,
                               cam_width, cam_height);
-    SkinnedModel dinosaur("C:/src/augmented_hands/resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
+    // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = skinnedModel.NumBones();
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     glm::vec3 coa = skinnedModel.getCenterOfMass();
@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
-    Text text("C:/src/augmented_hands/resource/arial.ttf");
+    Text text("../../resource/arial.ttf");
     std::array<glm::vec3, 28> frustumCornerVertices{
         {// near
          {-1.0f, 1.0f, -1.0f},
@@ -234,23 +234,23 @@ int main(int argc, char *argv[])
          {0.0f, 1.5f, -1.0f},
          {1.0f, 1.0f, -1.0f}}};
     /* setup shaders*/
-    Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
-    Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
-    Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
-    Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
-    Shader projectorShader("C:/src/augmented_hands/src/shaders/projector_shader.vs", "C:/src/augmented_hands/src/shaders/projector_shader.fs");
-    Shader projectorOnlyShader("C:/src/augmented_hands/src/shaders/projector_only.vs", "C:/src/augmented_hands/src/shaders/projector_only.fs");
-    Shader textureShader("C:/src/augmented_hands/src/shaders/color_by_texture.vs", "C:/src/augmented_hands/src/shaders/color_by_texture.fs");
-    Shader lineShader("C:/src/augmented_hands/src/shaders/line_shader.vs", "C:/src/augmented_hands/src/shaders/line_shader.fs");
-    Shader coordShader("C:/src/augmented_hands/src/shaders/coords.vs", "C:/src/augmented_hands/src/shaders/coords.fs");
+    Shader jfaInitShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa_init.fs");
+    Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
+    Shader fastTrackerShader("../../src/shaders/fast_tracker.vs", "../../src/shaders/fast_tracker.fs");
+    Shader debugShader("../../src/shaders/debug.vs", "../../src/shaders/debug.fs");
+    Shader projectorShader("../../src/shaders/projector_shader.vs", "../../src/shaders/projector_shader.fs");
+    Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
+    Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
+    Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
+    Shader coordShader("../../src/shaders/coords.vs", "../../src/shaders/coords.fs");
     Shader canvasShader;
     if (use_cuda)
-        canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
+        canvasShader = Shader("../../src/shaders/canvas.vs", "../../src/shaders/canvas_cuda.fs");
     else
-        canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
-    Shader vcolorShader("C:/src/augmented_hands/src/shaders/color_by_vertex.vs", "C:/src/augmented_hands/src/shaders/color_by_vertex.fs");
-    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
-    Shader textShader("C:/src/augmented_hands/src/shaders/text.vs", "C:/src/augmented_hands/src/shaders/text.fs");
+        canvasShader = Shader("../../src/shaders/canvas.vs", "../../src/shaders/canvas.fs");
+    Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
+    SkinningShader skinnedShader("../../src/shaders/skin_hand.vs", "../../src/shaders/skin_hand.fs");
+    Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
@@ -365,7 +365,7 @@ int main(int argc, char *argv[])
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
     {
         /* real producer */
-        std::cout << "using real camera to produce images" << std::endl;
+        std::cout << "Using real camera to produce images" << std::endl;
         projector.show();
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
         // camera.balance_white();
@@ -374,7 +374,7 @@ int main(int argc, char *argv[])
     else
     {
         /* fake producer */
-        std::cout << "using fake camera to produce images" << std::endl;
+        std::cout << "Using fake camera to produce images" << std::endl;
         producer_is_fake = true;
         // cam_height = 540;
         // cam_width = 720;

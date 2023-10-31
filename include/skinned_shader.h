@@ -74,7 +74,7 @@ public:
     static const unsigned int MAX_POINT_LIGHTS = 2;
     static const unsigned int MAX_SPOT_LIGHTS = 2;
 
-    SkinningShader(const char *vertexPath, const char *fragmentPath, const char *geometryPath = nullptr);
+    SkinningShader(const std::string &vertexPath, const std::string &fragmentPath, const std::string &geometryPath = "");
 
     void SetWorldTransform(const glm::mat4 &worldTransform);
     void SetProjectorTransform(const glm::mat4 &worldTransform);

@@ -18,6 +18,7 @@
 
 #include "skinned_model.h"
 #include "assimp_helpers.h"
+#include <filesystem>
 
 void SkinnedModel::Clear()
 {
@@ -46,7 +47,8 @@ bool SkinnedModel::LoadMesh(const std::string &Filename)
     glGenBuffers(sizeof(m_Buffers) / sizeof(m_Buffers[0]), m_Buffers);
 
     bool Ret = false;
-
+    std::filesystem::path p = Filename;
+    std::cout << "Loading mesh: " << std::filesystem::absolute(p) << std::endl;
     pScene = Importer.ReadFile(Filename.c_str(), ASSIMP_LOAD_FLAGS);
 
     if (pScene)
@@ -300,15 +302,13 @@ void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *
     m_Materials[index].pDiffuse = NULL;
     if (m_externalTextureFileName != "") // bypass model texture
     {
+        std::filesystem::path p = m_externalTextureFileName;
+        std::cout << "Loading diffuse texture: " << std::filesystem::absolute(p) << std::endl;
         m_Materials[index].pDiffuse = new Texture(m_externalTextureFileName.c_str(), GL_TEXTURE_2D);
         if (!m_Materials[index].pDiffuse->init())
         {
-            std::cout << "Error loading diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
+            std::cout << "Error loading diffuse texture." << std::endl;
             exit(1);
-        }
-        else
-        {
-            std::cout << "Loaded diffuse texture '" << m_externalTextureFileName << "'" << std::endl;
         }
     }
     else
@@ -389,12 +389,12 @@ void SkinnedModel::LoadColors(const aiMaterial *pMaterial, int index)
     int ShadingModel = 0;
     if (pMaterial->Get(AI_MATKEY_SHADING_MODEL, ShadingModel) == AI_SUCCESS)
     {
-        printf("Shading model %d\n", ShadingModel);
+        std::cout << "Assimp shading model: " << ShadingModel << std::endl;
     }
 
     if (pMaterial->Get(AI_MATKEY_COLOR_AMBIENT, AmbientColor) == AI_SUCCESS)
     {
-        printf("Loaded ambient color [%f %f %f]\n", AmbientColor.r, AmbientColor.g, AmbientColor.b);
+        std::cout << "Loaded ambient color: [" << AmbientColor.r << " " << AmbientColor.g << " " << AmbientColor.b << "]" << std::endl;
         m_Materials[index].AmbientColor.r = AmbientColor.r;
         m_Materials[index].AmbientColor.g = AmbientColor.g;
         m_Materials[index].AmbientColor.b = AmbientColor.b;
@@ -408,7 +408,7 @@ void SkinnedModel::LoadColors(const aiMaterial *pMaterial, int index)
 
     if (pMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, DiffuseColor) == AI_SUCCESS)
     {
-        printf("Loaded diffuse color [%f %f %f]\n", DiffuseColor.r, DiffuseColor.g, DiffuseColor.b);
+        std::cout << "Loaded diffuse color: [" << DiffuseColor.r << " " << DiffuseColor.g << " " << DiffuseColor.b << "]" << std::endl;
         m_Materials[index].DiffuseColor.r = DiffuseColor.r;
         m_Materials[index].DiffuseColor.g = DiffuseColor.g;
         m_Materials[index].DiffuseColor.b = DiffuseColor.b;
@@ -418,7 +418,7 @@ void SkinnedModel::LoadColors(const aiMaterial *pMaterial, int index)
 
     if (pMaterial->Get(AI_MATKEY_COLOR_SPECULAR, SpecularColor) == AI_SUCCESS)
     {
-        printf("Loaded specular color [%f %f %f]\n", SpecularColor.r, SpecularColor.g, SpecularColor.b);
+        std::cout << "Loaded specular color: [" << SpecularColor.r << " " << SpecularColor.g << " " << SpecularColor.b << "]" << std::endl;
         m_Materials[index].SpecularColor.r = SpecularColor.r;
         m_Materials[index].SpecularColor.g = SpecularColor.g;
         m_Materials[index].SpecularColor.b = SpecularColor.b;

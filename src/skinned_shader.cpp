@@ -1,6 +1,6 @@
 #include "skinned_shader.h"
 
-SkinningShader::SkinningShader(const char *vertexPath, const char *fragmentPath, const char *geometryPath) : Shader(vertexPath, fragmentPath, geometryPath)
+SkinningShader::SkinningShader(const std::string &vertexPath, const std::string &fragmentPath, const std::string &geometryPath) : Shader(vertexPath, fragmentPath, geometryPath)
 {
     worldTransformLoc = GetUniformLocation("gTransform");
     projectorTransformLoc = GetUniformLocation("gProjectorTransform");
