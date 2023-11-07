@@ -422,9 +422,9 @@ void Canvas::initGLBuffers()
 }
 void Canvas::getTimerValues(double &time0, double &time1, double &time2)
 {
-    time0 = t0.averageLap();
-    time1 = t1.averageLap();
-    time2 = t2.averageLap();
+    time0 = t0.averageLapInMilliSec();
+    time1 = t1.averageLapInMilliSec();
+    time2 = t2.averageLapInMilliSec();
 }
 void Canvas::resetTimers()
 {

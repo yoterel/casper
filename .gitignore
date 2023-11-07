@@ -3,3 +3,4 @@
 /third-party/opencv
 unity_augmented_hands/Assets/Plugins/Windows/x64/*
 /debug
+/benchmark

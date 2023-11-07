@@ -4,9 +4,12 @@ set(GLAD_VER 4.3)
 set(Python_EXECUTABLE "C:/Users/sens/miniconda3/envs/sd/python.exe")  # C:/Users/sens/.conda/envs/sandbox/python.exe
 set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
-set(OPENCV_PATH_ROOT "${PROJECT_SOURCE_DIR}/third-party/opencv")
+# set(OPENCV_PATH_ROOT "${PROJECT_SOURCE_DIR}/third-party/opencv")
+set(OPENCV_PATH_ROOT "C:/OpenCV_Build/build/install")
+set(OPENCV_COMPILER "vc16")
 set(CUDA_EXAMPLES "C:/src/cuda-samples")
-set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3/lib/x64")
+set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/lib/x64")
+set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/")
 # set(CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/third-party/opencv" ${CMAKE_PREFIX_PATH})
 cmake_policy(SET CMP0074 NEW)    # respect <PACKAGE>_ROOT variables in "find_package"
 include(CMakePrintHelpers)
@@ -15,9 +18,8 @@ project(augmented_hands VERSION 0.1 LANGUAGES C CXX CUDA)
 
 find_package(Python 3.10 COMPONENTS Interpreter Development REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
-find_package(OpenCV 4.6.0 EXACT REQUIRED PATHS "${OPENCV_PATH_ROOT}")
+find_package(OpenCV 4.8.0 EXACT REQUIRED PATHS "${OPENCV_PATH_ROOT}")
 find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
-
 message(PYTHON_FOUND="${Python_FOUND}")
 message(Python_Interpreter_FOUND="${Python_Interpreter_FOUND}")
 message(Python_EXECUTABLE="${Python_EXECUTABLE}")
@@ -191,21 +193,39 @@ target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
 # target_link_libraries(diffuse_example PRIVATE ${PYTHON_LIBRARIES})
 # target_link_libraries(diffuse_example PRIVATE Python::Python)  # Python::NumPy
 # target_link_libraries(diffuse_example PRIVATE ${Python_LIBRARY_DIRS}/python310.lib)
-
+######################################### opencv registration example program
+add_executable(benchmark_example
+    src/benchmark.cpp
+    src/timer.cpp
+)
+# target_include_directories(diffuse_example PRIVATE ${PYTHON_INCLUDE_DIRS})
+# target_link_libraries(diffuse_example PRIVATE )
+target_include_directories(benchmark_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(benchmark_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
+# set_target_properties(benchmark_example PROPERTIES CUDA_ARCHITECTURES "72")
 ######################################### post build copy dlls
-file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/x64/vc15/bin/*.dll")
-add_custom_command(TARGET ahand 
-                    POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${OPENCV_DLLS}
-                    $<TARGET_FILE_DIR:ahand>)
+file(GLOB OPENCV_DLLS "${OPENCV_PATH_ROOT}/x64/${OPENCV_COMPILER}/bin/*.dll")
+# message(OPENCV_DLLS="${OPENCV_DLLS}")
+list(LENGTH OPENCV_DLLS RES_LEN)
+if(NOT RES_LEN EQUAL 0)
+# DIR is empty, do something
+    add_custom_command(TARGET ahand 
+                        POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        ${OPENCV_DLLS}
+                        $<TARGET_FILE_DIR:ahand>)
+endif()
 
-file(GLOB OPENCV_DLLS "${PROJECT_SOURCE_DIR}/third-party/opencv/bin/*.dll")
-add_custom_command(TARGET ahand 
-                    POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${OPENCV_DLLS}
-                    $<TARGET_FILE_DIR:ahand>)
+file(GLOB OPENCV_DLLS "${OPENCV_PATH_ROOT}/bin/*.dll")
+# message(OPENCV_DLLS="${OPENCV_DLLS}")
+list(LENGTH OPENCV_DLLS RES_LEN)
+if(NOT RES_LEN EQUAL 0)
+    add_custom_command(TARGET ahand 
+                        POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        ${OPENCV_DLLS}
+                        $<TARGET_FILE_DIR:ahand>)
+endif()
 
 file(GLOB DYNAFLASH_DLLS "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/*.dll")
 add_custom_command(TARGET ahand 
