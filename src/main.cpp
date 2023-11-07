@@ -25,6 +25,9 @@
 #include "image_process.h"
 #include "stb_image_write.h"
 #include <helper_string.h>
+#include <filesystem>
+namespace fs = std::filesystem;
+
 // forward declarations
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
@@ -275,10 +278,14 @@ int main(int argc, char *argv[])
     int leap_time_delay = 50000; // us
     uint8_t *colorBuffer = new uint8_t[image_size];
     Texture camTexture = Texture();
+    Texture flowTexture = Texture();
     camTexture.init(cam_width, cam_height, 4);
+    flowTexture.init(cam_width, cam_height, 2);
     // uint32_t cam_height = 0;
     // uint32_t cam_width = 0;
     blocking_queue<CPylonImage> camera_queue;
+    // queue_spsc<cv::Mat> camera_queue_cv(50);
+    blocking_queue<cv::Mat> camera_queue_cv;
     // blocking_queue<std::vector<uint8_t>> projector_queue;
     blocking_queue<uint8_t *> projector_queue;
     BaslerCamera camera;
@@ -382,16 +389,37 @@ int main(int argc, char *argv[])
         /* fake producer */
         std::cout << "Using fake camera to produce images" << std::endl;
         producer_is_fake = true;
+        std::string path = "../../resource/hand_capture";
+        std::vector<cv::Mat> fake_cam_images;
+        int file_counter = 0;
+        for (const auto &entry : fs::directory_iterator(path))
+        {
+            std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
+            std::string file_path = entry.path().string();
+            cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
+            cv::Mat img4;
+            cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
+            fake_cam_images.push_back(img4);
+            file_counter++;
+        }
         // cam_height = 540;
         // cam_width = 720;
-        producer = std::thread([&camera_queue, &close_signal]() { //, &projector
+        producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
             CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
             Timer t_block;
+            int counter = 0;
             t_block.start();
             while (!close_signal)
             {
-                camera_queue.push(image);
-                while (t_block.getElapsedTimeInMicroSec() < 300.0)
+                int test = fake_cam_images.size();
+                // cv::Mat mycopy = fake_cam_images[counter].clone();
+                // camera_queue_cv.push_back(fake_cam_images[counter]);
+                camera_queue_cv.push(fake_cam_images[counter]);
+                if (counter < fake_cam_images.size() - 1)
+                    counter++;
+                else
+                    counter = 0;
+                while (t_block.getElapsedTimeInMicroSec() < 10000.0)
                 {
                 }
                 t_block.stop();
@@ -447,7 +475,8 @@ int main(int argc, char *argv[])
             std::cout << "swap buffers time: " << t3.averageLapInMilliSec() << std::endl;
             std::cout << "GPU->CPU time: " << t4.averageLapInMilliSec() << std::endl;
             // std::cout << "project time: " << t4.averageLap() << std::endl;
-            std::cout << "cam q size: " << camera_queue.size() << std::endl;
+            std::cout << "cam q1 size: " << camera_queue.size() << std::endl;
+            std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
             std::cout << "proj q size: " << projector_queue.size() << std::endl;
 
             frameCount = 0;
@@ -470,17 +499,20 @@ int main(int argc, char *argv[])
         t_misc.stop();
         t0.start();
         // retrieve camera image
-        CPylonImage pylonImage = camera_queue.pop();
         uint8_t *buffer;
         if (producer_is_fake)
         {
-            buffer = white_image.data;
+            // buffer = white_image.data;
+            cv::Mat cv_image = camera_queue_cv.pop();
+            buffer = cv_image.data;
         }
         else
         {
+            CPylonImage pylonImage = camera_queue.pop();
             buffer = (uint8_t *)pylonImage.GetBuffer();
         }
         camTexture.load(buffer, true);
+
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
         // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
         // NPP_wrapper::distanceTransform(buffer, output, cam_width, cam_height);
@@ -614,7 +646,7 @@ int main(int argc, char *argv[])
                 projectorOnlyShader.setBool("flipVer", false);
                 projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
                 projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                projectorOnlyShader.setBool("binary", true);
+                projectorOnlyShader.setBool("binary", false);
                 // skinnedModel.GetMaterial().pDiffuse->bind();
                 camTexture.bind();
                 projectorOnlyShader.setInt("src", 0);

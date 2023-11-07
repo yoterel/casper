@@ -300,8 +300,8 @@ int main(int argc, char **argv)
                 // nvof->collectGarbage();
             }
             std::cout << "GPU report:" << std::endl;
-            std::cout << "resize avg: " << t1.averageLapInMilliSec() << std::endl;
-            std::cout << "cvtColor avg: " << t2.averageLapInMilliSec() << std::endl;
+            std::cout << "cvtColor avg: " << t1.averageLapInMilliSec() << std::endl;
+            std::cout << "resize avg: " << t2.averageLapInMilliSec() << std::endl;
             std::cout << "NvidiaOpticalFlow_2_0 avg: " << t_cuda.averageLapInMilliSec() << std::endl;
             std::cout << "total avg: " << t_cuda.averageLapInMilliSec() + t1.averageLapInMilliSec() + t2.averageLapInMilliSec() << std::endl
                       << std::endl;
@@ -317,30 +317,44 @@ int main(int argc, char **argv)
             cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
             cv::cuda::GpuMat gpu_flow;
             gpu_flow.upload(flow);
-            cv::Mat im1 = images[0];
-            gpu_im1.upload(im1);
-            cv::cuda::resize(gpu_im1, gpu_im1_down, down_size, 0, 0, cv::INTER_LINEAR);
-            cv::cuda::cvtColor(gpu_im1_down, gpu_im1_gray, cv::COLOR_BGR2GRAY);
+            cv::Mat im1, im1_gray, im1_gray_down;
+            cv::Mat im2, im2_gray, im2_gray_down;
+            im1 = images[0];
+            cv::cvtColor(im1, im1_gray, cv::COLOR_BGR2GRAY);
+            cv::resize(im1_gray, im1_gray_down, down_size);
+            gpu_im1.upload(im1_gray_down);
+            // cv::cuda::resize(gpu_im1, gpu_im1_down, down_size, 0, 0, cv::INTER_LINEAR);
+            // cv::cuda::cvtColor(gpu_im1_down, gpu_im1_gray, cv::COLOR_BGR2GRAY);
             for (int i = 1; i < images.size() - 1; i++)
             {
-                // upload pre-processed frame to GPU
+                cv::Mat im2 = images[i];
                 t1.start();
-                gpu_im2.upload(images[i]);
+                cv::cvtColor(im2, im2_gray, cv::COLOR_BGR2GRAY);
                 t1.stop();
+                t2.start();
+                cv::resize(im2_gray, im2_gray_down, down_size);
+                t2.stop();
+                t3.start();
+                gpu_im2.upload(im2_gray_down);
+                t3.stop();
+                // upload pre-processed frame to GPU
+                // t1.start();
+                // gpu_im2.upload(images[i]);
+                // t1.stop();
                 // std::cout << "upload GPU: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // resize
-                t2.start();
-                cv::cuda::resize(gpu_im2, gpu_im2_down, down_size, 0, 0, cv::INTER_LINEAR);
-                t2.stop();
+                // t2.start();
+                // cv::cuda::resize(gpu_im2, gpu_im2_down, down_size, 0, 0, cv::INTER_LINEAR);
+                // t2.stop();
                 // std::cout << "resize GPU: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // convert to gray
-                t3.start();
-                cv::cuda::cvtColor(gpu_im2_down, gpu_im2_gray, cv::COLOR_BGR2GRAY);
-                t3.stop();
+                // t3.start();
+                // cv::cuda::cvtColor(gpu_im2_down, gpu_im2_gray, cv::COLOR_BGR2GRAY);
+                // t3.stop();
                 // std::cout << "cvtColor GPU: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // OF
                 t4.start();
-                fbof->calc(gpu_im1_gray, gpu_im2_gray, gpu_flow);
+                fbof->calc(gpu_im1, gpu_im2, gpu_flow);
                 t4.stop();
 
                 // t_cuda.start();
@@ -356,8 +370,8 @@ int main(int argc, char **argv)
                 // std::cout << "download GPU: " << t1.getElapsedTimeInMilliSec() << std::endl  << std::endl;
                 imwrite(std::format("../../benchmark/{}/{:04d}.png", alg, i - 1).c_str(), procFlow(flow, down_size));
                 gpu_im2.copyTo(gpu_im1);
-                gpu_im2_down.copyTo(gpu_im1_down);
-                gpu_im2_gray.copyTo(gpu_im1_gray);
+                // gpu_im2_down.copyTo(gpu_im1_down);
+                // gpu_im2_gray.copyTo(gpu_im1_gray);
 
                 // cv::cuda::GpuMat gpu_flow_xy[2];
                 // cv::cuda::split(gpu_flow, gpu_flow_xy);
@@ -388,9 +402,9 @@ int main(int argc, char **argv)
                 // imwrite(std::format("../../benchmark/{}/{:04d}.png", alg, i).c_str(), bgr);
             }
             std::cout << "GPU report:" << std::endl;
-            std::cout << "upload avg: " << t1.averageLapInMilliSec() << std::endl;
+            std::cout << "cvtColor avg: " << t1.averageLapInMilliSec() << std::endl;
             std::cout << "resize avg: " << t2.averageLapInMilliSec() << std::endl;
-            std::cout << "cvtColor avg: " << t3.averageLapInMilliSec() << std::endl;
+            std::cout << "upload avg: " << t3.averageLapInMilliSec() << std::endl;
             std::cout << "calcOpticalFlowFarneback avg: " << t4.averageLapInMilliSec() << std::endl;
             std::cout << "download avg: " << t5.averageLapInMilliSec() << std::endl
                       << std::endl;

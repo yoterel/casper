@@ -37,9 +37,9 @@ const float DEF_FAR = 2000.0f;
 class GLCamera
 {
 public:
-    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height, float far = 1500.0f, float speed = DEF_SPEED, bool inverted = false);
+    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height, float far = DEF_FAR, float speed = DEF_SPEED, bool inverted = false);
     GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height, float speed = DEF_SPEED, bool inverted = false);
-    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height, float far = 500.0f, float speed = DEF_SPEED, bool inverted = false);
+    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height, float far = DEF_FAR, float speed = DEF_SPEED, bool inverted = false);
     GLCamera(){};
     GLCamera(GLCamera &s)
     {

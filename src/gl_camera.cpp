@@ -10,7 +10,7 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
                                                                                        m_height(height),
                                                                                        m_inverted(inverted)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, DEF_FAR);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, far);
     m_mode = mode;
     if (m_mode == Camera_Mode::FIXED_CAMERA)
     {
@@ -41,7 +41,7 @@ GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
                                                                                        m_height(height),
                                                                                        m_inverted(inverted)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, DEF_FAR);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, far);
     Front = glm::normalize(front);
     // Pitch = asin(Front.y);
     // Yaw = atan2(Front.x, Front.z);

@@ -96,11 +96,12 @@ void Texture::initInternal(void *image_data, unsigned int color_format)
         case 1:
             glTexImage2D(m_textureTarget, 0, GL_RED, m_imageWidth, m_imageHeight, 0, GL_RED, GL_UNSIGNED_BYTE, image_data);
             break;
-
+        case 2:
+            glTexImage2D(m_textureTarget, 0, GL_RG32F, m_imageWidth, m_imageHeight, 0, GL_RG, GL_FLOAT, image_data);
+            break;
         case 3:
             glTexImage2D(m_textureTarget, 0, GL_RGB, m_imageWidth, m_imageHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, image_data);
             break;
-
         case 4:
             glTexImage2D(m_textureTarget, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, color_format, GL_UNSIGNED_BYTE, image_data);
             break;
