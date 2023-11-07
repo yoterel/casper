@@ -31,7 +31,7 @@ public:
     void   start();                             // start timer
     void   stop();                              // stop the timer
     void   reset();                             // reset timer statistics to 0
-    double averageLap();
+    double averageLapInMilliSec();
     double getElapsedTime();                    // get elapsed time in second
     double getElapsedTimeInSec();               // get elapsed time in second (same as getElapsedTime)
     double getElapsedTimeInMilliSec();          // get elapsed time in milli-second
@@ -42,7 +42,7 @@ private:
     double endTimeInMicroSec;                   // ending time in micro-second
     int    stopped;                             // stop flag
     double movingAverage;
-    int timestamp;
+    int samples;
 
 #if defined(WIN32) || defined(_WIN32)
     LARGE_INTEGER frequency;                    // ticks per second

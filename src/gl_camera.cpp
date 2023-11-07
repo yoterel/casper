@@ -1,14 +1,14 @@
 #include "gl_camera.h"
 
 GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
-                   float width, float height, float speed, bool inverted) : MovementSpeed(speed),
-                                                                            MouseSensitivity(DEF_SENSITIVITY),
-                                                                            Zoom(DEF_ZOOM),
-                                                                            Yaw(DEF_YAW),
-                                                                            Pitch(DEF_PITCH),
-                                                                            m_width(width),
-                                                                            m_height(height),
-                                                                            m_inverted(inverted)
+                   float width, float height, float far, float speed, bool inverted) : MovementSpeed(speed),
+                                                                                       MouseSensitivity(DEF_SENSITIVITY),
+                                                                                       Zoom(DEF_ZOOM),
+                                                                                       Yaw(DEF_YAW),
+                                                                                       Pitch(DEF_PITCH),
+                                                                                       m_width(width),
+                                                                                       m_height(height),
+                                                                                       m_inverted(inverted)
 {
     projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, DEF_FAR);
     m_mode = mode;
@@ -33,13 +33,13 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
     }
 }
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
-                   float width, float height, float speed, bool inverted) : MovementSpeed(speed),
-                                                                            MouseSensitivity(DEF_SENSITIVITY),
-                                                                            Zoom(DEF_ZOOM),
-                                                                            m_mode(Camera_Mode::FIXED_CAMERA),
-                                                                            m_width(width),
-                                                                            m_height(height),
-                                                                            m_inverted(inverted)
+                   float width, float height, float far, float speed, bool inverted) : MovementSpeed(speed),
+                                                                                       MouseSensitivity(DEF_SENSITIVITY),
+                                                                                       Zoom(DEF_ZOOM),
+                                                                                       m_mode(Camera_Mode::FIXED_CAMERA),
+                                                                                       m_width(width),
+                                                                                       m_height(height),
+                                                                                       m_inverted(inverted)
 {
     projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, DEF_FAR);
     Front = glm::normalize(front);

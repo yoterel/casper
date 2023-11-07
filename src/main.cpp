@@ -184,12 +184,12 @@ int main(int argc, char *argv[])
     //                        //   "C:/src/augmented_hands/resource/wood.jpg",
     //                        proj_width, proj_height,
     //                        cam_width, cam_height);
-    SkinnedModel skinnedModel("C:/src/augmented_hands/resource/GenericHand.fbx",
-                              "C:/src/augmented_hands/resource/uv.png",
+    SkinnedModel skinnedModel("../../resource/GenericHand.fbx",
+                              "../../resource/uv.png",
                               //   "C:/src/augmented_hands/resource/wood.jpg",
                               proj_width, proj_height,
                               cam_width, cam_height);
-    SkinnedModel dinosaur("C:/src/augmented_hands/resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
+    // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = skinnedModel.NumBones();
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     glm::vec3 coa = skinnedModel.getCenterOfMass();
@@ -204,7 +204,7 @@ int main(int argc, char *argv[])
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
-    Text text("C:/src/augmented_hands/resource/arial.ttf");
+    Text text("../../resource/arial.ttf");
     std::array<glm::vec3, 28> frustumCornerVertices{
         {// near
          {-1.0f, 1.0f, -1.0f},
@@ -239,23 +239,23 @@ int main(int argc, char *argv[])
          {0.0f, 1.5f, -1.0f},
          {1.0f, 1.0f, -1.0f}}};
     /* setup shaders*/
-    Shader jfaInitShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa_init.fs");
-    Shader jfaShader("C:/src/augmented_hands/src/shaders/jfa.vs", "C:/src/augmented_hands/src/shaders/jfa.fs");
-    Shader fastTrackerShader("C:/src/augmented_hands/src/shaders/fast_tracker.vs", "C:/src/augmented_hands/src/shaders/fast_tracker.fs");
-    Shader debugShader("C:/src/augmented_hands/src/shaders/debug.vs", "C:/src/augmented_hands/src/shaders/debug.fs");
-    Shader projectorShader("C:/src/augmented_hands/src/shaders/projector_shader.vs", "C:/src/augmented_hands/src/shaders/projector_shader.fs");
-    Shader projectorOnlyShader("C:/src/augmented_hands/src/shaders/projector_only.vs", "C:/src/augmented_hands/src/shaders/projector_only.fs");
-    Shader textureShader("C:/src/augmented_hands/src/shaders/color_by_texture.vs", "C:/src/augmented_hands/src/shaders/color_by_texture.fs");
-    Shader lineShader("C:/src/augmented_hands/src/shaders/line_shader.vs", "C:/src/augmented_hands/src/shaders/line_shader.fs");
-    Shader coordShader("C:/src/augmented_hands/src/shaders/coords.vs", "C:/src/augmented_hands/src/shaders/coords.fs");
+    Shader jfaInitShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa_init.fs");
+    Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
+    Shader fastTrackerShader("../../src/shaders/fast_tracker.vs", "../../src/shaders/fast_tracker.fs");
+    Shader debugShader("../../src/shaders/debug.vs", "../../src/shaders/debug.fs");
+    Shader projectorShader("../../src/shaders/projector_shader.vs", "../../src/shaders/projector_shader.fs");
+    Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
+    Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
+    Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
+    Shader coordShader("../../src/shaders/coords.vs", "../../src/shaders/coords.fs");
     Shader canvasShader;
     if (use_cuda)
-        canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas_cuda.fs");
+        canvasShader = Shader("../../src/shaders/canvas.vs", "../../src/shaders/canvas_cuda.fs");
     else
-        canvasShader = Shader("C:/src/augmented_hands/src/shaders/canvas.vs", "C:/src/augmented_hands/src/shaders/canvas.fs");
-    Shader vcolorShader("C:/src/augmented_hands/src/shaders/color_by_vertex.vs", "C:/src/augmented_hands/src/shaders/color_by_vertex.fs");
-    SkinningShader skinnedShader("C:/src/augmented_hands/src/shaders/skin_hand.vs", "C:/src/augmented_hands/src/shaders/skin_hand.fs");
-    Shader textShader("C:/src/augmented_hands/src/shaders/text.vs", "C:/src/augmented_hands/src/shaders/text.fs");
+        canvasShader = Shader("../../src/shaders/canvas.vs", "../../src/shaders/canvas.fs");
+    Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
+    SkinningShader skinnedShader("../../src/shaders/skin_hand.vs", "../../src/shaders/skin_hand.fs");
+    Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
@@ -300,6 +300,7 @@ int main(int argc, char *argv[])
     std::vector<double> camera_distortion;
     glm::mat4 w2vp;
     glm::mat4 w2vc;
+    Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
     if (loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc))
     {
         std::cout << "Using calibration data for camera and projector settings" << std::endl;
@@ -310,19 +311,20 @@ int main(int argc, char *argv[])
             gl_flycamera = GLCamera(glm::vec3(70.0f, -150.0f, 1008.0f),
                                     glm::vec3(0.0f, 0.0f, 0.0f),
                                     glm::vec3(0.0f, -1.0f, 0.0f),
-                                    Camera_Mode::FREE_CAMERA,
+                                    camera_mode,
                                     proj_width,
                                     proj_height,
+                                    1500.0f,
                                     100.0f,
                                     true);
-            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 50.0f, true);
-            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FREE_CAMERA, cam_width, cam_height, 50.0f, true);
+            gl_camera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height, 2.0f, true);
+            gl_projector = GLCamera(w2vp, vproj_project, camera_mode, cam_width, cam_height, 2.0f, true);
         }
         else
         {
-            gl_camera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height);
-            gl_projector = GLCamera(w2vp, vproj_project, Camera_Mode::FIXED_CAMERA, cam_width, cam_height);
-            gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
+            gl_camera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height);
+            gl_projector = GLCamera(w2vp, vproj_project, camera_mode, cam_width, cam_height);
+            gl_flycamera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height);
         }
     }
     else
@@ -331,21 +333,15 @@ int main(int argc, char *argv[])
         gl_camera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
                              glm::vec3(0.0f, 0.0f, 0.0f),
                              glm::vec3(0.0f, 1.0f, 0.0f),
-                             Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
+                             camera_mode, proj_width, proj_height, 500.0f, 2.0f);
         gl_projector = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
                                 glm::vec3(0.0f, 0.0f, 0.0f),
                                 glm::vec3(0.0f, -1.0f, 0.0f),
-                                Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
-        if (freecam_mode)
-            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
-                                    glm::vec3(0.0f, 0.0f, 0.0f),
-                                    glm::vec3(0.0f, 1.0f, 0.0f),
-                                    Camera_Mode::FREE_CAMERA, proj_width, proj_height, 10.0f);
-        else
-            gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
-                                    glm::vec3(0.0f, 0.0f, 0.0f),
-                                    glm::vec3(0.0f, 1.0f, 0.0f),
-                                    Camera_Mode::FIXED_CAMERA, proj_width, proj_height);
+                                camera_mode, proj_width, proj_height, 500.0f, 2.0f);
+        gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                glm::vec3(0.0f, 0.0f, 0.0f),
+                                glm::vec3(0.0f, 1.0f, 0.0f),
+                                camera_mode, proj_width, proj_height, 1500.0f, 100.0f);
     }
     std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
                                            {-1.0f, -1.0f, 1.0f},
@@ -375,7 +371,7 @@ int main(int argc, char *argv[])
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
     {
         /* real producer */
-        std::cout << "using real camera to produce images" << std::endl;
+        std::cout << "Using real camera to produce images" << std::endl;
         projector.show();
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
         // camera.balance_white();
@@ -384,7 +380,7 @@ int main(int argc, char *argv[])
     else
     {
         /* fake producer */
-        std::cout << "using fake camera to produce images" << std::endl;
+        std::cout << "Using fake camera to produce images" << std::endl;
         producer_is_fake = true;
         // cam_height = 540;
         // cam_width = 720;
@@ -440,16 +436,16 @@ int main(int argc, char *argv[])
             canvas.getTimerValues(tpbo, ttex, tproc);
             std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
             std::cout << "total app time: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
-            std::cout << "misc time: " << t_misc.averageLap() << std::endl;
-            std::cout << "wait for cam time: " << t0.averageLap() << std::endl;
-            std::cout << "leap frame time: " << t1.averageLap() << std::endl;
-            std::cout << "skinning time: " << t2.averageLap() << std::endl;
-            std::cout << "debug info: " << t_debug.averageLap() << std::endl;
+            std::cout << "misc time: " << t_misc.averageLapInMilliSec() << std::endl;
+            std::cout << "wait for cam time: " << t0.averageLapInMilliSec() << std::endl;
+            std::cout << "leap frame time: " << t1.averageLapInMilliSec() << std::endl;
+            std::cout << "skinning time: " << t2.averageLapInMilliSec() << std::endl;
+            std::cout << "debug info: " << t_debug.averageLapInMilliSec() << std::endl;
             std::cout << "canvas pbo time: " << tpbo << std::endl;
             std::cout << "canvas tex transfer time: " << ttex << std::endl;
             std::cout << "canvas process time: " << tproc << std::endl;
-            std::cout << "swap buffers time: " << t3.averageLap() << std::endl;
-            std::cout << "GPU->CPU time: " << t4.averageLap() << std::endl;
+            std::cout << "swap buffers time: " << t3.averageLapInMilliSec() << std::endl;
+            std::cout << "GPU->CPU time: " << t4.averageLapInMilliSec() << std::endl;
             // std::cout << "project time: " << t4.averageLap() << std::endl;
             std::cout << "cam q size: " << camera_queue.size() << std::endl;
             std::cout << "proj q size: " << projector_queue.size() << std::endl;

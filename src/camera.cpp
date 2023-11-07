@@ -7,12 +7,12 @@ class CConfigurationEventPrinter : public CConfigurationEventHandler
 public:
     void OnAttach(CInstantCamera & /*camera*/)
     {
-        std::cout << "OnAttach event" << std::endl;
+        std::cout << "Baser API: OnAttach event" << std::endl;
     }
 
     void OnAttached(CInstantCamera &camera)
     {
-        std::cout << "OnAttached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "Baser API: OnAttached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnOpen(CInstantCamera &camera)
@@ -67,23 +67,23 @@ public:
 
     void OnDetach(CInstantCamera &camera)
     {
-        std::cout << "OnDetach event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "Baser API: OnDetach event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnDetached(CInstantCamera &camera)
     {
-        std::cout << "OnDetached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "Baser API: OnDetached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnGrabError(CInstantCamera &camera, const char *errorMessage)
     {
-        std::cout << "OnGrabError event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
-        std::cout << "Error Message: " << errorMessage << std::endl;
+        std::cout << "Baser API: OnGrabError event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "Baser API: Error Message: " << errorMessage << std::endl;
     }
 
     void OnCameraDeviceRemoved(CInstantCamera &camera)
     {
-        std::cout << "OnCameraDeviceRemoved event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "Baser API: OnCameraDeviceRemoved event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 };
 
@@ -94,12 +94,12 @@ public:
     {
         if (exposure_time < 1850.0)
         {
-            std::cout << "exposure time cannot be less than 1850.0, setting to 1850.0" << std::endl;
+            std::cout << "Baser API: exposure time cannot be less than 1850.0, setting to 1850.0" << std::endl;
             exposure_time = 1850.0;
         }
         if (exposure_time > 15000.0)
         {
-            std::cout << "exposure time cannot be greater than 15000.0, setting to 15000.0" << std::endl;
+            std::cout << "Baser API: exposure time cannot be greater than 15000.0, setting to 15000.0" << std::endl;
             exposure_time = 15000.0;
         }
         m_exposure_time = exposure_time;
@@ -137,15 +137,15 @@ public:
         }
         catch (const GenericException &e)
         {
-            throw RUNTIME_EXCEPTION("Could not apply configuration. Pylon::GenericException caught in OnOpened method msg=%hs", e.what());
+            throw RUNTIME_EXCEPTION("Baser API: Could not apply configuration. Pylon::GenericException caught in OnOpened method msg=%hs", e.what());
         }
         catch (const std::exception &e)
         {
-            throw RUNTIME_EXCEPTION("Could not apply configuration. std::exception caught in OnOpened method msg=%hs", e.what());
+            throw RUNTIME_EXCEPTION("Baser API: Could not apply configuration. std::exception caught in OnOpened method msg=%hs", e.what());
         }
         catch (...)
         {
-            throw RUNTIME_EXCEPTION("Could not apply configuration. Unknown exception caught in OnOpened method.");
+            throw RUNTIME_EXCEPTION("Baser API: Could not apply configuration. Unknown exception caught in OnOpened method.");
         }
     }
 
@@ -162,12 +162,12 @@ public:
     {
         if (exposureTime < 1850.0)
         {
-            std::cout << "exposure time cannot be less than 1850.0, setting to 1850.0" << std::endl;
+            std::cout << "Baser API: exposure time cannot be less than 1850.0, setting to 1850.0" << std::endl;
             exposureTime = 1850.0;
         }
         if (exposureTime > 15000.0)
         {
-            std::cout << "exposure time cannot be greater than 15000.0, setting to 15000.0" << std::endl;
+            std::cout << "Baser API: exposure time cannot be greater than 15000.0, setting to 15000.0" << std::endl;
             exposureTime = 15000.0;
         }
         m_exposure_time = exposureTime;
@@ -364,7 +364,7 @@ public:
         }
         else
         {
-            std::cout << "Error: " << std::hex << ptrGrabResult->GetErrorCode() << std::dec << " " << ptrGrabResult->GetErrorDescription() << std::endl;
+            std::cout << "Baser API: error: " << std::hex << ptrGrabResult->GetErrorCode() << std::dec << " " << ptrGrabResult->GetErrorDescription() << std::endl;
         }
     }
 };
@@ -381,13 +381,12 @@ bool BaslerCamera::init(blocking_queue<CPylonImage> &camera_queue, bool &close_s
         camera.RegisterImageEventHandler(new MyImageEventHandler(camera_queue, close_signal, height, width), RegistrationMode_Append, Cleanup_Delete);
         camera.Open();
         is_open = true;
-        std::cout << "basler camera initialized." << std::endl;
+        std::cout << "Basler API: camera initialized." << std::endl;
         return true;
     }
     catch (const GenericException &e)
     {
-        std::cerr << "An exception occurred." << std::endl
-                  << e.GetDescription() << std::endl;
+        std::cerr << "Baser API: an exception occurred: " << e.GetDescription() << std::endl;
         return false;
     }
 }
@@ -447,8 +446,7 @@ void BaslerCamera::acquire()
     }
     catch (const GenericException &e)
     {
-        std::cerr << "An exception occurred." << std::endl
-                  << e.GetDescription() << std::endl;
+        std::cerr << "Baser API: An exception occurred: " << e.GetDescription() << std::endl;
     }
 }
 
@@ -465,7 +463,7 @@ void BaslerCamera::kill()
     camera.Close();
     // PylonTerminate();
     is_open = false;
-    std::cout << "basler camera killed." << std::endl;
+    std::cout << "Baser API: basler camera killed." << std::endl;
 }
 
 #ifdef PYTHON_BINDINGS_BUILD
@@ -482,8 +480,7 @@ void BaslerCamera::init_single(float exposure_time)
     }
     catch (const GenericException &e)
     {
-        std::cerr << "An exception occurred." << std::endl
-                  << e.GetDescription() << std::endl;
+        std::cerr << "Baser API: An exception occurred: " << e.GetDescription() << std::endl;
     }
 }
 
@@ -503,7 +500,7 @@ nb::ndarray<nb::numpy, const uint8_t> BaslerCamera::capture_single()
     }
     else
     {
-        std::cout << "Error: " << std::hex << ptrGrabResult->GetErrorCode() << std::dec << " " << ptrGrabResult->GetErrorDescription() << std::endl;
+        std::cout << "Baser API: Error: " << std::hex << ptrGrabResult->GetErrorCode() << std::dec << " " << ptrGrabResult->GetErrorDescription() << std::endl;
         return nb::ndarray<nb::numpy, const uint8_t>();
     }
 }

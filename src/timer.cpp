@@ -33,7 +33,7 @@ Timer::Timer()
     startTimeInMicroSec = 0;
     endTimeInMicroSec = 0;
     movingAverage = 0;
-    timestamp = 0;
+    samples = 0;
 }
 
 
@@ -77,20 +77,20 @@ void Timer::stop()
     gettimeofday(&endCount, NULL);
 #endif
     double time = getElapsedTimeInMicroSec();
-    movingAverage = (time + (timestamp*movingAverage)) / (timestamp+1);
-    timestamp += 1;
+    movingAverage = (time + (samples*movingAverage)) / (samples+1);
+    samples += 1;
 }
 
 void Timer::reset()
 {
     movingAverage = 0;
-    timestamp = 0;
+    samples = 0;
 }
 ///////////////////////////////////////////////////////////////////////////////
 // return average lap time in milli-second
 // 
 ///////////////////////////////////////////////////////////////////////////////
-double Timer::averageLap()
+double Timer::averageLapInMilliSec()
 {
     return movingAverage*0.001;
 }
