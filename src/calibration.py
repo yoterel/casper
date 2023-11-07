@@ -7,13 +7,14 @@ import leap
 import cv2
 import time
 from PIL import Image, ImageDraw
+from gsoup.viewer_drivers import calibration_static_view, pcs_slide_view
 
 
 def create_circle_image(width, height, loc, radii=10):
     img = Image.new("RGB", (width, height), "black")
     img1 = ImageDraw.Draw(img)
     img1.ellipse([loc[0] - radii, loc[1] - radii, loc[0] + radii,
-                 loc[1] + radii], fill="black", outline="red")
+                 loc[1] + radii], fill="blue", outline="blue")
     return np.array(img)
 
 
@@ -237,7 +238,7 @@ def auto_trigger_leap(leapmotion, proj=None, loc2d=None, threshold=100):
             tips = []
 
 
-def acq_leap_projector(root_path):
+def acq_leap_projector(root_path, n_sessions=10, manual=False):
     proj_wh = (1024, 768)
     dst_path = Path(root_path, "debug", "leap_calibration")
     dst_path.mkdir(parents=True, exist_ok=True)
@@ -250,29 +251,38 @@ def acq_leap_projector(root_path):
     tip_locations = []
     tip_locations_2d = []
     session = 0
-    while session < 10:
+    while session < n_sessions:
         # text = input(
         #     "current # of sessions: {}, continue?".format(session))
         # if text == "q" or text == "n" or text == "no":
         #     break
         # new_loc_x = np.random.randint(0, 1024, size=(1,))
         # new_loc_y = np.random.randint(0, 768, size=(1,))
-        new_loc_x = np.random.randint(200, 824, size=(1,))
-        new_loc_y = np.random.randint(1, 668, size=(1,))
-        loc_2d = np.array([new_loc_x, new_loc_y])
-        image = np.zeros((768, 1024, 3), dtype=np.uint8)
-        image[:, new_loc_x, :] = 255
-        image[new_loc_y, :, :] = 255
-        proj.project(image)
-        _, tips = auto_trigger_leap(leapmotion, proj, loc_2d)
+        if manual:
+            loc_2d = (np.array(proj_wh) / 2).astype(np.int32)
+            _, tips = auto_trigger_leap(
+                leapmotion, proj, loc_2d)
+        else:
+            new_loc_x = np.random.randint(200, 824, size=(1,))
+            new_loc_y = np.random.randint(100, 668, size=(1,))
+            loc_2d = np.array([new_loc_x, new_loc_y])
+            image = np.zeros((768, 1024, 3), dtype=np.uint8)
+            image[:, new_loc_x, :] = 255
+            image[new_loc_y, :, :] = 255
+            proj.project(image)
+            _, tips = auto_trigger_leap(leapmotion, proj, loc_2d)
         avg_tip = np.mean(tips, axis=0)
         tip_locations.append(avg_tip)
         tip_locations_2d.append(loc_2d)
         session += 1
     tip_locations = np.array(tip_locations)
     tip_locations_2d = np.array(tip_locations_2d).astype(np.float32)
-    np.savez(Path(dst_path, "calibration_data.npz"),
-             tip_locations=tip_locations, tip_locations_2d=tip_locations_2d)
+    if not manual:
+        np.savez(Path(dst_path, "calibration_data.npz"),
+                 tip_locations=tip_locations, tip_locations_2d=tip_locations_2d)
+    else:
+        np.savez(Path(dst_path, "calibration_data_manual.npz"),
+                 tip_locations=tip_locations, tip_locations_2d=tip_locations_2d)
     proj.kill()
     leapmotion.kill()
 
@@ -328,10 +338,40 @@ if __name__ == "__main__":
     # pix2pix(root_path)
     # acq_procam(root_path)
     # calibrate_procam(root_path)
-    # acq_leap_projector(root_path)
-    # calibrate_leap_projector(root_path)
+    acq_leap_projector(root_path, 20, False)
+    calibrate_leap_projector(root_path, False)
+
+    # dst_path = Path(root_path, "debug", "leap_calibration")
+    # res = np.load(Path(dst_path, "calibration_data_manual.npz"))
+    # res = {k: res[k] for k in res.keys()}
+    # pcs_slide_view(res["tip_locations"][None, :, :])
     # reconstruct(root_path)
+
+    # v, f = gsoup.load_mesh(
+    #     "C:/src/augmented_hands/resource/GenericHand/GenericHand.obj")
     # v, f, vc = gsoup.load_mesh(
     #     "C:/src/augmented_hands/resource/reconst2.ply", return_vert_color=True)
     # v1, vc1 = gsoup.load_pointcloud(
     #     "C:/src/augmented_hands/debug/reconstruct/points.ply", return_vert_color=True)
+    # calib_res_path = Path(root_path, "debug", "calibration")
+    # res = np.load(Path(calib_res_path, "calibration.npz"))
+    # calib_res = {k: res[k] for k in res.keys()}
+    # cam_int, cam_dist,\
+    #     proj_int, proj_dist,\
+    #     proj_transform = calib_res["cam_intrinsics"], calib_res["cam_distortion"],\
+    #     calib_res["proj_intrinsics"], calib_res["proj_distortion"],\
+    #     calib_res["proj_transform"]
+    # leap_calib_res_path = Path(root_path, "debug", "leap_calibration")
+    # world2projector = np.load(Path(leap_calib_res_path, "w2p.npy"))
+    # p2w = np.linalg.inv(world2projector)
+    # c2w = p2w @ proj_transform
+    # forward_map = np.load(
+    #     "C:/src/augmented_hands/debug/reconstruct/decode/forward_map.npy")
+    # fg = np.load("C:/src/augmented_hands/debug/reconstruct/decode/fg.npy")
+    # camera_wh = (720, 540)
+    # proj_wh = (1024, 768)
+    # color_image = gsoup.load_image(
+    #     "C:/src/augmented_hands/debug/reconstruct/captures/00040.png", float=True)[..., :3]
+    # calibration_static_view(c2w, p2w, camera_wh, proj_wh,
+    #                         cam_int, cam_dist, proj_int, forward_map, fg, color_image, mode="ij")
+    # print("done")

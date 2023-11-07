@@ -15,8 +15,8 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 #include "opencv2/opencv.hpp"
-
 #include "DynaFlash.h"
 
 #define MONOCHROME (0) /* 0:モノクロ 1:カラー */
@@ -37,10 +37,16 @@
 
 static CDynaFlash *pDynaFlash = NULL;					  /* I/Fクラスのインスタンス */
 static char *pFrameData[ALLOC_SRC_FRAME_BUFFER] = {NULL}; /* 投影画像の読み込み先 */
-
+bool signal_received = false;
 /********************************************************************************
  * バージョン表示
  ********************************************************************************/
+void signal_callback_handler(int signum)
+{
+	std::cout << "Caught signal " << signum << std::endl;
+	signal_received = true;
+}
+
 void PrintVersion()
 {
 	// char DriverVersion[40];
@@ -136,7 +142,7 @@ void ReleaseMovieFile()
  ********************************************************************************/
 int _tmain(int argc, _TCHAR *argv[])
 {
-
+	signal(SIGINT, signal_callback_handler);
 	DYNAFLASH_STATUS stDynaFlashStatus;
 	char *pBuf = NULL;
 	unsigned long nGetFrameCnt = 0;
@@ -236,6 +242,10 @@ int _tmain(int argc, _TCHAR *argv[])
 	{
 		/* ESCキーが押されたら終了する */
 		if ((GetAsyncKeyState(VK_ESCAPE) & 0x80000000) != 0)
+		{
+			break;
+		}
+		if (signal_received)
 		{
 			break;
 		}

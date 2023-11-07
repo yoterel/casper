@@ -2,15 +2,15 @@
 
 GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
                    float width, float height, float speed, bool inverted) : MovementSpeed(speed),
-                                                                            MouseSensitivity(SENSITIVITY),
-                                                                            Zoom(ZOOM),
-                                                                            Yaw(YAW),
-                                                                            Pitch(PITCH),
+                                                                            MouseSensitivity(DEF_SENSITIVITY),
+                                                                            Zoom(DEF_ZOOM),
+                                                                            Yaw(DEF_YAW),
+                                                                            Pitch(DEF_PITCH),
                                                                             m_width(width),
                                                                             m_height(height),
                                                                             m_inverted(inverted)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 1500.0f);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, DEF_FAR);
     m_mode = mode;
     if (m_mode == Camera_Mode::FIXED_CAMERA)
     {
@@ -34,14 +34,14 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
 }
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
                    float width, float height, float speed, bool inverted) : MovementSpeed(speed),
-                                                                            MouseSensitivity(SENSITIVITY),
-                                                                            Zoom(ZOOM),
+                                                                            MouseSensitivity(DEF_SENSITIVITY),
+                                                                            Zoom(DEF_ZOOM),
                                                                             m_mode(Camera_Mode::FIXED_CAMERA),
                                                                             m_width(width),
                                                                             m_height(height),
                                                                             m_inverted(inverted)
 {
-    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 500.0f);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, DEF_FAR);
     Front = glm::normalize(front);
     // Pitch = asin(Front.y);
     // Yaw = atan2(Front.x, Front.z);
@@ -53,7 +53,7 @@ GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
 }
 GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode,
                    float width, float height, float speed, bool inverted) : MovementSpeed(speed),
-                                                                            MouseSensitivity(SENSITIVITY),
+                                                                            MouseSensitivity(DEF_SENSITIVITY),
                                                                             m_mode(mode),
                                                                             m_width(width),
                                                                             m_height(height),
@@ -182,7 +182,7 @@ void GLCamera::processMouseScroll(float yoffset)
         Zoom = 1.0f;
     if (Zoom > 60.0f)
         Zoom = 60.0f;
-    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, 1.0f, 500.0f);
+    projectionMatrix = glm::perspective(glm::radians(Zoom), m_width / m_height, DEF_NEAR, DEF_FAR);
 }
 // calculates the front vector from the Camera's (updated) Euler Angles
 void GLCamera::updateCameraVectors()

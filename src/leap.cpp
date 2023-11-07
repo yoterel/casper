@@ -4,39 +4,14 @@
 void LeapConnect::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event)
 {
     IsConnected = true;
-    std::cout << "leap connected." << std::endl;
+    std::cout << "Leap: Connected." << std::endl;
 }
 
 /** Called by serviceMessageLoop() when a connection lost event is returned by LeapPollConnection(). */
 void LeapConnect::handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event)
 {
     IsConnected = false;
-}
-
-void LeapConnect::handlePolicyEvent(const LEAP_POLICY_EVENT *policy_event)
-{
-    std::cout << "Policy: " << policy_event->current_policy << std::endl;
-}
-
-void LeapConnect::handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config_change_event)
-{
-    if (config_change_event->status)
-    {
-        std::cout << "Setting config request id: " << config_change_event->requestID << " was successfull." << std::endl;
-    }
-    else
-    {
-        std::cout << "Setting config request id: " << config_change_event->requestID << " failed." << std::endl;
-    }
-}
-void LeapConnect::handleConfigResponseEvent(const LEAP_CONFIG_RESPONSE_EVENT *config_response_event)
-{
-    std::cout << "The config for request id: " << config_response_event->requestID << " is: " << config_response_event->value.strValue << std::endl;
-}
-
-void LeapConnect::handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent)
-{
-    std::cout << "Received image set for frame " << (long long int)imageEvent->info.frame_id << "with size " << (long long int)imageEvent->image[0].properties.width * (long long int)imageEvent->image[0].properties.height * 2 << std::endl;
+    std::cout << "leap: Disconnected." << std::endl;
 }
 
 void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
@@ -46,7 +21,7 @@ void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
     eLeapRS result = LeapOpenDevice(device_event->device, &deviceHandle);
     if (result != eLeapRS_Success)
     {
-        printf("Could not open device %s.\n", ResultString(result));
+        std::cout << "Leap: Failed to open device " << ResultString(result) << std::endl;
         return;
     }
 
@@ -66,7 +41,7 @@ void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
         result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
         if (result != eLeapRS_Success)
         {
-            printf("Failed to get device info %s.\n", ResultString(result));
+            std::cout << "Leap: Failed to get device info " << ResultString(result) << std::endl;
             free(deviceProperties.serial);
             return;
         }
@@ -76,10 +51,45 @@ void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
     LeapCloseDevice(deviceHandle);
 }
 
+void LeapConnect::handlePolicyEvent(const LEAP_POLICY_EVENT *policy_event)
+{
+    std::cout << "Leap: Policy: " << policy_event->current_policy << std::endl;
+}
+
+void LeapConnect::handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config_change_event)
+{
+    if (config_change_event->status)
+    {
+        std::cout << "Leap: Setting config request id: " << config_change_event->requestID << " was successfull." << std::endl;
+    }
+    else
+    {
+        std::cout << "Leap: Setting config request id: " << config_change_event->requestID << " failed." << std::endl;
+    }
+}
+void LeapConnect::handleConfigResponseEvent(const LEAP_CONFIG_RESPONSE_EVENT *config_response_event)
+{
+    std::cout << "Leap: The config for request id: " << config_response_event->requestID << " is: " << config_response_event->value.strValue << std::endl;
+}
+
 void LeapConnect::handleTrackingEvent(const LEAP_TRACKING_EVENT *tracking_event)
 {
     if (m_poll)
         setFrame(tracking_event); // support polling tracking data from different thread
+}
+
+void LeapConnect::handleTrackingModeEvent(const LEAP_TRACKING_MODE_EVENT *tracking_mode_event)
+{
+    std::cout << "Leap: Tracking mode is: " << tracking_mode_event->current_tracking_mode << std::endl;
+}
+void LeapConnect::handlePointMappingChangeEvent(const LEAP_POINT_MAPPING_CHANGE_EVENT *point_mapping_change_event)
+{
+    std::cout << "Leap: Point mapping change event received." << std::endl;
+}
+
+void LeapConnect::handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent)
+{
+    std::cout << "Leap: Received image set for frame " << (long long int)imageEvent->info.frame_id << "with size " << (long long int)imageEvent->image[0].properties.width * (long long int)imageEvent->image[0].properties.height * 2 << std::endl;
 }
 
 void LeapConnect::serviceMessageLoop()
@@ -139,10 +149,10 @@ void LeapConnect::serviceMessageLoop()
             handleImageEvent(msg.image_event);
             break;
         case eLeapEventType_PointMappingChange:
-            // handlePointMappingChangeEvent(msg.point_mapping_change_event);
+            handlePointMappingChangeEvent(msg.point_mapping_change_event);
             break;
         case eLeapEventType_TrackingMode:
-            // handleTrackingModeEvent(msg.tracking_mode_event);
+            handleTrackingModeEvent(msg.tracking_mode_event);
             break;
         case eLeapEventType_LogEvents:
             // handleLogEvents(msg.log_events);
@@ -155,7 +165,7 @@ void LeapConnect::serviceMessageLoop()
             break;
         default:
             // discard unknown message types
-            std::cout << "Unhandled message type: " << msg.type << std::endl;
+            std::cout << "Leap: Unhandled message type: " << msg.type << std::endl;
         } // switch on msg.type
     }
     // std::cout << "leap service loop finished." << std::endl;
@@ -199,7 +209,7 @@ void LeapConnect::kill(void)
     }
     CloseConnection();
     LeapDestroyConnection(connectionHandle);
-    std::cout << "leap killed." << std::endl;
+    std::cout << "Leap: Killed." << std::endl;
 }
 
 const char *LeapConnect::ResultString(eLeapRS r)
@@ -304,7 +314,7 @@ std::vector<float> LeapConnect::getIndexTip()
     for (uint32_t h = 0; h < currentFrame->nHands; h++)
     {
         LEAP_HAND *hand = &currentFrame->pHands[h];
-        if (hand->type == eLeapHandType_Right)
+        if (hand->type == eLeapHandType_Left)
             continue;
         LEAP_DIGIT *finger = &hand->digits[1];
         LEAP_BONE *bone = &finger->bones[3];

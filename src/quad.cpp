@@ -18,7 +18,8 @@ Quad::Quad(std::vector<glm::vec3> &vertices)
     };
     glm::vec3 normal1 = glm::triangleNormal(vertices[0], vertices[1], vertices[2]);
     glm::vec3 normal2 = glm::triangleNormal(vertices[0], vertices[2], vertices[3]);
-    if (!(glm::length2(normal1 - normal2) < EPISILON * EPISILON))
+    float len = glm::length2(normal1 - normal2);
+    if (!(len < EPISILON))
     {
         std::cout << "Warning: Quad is not planar!" << std::endl;
         exit(1);

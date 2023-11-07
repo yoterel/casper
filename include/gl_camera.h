@@ -23,20 +23,23 @@ enum Camera_Mode
     ORBIT_CAMERA,
     FIXED_CAMERA
 };
+
 // Default camera values
-const float YAW = -90.0f;
-const float PITCH = 0.0f;
-const float SPEED = 2.0f;
-const float SENSITIVITY = 0.1f;
-const float ZOOM = 45.0f;
+const float DEF_YAW = -90.0f;
+const float DEF_PITCH = 0.0f;
+const float DEF_SPEED = 2.0f;
+const float DEF_SENSITIVITY = 0.1f;
+const float DEF_ZOOM = 45.0f;
+const float DEF_NEAR = 1.0f;
+const float DEF_FAR = 2000.0f;
 
 // An abstract camera class that processes input and calculates the corresponding Euler Angles, Vectors and Matrices for use in OpenGL
 class GLCamera
 {
 public:
-    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height, float speed = SPEED, bool inverted = false);
-    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height, float speed = SPEED, bool inverted = false);
-    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height, float speed = SPEED, bool inverted = false);
+    GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode, float width, float height, float speed = DEF_SPEED, bool inverted = false);
+    GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode, float width, float height, float speed = DEF_SPEED, bool inverted = false);
+    GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front, float width, float height, float speed = DEF_SPEED, bool inverted = false);
     GLCamera(){};
     GLCamera(GLCamera &s)
     {

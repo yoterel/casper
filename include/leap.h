@@ -35,7 +35,12 @@ public:
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
         LeapSetPolicyFlags(connectionHandle,
-                           eLeapPolicyFlag_BackgroundFrames & eLeapPolicyFlag_Images, 0);
+                           0, 0);
+        // LeapSetPolicyFlags(connectionHandle,
+        //                    eLeapPolicyFlag_Images & eLeapPolicyFlag_MapPoints, 0);
+        // LeapSetPolicyFlags(connectionHandle,
+        //                    eLeapPolicyFlag_BackgroundFrames & eLeapPolicyFlag_Images, 0);
+        LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_ScreenTop); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
         // LeapRequestConfigValue();
         // LeapSaveConfigValue();
     };
@@ -79,11 +84,13 @@ private:
     void serviceMessageLoop();
     void handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event);
     void handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event);
+    void handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event);
     void handlePolicyEvent(const LEAP_POLICY_EVENT *policy_event);
     void handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config_change_event);
     void handleConfigResponseEvent(const LEAP_CONFIG_RESPONSE_EVENT *config_response_event);
-    void handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event);
     void handleTrackingEvent(const LEAP_TRACKING_EVENT *tracking_event);
+    void handleTrackingModeEvent(const LEAP_TRACKING_MODE_EVENT *tracking_mode_event);
+    void handlePointMappingChangeEvent(const LEAP_POINT_MAPPING_CHANGE_EVENT *point_mapping_change_event);
     void handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent);
     const char *ResultString(eLeapRS r);
 };
