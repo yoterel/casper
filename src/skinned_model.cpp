@@ -532,8 +532,6 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
 {
     shader.use();
     shader.SetMaterial(this->GetMaterial());
-    shader.setInt("src", 0);
-    shader.setInt("projTexture", 1);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, camTex);
     if (useFBO)

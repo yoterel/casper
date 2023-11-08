@@ -73,7 +73,8 @@
                 "-debug",
                 "-freecam",
                 "-no_proj",
-                "-fake_cam"
+                "-fake_cam",
+                "-poll"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build//Debug",

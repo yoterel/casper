@@ -33,7 +33,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world_left, std::vector<glm::mat4> &bones_to_world_right, std::vector<glm::vec3> &skeleton_vertices);
+bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world_left, std::vector<glm::mat4> &bones_to_world_right, std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO);
@@ -50,6 +50,7 @@ bool producer_is_fake = false;
 bool use_pbo = false;
 bool use_projector = true;
 bool use_screen = true;
+bool poll_mode = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
@@ -61,10 +62,10 @@ float lastY = proj_height / 2.0f;
 bool firstMouse = true;
 float deltaTime = 0.0f;
 glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
-double lastFrame = 0.0;
 unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
+int64_t lastFrameID = 0;
 bool space_modifier = false;
 bool shift_modifier = false;
 bool ctrl_modifier = false;
@@ -117,6 +118,11 @@ int main(int argc, char *argv[])
     {
         std::cout << "No screen mode is on" << std::endl;
         use_screen = false;
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "poll"))
+    {
+        std::cout << "Poll mode is on" << std::endl;
+        poll_mode = true;
     }
     Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug, t_debug1, t_debug2;
     t_app.start();
@@ -258,14 +264,16 @@ int main(int argc, char *argv[])
         canvasShader = Shader("../../src/shaders/canvas.vs", "../../src/shaders/canvas.fs");
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
     SkinningShader skinnedShader("../../src/shaders/skin_hand.vs", "../../src/shaders/skin_hand.fs");
+    SkinningShader skinnedShaderSimple("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
     /* more inits */
     NPP_wrapper::printfNPPinfo();
-    double previousTime = glfwGetTime();
-    double currentFrame = glfwGetTime();
+    double previousAppTime = t_app.getElapsedTimeInSec();
+    double previousSecondAppTime = t_app.getElapsedTimeInSec();
+    double currentAppTime = t_app.getElapsedTimeInSec();
     double whole = 0.0;
     long frameCount = 0;
     int64_t targetFrameTime = 0;
@@ -297,7 +305,7 @@ int main(int argc, char *argv[])
             std::cerr << "Failed to initialize projector\n";
         }
     }
-    LeapConnect leap;
+    LeapConnect leap(poll_mode);
     LEAP_CLOCK_REBASER clockSynchronizer;
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer;
@@ -348,7 +356,7 @@ int main(int argc, char *argv[])
         gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
                                 glm::vec3(0.0f, 0.0f, 0.0f),
                                 glm::vec3(0.0f, 1.0f, 0.0f),
-                                camera_mode, proj_width, proj_height, 1500.0f, 100.0f);
+                                camera_mode, proj_width, proj_height, 1500.0f, 50.0f);
     }
     std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
                                            {-1.0f, -1.0f, 1.0f},
@@ -405,21 +413,18 @@ int main(int argc, char *argv[])
         // cam_height = 540;
         // cam_width = 720;
         producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
-            CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
+            // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
             Timer t_block;
             int counter = 0;
             t_block.start();
             while (!close_signal)
             {
-                int test = fake_cam_images.size();
-                // cv::Mat mycopy = fake_cam_images[counter].clone();
-                // camera_queue_cv.push_back(fake_cam_images[counter]);
                 camera_queue_cv.push(fake_cam_images[counter]);
                 if (counter < fake_cam_images.size() - 1)
                     counter++;
                 else
                     counter = 0;
-                while (t_block.getElapsedTimeInMicroSec() < 10000.0)
+                while (t_block.getElapsedTimeInMicroSec() < 1000.0)
                 {
                 }
                 t_block.stop();
@@ -449,14 +454,17 @@ int main(int argc, char *argv[])
     while (!glfwWindowShouldClose(window))
     {
         t_misc.start();
-        currentFrame = glfwGetTime();
-        std::modf(currentFrame, &whole);
-        LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
-        deltaTime = static_cast<float>(currentFrame - lastFrame);
-        lastFrame = currentFrame;
+        currentAppTime = t_app.getElapsedTimeInSec(); // glfwGetTime();
+        deltaTime = static_cast<float>(currentAppTime - previousAppTime);
+        previousAppTime = currentAppTime;
+        if (!poll_mode)
+        {
+            std::modf(currentAppTime, &whole);
+            LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
+        }
         frameCount++;
         // stats display
-        if (currentFrame - previousTime >= 1.0)
+        if (currentAppTime - previousSecondAppTime >= 1.0)
         {
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
@@ -478,9 +486,8 @@ int main(int argc, char *argv[])
             std::cout << "cam q1 size: " << camera_queue.size() << std::endl;
             std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
             std::cout << "proj q size: " << projector_queue.size() << std::endl;
-
             frameCount = 0;
-            previousTime = currentFrame;
+            previousSecondAppTime = currentAppTime;
             t0.reset();
             t1.reset();
             t2.reset();
@@ -530,11 +537,14 @@ int main(int argc, char *argv[])
         // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t0.stop();
         t1.start();
-        // sync leap clock
-        std::modf(glfwGetTime(), &whole);
-        LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-        // get leap frame
-        getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices);
+        if (!poll_mode)
+        {
+            // sync leap clock
+            std::modf(glfwGetTime(), &whole);
+            LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+            // get leap frame
+        }
+        getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
         // get view & projection transforms
         glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
         glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
@@ -554,13 +564,21 @@ int main(int argc, char *argv[])
         if (bones_to_world_right.size() > 0)
         {
             t2.start();
-            /* render skinned mesh to fbo */
-            skinnedShader.use();
-            skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
-            skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-            skinnedShader.setBool("binary", true);
+            /* render skinned mesh to fbo, in camera space*/
+            skinnedShaderSimple.use();
+            skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+            skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
+            skinnedShaderSimple.setInt("src", 0);
             skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), true);
+            /* render skinned mesh to fbo, in projector space */
+            // skinnedShader.use();
+            // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+            // skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
+            // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+            // skinnedShader.setBool("binary", true);
+            // skinnedShader.setInt("src", 0);
+            // skinnedShader.setInt("projTexture", 1);
+            // skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), true);
             /* render another mesh to fbo */
             // projectorShader.use();
             // projectorShader.setBool("flipVer", false);
@@ -749,12 +767,21 @@ int main(int argc, char *argv[])
                 }
                 // draw skinned mesh in 3D
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                    skinnedShader.setBool("binary", true);
-                    skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), false, space_modifier);
+                    /* without camera texture */
+                    skinnedShaderSimple.use();
+                    skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    skinnedShaderSimple.setInt("src", 0);
+                    skinnedModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, camTexture.getTexture(), false);
+                    /* with camera texture */
+                    // skinnedShader.use();
+                    // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    // skinnedShader.setBool("binary", false);
+                    // skinnedShader.setInt("src", 0);
+                    // skinnedShader.setInt("projTexture", 1);
+                    // skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), false, space_modifier);
                 }
             }
             if (bones_to_world_left.size() > 0)
@@ -783,12 +810,21 @@ int main(int argc, char *argv[])
                 }
                 // draw skinned mesh in 3D
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
-                    skinnedShader.setBool("binary", true);
-                    skinnedModel.Render(skinnedShader, bones_to_world_left, rotx, camTexture.getTexture(), false, space_modifier);
+                    /* without camera texture */
+                    skinnedShaderSimple.use();
+                    skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    skinnedShaderSimple.setInt("src", 0);
+                    skinnedModel.Render(skinnedShaderSimple, bones_to_world_left, rotx, camTexture.getTexture(), false);
+                    /* with camera texture */
+                    // skinnedShader.use();
+                    // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    // skinnedShader.setBool("binary", true);
+                    // skinnedShader.setInt("src", 0);
+                    // skinnedShader.setInt("projTexture", 1);
+                    // skinnedModel.Render(skinnedShader, bones_to_world_left, rotx, camTexture.getTexture(), false, space_modifier);
                 }
             }
             // draws frustrum of camera (=vproj)
@@ -1255,10 +1291,12 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     return true;
 }
 
-void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
+bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                   std::vector<glm::mat4> &bones_to_world_left,
                   std::vector<glm::mat4> &bones_to_world_right,
-                  std::vector<glm::vec3> &skeleton_vertices)
+                  std::vector<glm::vec3> &skeleton_vertices,
+                  bool poll_mode,
+                  int64_t &lastFrameID)
 {
     // some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -1276,91 +1314,118 @@ void getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     // init
     glm::mat4 scalar = glm::scale(glm::mat4(1.0f), glm::vec3(magic_scale_factor));
     uint64_t targetFrameSize = 0;
-    skeleton_vertices.clear();
-    bones_to_world_left.clear();
-    bones_to_world_right.clear();
-    // Get the buffer size needed to hold the tracking data
-    if (LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, &targetFrameSize) == eLeapRS_Success)
+    LEAP_TRACKING_EVENT *frame = nullptr;
+    if (poll_mode)
     {
-        // Allocate enough memory
-        LEAP_TRACKING_EVENT *interpolatedFrame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
-        // Get the frame
-        if (LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, interpolatedFrame, targetFrameSize) == eLeapRS_Success)
+        frame = leap.getFrame();
+        if (frame && (frame->tracking_frame_id > lastFrameID))
         {
-            // Use the data...
-            //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
-            //  std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
-            //  std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
-            glm::vec3 red = glm::vec3(1.0f, 0.0f, 0.0f);
-            for (uint32_t h = 0; h < interpolatedFrame->nHands; h++)
-            {
-                LEAP_HAND *hand = &interpolatedFrame->pHands[h];
-                if (debug_vec.x > 0)
-                    if (hand->type == eLeapHandType_Right)
-                        chirality = flip_z;
-                std::vector<glm::mat4> bones_to_world;
-                // palm
-                glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
-                                               hand->palm.position.y,
-                                               hand->palm.position.z);
-                glm::vec3 towards_hand_tips = glm::vec3(hand->palm.direction.x, hand->palm.direction.y, hand->palm.direction.z);
-                towards_hand_tips = glm::normalize(towards_hand_tips);
-                // we offset the palm to coincide with wrist, as a real hand has a wrist joint that needs to be controlled
-                palm_pos = palm_pos + towards_hand_tips * magic_wrist_offset;
-                glm::mat4 palm_orientation = glm::toMat4(glm::quat(hand->palm.orientation.w,
-                                                                   hand->palm.orientation.x,
-                                                                   hand->palm.orientation.y,
-                                                                   hand->palm.orientation.z));
-                // for some reason using the "basis" from leap rotates and flips the coordinate system of the palm
-                // also there is an arbitrary scale factor associated with the 3d mesh
-                // so we need to fix those
-                palm_orientation = palm_orientation * chirality * magic_leap_basis_fix * scalar;
-
-                bones_to_world.push_back(glm::translate(glm::mat4(1.0f), palm_pos) * palm_orientation);
-                // arm
-                LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
-                LEAP_VECTOR arm_j2 = hand->arm.next_joint;
-                skeleton_vertices.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
-                skeleton_vertices.push_back(red);
-                skeleton_vertices.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
-                skeleton_vertices.push_back(red);
-                glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
-                                                          hand->arm.rotation.x,
-                                                          hand->arm.rotation.y,
-                                                          hand->arm.rotation.z));
-                // arm_rot = glm::rotate(arm_rot, glm::radians(debug_vec.x), glm::vec3(arm_rot[0][0], arm_rot[0][1], arm_rot[0][2]));
-                glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
-                bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
-                // fingers
-                for (uint32_t f = 0; f < 5; f++)
-                {
-                    LEAP_DIGIT finger = hand->digits[f];
-                    for (uint32_t b = 0; b < 4; b++)
-                    {
-                        LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
-                        LEAP_VECTOR joint2 = finger.bones[b].next_joint;
-                        skeleton_vertices.push_back(glm::vec3(joint1.x, joint1.y, joint1.z));
-                        skeleton_vertices.push_back(red);
-                        skeleton_vertices.push_back(glm::vec3(joint2.x, joint2.y, joint2.z));
-                        skeleton_vertices.push_back(red);
-                        glm::mat4 rot = glm::toMat4(glm::quat(finger.bones[b].rotation.w,
-                                                              finger.bones[b].rotation.x,
-                                                              finger.bones[b].rotation.y,
-                                                              finger.bones[b].rotation.z));
-                        glm::vec3 translate = glm::vec3(joint1.x, joint1.y, joint1.z);
-                        glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                        bones_to_world.push_back(trans * rot * chirality * magic_leap_basis_fix * scalar);
-                    }
-                }
-                if (hand->type == eLeapHandType_Right)
-                    bones_to_world_right = bones_to_world;
-                else
-                    bones_to_world_left = bones_to_world;
-            }
-            // Free the allocated buffer when done.
-            free(interpolatedFrame);
+            lastFrameID = frame->tracking_frame_id;
+            skeleton_vertices.clear();
+            bones_to_world_left.clear();
+            bones_to_world_right.clear();
+        }
+        else
+        {
+            return false;
         }
     }
+    else
+    {
+        /* code */
+        skeleton_vertices.clear();
+        bones_to_world_left.clear();
+        bones_to_world_right.clear();
+        // Get the buffer size needed to hold the tracking data
+        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, &targetFrameSize);
+        if (retVal != eLeapRS_Success)
+        {
+            // std::cout << "ERROR: LeapGetFrameSize() returned " << retVal << std::endl;
+            return false;
+        }
+        // Allocate enough memory
+        frame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
+        // Get the frame data
+        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, frame, targetFrameSize);
+        if (retVal != eLeapRS_Success)
+        {
+            // std::cout << "ERROR: LeapInterpolateFrame() returned " << retVal << std::endl;
+            return false;
+        }
+    }
+    // Use the data...
+    //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
+    //  std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
+    //  std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
+    glm::vec3 red = glm::vec3(1.0f, 0.0f, 0.0f);
+    for (uint32_t h = 0; h < frame->nHands; h++)
+    {
+        LEAP_HAND *hand = &frame->pHands[h];
+        if (debug_vec.x > 0)
+            if (hand->type == eLeapHandType_Right)
+                chirality = flip_z;
+        std::vector<glm::mat4> bones_to_world;
+        // palm
+        glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
+                                       hand->palm.position.y,
+                                       hand->palm.position.z);
+        glm::vec3 towards_hand_tips = glm::vec3(hand->palm.direction.x, hand->palm.direction.y, hand->palm.direction.z);
+        towards_hand_tips = glm::normalize(towards_hand_tips);
+        // we offset the palm to coincide with wrist, as a real hand has a wrist joint that needs to be controlled
+        palm_pos = palm_pos + towards_hand_tips * magic_wrist_offset;
+        glm::mat4 palm_orientation = glm::toMat4(glm::quat(hand->palm.orientation.w,
+                                                           hand->palm.orientation.x,
+                                                           hand->palm.orientation.y,
+                                                           hand->palm.orientation.z));
+        // for some reason using the "basis" from leap rotates and flips the coordinate system of the palm
+        // also there is an arbitrary scale factor associated with the 3d mesh
+        // so we need to fix those
+        palm_orientation = palm_orientation * chirality * magic_leap_basis_fix * scalar;
+
+        bones_to_world.push_back(glm::translate(glm::mat4(1.0f), palm_pos) * palm_orientation);
+        // arm
+        LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
+        LEAP_VECTOR arm_j2 = hand->arm.next_joint;
+        skeleton_vertices.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
+        skeleton_vertices.push_back(red);
+        skeleton_vertices.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
+        skeleton_vertices.push_back(red);
+        glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
+                                                  hand->arm.rotation.x,
+                                                  hand->arm.rotation.y,
+                                                  hand->arm.rotation.z));
+        // arm_rot = glm::rotate(arm_rot, glm::radians(debug_vec.x), glm::vec3(arm_rot[0][0], arm_rot[0][1], arm_rot[0][2]));
+        glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
+        bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
+        // fingers
+        for (uint32_t f = 0; f < 5; f++)
+        {
+            LEAP_DIGIT finger = hand->digits[f];
+            for (uint32_t b = 0; b < 4; b++)
+            {
+                LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
+                LEAP_VECTOR joint2 = finger.bones[b].next_joint;
+                skeleton_vertices.push_back(glm::vec3(joint1.x, joint1.y, joint1.z));
+                skeleton_vertices.push_back(red);
+                skeleton_vertices.push_back(glm::vec3(joint2.x, joint2.y, joint2.z));
+                skeleton_vertices.push_back(red);
+                glm::mat4 rot = glm::toMat4(glm::quat(finger.bones[b].rotation.w,
+                                                      finger.bones[b].rotation.x,
+                                                      finger.bones[b].rotation.y,
+                                                      finger.bones[b].rotation.z));
+                glm::vec3 translate = glm::vec3(joint1.x, joint1.y, joint1.z);
+                glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
+                bones_to_world.push_back(trans * rot * chirality * magic_leap_basis_fix * scalar);
+            }
+        }
+        if (hand->type == eLeapHandType_Right)
+            bones_to_world_right = bones_to_world;
+        else
+            bones_to_world_left = bones_to_world;
+    }
+    // Free the allocated buffer when done.
+    free(frame);
+    return true;
 }
 // // create transformation matrices
 // glm::mat4 canvas_model_mat = glm::mat4(1.0f);

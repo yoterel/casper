@@ -288,21 +288,71 @@ LEAP_DEVICE_INFO *LeapConnect::GetDeviceProperties()
     return currentDevice;
 }
 
+void LeapConnect::deepCopyTrackingEvent(LEAP_TRACKING_EVENT *dst, const LEAP_TRACKING_EVENT *src)
+{
+    memcpy(&dst->info, &src->info, sizeof(LEAP_FRAME_HEADER));
+    dst->tracking_frame_id = src->tracking_frame_id;
+    dst->nHands = src->nHands;
+    dst->framerate = src->framerate;
+    memcpy(dst->pHands, src->pHands, src->nHands * sizeof(LEAP_HAND));
+}
+
 /**
  * Caches the newest frame by copying the tracking event struct returned by
  * LeapC.
  */
 void LeapConnect::setFrame(const LEAP_TRACKING_EVENT *frame)
 {
+    // LockMutex(&dataLock);
+    // if (!lastFrame)
+    //     lastFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(*frame));
+    // *lastFrame = *frame;
+    // UnlockMutex(&dataLock);
     LockMutex(&dataLock);
     if (!lastFrame)
-        lastFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(*frame));
-    *lastFrame = *frame;
+    {
+        lastFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(LEAP_TRACKING_EVENT));
+        lastFrame->pHands = (LEAP_HAND *)malloc(2 * sizeof(LEAP_HAND));
+    }
+
+    if (frame != NULL)
+    {
+        deepCopyTrackingEvent(lastFrame, frame);
+    }
+
     UnlockMutex(&dataLock);
+}
+
+LEAP_TRACKING_EVENT *LeapConnect::getFrame()
+{
+    LEAP_TRACKING_EVENT *currentFrame = NULL;
+    if (currentFrame == NULL)
+    {
+        currentFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(LEAP_TRACKING_EVENT));
+        currentFrame->pHands = (LEAP_HAND *)malloc(2 * sizeof(LEAP_HAND));
+    }
+
+    LockMutex(&dataLock);
+    if (lastFrame == NULL)
+    {
+        UnlockMutex(&dataLock);
+        return NULL;
+    }
+
+    deepCopyTrackingEvent(currentFrame, lastFrame);
+    UnlockMutex(&dataLock);
+
+    return currentFrame;
+    // LEAP_TRACKING_EVENT *currentFrame = NULL;
+    // LockMutex(&dataLock);
+    // currentFrame = lastFrame;
+    // UnlockMutex(&dataLock);
+    // return currentFrame;
 }
 
 std::vector<float> LeapConnect::getIndexTip()
 {
+    // todo: deep copy frame instead of assigning pointers
     LEAP_TRACKING_EVENT *currentFrame;
 
     LockMutex(&dataLock);

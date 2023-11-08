@@ -5,7 +5,7 @@
 #include "opencv2/opencv.hpp"
 #include <opencv2/video/tracking.hpp>
 #include <filesystem>
-
+#include <numeric>
 #include <opencv2/opencv.hpp>
 // #include "opencv2/cudaarithm.hpp"
 // #include "opencv2/features2d.hpp"
@@ -248,11 +248,11 @@ int main(int argc, char **argv)
     int downscale_factor = 2;
     int stride = 1;
     int slow_tracker_every = 6;
-    Timer t1, t2, t3, t4, t5, t_cuda;
+    Timer t1, t2, t3, t4, t5, t6, t_cuda;
     // Read the images to be aligned
     std::string path = "C:/Users/sens/Desktop/augmented_hands/session2";
     std::vector<cv::Mat> images = load_images(path);
-    std::vector<std::string> algorithms = {"OF_nv_GPU", "OF_fb_GPU", "OF_fb_CPU"}; // , "ORB", "CC", "OF_GPU", "FAST"
+    std::vector<std::string> algorithms = {"OF_nv_GPU", "OF_fb_GPU", "OF_fb_CPU", "OF_sparse_CPU"}; // , "ORB", "CC", "OF_GPU", "FAST"
     // todo:
     // cornerSubPix, OF with parameter tuning, OF GPU, FastFeature
     // references:
@@ -279,6 +279,7 @@ int main(int argc, char **argv)
             cv::resize(im1_gray, im1_gray_down, down_size);
             for (int i = 1; i < images.size() - 1; i++)
             {
+                std::cout << '\r' << std::format("{:04d} / {}", i, images.size()) << std::flush;
                 cv::Mat im2 = images[i];
                 t1.start();
                 cv::cvtColor(im2, im2_gray, cv::COLOR_BGR2GRAY);
@@ -327,6 +328,7 @@ int main(int argc, char **argv)
             // cv::cuda::cvtColor(gpu_im1_down, gpu_im1_gray, cv::COLOR_BGR2GRAY);
             for (int i = 1; i < images.size() - 1; i++)
             {
+                std::cout << '\r' << std::format("{:04d} / {}", i, images.size()) << std::flush;
                 cv::Mat im2 = images[i];
                 t1.start();
                 cv::cvtColor(im2, im2_gray, cv::COLOR_BGR2GRAY);
@@ -428,6 +430,7 @@ int main(int argc, char **argv)
             cv::resize(im1_gray, im1_gray_down, down_size);
             for (int i = 1; i < images.size() - 1; i++)
             {
+                std::cout << '\r' << std::format("{:04d} / {}", i, images.size()) << std::flush;
                 im2 = images[i + 1];
                 t1.start();
                 cv::cvtColor(im2, im2_gray, cv::COLOR_BGR2GRAY);
@@ -457,10 +460,11 @@ int main(int argc, char **argv)
             t2.reset();
             t3.reset();
         }
-        if (alg == "OF_sparse")
+        if (alg == "OF_sparse_CPU")
         {
+            // downscale_factor = 1;
+            cv::Size down_size = cv::Size(images[0].cols / downscale_factor, images[0].rows / downscale_factor);
             std::vector<cv::Point2f> p0, p1;
-            cv::Mat mask = cv::Mat::zeros(images[0].size(), images[0].type());
             std::vector<cv::Scalar> colors;
             cv::RNG rng;
 
@@ -472,19 +476,29 @@ int main(int argc, char **argv)
                 colors.push_back(cv::Scalar(r, g, b));
             }
             // vector<Point2f> good_old, good_new;
-            for (int i = 0; i < images.size(); i++)
+            cv::Mat im1, im2;
+            cv::Mat im1_gray, im2_gray;
+            cv::Mat im1_gray_down, im2_gray_down;
+            // cv::Mat im1_bin, im2_bin;
+            im1 = images[0];
+            cvtColor(im1, im1_gray, cv::COLOR_BGR2GRAY);
+            // threshold(im1_gray, im1_bin, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+            resize(im1_gray, im1_gray_down, down_size);
+            std::vector<int> feature_num;
+            int fails = 0;
+            std::vector<int> good_feature_num;
+            for (int i = 1; i < images.size(); i++)
             {
-                cv::Mat im1 = images[i];
-                cv::Mat im2 = images[i + 1];
+                std::cout << '\r' << std::format("{:04d} / {}", i, images.size()) << std::flush;
+                p0.clear();
+                p1.clear();
+                cv::Mat mask = cv::Mat::zeros(images[0].size(), images[0].type());
+                cv::Mat im2 = images[i];
                 t1.start();
                 // convert images to gray scale;
-                cv::Mat im1_gray, im2_gray;
-                cv::Mat im1_bin, im2_bin;
-                cv::Mat im1_gray_down, im2_gray_down;
-                cvtColor(im1, im1_gray, cv::COLOR_BGR2GRAY);
                 cvtColor(im2, im2_gray, cv::COLOR_BGR2GRAY);
                 t1.stop();
-                std::cout << "t bgr2gray: " << t1.getElapsedTimeInMilliSec() << std::endl;
+                // std::cout << "t bgr2gray: " << t1.getElapsedTimeInMilliSec() << std::endl;
 
                 // create pyramid from gray scale images
                 // t1.start();
@@ -495,11 +509,10 @@ int main(int argc, char **argv)
                 // std::cout << "t buildPyramid: " << t1.getElapsedTimeInMilliSec() << std::endl;
 
                 // threshold images
-                t1.start();
-                threshold(im1_gray, im1_bin, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-                threshold(im2_gray, im2_bin, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-                t1.stop();
-                std::cout << "t threshold: " << t1.getElapsedTimeInMilliSec() << std::endl;
+                // t2.start();
+                // threshold(im2_gray, im2_bin, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+                // t2.stop();
+                // std::cout << "t threshold: " << t1.getElapsedTimeInMilliSec() << std::endl;
 
                 // adaptive threshold
                 // t1.start();
@@ -509,51 +522,51 @@ int main(int argc, char **argv)
                 // std::cout << "t adaptiveThreshold: " << t1.getElapsedTimeInMilliSec() << std::endl;
 
                 // downscale images for faster processing
-                // t1.start();
-                // resize(im1_gray, im1_gray_down, Size(im1.rows / downscale_factor, im1.cols / downscale_factor));
-                // resize(im2_gray, im2_gray_down, Size(im2.rows / downscale_factor, im2.cols / downscale_factor));
+                t2.start();
+                resize(im2_gray, im2_gray_down, down_size);
+                t2.stop();
                 // t1.stop();
                 // std::cout << "t resize: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // std::cout << "resized to: " << im1_gray.rows << "x" << im1_gray.cols << std::endl;
 
-                cv::Mat im1_aligned;
-                if ((i % slow_tracker_every == 0) && (i > 0))
-                {
-                    // for(uint j = 0; j < p0.size(); j++)
-                    // circle(mask, p0[j], 5, colors[j], -1);
-                    cv::Mat img;
-                    add(im1, mask, img);
-                    cv::imwrite(std::format("../../benchmark/{}/{:04d}.png", alg, i).c_str(), img);
-                    p0.clear();
-                    // good_new.clear();
-                    // good_old.clear();
-                    mask = cv::Mat::zeros(images[0].size(), images[0].type());
-                }
-                if (p0.size() == 0)
-                {
-
-                    t1.start();
-                    goodFeaturesToTrack(im1_gray, p0, 100, 0.3, 3, cv::Mat(), 7, false, 0.04);
-                    t1.stop();
-                    std::cout << "goodFeaturesToTrack: " << t1.getElapsedTimeInMilliSec() << std::endl;
-                    std::cout << "feature_num: " << p0.size() << std::endl;
-                }
+                // cv::Mat im1_aligned;
+                // if ((i % slow_tracker_every == 0) && (i > 0))
+                // {
+                //     // for(uint j = 0; j < p0.size(); j++)
+                //     // circle(mask, p0[j], 5, colors[j], -1);
+                //     cv::Mat img;
+                //     add(im1, mask, img);
+                //     cv::imwrite(std::format("../../benchmark/{}/{:04d}.png", alg, i).c_str(), img);
+                //     p0.clear();
+                //     // good_new.clear();
+                //     // good_old.clear();
+                //     mask = cv::Mat::zeros(images[0].size(), images[0].type());
+                // }
+                t3.start();
+                float quality = 0.1;
+                goodFeaturesToTrack(im1_gray_down, p0, 100, quality, 3, cv::Mat(), 7, false, 0.04);
+                t3.stop();
+                feature_num.push_back(p0.size());
                 std::vector<uchar> status;
                 std::vector<float> err;
                 cv::TermCriteria criteria = cv::TermCriteria((cv::TermCriteria::COUNT) + (cv::TermCriteria::EPS), 10, 0.03);
-                t1.start();
-                cv::calcOpticalFlowPyrLK(im1_gray, im2_gray, p0, p1, status, err, cv::Size(15, 15), 2, criteria);
-                t1.stop();
-                std::cout << "calcOpticalFlowPyrLK: " << t1.getElapsedTimeInMilliSec() << std::endl;
+                t4.start();
+                cv::calcOpticalFlowPyrLK(im1_gray_down, im2_gray_down, p0, p1, status, err, cv::Size(15, 15), 2, criteria);
+                t4.stop();
+                // std::cout << "calcOpticalFlowPyrLK: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // t1.start();
-                // for(uint i = 0; i < p0.size(); i++)
-                // {
-                //     // Select good points
-                //     if(status[i] == 1) {
-                //         good_old.push_back(p0[i]);
-                //         good_new.push_back(p1[i]);
-                //     }
-                // }
+                int counter = 0;
+                for (uint i = 0; i < p0.size(); i++)
+                {
+                    // Select good points
+                    if (status[i] == 1)
+                    {
+                        counter += 1;
+                        // good_old.push_back(p0[i]);
+                        // good_new.push_back(p1[i]);
+                    }
+                }
+                good_feature_num.push_back(counter);
                 // t1.stop();
                 // std::cout << "select good points: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // t1.start();
@@ -567,32 +580,60 @@ int main(int argc, char **argv)
                 // t1.stop();
                 // std::cout << "warpPerspective: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // find affine transform
-                if (p1.size() < 3)
+                // if (p1.size() < 3)
+                //     continue;
+                if ((p1.size() < 3) || p0.size() < 3)
+                {
+                    fails += 1;
                     continue;
-                t1.start();
+                }
+                t5.start();
                 cv::Mat f = cv::estimateAffine2D(p0, p1);
-                // f.at<float>(0,2) *= downscale_factor;
-                // f.at<float>(1,2) *= downscale_factor;
-                t1.stop();
-                std::cout << "estimateAffine2D: " << t1.getElapsedTimeInMilliSec() << std::endl;
-                t1.start();
+                // f.at<float>(0, 2) *= downscale_factor;
+                // f.at<float>(1, 2) *= downscale_factor;
+                t5.stop();
+                // std::cout << "estimateAffine2D: " << t1.getElapsedTimeInMilliSec() << std::endl;
+                t6.start();
                 cv::Mat im1_aligned2;
-                cv::warpAffine(im1, im1_aligned2, f, im2.size());
-                t1.stop();
+                cv::warpAffine(im1, im1_aligned2, f, im1.size());
+                t6.stop();
                 // visualize
-                std::cout << "warpAffine: " << t1.getElapsedTimeInMilliSec() << std::endl;
+                // std::cout << "warpAffine: " << t1.getElapsedTimeInMilliSec() << std::endl;
                 // imwrite(std::format("../../benchmark/{}/{:04d}_image1.png", alg, i).c_str(), im1);
                 // imwrite(std::format("../../benchmark/{}/{:04d}_image1_aligned.png", alg, i).c_str(), im1_aligned2);
                 // imwrite(std::format("../../benchmark/{}/{:04d}_image2.png", alg, i).c_str(), im2);
-
                 for (uint j = 0; j < p0.size(); j++)
                 {
-                    // Point2f debug_vec = p0[i]*downscale_factor;
-                    // circle(mask, p1[i]*downscale_factor, 5, colors[i], -1);
-                    cv::line(mask, p1[j], p0[j], colors[j], 2);
+                    // cv::Point2f debug_vec = p0[i]*downscale_factor;
+                    circle(mask, p1[i] * downscale_factor, 5, colors[i], -1);
+                    cv::line(mask, p1[j] * downscale_factor, p0[j] * downscale_factor, colors[j], 2);
+                    cv::Mat img;
+                    add(im1, mask, img);
+                    cv::imwrite(std::format("../../benchmark/{}/{:04d}.png", alg, i).c_str(), img);
                 }
+                im2.copyTo(im1);
+                im2_gray.copyTo(im1_gray);
+                im2_gray_down.copyTo(im1_gray_down);
                 // imwrite(std::format("../../benchmark/{}/{:04d}_of.png", alg, i).c_str(), img);
             }
+            std::cout << "Sprase CPU report:" << std::endl;
+            std::cout << "cvtColor avg: " << t1.averageLapInMilliSec() << std::endl;
+            std::cout << "resize avg: " << t2.averageLapInMilliSec() << std::endl;
+            std::cout << "features extraction avg: " << t3.averageLapInMilliSec() << std::endl;
+            std::cout << "calcOpticalFlowPyrLK avg: " << t4.averageLapInMilliSec() << std::endl;
+            std::cout << "estimateAffine2D avg: " << t5.averageLapInMilliSec() << std::endl;
+            std::cout << "warpAffine avg: " << t6.averageLapInMilliSec() << std::endl;
+            std::cout << "fails: " << fails << std::format("/{}", images.size()) << std::endl;
+            std::cout << "feature_num avg: " << std::accumulate(feature_num.begin(), feature_num.end(), 0.0) / feature_num.size() << std::endl;
+            std::cout << "good_feature_num avg: " << std::accumulate(good_feature_num.begin(), good_feature_num.end(), 0.0) / good_feature_num.size() << std::endl
+                      << std::endl;
+            std::cout << "total avg: " << t1.averageLapInMilliSec() + t2.averageLapInMilliSec() + t3.averageLapInMilliSec() + t4.averageLapInMilliSec() + t5.averageLapInMilliSec() << std::endl
+                      << std::endl;
+            t1.reset();
+            t2.reset();
+            t3.reset();
+            t4.reset();
+            t5.reset();
             // if (alg == "FAST")
             // {
             //     const int kMaxMatchingSize = 50;

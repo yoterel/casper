@@ -44,6 +44,10 @@ public:
         // LeapRequestConfigValue();
         // LeapSaveConfigValue();
     };
+    LeapConnect(bool pollMode) : LeapConnect()
+    {
+        m_poll = pollMode;
+    };
     ~LeapConnect()
     {
         kill();
@@ -55,18 +59,14 @@ public:
     void setDevice(const LEAP_DEVICE_INFO *deviceProps);
     int64_t LeapGetTime() { return LeapGetNow(); };
     void setFrame(const LEAP_TRACKING_EVENT *frame);
+    LEAP_TRACKING_EVENT *getFrame();
     // std::vector<float> getFrame();
     std::vector<float> getIndexTip();
     bool IsConnected = false;
-#ifdef PYTHON_BINDINGS_BUILD
-    LeapConnect(bool pollMode) : LeapConnect()
-    {
-        m_poll = true;
-    };
-#endif
 
 private:
     void CloseConnection(void);
+    void deepCopyTrackingEvent(LEAP_TRACKING_EVENT *dst, const LEAP_TRACKING_EVENT *src);
     // Internal state
     volatile bool _isRunning = false;
     LEAP_CONNECTION connectionHandle = NULL;
