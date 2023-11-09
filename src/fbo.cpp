@@ -112,3 +112,16 @@ void FBO::saveColorToFile(std::string filepath)
     stbi_write_png(filepath.c_str(), m_width, m_height, 4, buffer.data(), stride);
     this->unbind();
 }
+
+cv::Mat FBO::toOpenCVMat()
+{
+    unsigned int nrChannels = 4;
+    std::vector<char> buffer(m_width * m_height * nrChannels);
+    GLsizei stride = nrChannels * m_width;
+    this->bind(false);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+    cv::Mat fbo_image(m_height, m_width, CV_8UC4, buffer.data());
+    this->unbind();
+    return fbo_image;
+}

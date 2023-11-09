@@ -33,7 +33,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world_left, std::vector<glm::mat4> &bones_to_world_right, std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
+LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world_left, std::vector<glm::mat4> &bones_to_world_right, std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO);
@@ -75,6 +75,13 @@ bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC4, cv::Scalar(255, 255, 255, 255));
+cv::Mat curFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
+cv::Mat prevFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
+float downscale_factor = 2.0f;
+cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
+cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
+cv::Mat curFrame_gray, prevFrame_gray;
+cv::Mat FBORender;
 // GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
 GLCamera gl_flycamera;
 GLCamera gl_camera;
@@ -506,6 +513,7 @@ int main(int argc, char *argv[])
         t_misc.stop();
         t0.start();
         // retrieve camera image
+        // prevFrame = curFrame.clone();
         uint8_t *buffer;
         if (producer_is_fake)
         {
@@ -518,6 +526,8 @@ int main(int argc, char *argv[])
             CPylonImage pylonImage = camera_queue.pop();
             buffer = (uint8_t *)pylonImage.GetBuffer();
         }
+        // cv::Mat tmp(cam_height, cam_width, CV_8UC4, buffer);
+        // curFrame = tmp.clone();
         camTexture.load(buffer, true);
 
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
@@ -544,7 +554,38 @@ int main(int argc, char *argv[])
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
             // get leap frame
         }
-        getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
+        LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
+        if (poll_mode && false)
+        {
+            if (status == LEAP_STATUS::LEAP_NEWFRAME)
+            {
+                // render frame to texture
+                if (bones_to_world_right.size() > 0)
+                {
+                    /* render skinned mesh to fbo, in camera space*/
+                    skinnedShaderSimple.use();
+                    skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
+                    skinnedShaderSimple.setInt("src", 0);
+                    skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), true);
+                    FBORender = skinnedModel.m_fbo.toOpenCVMat();
+                }
+            }
+            else
+            {
+                if (status == LEAP_STATUS::LEAP_NONEWFRAME)
+                {
+                    // use optical flow to warp texture
+                    cv::cvtColor(curFrame, curFrame_gray, cv::COLOR_RGBA2GRAY);
+                    cv::resize(curFrame_gray, curFrame_gray, down_size);
+                    cv::calcOpticalFlowFarneback(prevFrame_gray, curFrame_gray, flow, 0.5, 5, 15, 3, 5, 1.2, cv::OPTFLOW_USE_INITIAL_FLOW);
+                    prevFrame_gray = curFrame_gray.clone();
+                }
+            }
+        }
+        else
+        {
+        }
         // get view & projection transforms
         glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
         glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
@@ -1291,12 +1332,12 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     return true;
 }
 
-bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
-                  std::vector<glm::mat4> &bones_to_world_left,
-                  std::vector<glm::mat4> &bones_to_world_right,
-                  std::vector<glm::vec3> &skeleton_vertices,
-                  bool poll_mode,
-                  int64_t &lastFrameID)
+LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
+                         std::vector<glm::mat4> &bones_to_world_left,
+                         std::vector<glm::mat4> &bones_to_world_right,
+                         std::vector<glm::vec3> &skeleton_vertices,
+                         bool poll_mode,
+                         int64_t &lastFrameID)
 {
     // some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -1327,7 +1368,7 @@ bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
         }
         else
         {
-            return false;
+            return LEAP_STATUS::LEAP_NONEWFRAME;
         }
     }
     else
@@ -1341,7 +1382,7 @@ bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapGetFrameSize() returned " << retVal << std::endl;
-            return false;
+            return LEAP_STATUS::LEAP_FAILED;
         }
         // Allocate enough memory
         frame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
@@ -1350,7 +1391,7 @@ bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapInterpolateFrame() returned " << retVal << std::endl;
-            return false;
+            return LEAP_STATUS::LEAP_FAILED;
         }
     }
     // Use the data...
@@ -1425,7 +1466,7 @@ bool getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     }
     // Free the allocated buffer when done.
     free(frame);
-    return true;
+    return LEAP_STATUS::LEAP_NEWFRAME;
 }
 // // create transformation matrices
 // glm::mat4 canvas_model_mat = glm::mat4(1.0f);

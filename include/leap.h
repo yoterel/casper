@@ -23,6 +23,13 @@
 namespace nb = nanobind;
 #endif
 
+enum class LEAP_STATUS
+{
+    LEAP_NEWFRAME,
+    LEAP_NONEWFRAME,
+    LEAP_FAILED,
+};
+
 class LeapConnect
 {
 public:

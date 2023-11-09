@@ -1,7 +1,7 @@
 #ifndef FBO_H
 #define FBO_H
 #include <string>
-
+#include <opencv2/opencv.hpp>
 class FBO
 {
 public:
@@ -13,6 +13,7 @@ public:
     void bind(bool clear = true);
     void unbind();
     void saveColorToFile(std::string filepath);
+    cv::Mat toOpenCVMat();
     unsigned int getTexture() { return m_texture; };
 
 private:

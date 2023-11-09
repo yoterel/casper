@@ -6,7 +6,7 @@ set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")
 set(OPENCV_COMPILER "vc15")
-# set(OpenCV_DIR "C:/OpenCV_Build/install")
+# set(OpenCV_DIR "C:/OpenCV_Build/install_debug")
 # set(OPENCV_COMPILER "vc16")
 set(CUDA_EXAMPLES "C:/src/cuda-samples")
 set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/lib/x64")
@@ -20,17 +20,16 @@ find_package(Python 3.10 COMPONENTS Interpreter Development REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
 find_package(OpenCV 4.6.0 EXACT REQUIRED)
 find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
-message(PYTHON_FOUND="${Python_FOUND}")
-message(Python_Interpreter_FOUND="${Python_Interpreter_FOUND}")
-message(Python_EXECUTABLE="${Python_EXECUTABLE}")
-message(Python_STDLIB="${Python_STDLIB}")
-message(Python_Development_FOUND="${Python_Development_FOUND}")
-
-message(PYTHON_VERSION="${Python_VERSION}")
-message(PYTHON_INCLUDE_DIRS="${PYTHON_INCLUDE_DIRS}")
-message(PYTHON_LIBRARIES="${PYTHON_LIBRARIES}")
-message(Python_LIBRARY_DIRS="${Python_LIBRARY_DIRS}")
-message(Python_RUNTIME_LIBRARY_DIRS="${Python_RUNTIME_LIBRARY_DIRS}")
+# message(PYTHON_FOUND="${Python_FOUND}")
+# message(Python_Interpreter_FOUND="${Python_Interpreter_FOUND}")
+# message(Python_EXECUTABLE="${Python_EXECUTABLE}")
+# message(Python_STDLIB="${Python_STDLIB}")
+# message(Python_Development_FOUND="${Python_Development_FOUND}")
+# message(PYTHON_VERSION="${Python_VERSION}")
+# message(PYTHON_INCLUDE_DIRS="${PYTHON_INCLUDE_DIRS}")
+# message(PYTHON_LIBRARIES="${PYTHON_LIBRARIES}")
+# message(Python_LIBRARY_DIRS="${Python_LIBRARY_DIRS}")
+# message(Python_RUNTIME_LIBRARY_DIRS="${Python_RUNTIME_LIBRARY_DIRS}")
 ################ nanobind
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
@@ -88,6 +87,7 @@ add_executable(ahand
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
+# target_compile_definitions(ahand PRIVATE CV_IGNORE_DEBUG_BUILD_GUARD)
 set_target_properties(ahand PROPERTIES CUDA_ARCHITECTURES "72")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common")
@@ -149,6 +149,37 @@ target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-pa
 target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 
+####################################### coaxial calibration
+add_executable(coaxial_calib 
+    src/coaxial.cpp
+    src/display
+    src/camera.cpp
+    src/timer.cpp
+    src/texture.cpp
+    src/quad.cpp
+    src/text.cpp
+    third-party/glad${GLAD_VER}/src/glad.c
+)
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# pylon
+target_link_libraries(coaxial_calib PRIVATE pylon::pylon)
+# opencv
+target_link_libraries(coaxial_calib PRIVATE ${OpenCV_LIBS})
+# dynaflash
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+# GLFW
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# GLAD
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# glm
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# stb
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# freetype
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
+target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
 ######################################### cuda sample program
 # add_executable(cuda_example 
 #     # src/add.cu

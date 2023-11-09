@@ -25,5 +25,4 @@ void check2(NppStatus result);
 void saveImage(char *filepath, GLFWwindow *w);
 void saveImage(std::string filepath, unsigned int texture,
                unsigned int width, unsigned int height, Shader &shader);
-
 #endif // AHANDS_UTILS
