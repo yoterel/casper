@@ -68,6 +68,12 @@ cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downsca
 cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
 cv::Mat curFrame_gray, prevFrame_gray;
 cv::Mat FBORender;
+std::vector<glm::vec3> screen_verts = {{-1.0f, 1.0f, 0.0f},
+                                       {-1.0f, -1.0f, 0.0f},
+                                       {1.0f, -1.0f, 0.0f},
+                                       {1.0f, 1.0f, 0.0f}};
+bool dragging = false;
+int dragging_vert = 0;
 
 int main(int argc, char *argv[])
 {
@@ -78,9 +84,11 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    // glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
     GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
+    glfwMakeContextCurrent(window);
     int secondary_screen_x, secondary_screen_y;
     glfwGetMonitorPos(monitors[1], &secondary_screen_x, &secondary_screen_y);
     glfwSetWindowPos(window, secondary_screen_x + 100, secondary_screen_y + 100);
@@ -90,7 +98,6 @@ int main(int argc, char *argv[])
         glfwTerminate();
         return -1;
     }
-    glfwMakeContextCurrent(window);
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
@@ -106,14 +113,16 @@ int main(int argc, char *argv[])
     glViewport(0, 0, proj_width, proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glPointSize(10.0f);
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
+    // glEnable(GL_CULL_FACE);
+    // glEnable(GL_BLEND);
+    // glEnable(GL_DEPTH_TEST);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback); // callback for resizing
+    // int a, b;
+    // glfwGetFramebufferSize(window, &a, &b);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_TRUE);
     /* setup global GL buffers */
     unsigned int pbo[2] = {0};
     if (use_pbo)
@@ -171,11 +180,6 @@ int main(int argc, char *argv[])
     std::vector<double> camera_distortion;
     glm::mat4 w2vp;
     glm::mat4 w2vc;
-    std::vector<glm::vec3> screen_verts = {{-1.0f, 1.0f, 0.0f},
-                                           {-1.0f, -1.0f, 0.0f},
-                                           {1.0f, -1.0f, 0.0f},
-                                           {1.0f, 1.0f, 0.0f}};
-    Quad screen(screen_verts);
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
@@ -190,21 +194,15 @@ int main(int argc, char *argv[])
     else
     {
         /* fake producer */
+        std::vector<cv::Mat> fake_cam_images;
         std::cout << "Using fake camera to produce images" << std::endl;
         producer_is_fake = true;
-        std::string path = "../../resource/hand_capture";
-        std::vector<cv::Mat> fake_cam_images;
-        int file_counter = 0;
-        for (const auto &entry : fs::directory_iterator(path))
-        {
-            std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
-            std::string file_path = entry.path().string();
-            cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
-            cv::Mat img4;
-            cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
-            fake_cam_images.push_back(img4);
-            file_counter++;
-        }
+        std::string file_path = "../../resource/XGA_rand.png";
+        cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
+        cv::resize(img3, img3, cv::Size(cam_width, cam_height));
+        cv::Mat img4;
+        cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
+        fake_cam_images.push_back(img4);
         // cam_height = 540;
         // cam_width = 720;
         producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
@@ -298,16 +296,33 @@ int main(int argc, char *argv[])
         camTexture.load(buffer, true);
 
         // render
-        textureShader.use();
-        textureShader.setMat4("view", glm::mat4(1.0f));
-        textureShader.setMat4("projection", glm::mat4(1.0f));
-        textureShader.setMat4("model", glm::mat4(1.0f));
-        textureShader.setBool("flipVer", false);
-        textureShader.setInt("src", 0);
-        textureShader.setBool("binary", false);
-        camTexture.bind();
-        screen.render();
-
+        {
+            Quad screen(screen_verts);
+            textureShader.use();
+            textureShader.setMat4("view", glm::mat4(1.0f));
+            textureShader.setMat4("projection", glm::mat4(1.0f));
+            textureShader.setMat4("model", glm::mat4(1.0f));
+            textureShader.setBool("flipVer", false);
+            textureShader.setInt("src", 0);
+            textureShader.setBool("binary", false);
+            camTexture.bind();
+            screen.render();
+        }
+        {
+            float text_spacing = 10.0f;
+            double x;
+            double y;
+            glfwGetCursorPos(window, &x, &y);
+            glm::vec2 mouse_pos = glm::vec2(x, y);
+            std::vector<std::string> texts_to_render = {
+                std::format("mouse x, y: {:.02f}, {:.02f}", mouse_pos.x, mouse_pos.y),
+                std::format("modifiers : shift: {}, ctrl: {}, space: {}", shift_modifier ? "on" : "off", ctrl_modifier ? "on" : "off", space_modifier ? "on" : "off"),
+            };
+            for (int i = 0; i < texts_to_render.size(); ++i)
+            {
+                text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+            }
+        }
         // send result to projector queue
         glReadBuffer(GL_FRONT);
         if (use_pbo) // something fishy going on here. using pbo collapses program after a while
@@ -426,17 +441,55 @@ void processInput(GLFWwindow *window)
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
 // ---------------------------------------------------------------------------------------------
+// void framebuffer_size_callback(GLFWwindow *window, int width, int height)
+// {
+//     // make sure the viewport matches the new window dimensions; note that width and
+//     // height will be significantly larger than specified on retina displays.
+//     glViewport(0, 0, width, height);
+// }
+// glfw: whenever the mouse button gets pressed, this callback is called
+// ----------------------------------------------------------------------
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+{
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        if (dragging == false)
+        {
+
+            double x;
+            double y;
+            glfwGetCursorPos(window, &x, &y);
+            int closest_vert = 0;
+            float min_dist = 100000.0f;
+            for (int i = 0; i < screen_verts.size(); i++)
+            {
+                glm::vec3 v = screen_verts[i];
+                glm::vec3 mouse_pos = glm::vec3((2.0f * x / proj_width) - 1.0f, (2.0f * y / proj_height) - 1.0f, 0.0f);
+                float dist = glm::distance(v, mouse_pos);
+                if (dist < min_dist)
+                {
+                    min_dist = dist;
+                    closest_vert = i;
+                }
+            }
+            if (min_dist < 0.3f)
+            {
+                dragging = true;
+                dragging_vert = closest_vert;
+            }
+        }
+    }
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
+    {
+        dragging = false;
+    }
+}
+
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     // make sure the viewport matches the new window dimensions; note that width and
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
-}
-// glfw: whenever the mouse button gets pressed, this callback is called
-// ----------------------------------------------------------------------
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
-{
-    //
 }
 // glfw: whenever the mouse moves, this callback is called
 // -------------------------------------------------------
@@ -444,29 +497,9 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
-
-    if (firstMouse)
+    if (dragging)
     {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
-    }
-
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-
-    lastX = xpos;
-    lastY = ypos;
-    if (shift_modifier)
-    {
-    }
-    else
-    {
-        if (ctrl_modifier)
-        {
-        }
-        else
-        {
-        }
+        screen_verts[dragging_vert].x = (2.0f * xpos / proj_width) - 1.0f;
+        screen_verts[dragging_vert].y = (2.0f * ypos / proj_height) - 1.0f;
     }
 }
