@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
         std::cout << "Poll mode is on" << std::endl;
         poll_mode = true;
     }
-    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug, t_debug1, t_debug2;
+    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug, t_pp, t_debug2;
     t_app.start();
     /* init GLFW */
     glfwInit();
@@ -200,15 +200,20 @@ int main(int argc, char *argv[])
     //                        //   "C:/src/augmented_hands/resource/wood.jpg",
     //                        proj_width, proj_height,
     //                        cam_width, cam_height);
-    SkinnedModel skinnedModel("../../resource/GenericHand.fbx",
-                              "../../resource/uv.png",
-                              //   "C:/src/augmented_hands/resource/wood.jpg",
-                              proj_width, proj_height,
-                              cam_width, cam_height);
+    SkinnedModel leftHandModel("../../resource/GenericHand.fbx",
+                               "../../resource/uv.png",
+                               //   "C:/src/augmented_hands/resource/wood.jpg",
+                               proj_width, proj_height,
+                               cam_width, cam_height);
+    SkinnedModel rightHandModel("../../resource/GenericHand.fbx",
+                                "../../resource/uv.png",
+                                //   "C:/src/augmented_hands/resource/wood.jpg",
+                                proj_width, proj_height,
+                                cam_width, cam_height);
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
-    n_bones = skinnedModel.NumBones();
+    n_bones = leftHandModel.NumBones();
     Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
-    glm::vec3 coa = skinnedModel.getCenterOfMass();
+    glm::vec3 coa = leftHandModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
 
     // glm::mat4 mm_to_cm = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 0.1f, 0.1f));
@@ -254,6 +259,7 @@ int main(int argc, char *argv[])
          {0.0f, 1.5f, -1.0f},
          {0.0f, 1.5f, -1.0f},
          {1.0f, 1.0f, -1.0f}}};
+    FBO hands_fbo(proj_width, proj_height);
     /* setup shaders*/
     Shader jfaInitShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa_init.fs");
     Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
@@ -460,6 +466,7 @@ int main(int argc, char *argv[])
     /* main loop */
     while (!glfwWindowShouldClose(window))
     {
+        /* update / sync clocks */
         t_misc.start();
         currentAppTime = t_app.getElapsedTimeInSec(); // glfwGetTime();
         deltaTime = static_cast<float>(currentAppTime - previousAppTime);
@@ -470,7 +477,8 @@ int main(int argc, char *argv[])
             LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
         }
         frameCount++;
-        // stats display
+
+        /* display stats */
         if (currentAppTime - previousSecondAppTime >= 1.0)
         {
             fps = frameCount;
@@ -503,16 +511,16 @@ int main(int argc, char *argv[])
             t5.reset();
             t_misc.reset();
             canvas.resetTimers();
+            t_pp.reset();
             t_debug.reset();
-            t_debug1.reset();
-            t_debug2.reset();
         }
-        // input
+        /* deal with user input */
         processInput(window);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         t_misc.stop();
+
+        /* deal with camera input */
         t0.start();
-        // retrieve camera image
         // prevFrame = curFrame.clone();
         uint8_t *buffer;
         if (producer_is_fake)
@@ -546,6 +554,8 @@ int main(int argc, char *argv[])
         // cv::Point maxLoc;
         // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t0.stop();
+
+        /* deal with leap input */
         t1.start();
         if (!poll_mode)
         {
@@ -567,8 +577,12 @@ int main(int argc, char *argv[])
                     skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
                     skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
                     skinnedShaderSimple.setInt("src", 0);
-                    skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), true);
-                    FBORender = skinnedModel.m_fbo.toOpenCVMat();
+                    hands_fbo.bind();
+                    glEnable(GL_DEPTH_TEST);
+                    rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx);
+                    hands_fbo.unbind();
+                    glDisable(GL_DEPTH_TEST);
+                    // FBORender = skinnedModel.m_fbo.toOpenCVMat();
                 }
             }
             else
@@ -585,7 +599,9 @@ int main(int argc, char *argv[])
         }
         else
         {
+            // ?
         }
+        /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
         glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
         glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
@@ -601,16 +617,22 @@ int main(int argc, char *argv[])
         // projectorOnlyShader.setBool("binary", true);
         // projectorOnlyShader.setBool("src", 0);
         // canvas.renderTexture(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
-        // process leap frame
+
+        /* skin hand mesh with leap input */
+        t2.start();
         if (bones_to_world_right.size() > 0)
         {
-            t2.start();
             /* render skinned mesh to fbo, in camera space*/
             skinnedShaderSimple.use();
             skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
             skinnedShaderSimple.setInt("src", 0);
-            skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), true);
+            hands_fbo.bind(true);
+            glEnable(GL_DEPTH_TEST);
+            rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx);
+            hands_fbo.unbind();
+            glDisable(GL_DEPTH_TEST);
+
             /* render skinned mesh to fbo, in projector space */
             // skinnedShader.use();
             // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
@@ -627,38 +649,56 @@ int main(int argc, char *argv[])
             // projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
             // projectorShader.setBool("binary", true);
             // dinosaur.Render(projectorShader, camTexture.getTexture(), true);
-            if (!debug_mode)
-            {
-                // skinnedModel.m_fbo.saveColorToFile("test1.png");
-                // canvasShader.use();
-                // canvasShader.setBool("binary", false);
-                // canvasShader.setBool("flipVer", false);
-                // canvasShader.setInt("src", 0);
-                // canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
-                projectorOnlyShader.use();
-                projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-                projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                projectorOnlyShader.setBool("binary", true);
-                projectorOnlyShader.setBool("src", 0);
-                /* render hand with jfa */
-                // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
-                // canvas.render(jfaInitShader, jfaShader, fastTrackerShader, skinnedModel.m_fbo.getTexture(), warped_cam, true);
-            }
-            // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
-            t2.stop();
-
-            // canvas.Render(canvasShader, buffer);
-            // canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
-            // }
-            // else
-            // {
-            //     skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
-            //     t2.stop();
-            // }
         }
+        if (bones_to_world_left.size() > 0)
+        {
+            /* render skinned mesh to fbo, in camera space*/
+            skinnedShaderSimple.use();
+            skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+            skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
+            skinnedShaderSimple.setInt("src", 0);
+            hands_fbo.bind(false);
+            glEnable(GL_DEPTH_TEST);
+            leftHandModel.Render(skinnedShaderSimple, bones_to_world_left, rotx);
+            hands_fbo.unbind();
+            glDisable(GL_DEPTH_TEST);
+        }
+        t2.stop();
+        /* post process fbo using camera input */
+        t_pp.start();
+        if (!debug_mode)
+        {
+            // skinnedModel.m_fbo.saveColorToFile("test1.png");
+            // canvasShader.use();
+            // canvasShader.setBool("binary", false);
+            // canvasShader.setBool("flipVer", false);
+            // canvasShader.setInt("src", 0);
+            // canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
+            projectorOnlyShader.use();
+            projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+            projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+            projectorOnlyShader.setBool("binary", true);
+            projectorOnlyShader.setBool("src", 0);
+            /* render hand with jfa */
+            // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
+            // canvas.render(jfaInitShader, jfaShader, fastTrackerShader, skinnedModel.m_fbo.getTexture(), warped_cam, true);
+        }
+        t_pp.stop();
+        // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
+
+        // canvas.Render(canvasShader, buffer);
+        // canvas.Render(jfaInitShader, jfaShader, fastTrackerShader, slow_tracker_texture, buffer, true);
+        // }
+        // else
+        // {
+        //     skinnedModel.Render(skinnedShader, bones_to_world, LocalToWorld, false, buffer);
+        //     t2.stop();
+        // }
+
+        /* debug mode renders*/
+        t_debug.start();
         if (debug_mode)
         {
-            t_debug.start();
             // setup some vertices
             std::vector<glm::vec3> near_frustrum = {{-1.0f, 1.0f, -1.0f},
                                                     {-1.0f, -1.0f, -1.0f},
@@ -701,15 +741,15 @@ int main(int argc, char *argv[])
             // draws some mesh (lit by camera input)
             {
                 /* quad at vcam far plane, shined by vproj (perspective corrected) */
-                projectorOnlyShader.use();
-                projectorOnlyShader.setBool("flipVer", false);
-                projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-                projectorOnlyShader.setBool("binary", false);
-                // skinnedModel.GetMaterial().pDiffuse->bind();
-                camTexture.bind();
-                projectorOnlyShader.setInt("src", 0);
-                vcamFarQuad.render();
+                // projectorOnlyShader.use();
+                // projectorOnlyShader.setBool("flipVer", false);
+                // projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                // projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                // projectorOnlyShader.setBool("binary", false);
+                // camTexture.bind();
+                // projectorOnlyShader.setInt("src", 0);
+                // vcamFarQuad.render();
+
                 /* dinosaur */
                 // projectorShader.use();
                 // projectorShader.setBool("flipVer", false);
@@ -781,7 +821,7 @@ int main(int argc, char *argv[])
                     vcolorShader.setMat4("projection", flycam_projection_transform);
                     vcolorShader.setMat4("view", flycam_view_transform);
                     std::vector<glm::mat4> BoneToLocalTransforms;
-                    skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                    leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
                     glBindVertexArray(gizmoVAO);
                     // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
                     for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
@@ -813,7 +853,7 @@ int main(int argc, char *argv[])
                     skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
                     skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                     skinnedShaderSimple.setInt("src", 0);
-                    skinnedModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, camTexture.getTexture(), false);
+                    rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx);
                     /* with camera texture */
                     // skinnedShader.use();
                     // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
@@ -833,7 +873,7 @@ int main(int argc, char *argv[])
                     vcolorShader.setMat4("projection", flycam_projection_transform);
                     vcolorShader.setMat4("view", flycam_view_transform);
                     std::vector<glm::mat4> BoneToLocalTransforms;
-                    skinnedModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                    leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
                     glBindVertexArray(gizmoVAO);
                     // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
                     for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
@@ -856,7 +896,7 @@ int main(int argc, char *argv[])
                     skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
                     skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                     skinnedShaderSimple.setInt("src", 0);
-                    skinnedModel.Render(skinnedShaderSimple, bones_to_world_left, rotx, camTexture.getTexture(), false);
+                    leftHandModel.Render(skinnedShaderSimple, bones_to_world_left, rotx);
                     /* with camera texture */
                     // skinnedShader.use();
                     // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
@@ -914,9 +954,10 @@ int main(int argc, char *argv[])
                 textureShader.setMat4("projection", flycam_projection_transform);
                 textureShader.setMat4("view", flycam_view_transform);
                 textureShader.setMat4("model", glm::mat4(1.0f));
-                textureShader.setBool("binary", true);
+                textureShader.setBool("binary", false);
                 textureShader.setInt("src", 0);
-                camTexture.bind();
+                // camTexture.bind();
+                hands_fbo.getTexture().bind();
                 vprojNearQuad.render();
             }
             // draw projector output to near plane of vcam frustrum
@@ -928,7 +969,7 @@ int main(int argc, char *argv[])
                 textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
                 textureShader.setBool("binary", false);
                 textureShader.setInt("src", 0);
-                glBindTexture(GL_TEXTURE_2D, skinnedModel.m_fbo.getTexture());
+                camTexture.bind();
                 vcamNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, vcamNearQuad);
             }
             // draws text

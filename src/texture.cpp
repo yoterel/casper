@@ -16,6 +16,20 @@ Texture::Texture(GLenum TextureTarget)
     m_textureTarget = TextureTarget;
 }
 
+Texture::~Texture()
+{
+    if (m_textureObj != 0)
+    {
+        glDeleteTextures(1, &m_textureObj);
+        m_textureObj = 0;
+    }
+    if (m_PBO != 0)
+    {
+        glDeleteBuffers(1, &m_PBO);
+        m_PBO = 0;
+    }
+}
+
 bool Texture::init()
 {
     stbi_set_flip_vertically_on_load(1);
