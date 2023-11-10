@@ -175,6 +175,9 @@ target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/g
 target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
 # glm
 target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# assimp
+target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
+target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
 # stb
 target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 # freetype

@@ -12,6 +12,7 @@
 #include "camera.h"
 #include "display.h"
 #include "shader.h"
+#include "GLMhelpers.h"
 #include "timer.h"
 #include "quad.h"
 #include "text.h"
@@ -68,12 +69,19 @@ cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downsca
 cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
 cv::Mat curFrame_gray, prevFrame_gray;
 cv::Mat FBORender;
-std::vector<glm::vec3> screen_verts = {{-1.0f, 1.0f, 0.0f},
-                                       {-1.0f, -1.0f, 0.0f},
-                                       {1.0f, -1.0f, 0.0f},
-                                       {1.0f, 1.0f, 0.0f}};
+std::vector<glm::vec2> orig_screen_verts = {{-1.0f, 1.0f},
+                                            {-1.0f, -1.0f},
+                                            {1.0f, -1.0f},
+                                            {1.0f, 1.0f}};
+
+std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
+                                       {-1.0f, -1.0f},
+                                       {1.0f, -1.0f},
+                                       {1.0f, 1.0f}};
 bool dragging = false;
 int dragging_vert = 0;
+int closest_vert = 0;
+float min_dist = 100000.0f;
 
 int main(int argc, char *argv[])
 {
@@ -84,20 +92,22 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    // glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
-    GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
-    glfwMakeContextCurrent(window);
-    int secondary_screen_x, secondary_screen_y;
-    glfwGetMonitorPos(monitors[1], &secondary_screen_x, &secondary_screen_y);
-    glfwSetWindowPos(window, secondary_screen_x + 100, secondary_screen_y + 100);
+    GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL /*monitors[i] for full screen*/, NULL);
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return -1;
     }
+    glfwMakeContextCurrent(window);
+    int secondary_screen_x, secondary_screen_y;
+    glfwGetMonitorPos(monitors[1], &secondary_screen_x, &secondary_screen_y);
+    glfwSetWindowMonitor(window, NULL, secondary_screen_x + 100, secondary_screen_y + 100, proj_width, proj_height, GLFW_DONT_CARE);
+    glfwSetWindowMonitor(window, NULL, secondary_screen_x + 150, secondary_screen_y + 150, proj_width, proj_height, GLFW_DONT_CARE); // really glfw?
+    // glfwSetWindowPos(window, secondary_screen_x + 100, secondary_screen_y + 100);
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
@@ -142,6 +152,7 @@ int main(int argc, char *argv[])
     Shader canvasShader("../../src/shaders/canvas.vs", "../../src/shaders/canvas.fs");
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
+    Quad screen(orig_screen_verts);
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
@@ -197,7 +208,7 @@ int main(int argc, char *argv[])
         std::vector<cv::Mat> fake_cam_images;
         std::cout << "Using fake camera to produce images" << std::endl;
         producer_is_fake = true;
-        std::string file_path = "../../resource/XGA_rand.png";
+        std::string file_path = "../../resource/uv.png";
         cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
         cv::resize(img3, img3, cv::Size(cam_width, cam_height));
         cv::Mat img4;
@@ -297,30 +308,60 @@ int main(int argc, char *argv[])
 
         // render
         {
-            Quad screen(screen_verts);
+            std::vector<cv::Point2f> origpts, newpts;
+            for (int i = 0; i < 4; ++i)
+            {
+                origpts.push_back(cv::Point2f(orig_screen_verts[i].x, orig_screen_verts[i].y));
+                newpts.push_back(cv::Point2f(screen_verts[i].x, screen_verts[i].y));
+            }
+            cv::Mat1f hom = cv::getPerspectiveTransform(origpts, newpts);
+            cv::Mat1f perspective = cv::Mat::zeros(4, 4, CV_32F);
+            perspective.at<float>(0, 0) = hom.at<float>(0, 0);
+            perspective.at<float>(0, 1) = hom.at<float>(0, 1);
+            perspective.at<float>(0, 3) = hom.at<float>(0, 2);
+            perspective.at<float>(1, 0) = hom.at<float>(1, 0);
+            perspective.at<float>(1, 1) = hom.at<float>(1, 1);
+            perspective.at<float>(1, 3) = hom.at<float>(1, 2);
+            perspective.at<float>(3, 0) = hom.at<float>(2, 0);
+            perspective.at<float>(3, 1) = hom.at<float>(2, 1);
+            perspective.at<float>(3, 3) = hom.at<float>(2, 2);
+            for (int i = 0; i < 4; ++i)
+            {
+                cv::Vec4f cord = cv::Vec4f(orig_screen_verts[i].x, orig_screen_verts[i].y, 0.0f, 1.0f);
+                cv::Mat tmp = perspective * cv::Mat(cord);
+                screen_verts[i].x = tmp.at<float>(0, 0) / tmp.at<float>(3, 0);
+                screen_verts[i].y = tmp.at<float>(1, 0) / tmp.at<float>(3, 0);
+            }
+            // cv::Mat hom4x4 = cv::Mat::eye(4, 4, CV_32FC1);
+            // hom.copyTo(hom4x4(cv::Rect(0, 0, 3, 3)));
+            GLMHelpers::CV2GLM(perspective, &w2vp);
             textureShader.use();
-            textureShader.setMat4("view", glm::mat4(1.0f));
+            textureShader.setMat4("view", w2vp);
             textureShader.setMat4("projection", glm::mat4(1.0f));
             textureShader.setMat4("model", glm::mat4(1.0f));
-            textureShader.setBool("flipVer", false);
+            textureShader.setBool("flipVer", true);
             textureShader.setInt("src", 0);
             textureShader.setBool("binary", false);
             camTexture.bind();
             screen.render();
+            Quad tmp_screen(screen_verts);
+            textureShader.setMat4("view", glm::mat4(1.0f));
+            tmp_screen.render(false, true);
         }
         {
-            float text_spacing = 10.0f;
+            float text_spacing = 15.0f;
             double x;
             double y;
             glfwGetCursorPos(window, &x, &y);
-            glm::vec2 mouse_pos = glm::vec2(x, y);
+            glm::vec2 mouse_pos = glm::vec2((2.0f * x / proj_width) - 1.0f, -1.0f * ((2.0f * y / proj_height) - 1.0f));
             std::vector<std::string> texts_to_render = {
                 std::format("mouse x, y: {:.02f}, {:.02f}", mouse_pos.x, mouse_pos.y),
+                std::format("closest_vert: {}, min_dist vert: {:.03f}", closest_vert, min_dist),
                 std::format("modifiers : shift: {}, ctrl: {}, space: {}", shift_modifier ? "on" : "off", ctrl_modifier ? "on" : "off", space_modifier ? "on" : "off"),
             };
             for (int i = 0; i < texts_to_render.size(); ++i)
             {
-                text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
             }
         }
         // send result to projector queue
@@ -439,40 +480,13 @@ void processInput(GLFWwindow *window)
     }
 }
 
-// glfw: whenever the window size changed (by OS or user resize) this callback function executes
-// ---------------------------------------------------------------------------------------------
-// void framebuffer_size_callback(GLFWwindow *window, int width, int height)
-// {
-//     // make sure the viewport matches the new window dimensions; note that width and
-//     // height will be significantly larger than specified on retina displays.
-//     glViewport(0, 0, width, height);
-// }
-// glfw: whenever the mouse button gets pressed, this callback is called
-// ----------------------------------------------------------------------
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         if (dragging == false)
         {
-
-            double x;
-            double y;
-            glfwGetCursorPos(window, &x, &y);
-            int closest_vert = 0;
-            float min_dist = 100000.0f;
-            for (int i = 0; i < screen_verts.size(); i++)
-            {
-                glm::vec3 v = screen_verts[i];
-                glm::vec3 mouse_pos = glm::vec3((2.0f * x / proj_width) - 1.0f, (2.0f * y / proj_height) - 1.0f, 0.0f);
-                float dist = glm::distance(v, mouse_pos);
-                if (dist < min_dist)
-                {
-                    min_dist = dist;
-                    closest_vert = i;
-                }
-            }
-            if (min_dist < 0.3f)
+            if (min_dist < 1.0f)
             {
                 dragging = true;
                 dragging_vert = closest_vert;
@@ -495,11 +509,25 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 // -------------------------------------------------------
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
-    float xpos = static_cast<float>(xposIn);
-    float ypos = static_cast<float>(yposIn);
+    float x = static_cast<float>(xposIn);
+    float y = static_cast<float>(yposIn);
+    glm::vec2 mouse_pos = glm::vec2((2.0f * x / proj_width) - 1.0f, -1.0f * ((2.0f * y / proj_height) - 1.0f));
+    float cur_min_dist = 100.0f;
+    for (int i = 0; i < screen_verts.size(); i++)
+    {
+        glm::vec2 v = glm::vec2(screen_verts[i]);
+
+        float dist = glm::distance(v, mouse_pos);
+        if (dist < cur_min_dist)
+        {
+            cur_min_dist = dist;
+            closest_vert = i;
+        }
+    }
+    min_dist = cur_min_dist;
     if (dragging)
     {
-        screen_verts[dragging_vert].x = (2.0f * xpos / proj_width) - 1.0f;
-        screen_verts[dragging_vert].y = (2.0f * ypos / proj_height) - 1.0f;
+        screen_verts[dragging_vert].x = mouse_pos.x;
+        screen_verts[dragging_vert].y = mouse_pos.y;
     }
 }

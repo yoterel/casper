@@ -17,7 +17,7 @@
 */
 
 #include "skinned_model.h"
-#include "assimp_helpers.h"
+#include "GLMhelpers.h"
 #include <filesystem>
 
 void SkinnedModel::Clear()
@@ -53,7 +53,7 @@ bool SkinnedModel::LoadMesh(const std::string &Filename)
 
     if (pScene)
     {
-        m_GlobalInverseTransform = AssimpGLMHelpers::ConvertMatrixToGLMFormat(pScene->mRootNode->mTransformation);
+        m_GlobalInverseTransform = GLMHelpers::ConvertMatrixToGLMFormat(pScene->mRootNode->mTransformation);
         m_GlobalInverseTransform = glm::inverse(m_GlobalInverseTransform);
         Ret = InitFromScene(pScene, Filename);
     }
@@ -239,7 +239,7 @@ void SkinnedModel::LoadSingleBone(unsigned int MeshIndex, const aiBone *pBone)
 
     if (BoneId == m_BoneInfo.size())
     {
-        BoneInfo bi(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pBone->mOffsetMatrix));
+        BoneInfo bi(GLMHelpers::ConvertMatrixToGLMFormat(pBone->mOffsetMatrix));
         m_BoneInfo.push_back(bi);
     }
 
@@ -648,7 +648,7 @@ void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4> &Tran
     Transforms.resize(m_BoneInfo.size());
     aiNode *pNode = pScene->mRootNode;
     std::string NodeName(pNode->mName.data);
-    glm::mat4 NodeTransformation(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
+    glm::mat4 NodeTransformation(GLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
     // glm::mat4 GlobalTransformation = ParentTransform * NodeTransformation;
     if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end())
     {
@@ -694,7 +694,7 @@ void SkinnedModel::ReadNodeHierarchy(const aiNode *pNode, const glm::mat4 &Paren
     // if the mesh is in bind pose, this is expected to set all FinalTransformation to identity
     // because mTransformation is child to parent transform (e.g. bone to local for root), and local to bone cancles it out.
     std::string NodeName(pNode->mName.data);
-    glm::mat4 NodeTransformation(AssimpGLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
+    glm::mat4 NodeTransformation(GLMHelpers::ConvertMatrixToGLMFormat(pNode->mTransformation));
     glm::mat4 GlobalTransformation = ParentTransform * NodeTransformation;
     if (m_BoneNameToIndexMap.find(NodeName) != m_BoneNameToIndexMap.end())
     {

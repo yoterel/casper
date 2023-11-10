@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SKINNED_MODEL_H
+#define SKINNED_MODEL_H
 
 #include <map>
 #include <vector>
@@ -11,7 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "texture.h"
-#include "assimp_helpers.h"
+#include "GLMhelpers.h"
 #include "material.h"
 #include "skinned_shader.h"
 #include "fbo.h"
@@ -197,3 +198,4 @@ private:
     std::vector<BoneInfo> m_BoneInfo; // per bone info
     glm::mat4 m_GlobalInverseTransform;
 };
+#endif
