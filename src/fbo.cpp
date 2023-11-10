@@ -4,10 +4,11 @@
 #include <vector>
 #include "stb_image_write.h"
 
-FBO::FBO(unsigned int width, unsigned int height, unsigned int channels) : m_width(width), m_height(height), m_channels(channels)
+FBO::FBO(unsigned int width, unsigned int height, unsigned int channels) : m_width(width), m_height(height), m_channels(channels), m_texture()
 {
     init();
 }
+
 FBO::~FBO()
 {
     if (m_depthBuffer != 0)
@@ -20,50 +21,46 @@ FBO::~FBO()
         glDeleteFramebuffers(1, &m_FBO);
         // m_FBO = {0};
     }
-    if (m_texture != 0)
-    {
-        glDeleteTextures(1, &m_texture);
-        // m_texture_dst = 0;
-    }
 }
 
 void FBO::init()
 {
-    glGenTextures(1, &m_texture);
+    m_texture.init(m_width, m_height, m_channels);
+    // glGenTextures(1, &m_texture);
     glGenRenderbuffers(1, &m_depthBuffer);
     glGenFramebuffers(1, &m_FBO);
 
-    glBindTexture(GL_TEXTURE_2D, m_texture);
-    //  set the texture wrapping parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    //  set texture filtering parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // glBindTexture(GL_TEXTURE_2D, m_texture);
+    // //  set the texture wrapping parameters
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    // //  set texture filtering parameters
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    if (m_channels == 4)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-    }
-    else
-    {
-        if (m_channels == 3)
-        {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
-        }
-        else
-        {
-            if (m_channels == 2)
-            {
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RG, m_width, m_height, 0, GL_RG, GL_FLOAT, 0);
-            }
-            else
-            {
-                std::cout << "FBO ERROR: Unsupported number of channels." << std::endl;
-                exit(1);
-            }
-        }
-    }
+    // if (m_channels == 4)
+    // {
+    //     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    // }
+    // else
+    // {
+    //     if (m_channels == 3)
+    //     {
+    //         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    //     }
+    //     else
+    //     {
+    //         if (m_channels == 2)
+    //         {
+    //             glTexImage2D(GL_TEXTURE_2D, 0, GL_RG, m_width, m_height, 0, GL_RG, GL_FLOAT, 0);
+    //         }
+    //         else
+    //         {
+    //             std::cout << "FBO ERROR: Unsupported number of channels." << std::endl;
+    //             exit(1);
+    //         }
+    //     }
+    // }
 
     glBindRenderbuffer(GL_RENDERBUFFER, m_depthBuffer);
     //  allocate storage
@@ -72,7 +69,7 @@ void FBO::init()
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture.getTexture(), 0);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthBuffer);
 
     GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);

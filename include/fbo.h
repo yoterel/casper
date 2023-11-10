@@ -2,6 +2,8 @@
 #define FBO_H
 #include <string>
 #include <opencv2/opencv.hpp>
+#include "texture.h"
+
 class FBO
 {
 public:
@@ -14,11 +16,12 @@ public:
     void unbind();
     void saveColorToFile(std::string filepath);
     cv::Mat toOpenCVMat();
-    unsigned int getTexture() { return m_texture; };
+    Texture getTexture() { return m_texture; };
 
 private:
     unsigned int m_width, m_height, m_channels;
-    unsigned int m_texture = 0; // todo: change to texture class
+    // unsigned int m_texture = 0; // todo: change to texture class
+    Texture m_texture;
     unsigned int m_depthBuffer = 0;
     unsigned int m_FBO = 0;
 };

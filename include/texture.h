@@ -12,6 +12,7 @@ public:
 
     Texture(GLenum TextureTarget = GL_TEXTURE_2D);
 
+    ~Texture();
     // Should be called once to load the texture
     bool init();
 

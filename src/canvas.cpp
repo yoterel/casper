@@ -70,7 +70,7 @@ unsigned int Canvas::renderToFBO(Shader &shader, Quad &quad)
     m_fbo.bind();
     quad.render();
     m_fbo.unbind();
-    return m_fbo.getTexture();
+    return m_fbo.getTexture().getTexture();
 }
 
 unsigned int Canvas::renderToFBO(unsigned int tex, Shader &shader, Quad &quad)
@@ -85,7 +85,7 @@ unsigned int Canvas::renderToFBO(unsigned int tex, Shader &shader, Quad &quad)
     m_fbo.unbind();
     glBindTexture(GL_TEXTURE_2D, 0);
     // m_fbo.saveColorToFile("test.png");
-    return m_fbo.getTexture();
+    return m_fbo.getTexture().getTexture();
 }
 
 void Canvas::renderTexture(unsigned int tex, Shader &shader, Quad &quad)
