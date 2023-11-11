@@ -412,19 +412,20 @@ int main(int argc, char *argv[])
         producer_is_fake = true;
         std::string path = "../../resource/hand_capture";
         std::vector<cv::Mat> fake_cam_images;
-        int file_counter = 0;
-        for (const auto &entry : fs::directory_iterator(path))
-        {
-            std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
-            std::string file_path = entry.path().string();
-            cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
-            cv::Mat img4;
-            cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
-            fake_cam_images.push_back(img4);
-            file_counter++;
-        }
-        // cam_height = 540;
-        // cam_width = 720;
+        // white image
+        fake_cam_images.push_back(white_image);
+        // images from folder
+        // int file_counter = 0;
+        // for (const auto &entry : fs::directory_iterator(path))
+        // {
+        //     std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
+        //     std::string file_path = entry.path().string();
+        //     cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
+        //     cv::Mat img4;
+        //     cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
+        //     fake_cam_images.push_back(img4);
+        //     file_counter++;
+        // }
         producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
             // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
             Timer t_block;
@@ -483,8 +484,8 @@ int main(int argc, char *argv[])
         {
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
-            double tpbo, ttex, tproc;
-            canvas.getTimerValues(tpbo, ttex, tproc);
+            // double tpbo, ttex, tproc;
+            // canvas.getTimerValues(tpbo, ttex, tproc);
             std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
             std::cout << "total app time: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
             std::cout << "misc time: " << t_misc.averageLapInMilliSec() << std::endl;
@@ -492,9 +493,10 @@ int main(int argc, char *argv[])
             std::cout << "leap frame time: " << t1.averageLapInMilliSec() << std::endl;
             std::cout << "skinning time: " << t2.averageLapInMilliSec() << std::endl;
             std::cout << "debug info: " << t_debug.averageLapInMilliSec() << std::endl;
-            std::cout << "canvas pbo time: " << tpbo << std::endl;
-            std::cout << "canvas tex transfer time: " << ttex << std::endl;
-            std::cout << "canvas process time: " << tproc << std::endl;
+            std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
+            // std::cout << "canvas pbo time: " << tpbo << std::endl;
+            // std::cout << "canvas tex transfer time: " << ttex << std::endl;
+            // std::cout << "canvas process time: " << tproc << std::endl;
             std::cout << "swap buffers time: " << t3.averageLapInMilliSec() << std::endl;
             std::cout << "GPU->CPU time: " << t4.averageLapInMilliSec() << std::endl;
             // std::cout << "project time: " << t4.averageLap() << std::endl;
@@ -666,23 +668,23 @@ int main(int argc, char *argv[])
         t2.stop();
         /* post process fbo using camera input */
         t_pp.start();
-        if (!debug_mode)
-        {
-            // skinnedModel.m_fbo.saveColorToFile("test1.png");
-            // canvasShader.use();
-            // canvasShader.setBool("binary", false);
-            // canvasShader.setBool("flipVer", false);
-            // canvasShader.setInt("src", 0);
-            // canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
-            projectorOnlyShader.use();
-            projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-            projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
-            projectorOnlyShader.setBool("binary", true);
-            projectorOnlyShader.setBool("src", 0);
-            /* render hand with jfa */
-            // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
-            // canvas.render(jfaInitShader, jfaShader, fastTrackerShader, skinnedModel.m_fbo.getTexture(), warped_cam, true);
-        }
+        // if (!debug_mode)
+        // {
+        // skinnedModel.m_fbo.saveColorToFile("test1.png");
+        // canvasShader.use();
+        // canvasShader.setBool("binary", false);
+        // canvasShader.setBool("flipVer", false);
+        // canvasShader.setInt("src", 0);
+        // canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
+        // projectorOnlyShader.use();
+        // projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+        // projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+        // projectorOnlyShader.setBool("binary", true);
+        // projectorOnlyShader.setBool("src", 0);
+        /* render hand with jfa */
+        // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
+        canvas.render(jfaInitShader, jfaShader, fastTrackerShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), true);
+        // }
         t_pp.stop();
         // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
 
