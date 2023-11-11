@@ -657,7 +657,7 @@ int main(int argc, char *argv[])
             skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
             skinnedShaderSimple.setInt("src", 0);
-            hands_fbo.bind(false);
+            hands_fbo.bind(bones_to_world_right.size() == 0);
             glEnable(GL_DEPTH_TEST);
             leftHandModel.Render(skinnedShaderSimple, bones_to_world_left, rotx);
             hands_fbo.unbind();
@@ -957,7 +957,7 @@ int main(int argc, char *argv[])
                 textureShader.setBool("binary", false);
                 textureShader.setInt("src", 0);
                 // camTexture.bind();
-                hands_fbo.getTexture().bind();
+                hands_fbo.getTexture()->bind();
                 vprojNearQuad.render();
             }
             // draw projector output to near plane of vcam frustrum

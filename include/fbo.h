@@ -16,7 +16,7 @@ public:
     void unbind();
     void saveColorToFile(std::string filepath);
     cv::Mat toOpenCVMat();
-    Texture getTexture() { return m_texture; };
+    Texture *getTexture() { return &m_texture; };
 
 private:
     unsigned int m_width, m_height, m_channels;
