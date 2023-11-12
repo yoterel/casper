@@ -23,9 +23,9 @@ FBO::~FBO()
     }
 }
 
-void FBO::init()
+void FBO::init(unsigned int input_color_format, unsigned int texture_color_format)
 {
-    m_texture.init(m_width, m_height, m_channels);
+    m_texture.init(m_width, m_height, m_channels, input_color_format, texture_color_format);
     // glGenTextures(1, &m_texture);
     glGenRenderbuffers(1, &m_depthBuffer);
     glGenFramebuffers(1, &m_FBO);

@@ -62,13 +62,13 @@ bool Texture::init(void *pData, uint32_t bufferSize)
     return true;
 }
 
-void Texture::init(int width, int height, int bpp)
+void Texture::init(int width, int height, int bpp, unsigned int input_color_format, unsigned int texture_color_format)
 {
     m_imageWidth = width;
     m_imageHeight = height;
     m_imageBPP = bpp;
     m_sizeTexData = sizeof(GLubyte) * m_imageWidth * m_imageHeight * m_imageBPP;
-    initInternal(NULL);
+    initInternal(NULL, input_color_format, texture_color_format);
 }
 
 void Texture::initRaw(unsigned char *pData, int width, int height, int bpp)
@@ -81,7 +81,7 @@ void Texture::initRaw(unsigned char *pData, int width, int height, int bpp)
     load(pData, false);
 }
 
-void Texture::initInternal(void *image_data, unsigned int color_format)
+void Texture::initInternal(void *image_data, unsigned int input_color_format, unsigned int texture_color_format)
 {
     // pbo
     void *data = malloc(m_sizeTexData);
@@ -117,7 +117,7 @@ void Texture::initInternal(void *image_data, unsigned int color_format)
             glTexImage2D(m_textureTarget, 0, GL_RGB, m_imageWidth, m_imageHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, image_data);
             break;
         case 4:
-            glTexImage2D(m_textureTarget, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, color_format, GL_UNSIGNED_BYTE, image_data);
+            glTexImage2D(m_textureTarget, 0, texture_color_format, m_imageWidth, m_imageHeight, 0, input_color_format, GL_UNSIGNED_BYTE, image_data);
             break;
 
         default:

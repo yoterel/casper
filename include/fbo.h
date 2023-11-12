@@ -11,7 +11,7 @@ public:
     ~FBO();
     FBO(const FBO &) = delete;
     FBO &operator=(const FBO &) = delete;
-    void init();
+    void init(unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
     void bind(bool clear = true);
     void unbind();
     void saveColorToFile(std::string filepath);

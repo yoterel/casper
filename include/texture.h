@@ -20,7 +20,7 @@ public:
 
     bool init(void *pData, uint32_t bufferSize);
 
-    void init(int width, int height, int bpp = 4);
+    void init(int width, int height, int bpp = 4, unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
 
     void initRaw(unsigned char *pData, int width, int height, int bpp = 4);
 
@@ -38,7 +38,7 @@ public:
     GLuint getTexture() const { return m_textureObj; }
 
 private:
-    void initInternal(void *image_data, unsigned int color_format = GL_BGRA);
+    void initInternal(void *image_data, unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
 
     std::string m_fileName;
     GLenum m_textureTarget;

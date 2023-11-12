@@ -6,6 +6,7 @@
 #include <assimp/matrix4x4.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <opencv2/opencv.hpp>
 
 class GLMHelpers

@@ -78,6 +78,7 @@ add_executable(ahand
     src/skinned_model.cpp
     src/skinned_shader.cpp
     src/canvas.cpp
+    src/post_process.cpp
     src/utils.cpp
     src/cuda/cuda2gl.cu
     src/image_process.cpp

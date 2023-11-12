@@ -20,6 +20,7 @@
 #include "leap.h"
 #include "text.h"
 #include "canvas.h"
+#include "post_process.h"
 #include "utils.h"
 #include "cnpy.h"
 #include "image_process.h"
@@ -131,7 +132,7 @@ int main(int argc, char *argv[])
         std::cout << "Poll mode is on" << std::endl;
         poll_mode = true;
     }
-    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug, t_pp, t_debug2;
+    Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_debug2;
     t_app.start();
     /* init GLFW */
     glfwInit();
@@ -212,7 +213,14 @@ int main(int argc, char *argv[])
                                 cam_width, cam_height);
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
-    Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
+    // Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
+    PostProcess postProcess(cam_width, cam_height, proj_width, proj_height);
+    Quad fullScreenQuad(0.0f);
+    std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
+                                           {-1.0f, -1.0f},
+                                           {1.0f, -1.0f},
+                                           {1.0f, 1.0f}};
+    glm::mat4 c2p_homography = postProcess.findHomography(screen_verts);
     glm::vec3 coa = leftHandModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
 
@@ -260,7 +268,10 @@ int main(int argc, char *argv[])
          {0.0f, 1.5f, -1.0f},
          {1.0f, 1.0f, -1.0f}}};
     FBO hands_fbo(proj_width, proj_height);
+    FBO postprocess_fbo(proj_width, proj_height);
+    FBO c2p_fbo(proj_width, proj_height);
     /* setup shaders*/
+    Shader NNShader("../../src/shaders/NN_shader.vs", "../../src/shaders/NN_shader.fs");
     Shader jfaInitShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa_init.fs");
     Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
     Shader fastTrackerShader("../../src/shaders/fast_tracker.vs", "../../src/shaders/fast_tracker.fs");
@@ -438,7 +449,7 @@ int main(int argc, char *argv[])
                     counter++;
                 else
                     counter = 0;
-                while (t_block.getElapsedTimeInMicroSec() < 1000.0)
+                while (t_block.getElapsedTimeInMilliSec() < 2.0)
                 {
                 }
                 t_block.stop();
@@ -484,35 +495,30 @@ int main(int argc, char *argv[])
         {
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
-            // double tpbo, ttex, tproc;
-            // canvas.getTimerValues(tpbo, ttex, tproc);
             std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
-            std::cout << "total app time: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
-            std::cout << "misc time: " << t_misc.averageLapInMilliSec() << std::endl;
-            std::cout << "wait for cam time: " << t0.averageLapInMilliSec() << std::endl;
-            std::cout << "leap frame time: " << t1.averageLapInMilliSec() << std::endl;
-            std::cout << "skinning time: " << t2.averageLapInMilliSec() << std::endl;
+            std::cout << "total app: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
+            std::cout << "misc: " << t_misc.averageLapInMilliSec() << std::endl;
+            std::cout << "cam: " << t_camera.averageLapInMilliSec() << std::endl;
+            std::cout << "leap: " << t_leap.averageLapInMilliSec() << std::endl;
+            std::cout << "skinning: " << t_skin.averageLapInMilliSec() << std::endl;
             std::cout << "debug info: " << t_debug.averageLapInMilliSec() << std::endl;
             std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
-            // std::cout << "canvas pbo time: " << tpbo << std::endl;
-            // std::cout << "canvas tex transfer time: " << ttex << std::endl;
-            // std::cout << "canvas process time: " << tproc << std::endl;
-            std::cout << "swap buffers time: " << t3.averageLapInMilliSec() << std::endl;
-            std::cout << "GPU->CPU time: " << t4.averageLapInMilliSec() << std::endl;
+            std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
+            std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
+            std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
             // std::cout << "project time: " << t4.averageLap() << std::endl;
             std::cout << "cam q1 size: " << camera_queue.size() << std::endl;
             std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
             std::cout << "proj q size: " << projector_queue.size() << std::endl;
             frameCount = 0;
             previousSecondAppTime = currentAppTime;
-            t0.reset();
-            t1.reset();
-            t2.reset();
-            t3.reset();
-            t4.reset();
-            t5.reset();
+            t_camera.reset();
+            t_leap.reset();
+            t_skin.reset();
+            t_swap.reset();
+            t_download.reset();
+            t_warp.reset();
             t_misc.reset();
-            canvas.resetTimers();
             t_pp.reset();
             t_debug.reset();
         }
@@ -522,7 +528,7 @@ int main(int argc, char *argv[])
         t_misc.stop();
 
         /* deal with camera input */
-        t0.start();
+        t_camera.start();
         // prevFrame = curFrame.clone();
         uint8_t *buffer;
         if (producer_is_fake)
@@ -555,10 +561,10 @@ int main(int argc, char *argv[])
         // cv::Point minLoc;
         // cv::Point maxLoc;
         // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
-        t0.stop();
+        t_camera.stop();
 
         /* deal with leap input */
-        t1.start();
+        t_leap.start();
         if (!poll_mode)
         {
             // sync leap clock
@@ -599,10 +605,6 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        else
-        {
-            // ?
-        }
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
         glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
@@ -611,7 +613,7 @@ int main(int argc, char *argv[])
         glm::mat4 vproj_projection_transform = gl_projector.getProjectionMatrix();
         glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
         glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
-        t1.stop();
+        t_leap.stop();
         /* render warped cam image */
         // projectorOnlyShader.use();
         // projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
@@ -621,7 +623,7 @@ int main(int argc, char *argv[])
         // canvas.renderTexture(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
 
         /* skin hand mesh with leap input */
-        t2.start();
+        t_skin.start();
         if (bones_to_world_right.size() > 0)
         {
             /* render skinned mesh to fbo, in camera space*/
@@ -665,7 +667,7 @@ int main(int argc, char *argv[])
             hands_fbo.unbind();
             glDisable(GL_DEPTH_TEST);
         }
-        t2.stop();
+        t_skin.stop();
         /* post process fbo using camera input */
         t_pp.start();
         // if (!debug_mode)
@@ -683,9 +685,22 @@ int main(int argc, char *argv[])
         // projectorOnlyShader.setBool("src", 0);
         /* render hand with jfa */
         // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
-        canvas.render(jfaInitShader, jfaShader, fastTrackerShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), true);
+        postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo);
+        c2p_fbo.bind();
+        textureShader.use();
+        textureShader.setMat4("view", glm::mat4(1.0f));
+        textureShader.setMat4("projection", c2p_homography);
+        textureShader.setMat4("model", glm::mat4(1.0f));
+        textureShader.setBool("flipVer", true);
+        textureShader.setInt("src", 0);
+        textureShader.setBool("binary", false);
+        postprocess_fbo.getTexture()->bind();
+        fullScreenQuad.render();
+        c2p_fbo.unbind();
+
         // }
         t_pp.stop();
+
         // saveImage("test2.png", skinnedModel.m_fbo.getTexture(), proj_width, proj_height, canvasShader);
 
         // canvas.Render(canvasShader, buffer);
@@ -698,9 +713,21 @@ int main(int argc, char *argv[])
         // }
 
         /* debug mode renders*/
-        t_debug.start();
-        if (debug_mode)
+        if (!debug_mode)
         {
+            textureShader.use();
+            textureShader.setBool("flipVer", false);
+            textureShader.setMat4("projection", glm::mat4(1.0f));
+            textureShader.setMat4("view", glm::mat4(1.0f));
+            textureShader.setMat4("model", glm::mat4(1.0f));
+            textureShader.setBool("binary", false);
+            textureShader.setInt("src", 0);
+            c2p_fbo.getTexture()->bind();
+            fullScreenQuad.render();
+        }
+        else
+        {
+            t_debug.start();
             // setup some vertices
             std::vector<glm::vec3> near_frustrum = {{-1.0f, 1.0f, -1.0f},
                                                     {-1.0f, -1.0f, -1.0f},
@@ -959,11 +986,14 @@ int main(int argc, char *argv[])
                 textureShader.setBool("binary", false);
                 textureShader.setInt("src", 0);
                 // camTexture.bind();
-                hands_fbo.getTexture()->bind();
+                // glBindTexture(GL_TEXTURE_2D, resTexture);
+                postprocess_fbo.getTexture()->bind();
+                // hands_fbo.getTexture()->bind();
                 vprojNearQuad.render();
             }
             // draw projector output to near plane of vcam frustrum
             {
+                t_warp.start();
                 textureShader.use();
                 textureShader.setBool("flipVer", false);
                 textureShader.setMat4("projection", flycam_projection_transform);
@@ -971,8 +1001,9 @@ int main(int argc, char *argv[])
                 textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
                 textureShader.setBool("binary", false);
                 textureShader.setInt("src", 0);
-                camTexture.bind();
+                c2p_fbo.getTexture()->bind();
                 vcamNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, vcamNearQuad);
+                t_warp.stop();
             }
             // draws text
             {
@@ -1001,10 +1032,10 @@ int main(int argc, char *argv[])
         glReadBuffer(GL_FRONT);
         if (use_pbo) // something fishy going on here. using pbo collapses program after a while
         {
-            t4.start();
+            t_download.start();
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
-            t4.stop();
+            t_download.stop();
 
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(frameCount + 1) % 2]);
             GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
@@ -1021,9 +1052,9 @@ int main(int argc, char *argv[])
         }
         else
         {
-            t4.start();
+            t_download.start();
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
-            t4.stop();
+            t_download.stop();
             // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
             projector_queue.push(colorBuffer);
         }
@@ -1039,10 +1070,10 @@ int main(int argc, char *argv[])
         // stride += (stride % 4) ? (4 - stride % 4) : 0;
         // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
         // swap buffers and poll IO events
-        t3.start();
+        t_swap.start();
         glfwSwapBuffers(window);
         glfwPollEvents();
-        t3.stop();
+        t_swap.stop();
     }
     // cleanup
     close_signal = true;

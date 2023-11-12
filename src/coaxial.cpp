@@ -357,6 +357,10 @@ int main(int argc, char *argv[])
             std::vector<std::string> texts_to_render = {
                 std::format("mouse x, y: {:.02f}, {:.02f}", mouse_pos.x, mouse_pos.y),
                 std::format("closest_vert: {}, min_dist vert: {:.03f}", closest_vert, min_dist),
+                std::format("screen vert 0: {:.04f}, {:.04f}", screen_verts[0].x, screen_verts[1].y),
+                std::format("screen vert 1: {:.04f}, {:.04f}", screen_verts[1].x, screen_verts[1].y),
+                std::format("screen vert 2: {:.04f}, {:.04f}", screen_verts[2].x, screen_verts[2].y),
+                std::format("screen vert 3: {:.04f}, {:.04f}", screen_verts[3].x, screen_verts[3].y),
                 std::format("modifiers : shift: {}, ctrl: {}, space: {}", shift_modifier ? "on" : "off", ctrl_modifier ? "on" : "off", space_modifier ? "on" : "off"),
             };
             for (int i = 0; i < texts_to_render.size(); ++i)
