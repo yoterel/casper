@@ -184,6 +184,46 @@ target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-pa
 # freetype
 target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
 target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
+
+####################################### leap->proejctor calibration
+add_executable(leap_calib 
+    src/calibration.cpp
+    src/display
+    src/camera.cpp
+    src/timer.cpp
+    src/texture.cpp
+    src/quad.cpp
+    src/text.cpp
+    src/fbo.cpp
+    src/leap.cpp
+    third-party/glad${GLAD_VER}/src/glad.c
+)
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# pylon
+target_link_libraries(leap_calib PRIVATE pylon::pylon)
+# opencv
+target_link_libraries(leap_calib PRIVATE ${OpenCV_LIBS})
+# dynaflash
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+# GLFW
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# GLAD
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# glm
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# assimp
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
+target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
+# stb
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# freetype
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
+target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
+# leap
+target_link_libraries(leap_calib PRIVATE LeapSDK::LeapC)
+
 ######################################### cuda sample program
 # add_executable(cuda_example 
 #     # src/add.cu
