@@ -19,6 +19,7 @@
 #include "leap.h"
 #include "text.h"
 #include "post_process.h"
+#include "point_cloud.h"
 #include "utils.h"
 #include "image_process.h"
 #include "stb_image_write.h"
@@ -28,6 +29,7 @@ namespace fs = std::filesystem;
 // forward declarations
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void processInput(GLFWwindow *window);
 LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world_left, std::vector<glm::mat4> &bones_to_world_right, std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
@@ -58,6 +60,8 @@ float lastY = proj_height / 2.0f;
 bool firstMouse = true;
 float deltaTime = 0.0f;
 glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
+std::vector<glm::vec2> screen_vert = {{0.5f, 0.5f}};
+std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
 unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
@@ -66,18 +70,13 @@ bool space_modifier = false;
 bool shift_modifier = false;
 bool ctrl_modifier = false;
 unsigned int n_bones = 0;
+int state_machine = 0;
+bool dragging = false;
 float screen_z = -10.0f;
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC4, cv::Scalar(255, 255, 255, 255));
-cv::Mat curFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-cv::Mat prevFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-float downscale_factor = 2.0f;
-cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
-cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
-cv::Mat curFrame_gray, prevFrame_gray;
-cv::Mat FBORender;
 
 int main(int argc, char *argv[])
 {
@@ -121,20 +120,17 @@ int main(int argc, char *argv[])
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback); // callback for resizing
     glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_TRUE);
     Quad fullScreenQuad(0.0f);
     Timer t_app;
-    std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
-                                           {-1.0f, -1.0f},
-                                           {1.0f, -1.0f},
-                                           {1.0f, 1.0f}};
     Text text("../../resource/arial.ttf");
     FBO hands_fbo(proj_width, proj_height);
     FBO postprocess_fbo(proj_width, proj_height);
     /* setup shaders*/
     Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
+    Shader vertexShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
@@ -268,6 +264,7 @@ int main(int argc, char *argv[])
         else
         {
             CPylonImage pylonImage = camera_queue.pop();
+            auto test = pylonImage.GetImageSize();
             buffer = (uint8_t *)pylonImage.GetBuffer();
         }
         // cv::Mat tmp(cam_height, cam_width, CV_8UC4, buffer);
@@ -276,6 +273,29 @@ int main(int argc, char *argv[])
 
         // render
         {
+            if (state_machine == 0)
+            {
+                textureShader.use();
+                textureShader.setMat4("view", glm::mat4(1.0f));
+                textureShader.setMat4("projection", glm::mat4(1.0f));
+                textureShader.setMat4("model", glm::mat4(1.0f));
+                textureShader.setBool("flipVer", true);
+                textureShader.setInt("src", 0);
+                textureShader.setBool("binary", false);
+                camTexture.bind();
+                fullScreenQuad.render();
+                double x;
+                double y;
+                glfwGetCursorPos(window, &x, &y);
+                glm::vec2 mouse_pos = glm::vec2((2.0f * x / proj_width) - 1.0f, -1.0f * ((2.0f * y / proj_height) - 1.0f));
+                vertexShader.use();
+                vertexShader.setMat4("view", glm::mat4(1.0f));
+                vertexShader.setMat4("projection", glm::mat4(1.0f));
+                vertexShader.setMat4("model", glm::mat4(1.0f));
+                // pointShader.setVec2("mouse_pos", mouse_pos);
+                PointCloud pointCloud(screen_vert, screen_vert_color);
+                pointCloud.render();
+            }
             // LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
             // display projector screen, where mouse can control the projector output
             // display the leap camera images side by side, where mouse can control where to mark
@@ -322,6 +342,10 @@ int main(int argc, char *argv[])
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE)
+    {
+        state_machine += 1;
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -333,25 +357,32 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+{
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        if (dragging == false)
+        {
+            dragging = true;
+        }
+    }
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
+    {
+        dragging = false;
+    }
+}
 // glfw: whenever the mouse moves, this callback is called
 // -------------------------------------------------------
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
-    float xpos = static_cast<float>(xposIn);
-    float ypos = static_cast<float>(yposIn);
-
-    if (firstMouse)
+    float x = static_cast<float>(xposIn);
+    float y = static_cast<float>(yposIn);
+    glm::vec2 mouse_pos = glm::vec2((2.0f * x / proj_width) - 1.0f, -1.0f * ((2.0f * y / proj_height) - 1.0f));
+    if (dragging)
     {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
+        screen_vert[0].x = mouse_pos.x;
+        screen_vert[0].y = mouse_pos.y;
     }
-
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-
-    lastX = xpos;
-    lastY = ypos;
 }
 
 LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,

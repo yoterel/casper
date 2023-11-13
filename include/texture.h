@@ -27,7 +27,7 @@ public:
     // Must be called at least once for the specific texture unit
     void bind(GLenum TextureUnit = GL_TEXTURE0);
 
-    void load(uint8_t *buffer, bool use_pbo = true);
+    void load(uint8_t *buffer, bool use_pbo = true, unsigned int buffer_color_format = GL_BGRA);
 
     void getImageSize(int &ImageWidth, int &ImageHeight)
     {

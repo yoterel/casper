@@ -134,7 +134,7 @@ void Texture::initInternal(void *image_data, unsigned int input_color_format, un
     glBindTexture(m_textureTarget, 0);
 }
 
-void Texture::load(uint8_t *buffer, bool use_pbo)
+void Texture::load(uint8_t *buffer, bool use_pbo, unsigned int buffer_color_format)
 {
     if (use_pbo)
     {
@@ -148,13 +148,13 @@ void Texture::load(uint8_t *buffer, bool use_pbo)
             glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
         }
         glBindTexture(m_textureTarget, m_textureObj);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_imageWidth, m_imageHeight, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_imageWidth, m_imageHeight, buffer_color_format, GL_UNSIGNED_BYTE, 0);
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     }
     else
     {
         glBindTexture(GL_TEXTURE_2D, m_textureObj);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_imageWidth, m_imageHeight, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_imageWidth, m_imageHeight, buffer_color_format, GL_UNSIGNED_BYTE, buffer);
     }
 }
 
