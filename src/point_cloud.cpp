@@ -19,6 +19,7 @@ PointCloud::PointCloud(std::vector<glm::vec3> &vertices, std::vector<glm::vec3> 
         verts.push_back(colors[i].y);
         verts.push_back(colors[i].z);
     }
+    m_verts = vertices.size();
     this->init(verts);
 }
 PointCloud::PointCloud(std::vector<glm::vec2> &vertices, std::vector<glm::vec3> &colors)
@@ -38,6 +39,7 @@ PointCloud::PointCloud(std::vector<glm::vec2> &vertices, std::vector<glm::vec3> 
         verts.push_back(colors[i].y);
         verts.push_back(colors[i].z);
     }
+    m_verts = vertices.size();
     this->init(verts);
 }
 
@@ -81,7 +83,7 @@ void PointCloud::render()
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glBindVertexArray(m_VAO);
-    glDrawArrays(GL_POINTS, 0, 6);
+    glDrawArrays(GL_POINTS, 0, m_verts);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);

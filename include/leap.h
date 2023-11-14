@@ -33,7 +33,7 @@ enum class LEAP_STATUS
 class LeapConnect
 {
 public:
-    LeapConnect()
+    LeapConnect(bool pollMode = true, bool with_images = false)
     {
         OpenConnection();
         while (!IsConnected)
@@ -41,8 +41,14 @@ public:
             std::cout << "Leap: waiting for connection..." << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
-        LeapSetPolicyFlags(connectionHandle,
-                           0, 0);
+        if (with_images)
+        {
+            LeapSetPolicyFlags(connectionHandle, eLeapPolicyFlag_Images, 0);
+        }
+        else
+        {
+            LeapSetPolicyFlags(connectionHandle, 0, 0);
+        }
         // LeapSetPolicyFlags(connectionHandle,
         //                    eLeapPolicyFlag_Images & eLeapPolicyFlag_MapPoints, 0);
         // LeapSetPolicyFlags(connectionHandle,
@@ -50,9 +56,6 @@ public:
         LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_Desktop); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
         // LeapRequestConfigValue();
         // LeapSaveConfigValue();
-    };
-    LeapConnect(bool pollMode) : LeapConnect()
-    {
         m_poll = pollMode;
     };
     ~LeapConnect()
@@ -67,6 +70,8 @@ public:
     int64_t LeapGetTime() { return LeapGetNow(); };
     void setFrame(const LEAP_TRACKING_EVENT *frame);
     LEAP_TRACKING_EVENT *getFrame();
+    void setImage(const LEAP_IMAGE_EVENT *imageEvent);
+    void getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height);
     // std::vector<float> getFrame();
     std::vector<float> getIndexTip();
     bool IsConnected = false;
@@ -82,6 +87,13 @@ private:
     LEAP_CLOCK_REBASER m_clockSynchronizer;
     int64_t m_targetFrameTime = 0;
     bool m_poll = false;
+    long long int m_imageFrameID = 0;
+    void *m_imageBuffer = NULL;
+    uint64_t m_imageSize = 0;
+    bool m_imageReady = false;
+    bool m_textureChanged = false;
+    uint32_t m_imageWidth = 0;
+    uint32_t m_imageHeight = 0;
     // Callback function pointers
     //  struct Callbacks ConnectionCallbacks;
 
@@ -106,7 +118,7 @@ private:
 NB_MODULE(leap, m)
 {
     nb::class_<LeapConnect>(m, "device")
-        .def(nb::init<bool>(), nb::arg("polling_mode") = true, "a class controlling a leap motion (ultraleap) device")
+        .def(nb::init<bool, bool>(), nb::arg("polling_mode") = true, nb::arg("with_images") = false, "a class controlling a leap motion (ultraleap) device")
         .def("kill", &LeapConnect::kill, "frees the resources associated with the device")
         .def("get_index_tip", &LeapConnect::getIndexTip, "get location of tip of index finger (xyz)");
     // .def("get_joints", &LeapConnect::getFrame, "get a list of joint locations (xyz)")

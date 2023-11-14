@@ -17,5 +17,6 @@ private:
     void init(std::vector<float> &verts);
     unsigned int m_VBO = 0;
     unsigned int m_VAO = 0;
+    unsigned int m_verts = 0;
 };
 #endif

@@ -89,7 +89,7 @@ void LeapConnect::handlePointMappingChangeEvent(const LEAP_POINT_MAPPING_CHANGE_
 
 void LeapConnect::handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent)
 {
-    std::cout << "Leap: Received image set for frame " << (long long int)imageEvent->info.frame_id << "with size " << (long long int)imageEvent->image[0].properties.width * (long long int)imageEvent->image[0].properties.height * 2 << std::endl;
+    setImage(imageEvent);
 }
 
 void LeapConnect::serviceMessageLoop()
@@ -106,7 +106,7 @@ void LeapConnect::serviceMessageLoop()
             std::cout << "LeapC PollConnection call was:" << ResultString(result) << std::endl;
             continue;
         }
-
+        // std::cout << "Leap: Message received: " << msg.type << std::endl;
         switch (msg.type)
         {
         case eLeapEventType_Connection:
@@ -297,6 +297,51 @@ void LeapConnect::deepCopyTrackingEvent(LEAP_TRACKING_EVENT *dst, const LEAP_TRA
     memcpy(dst->pHands, src->pHands, src->nHands * sizeof(LEAP_HAND));
 }
 
+void LeapConnect::setImage(const LEAP_IMAGE_EVENT *imageEvent)
+{
+    // std::cout << "Leap: Received image set for frame " << (long long int)imageEvent->info.frame_id << "with size " << (long long int)imageEvent->image[0].properties.width * (long long int)imageEvent->image[0].properties.height * 2 << std::endl;
+    const LEAP_IMAGE_PROPERTIES *properties = &imageEvent->image[0].properties;
+    if (properties->bpp != 1)
+        return;
+    LockMutex(&dataLock);
+    m_imageFrameID = imageEvent->info.frame_id;
+    if (properties->width * properties->height != m_imageSize)
+    {
+        void *prev_image_buffer = m_imageBuffer;
+        m_imageWidth = properties->width;
+        m_imageHeight = properties->height;
+        m_imageSize = m_imageWidth * m_imageHeight;
+        m_imageBuffer = malloc(2 * m_imageSize);
+        if (prev_image_buffer)
+            free(prev_image_buffer);
+        m_textureChanged = true;
+    }
+
+    memcpy(m_imageBuffer, (char *)imageEvent->image[0].data + imageEvent->image[0].offset, m_imageSize);
+    memcpy((char *)m_imageBuffer + m_imageSize, (char *)imageEvent->image[1].data + imageEvent->image[1].offset, m_imageSize);
+    UnlockMutex(&dataLock);
+    m_imageReady = true;
+}
+
+void LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height)
+{
+    LockMutex(&dataLock);
+    if (m_imageReady)
+    {
+        std::vector<uint8_t> buffer1((char *)m_imageBuffer, (char *)m_imageBuffer + m_imageSize);
+        std::vector<uint8_t> buffer2((char *)m_imageBuffer + m_imageSize, (char *)m_imageBuffer + 2 * m_imageSize);
+        image1 = std::move(buffer1);
+        image2 = std::move(buffer2);
+        width = m_imageWidth;
+        height = m_imageHeight;
+    }
+    else
+    {
+        width = 0;
+        height = 0;
+    }
+    UnlockMutex(&dataLock);
+}
 /**
  * Caches the newest frame by copying the tracking event struct returned by
  * LeapC.

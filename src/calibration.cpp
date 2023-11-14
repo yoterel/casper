@@ -20,7 +20,6 @@
 #include "text.h"
 #include "post_process.h"
 #include "point_cloud.h"
-#include "utils.h"
 #include "image_process.h"
 #include "stb_image_write.h"
 #include <filesystem>
@@ -29,15 +28,12 @@ namespace fs = std::filesystem;
 // forward declarations
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+cv::Point3d approximate_ray_intersection(const cv::Point3d &v1, const cv::Point3d &q1,
+                                         const cv::Point3d &v2, const cv::Point3d &q2,
+                                         double *distance, double *out_lambda1, double *out_lambda2);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void processInput(GLFWwindow *window);
-LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world_left, std::vector<glm::mat4> &bones_to_world_right, std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
-void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
-void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
-void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO);
-void setup_frustrum_buffers(unsigned int &VAO, unsigned int &VBO);
 void initGLBuffers(unsigned int *pbo);
-bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
 // global settings
@@ -48,7 +44,6 @@ bool producer_is_fake = false;
 bool use_pbo = false;
 bool use_projector = true;
 bool use_screen = true;
-bool poll_mode = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
@@ -62,6 +57,11 @@ float deltaTime = 0.0f;
 glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
 std::vector<glm::vec2> screen_vert = {{0.5f, 0.5f}};
 std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
+std::vector<glm::vec2> proj_verts;
+std::vector<glm::vec2> leap1_verts;
+std::vector<glm::vec2> leap2_verts;
+float leap_width = 0.0f;
+float leap_height = 0.0f;
 unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
@@ -71,6 +71,8 @@ bool shift_modifier = false;
 bool ctrl_modifier = false;
 unsigned int n_bones = 0;
 int state_machine = 0;
+bool enter_pressed = false;
+bool finish_calibration = false;
 bool dragging = false;
 float screen_z = -10.0f;
 bool hand_in_frame = false;
@@ -88,9 +90,6 @@ int main(int argc, char *argv[])
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
     GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
-    int secondary_screen_x, secondary_screen_y;
-    glfwGetMonitorPos(monitors[1], &secondary_screen_x, &secondary_screen_y);
-    glfwSetWindowPos(window, secondary_screen_x + 100, secondary_screen_y + 100);
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -98,6 +97,10 @@ int main(int argc, char *argv[])
         return -1;
     }
     glfwMakeContextCurrent(window);
+    int secondary_screen_x, secondary_screen_y;
+    glfwGetMonitorPos(monitors[1], &secondary_screen_x, &secondary_screen_y);
+    glfwSetWindowMonitor(window, NULL, secondary_screen_x + 100, secondary_screen_y + 100, proj_width, proj_height, GLFW_DONT_CARE);
+    glfwSetWindowMonitor(window, NULL, secondary_screen_x + 150, secondary_screen_y + 150, proj_width, proj_height, GLFW_DONT_CARE); // really glfw?
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
@@ -124,6 +127,7 @@ int main(int argc, char *argv[])
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_TRUE);
     Quad fullScreenQuad(0.0f);
     Timer t_app;
+    t_app.start();
     Text text("../../resource/arial.ttf");
     FBO hands_fbo(proj_width, proj_height);
     FBO postprocess_fbo(proj_width, proj_height);
@@ -160,61 +164,37 @@ int main(int argc, char *argv[])
             std::cerr << "Failed to initialize projector\n";
         }
     }
-    LeapConnect leap(poll_mode);
+    LeapConnect leap(true, true);
     std::thread producer, consumer;
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
-    {
-        /* real producer */
-        std::cout << "Using real camera to produce images" << std::endl;
-        projector.show();
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        // camera.balance_white();
-        camera.acquire();
-    }
-    else
-    {
-        /* fake producer */
-        std::cout << "Using fake camera to produce images" << std::endl;
-        producer_is_fake = true;
-        std::string path = "../../resource/hand_capture";
-        std::vector<cv::Mat> fake_cam_images;
-        // white image
-        fake_cam_images.push_back(white_image);
-        // images from folder
-        // int file_counter = 0;
-        // for (const auto &entry : fs::directory_iterator(path))
-        // {
-        //     std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
-        //     std::string file_path = entry.path().string();
-        //     cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
-        //     cv::Mat img4;
-        //     cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
-        //     fake_cam_images.push_back(img4);
-        //     file_counter++;
-        // }
-        producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
-            // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
-            Timer t_block;
-            int counter = 0;
-            t_block.start();
-            while (!close_signal)
+    /* fake producer */
+    std::cout << "Using fake camera to produce images" << std::endl;
+    producer_is_fake = true;
+    std::string path = "../../resource/hand_capture";
+    std::vector<cv::Mat> fake_cam_images;
+    // white image
+    fake_cam_images.push_back(white_image);
+    producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
+        // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
+        Timer t_block;
+        int counter = 0;
+        t_block.start();
+        while (!close_signal)
+        {
+            camera_queue_cv.push(fake_cam_images[counter]);
+            if (counter < fake_cam_images.size() - 1)
+                counter++;
+            else
+                counter = 0;
+            while (t_block.getElapsedTimeInMilliSec() < 2.0)
             {
-                camera_queue_cv.push(fake_cam_images[counter]);
-                if (counter < fake_cam_images.size() - 1)
-                    counter++;
-                else
-                    counter = 0;
-                while (t_block.getElapsedTimeInMilliSec() < 2.0)
-                {
-                }
-                t_block.stop();
-                t_block.start();
             }
-            std::cout << "Producer finish" << std::endl;
-        });
-    }
+            t_block.stop();
+            t_block.start();
+        }
+        std::cout << "Producer finish" << std::endl;
+    });
     // image consumer (real projector = virtual camera)
     consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
         uint8_t *image;
@@ -246,8 +226,8 @@ int main(int argc, char *argv[])
         {
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
-            std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
-            std::cout << "total app: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
+            // std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
+            // std::cout << "total app: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
         }
         /* deal with user input */
         processInput(window);
@@ -272,9 +252,106 @@ int main(int argc, char *argv[])
         camTexture.load(buffer, true);
 
         // render
+        if (finish_calibration)
         {
-            if (state_machine == 0)
+            // extract 3d points from leap1_verts and leap2_verts
+
+            // first get rays from the leap camera corrected for distortion, in 2D camera space
+            std::vector<LEAP_VECTOR> leap1_rays_2d, leap2_rays_2d;
+            for (int i = 0; i < leap1_verts.size(); i++)
             {
+                LEAP_VECTOR l1_verts = {leap_width * (leap1_verts[i].x + 1) / 2, leap_height * (leap1_verts[i].y + 1) / 2, 1.0f};
+                LEAP_VECTOR l2_verts = {leap_width * (leap2_verts[i].x + 1) / 2, leap_height * (leap2_verts[i].y + 1) / 2, 1.0f};
+                LEAP_VECTOR l1_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_verts);
+                leap1_rays_2d.push_back(l1_ray);
+                LEAP_VECTOR l2_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_verts);
+                leap2_rays_2d.push_back(l2_ray);
+            }
+            std::vector<cv::Point2f> image_points;
+            std::vector<cv::Point3f> object_points;
+
+            // second convert rays to 3D leap space using the extrinsics matrix
+            /*
+            std::vector<cv::Point3f> leap1_ray_dirs_3d, leap2_ray_dirs_3d;
+            glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
+            glm::mat4 leap2_extrinsic = glm::mat4(1.0f);
+            LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, glm::value_ptr(leap1_extrinsic));
+            LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, glm::value_ptr(leap2_extrinsic));
+            cv::Point3f leap1_origin = {leap1_extrinsic[3][0], leap1_extrinsic[3][1], leap1_extrinsic[3][2]};
+            cv::Point3f leap2_origin = {leap2_extrinsic[3][0], leap2_extrinsic[3][1], leap2_extrinsic[3][2]};
+            for (int i = 0; i < leap1_verts.size(); i++)
+            {
+                glm::vec4 leap1_ray_3d = glm::inverse(leap1_extrinsic) * glm::vec4(leap1_rays_2d[i].x, leap1_rays_2d[i].y, leap1_rays_2d[i].z, 1.0f);
+                leap1_ray_3d.x /= leap1_ray_3d.z;
+                leap1_ray_3d.y /= leap1_ray_3d.z;
+                leap1_ray_dirs_3d.push_back(cv::Point3f(leap1_ray_3d.x, leap1_ray_3d.y, 1.0f));
+                glm::vec4 leap2_ray_3d = glm::inverse(leap2_extrinsic) * glm::vec4(leap2_rays_2d[i].x, leap2_rays_2d[i].y, leap2_rays_2d[i].z, 1.0f);
+                leap2_ray_3d.x /= leap2_ray_3d.z;
+                leap2_ray_3d.y /= leap2_ray_3d.z;
+                leap2_ray_dirs_3d.push_back(cv::Point3f(leap2_ray_3d.x, leap2_ray_3d.y, 1.0f));
+            }
+            // triangulate the 3D rays to get the 3D points
+            for (int i = 0; i < leap2_ray_dirs_3d.size(); i++)
+            {
+                cv::Point3f point = approximate_ray_intersection(leap1_ray_dirs_3d[i], leap1_origin, leap2_ray_dirs_3d[i], leap2_origin, NULL, NULL, NULL);
+                object_points.push_back(point);
+            }
+            */
+            for (int i = 0; i < leap1_rays_2d.size(); i++)
+            {
+                // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
+                float z = 40 / (leap1_rays_2d[i].x - leap2_rays_2d[i].x);
+                float y = z * leap1_rays_2d[i].y;
+                float x = z * leap1_rays_2d[i].x - 20;
+                object_points.push_back(cv::Point3f(x, -z, y));
+            }
+            for (int i = 0; i < proj_verts.size(); i++)
+            {
+                image_points.push_back(cv::Point2f(proj_width * (proj_verts[i].x + 1) / 2, proj_height * (proj_verts[i].y + 1) / 2));
+            }
+            // use solve pnp to find transformation of projector to leap space
+            cv::Mat1f camera_matrix = cv::Mat::eye(3, 3, CV_32F);
+            cv::Mat1f dist_coeffs = cv::Mat::zeros(8, 1, CV_32F);
+            cv::Mat1f rvec, tvec;
+            cv::solvePnP(object_points, image_points, camera_matrix, cv::Mat1f(), rvec, tvec);
+            cv::Mat1f rot_mat;
+            cv::Rodrigues(rvec, rot_mat);
+            std::cout << rvec.type() << std::endl;
+            std::cout << tvec.type() << std::endl;
+            std::cout << rot_mat.type() << std::endl;
+            cv::Mat1f w2p(4, 4, CV_32FC1);
+            w2p.at<float>(0, 0) = rot_mat.at<float>(0, 0);
+            w2p.at<float>(0, 1) = rot_mat.at<float>(0, 1);
+            w2p.at<float>(0, 2) = rot_mat.at<float>(0, 2);
+            w2p.at<float>(0, 3) = tvec.at<float>(0, 0);
+            w2p.at<float>(1, 0) = rot_mat.at<float>(1, 0);
+            w2p.at<float>(1, 1) = rot_mat.at<float>(1, 1);
+            w2p.at<float>(1, 2) = rot_mat.at<float>(1, 2);
+            w2p.at<float>(1, 3) = tvec.at<float>(1, 0);
+            w2p.at<float>(2, 0) = rot_mat.at<float>(2, 0);
+            w2p.at<float>(2, 1) = rot_mat.at<float>(2, 1);
+            w2p.at<float>(2, 2) = rot_mat.at<float>(2, 2);
+            w2p.at<float>(2, 3) = tvec.at<float>(2, 0);
+            w2p.at<float>(3, 0) = 0.0f;
+            w2p.at<float>(3, 1) = 0.0f;
+            w2p.at<float>(3, 2) = 0.0f;
+            w2p.at<float>(3, 3) = 1.0f;
+            cv::Mat p2w = w2p.inv();
+            std::cout << p2w << std::endl;
+            glfwSetWindowShouldClose(window, true);
+        }
+        else
+        {
+            unsigned int cur_width;
+            unsigned int cur_height;
+            if (state_machine % 3 == 0)
+            {
+                cur_width = proj_width;
+                cur_height = proj_height;
+                glfwSetWindowMonitor(window, NULL, secondary_screen_x + 100, secondary_screen_y + 100, proj_width, proj_height, GLFW_DONT_CARE);
+                glViewport(0, 0, proj_width, proj_height); // set viewport
+                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 textureShader.use();
                 textureShader.setMat4("view", glm::mat4(1.0f));
                 textureShader.setMat4("projection", glm::mat4(1.0f));
@@ -284,18 +361,64 @@ int main(int argc, char *argv[])
                 textureShader.setBool("binary", false);
                 camTexture.bind();
                 fullScreenQuad.render();
+            }
+            else
+            {
+                std::vector<uint8_t> buffer1, buffer2;
+                uint32_t width, height;
+                leap.getImage(buffer1, buffer2, width, height);
+                cur_width = width;
+                cur_height = height;
+                leap_width = width;
+                leap_height = height;
+                glfwSetWindowMonitor(window, NULL, secondary_screen_x + 100, secondary_screen_y + 100, width, height, GLFW_DONT_CARE);
+                glViewport(0, 0, width, height); // set viewport
+                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                Texture leapTexture = Texture();
+                if (state_machine % 3 == 1)
+                {
+                    leapTexture.init(buffer1.data(), width, height, 1);
+                    textureShader.use();
+                    textureShader.setMat4("view", glm::mat4(1.0f));
+                    textureShader.setMat4("projection", glm::mat4(1.0f));
+                    textureShader.setMat4("model", glm::mat4(1.0f));
+                    textureShader.setBool("flipVer", true);
+                    textureShader.setInt("src", 0);
+                    textureShader.setBool("binary", false);
+                    textureShader.setBool("isGray", true);
+                    leapTexture.bind();
+                    fullScreenQuad.render();
+                }
+                else
+                {
+                    leapTexture.init(buffer2.data(), width, height, 1);
+                    textureShader.use();
+                    textureShader.setMat4("view", glm::mat4(1.0f));
+                    textureShader.setMat4("projection", glm::mat4(1.0f));
+                    textureShader.setMat4("model", glm::mat4(1.0f));
+                    textureShader.setBool("flipVer", true);
+                    textureShader.setInt("src", 0);
+                    textureShader.setBool("binary", false);
+                    leapTexture.bind();
+                    fullScreenQuad.render();
+                }
+            }
+            if (dragging)
+            {
                 double x;
                 double y;
                 glfwGetCursorPos(window, &x, &y);
-                glm::vec2 mouse_pos = glm::vec2((2.0f * x / proj_width) - 1.0f, -1.0f * ((2.0f * y / proj_height) - 1.0f));
-                vertexShader.use();
-                vertexShader.setMat4("view", glm::mat4(1.0f));
-                vertexShader.setMat4("projection", glm::mat4(1.0f));
-                vertexShader.setMat4("model", glm::mat4(1.0f));
-                // pointShader.setVec2("mouse_pos", mouse_pos);
-                PointCloud pointCloud(screen_vert, screen_vert_color);
-                pointCloud.render();
+                glm::vec2 mouse_pos = glm::vec2((2.0f * x / cur_width) - 1.0f, -1.0f * ((2.0f * y / cur_height) - 1.0f));
+                screen_vert[0].x = mouse_pos.x;
+                screen_vert[0].y = mouse_pos.y;
             }
+            vertexShader.use();
+            vertexShader.setMat4("view", glm::mat4(1.0f));
+            vertexShader.setMat4("projection", glm::mat4(1.0f));
+            vertexShader.setMat4("model", glm::mat4(1.0f));
+            PointCloud pointCloud(screen_vert, screen_vert_color);
+            pointCloud.render();
             // LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
             // display projector screen, where mouse can control the projector output
             // display the leap camera images side by side, where mouse can control where to mark
@@ -342,9 +465,38 @@ int main(int argc, char *argv[])
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+    {
+        enter_pressed = true;
+    }
     if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE)
     {
-        state_machine += 1;
+        if (enter_pressed)
+        {
+            if (!finish_calibration)
+            {
+                if (state_machine % 3 == 0)
+                {
+                    proj_verts.push_back(screen_vert[0]);
+                }
+                else if (state_machine % 3 == 1)
+                {
+                    leap1_verts.push_back(screen_vert[0]);
+                }
+                else if (state_machine % 3 == 2)
+                {
+                    leap2_verts.push_back(screen_vert[0]);
+                }
+                state_machine += 1;
+            }
+            if (leap2_verts.size() >= 6)
+            {
+                finish_calibration = true;
+            }
+        }
+        enter_pressed = false;
     }
 }
 
@@ -385,139 +537,70 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
     }
 }
 
-LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
-                         std::vector<glm::mat4> &bones_to_world_left,
-                         std::vector<glm::mat4> &bones_to_world_right,
-                         std::vector<glm::vec3> &skeleton_vertices,
-                         bool poll_mode,
-                         int64_t &lastFrameID)
+cv::Point3d approximate_ray_intersection(const cv::Point3d &v1, const cv::Point3d &q1,
+                                         const cv::Point3d &v2, const cv::Point3d &q2,
+                                         double *distance, double *out_lambda1, double *out_lambda2)
 {
-    // some defs
-    glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 flip_y = glm::mat4(1.0f);
-    flip_y[1][1] = -1.0f;
-    glm::mat4 flip_z = glm::mat4(1.0f);
-    flip_z[2][2] = -1.0f;
-    // magic numbers
-    int magic_leap_time_delay = 40000; // us
-    float magic_scale_factor = 10.0f;
-    float magic_wrist_offset = -65.0f;
-    glm::mat4 magic_leap_basis_fix = roty * flip_z * flip_y;
-    glm::mat4 chirality = glm::mat4(1.0f);
-    // init
-    glm::mat4 scalar = glm::scale(glm::mat4(1.0f), glm::vec3(magic_scale_factor));
-    uint64_t targetFrameSize = 0;
-    LEAP_TRACKING_EVENT *frame = nullptr;
-    if (poll_mode)
-    {
-        frame = leap.getFrame();
-        if (frame && (frame->tracking_frame_id > lastFrameID))
-        {
-            lastFrameID = frame->tracking_frame_id;
-            skeleton_vertices.clear();
-            bones_to_world_left.clear();
-            bones_to_world_right.clear();
-        }
-        else
-        {
-            return LEAP_STATUS::LEAP_NONEWFRAME;
-        }
-    }
-    else
-    {
-        /* code */
-        skeleton_vertices.clear();
-        bones_to_world_left.clear();
-        bones_to_world_right.clear();
-        // Get the buffer size needed to hold the tracking data
-        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, &targetFrameSize);
-        if (retVal != eLeapRS_Success)
-        {
-            // std::cout << "ERROR: LeapGetFrameSize() returned " << retVal << std::endl;
-            return LEAP_STATUS::LEAP_FAILED;
-        }
-        // Allocate enough memory
-        frame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
-        // Get the frame data
-        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, frame, targetFrameSize);
-        if (retVal != eLeapRS_Success)
-        {
-            // std::cout << "ERROR: LeapInterpolateFrame() returned " << retVal << std::endl;
-            return LEAP_STATUS::LEAP_FAILED;
-        }
-    }
-    // Use the data...
-    //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
-    //  std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
-    //  std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
-    glm::vec3 red = glm::vec3(1.0f, 0.0f, 0.0f);
-    for (uint32_t h = 0; h < frame->nHands; h++)
-    {
-        LEAP_HAND *hand = &frame->pHands[h];
-        if (debug_vec.x > 0)
-            if (hand->type == eLeapHandType_Right)
-                chirality = flip_z;
-        std::vector<glm::mat4> bones_to_world;
-        // palm
-        glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
-                                       hand->palm.position.y,
-                                       hand->palm.position.z);
-        glm::vec3 towards_hand_tips = glm::vec3(hand->palm.direction.x, hand->palm.direction.y, hand->palm.direction.z);
-        towards_hand_tips = glm::normalize(towards_hand_tips);
-        // we offset the palm to coincide with wrist, as a real hand has a wrist joint that needs to be controlled
-        palm_pos = palm_pos + towards_hand_tips * magic_wrist_offset;
-        glm::mat4 palm_orientation = glm::toMat4(glm::quat(hand->palm.orientation.w,
-                                                           hand->palm.orientation.x,
-                                                           hand->palm.orientation.y,
-                                                           hand->palm.orientation.z));
-        // for some reason using the "basis" from leap rotates and flips the coordinate system of the palm
-        // also there is an arbitrary scale factor associated with the 3d mesh
-        // so we need to fix those
-        palm_orientation = palm_orientation * chirality * magic_leap_basis_fix * scalar;
+    cv::Mat v1mat = cv::Mat(v1);
+    cv::Mat v2mat = cv::Mat(v2);
 
-        bones_to_world.push_back(glm::translate(glm::mat4(1.0f), palm_pos) * palm_orientation);
-        // arm
-        LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
-        LEAP_VECTOR arm_j2 = hand->arm.next_joint;
-        skeleton_vertices.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
-        skeleton_vertices.push_back(red);
-        skeleton_vertices.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
-        skeleton_vertices.push_back(red);
-        glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
-                                                  hand->arm.rotation.x,
-                                                  hand->arm.rotation.y,
-                                                  hand->arm.rotation.z));
-        // arm_rot = glm::rotate(arm_rot, glm::radians(debug_vec.x), glm::vec3(arm_rot[0][0], arm_rot[0][1], arm_rot[0][2]));
-        glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
-        bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
-        // fingers
-        for (uint32_t f = 0; f < 5; f++)
-        {
-            LEAP_DIGIT finger = hand->digits[f];
-            for (uint32_t b = 0; b < 4; b++)
-            {
-                LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
-                LEAP_VECTOR joint2 = finger.bones[b].next_joint;
-                skeleton_vertices.push_back(glm::vec3(joint1.x, joint1.y, joint1.z));
-                skeleton_vertices.push_back(red);
-                skeleton_vertices.push_back(glm::vec3(joint2.x, joint2.y, joint2.z));
-                skeleton_vertices.push_back(red);
-                glm::mat4 rot = glm::toMat4(glm::quat(finger.bones[b].rotation.w,
-                                                      finger.bones[b].rotation.x,
-                                                      finger.bones[b].rotation.y,
-                                                      finger.bones[b].rotation.z));
-                glm::vec3 translate = glm::vec3(joint1.x, joint1.y, joint1.z);
-                glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                bones_to_world.push_back(trans * rot * chirality * magic_leap_basis_fix * scalar);
-            }
-        }
-        if (hand->type == eLeapHandType_Right)
-            bones_to_world_right = bones_to_world;
-        else
-            bones_to_world_left = bones_to_world;
+    double v1tv1 = cv::Mat(v1mat.t() * v1mat).at<double>(0, 0);
+    double v2tv2 = cv::Mat(v2mat.t() * v2mat).at<double>(0, 0);
+    double v1tv2 = cv::Mat(v1mat.t() * v2mat).at<double>(0, 0);
+    double v2tv1 = cv::Mat(v2mat.t() * v1mat).at<double>(0, 0);
+
+    // cv::Mat V(2, 2, CV_64FC1);
+    // V.at<double>(0,0) = v1tv1;  V.at<double>(0,1) = -v1tv2;
+    // V.at<double>(1,0) = -v2tv1; V.at<double>(1,1) = v2tv2;
+    // std::cout << " V: "<< V << std::endl;
+
+    cv::Mat Vinv(2, 2, CV_64FC1);
+    double detV = v1tv1 * v2tv2 - v1tv2 * v2tv1;
+    Vinv.at<double>(0, 0) = v2tv2 / detV;
+    Vinv.at<double>(0, 1) = v1tv2 / detV;
+    Vinv.at<double>(1, 0) = v2tv1 / detV;
+    Vinv.at<double>(1, 1) = v1tv1 / detV;
+    // std::cout << " V.inv(): "<< V.inv() << std::endl << " Vinv: " << Vinv << std::endl;
+
+    // cv::Mat Q(2, 1, CV_64FC1);
+    // Q.at<double>(0,0) = cv::Mat(v1mat.t()*(cv::Mat(q2-q1))).at<double>(0,0);
+    // Q.at<double>(1,0) = cv::Mat(v2mat.t()*(cv::Mat(q1-q2))).at<double>(0,0);
+    // std::cout << " Q: "<< Q << std::endl;
+
+    cv::Point3d q2_q1 = q2 - q1;
+    double Q1 = v1.x * q2_q1.x + v1.y * q2_q1.y + v1.z * q2_q1.z;
+    double Q2 = -(v2.x * q2_q1.x + v2.y * q2_q1.y + v2.z * q2_q1.z);
+
+    // cv::Mat L = V.inv()*Q;
+    // cv::Mat L = Vinv*Q;
+    // std::cout << " L: "<< L << std::endl;
+
+    double lambda1 = (v2tv2 * Q1 + v1tv2 * Q2) / detV;
+    double lambda2 = (v2tv1 * Q1 + v1tv1 * Q2) / detV;
+    // std::cout << "lambda1: " << lambda1 << " lambda2: " << lambda2 << std::endl;
+
+    // cv::Mat p1 = L.at<double>(0,0)*v1mat + cv::Mat(q1); //ray1
+    // cv::Mat p2 = L.at<double>(1,0)*v2mat + cv::Mat(q2); //ray2
+    // cv::Point3d p1 = L.at<double>(0,0)*v1 + q1; //ray1
+    // cv::Point3d p2 = L.at<double>(1,0)*v2 + q2; //ray2
+    cv::Point3d p1 = lambda1 * v1 + q1; // ray1
+    cv::Point3d p2 = lambda2 * v2 + q2; // ray2
+
+    // cv::Point3d p = cv::Point3d(cv::Mat((p1+p2)/2.0));
+    cv::Point3d p = 0.5 * (p1 + p2);
+
+    if (distance != NULL)
+    {
+        *distance = cv::norm(p2 - p1);
     }
-    // Free the allocated buffer when done.
-    free(frame);
-    return LEAP_STATUS::LEAP_NEWFRAME;
+    if (out_lambda1)
+    {
+        *out_lambda1 = lambda1;
+    }
+    if (out_lambda2)
+    {
+        *out_lambda2 = lambda2;
+    }
+
+    return p;
 }

@@ -52,15 +52,15 @@ bool Texture::init(const std::string &Filename)
     return init();
 }
 
-bool Texture::init(void *pData, uint32_t bufferSize)
-{
-    uint8_t *image_data = stbi_load_from_memory((const stbi_uc *)pData, bufferSize, &m_imageWidth, &m_imageHeight, &m_imageBPP, 0);
-    m_sizeTexData = sizeof(GLubyte) * m_imageWidth * m_imageHeight * m_imageBPP;
-    initInternal(image_data, GL_RGBA);
-    load(image_data, false);
-    stbi_image_free(image_data);
-    return true;
-}
+// bool Texture::init(void *pData, uint32_t bufferSize)
+// {
+//     uint8_t *image_data = stbi_load_from_memory((const stbi_uc *)pData, bufferSize, &m_imageWidth, &m_imageHeight, &m_imageBPP, 0);
+//     m_sizeTexData = sizeof(GLubyte) * m_imageWidth * m_imageHeight * m_imageBPP;
+//     initInternal(image_data, GL_RGBA);
+//     load(image_data, false);
+//     stbi_image_free(image_data);
+//     return true;
+// }
 
 void Texture::init(int width, int height, int bpp, unsigned int input_color_format, unsigned int texture_color_format)
 {
@@ -71,14 +71,14 @@ void Texture::init(int width, int height, int bpp, unsigned int input_color_form
     initInternal(NULL, input_color_format, texture_color_format);
 }
 
-void Texture::initRaw(unsigned char *pData, int width, int height, int bpp)
+void Texture::init(uint8_t *buffer, int width, int height, int bpp)
 {
     m_imageWidth = width;
     m_imageHeight = height;
     m_imageBPP = bpp;
     m_sizeTexData = sizeof(GLubyte) * m_imageWidth * m_imageHeight * m_imageBPP;
-    initInternal(pData, GL_RGBA);
-    load(pData, false);
+    initInternal(buffer, GL_RGBA);
+    // load(pData, false);
 }
 
 void Texture::initInternal(void *image_data, unsigned int input_color_format, unsigned int texture_color_format)

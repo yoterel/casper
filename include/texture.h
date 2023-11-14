@@ -18,11 +18,9 @@ public:
 
     bool init(const std::string &Filename);
 
-    bool init(void *pData, uint32_t bufferSize);
-
     void init(int width, int height, int bpp = 4, unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
 
-    void initRaw(unsigned char *pData, int width, int height, int bpp = 4);
+    void init(uint8_t *buffer, int width, int height, int bpp = 4);
 
     // Must be called at least once for the specific texture unit
     void bind(GLenum TextureUnit = GL_TEXTURE0);
