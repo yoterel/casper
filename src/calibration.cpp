@@ -316,9 +316,6 @@ int main(int argc, char *argv[])
             cv::solvePnP(object_points, image_points, camera_matrix, cv::Mat1f(), rvec, tvec);
             cv::Mat1f rot_mat;
             cv::Rodrigues(rvec, rot_mat);
-            std::cout << rvec.type() << std::endl;
-            std::cout << tvec.type() << std::endl;
-            std::cout << rot_mat.type() << std::endl;
             cv::Mat1f w2p(4, 4, CV_32FC1);
             w2p.at<float>(0, 0) = rot_mat.at<float>(0, 0);
             w2p.at<float>(0, 1) = rot_mat.at<float>(0, 1);
