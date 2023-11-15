@@ -62,13 +62,6 @@ bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC4, cv::Scalar(255, 255, 255, 255));
-cv::Mat curFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-cv::Mat prevFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-float downscale_factor = 2.0f;
-cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
-cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
-cv::Mat curFrame_gray, prevFrame_gray;
-cv::Mat FBORender;
 std::vector<glm::vec2> orig_screen_verts = {{-1.0f, 1.0f},
                                             {-1.0f, -1.0f},
                                             {1.0f, -1.0f},
@@ -266,7 +259,6 @@ int main(int argc, char *argv[])
         {
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
-            double tpbo, ttex, tproc;
             std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
             std::cout << "total app time: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
             std::cout << "wait for cam time: " << t0.averageLapInMilliSec() << std::endl;
@@ -289,7 +281,6 @@ int main(int argc, char *argv[])
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         t0.start();
         // retrieve camera image
-        prevFrame = curFrame.clone();
         uint8_t *buffer;
         if (producer_is_fake)
         {
@@ -302,8 +293,6 @@ int main(int argc, char *argv[])
             CPylonImage pylonImage = camera_queue.pop();
             buffer = (uint8_t *)pylonImage.GetBuffer();
         }
-        cv::Mat tmp(cam_height, cam_width, CV_8UC4, buffer);
-        curFrame = tmp.clone();
         camTexture.load(buffer, true);
 
         // render
@@ -342,6 +331,7 @@ int main(int argc, char *argv[])
             textureShader.setBool("flipVer", true);
             textureShader.setInt("src", 0);
             textureShader.setBool("binary", false);
+            // textureShader.setBool("isGray", true);
             camTexture.bind();
             screen.render();
             Quad tmp_screen(screen_verts);
