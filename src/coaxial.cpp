@@ -18,6 +18,7 @@
 #include "text.h"
 #include "stb_image_write.h"
 #include "texture.h"
+#include "point_cloud.h"
 #include <filesystem>
 namespace fs = std::filesystem;
 
@@ -34,7 +35,7 @@ bool debug_mode = false;
 bool freecam_mode = false;
 bool use_cuda = false;
 bool producer_is_fake = false;
-bool use_pbo = false;
+bool use_pbo = true;
 bool use_projector = true;
 bool use_screen = true;
 bool poll_mode = false;
@@ -71,6 +72,10 @@ std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                        {-1.0f, -1.0f},
                                        {1.0f, -1.0f},
                                        {1.0f, 1.0f}};
+std::vector<glm::vec3> screen_verts_color = {{1.0f, 0.0f, 0.0f},
+                                             {1.0f, 0.0f, 0.0f},
+                                             {1.0f, 0.0f, 0.0f},
+                                             {1.0f, 0.0f, 0.0f}};
 bool dragging = false;
 int dragging_vert = 0;
 int closest_vert = 0;
@@ -78,7 +83,7 @@ float min_dist = 100000.0f;
 
 int main(int argc, char *argv[])
 {
-    Timer t0, t1, t2, t3, t4, t5, t6, t7, t_app, t_misc, t_debug, t_debug1, t_debug2;
+    Timer t_cam, t_upload, t_download, t_render, t_copy, t_debug, t_app, t_misc, t_swap;
     t_app.start();
     /* init GLFW */
     glfwInit();
@@ -112,7 +117,7 @@ int main(int argc, char *argv[])
     std::cout << "  GL Renderer  : " << glGetString(GL_RENDERER) << std::endl;
     std::cout << "  GLSL Version : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << std::endl;
-    // glfwSwapInterval(0);                       // do not sync to monitor
+    glfwSwapInterval(0);                       // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glPointSize(10.0f);
@@ -136,14 +141,9 @@ int main(int argc, char *argv[])
     Text text("../../resource/arial.ttf");
 
     /* setup shaders*/
-    Shader debugShader("../../src/shaders/debug.vs", "../../src/shaders/debug.fs");
-    Shader projectorShader("../../src/shaders/projector_shader.vs", "../../src/shaders/projector_shader.fs");
-    Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
+
     Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
-    Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
-    Shader coordShader("../../src/shaders/coords.vs", "../../src/shaders/coords.fs");
-    Shader canvasShader("../../src/shaders/canvas.vs", "../../src/shaders/canvas.fs");
-    Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
+    Shader vertexShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     Quad screen(orig_screen_verts);
     textShader.use();
@@ -250,6 +250,7 @@ int main(int argc, char *argv[])
     /* main loop */
     while (!glfwWindowShouldClose(window))
     {
+        t_misc.start();
         currentAppTime = t_app.getElapsedTimeInSec(); // glfwGetTime();
         deltaTime = static_cast<float>(currentAppTime - previousAppTime);
         previousAppTime = currentAppTime;
@@ -261,40 +262,37 @@ int main(int argc, char *argv[])
             ms_per_frame = 1000.0f / frameCount;
             std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
             std::cout << "total app time: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
-            std::cout << "wait for cam time: " << t0.averageLapInMilliSec() << std::endl;
-            std::cout << "debug info: " << t_debug.averageLapInMilliSec() << std::endl;
-            std::cout << "swap buffers time: " << t3.averageLapInMilliSec() << std::endl;
-            std::cout << "GPU->CPU time: " << t4.averageLapInMilliSec() << std::endl;
-            // std::cout << "project time: " << t4.averageLap() << std::endl;
+            std::cout << "t_misc: " << t_misc.averageLapInMilliSec() << std::endl;
+            std::cout << "cam time: " << t_cam.averageLapInMilliSec() << std::endl;
+            std::cout << "cam upload: " << t_upload.averageLapInMilliSec() << std::endl;
+            std::cout << "swap buffers time: " << t_swap.averageLapInMilliSec() << std::endl;
+            std::cout << "GPU->CPU time: " << t_download.averageLapInMilliSec() << std::endl;
+            std::cout << "debug time: " << t_debug.averageLapInMilliSec() << std::endl;
             std::cout << "cam q1 size: " << camera_queue.size() << std::endl;
             std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
             std::cout << "proj q size: " << projector_queue.size() << std::endl;
             frameCount = 0;
             previousSecondAppTime = currentAppTime;
-            t0.reset();
-            t3.reset();
-            t4.reset();
+            t_misc.reset();
+            t_cam.reset();
+            t_upload.reset();
+            t_swap.reset();
+            t_download.reset();
             t_debug.reset();
         }
         // input
         processInput(window);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        t0.start();
+        t_misc.stop();
+        t_cam.start();
         // retrieve camera image
-        uint8_t *buffer;
-        if (producer_is_fake)
-        {
-            // buffer = white_image.data;
-            cv::Mat cv_image = camera_queue_cv.pop();
-            buffer = cv_image.data;
-        }
-        else
-        {
-            CPylonImage pylonImage = camera_queue.pop();
-            buffer = (uint8_t *)pylonImage.GetBuffer();
-        }
+        CPylonImage pylonImage = camera_queue.pop();
+        uint8_t *buffer = (uint8_t *)pylonImage.GetBuffer();
+        t_cam.stop();
+        t_upload.start();
         camTexture.load(buffer, true);
-
+        t_upload.stop();
+        t_render.start();
         // render
         {
             std::vector<cv::Point2f> origpts, newpts;
@@ -303,7 +301,7 @@ int main(int argc, char *argv[])
                 origpts.push_back(cv::Point2f(orig_screen_verts[i].x, orig_screen_verts[i].y));
                 newpts.push_back(cv::Point2f(screen_verts[i].x, screen_verts[i].y));
             }
-            cv::Mat1f hom = cv::getPerspectiveTransform(origpts, newpts);
+            cv::Mat1f hom = cv::getPerspectiveTransform(origpts, newpts, cv::DECOMP_SVD);
             cv::Mat1f perspective = cv::Mat::zeros(4, 4, CV_32F);
             perspective.at<float>(0, 0) = hom.at<float>(0, 0);
             perspective.at<float>(0, 1) = hom.at<float>(0, 1);
@@ -328,16 +326,21 @@ int main(int argc, char *argv[])
             textureShader.setMat4("view", w2vp);
             textureShader.setMat4("projection", glm::mat4(1.0f));
             textureShader.setMat4("model", glm::mat4(1.0f));
-            textureShader.setBool("flipVer", true);
+            // textureShader.setBool("flipVer", true);
             textureShader.setInt("src", 0);
-            textureShader.setBool("binary", false);
+            textureShader.setBool("allGreen", true);
             // textureShader.setBool("isGray", true);
             camTexture.bind();
             screen.render();
-            Quad tmp_screen(screen_verts);
-            textureShader.setMat4("view", glm::mat4(1.0f));
-            tmp_screen.render(false, true);
+            PointCloud cloud(screen_verts, screen_verts_color);
+            vertexShader.use();
+            vertexShader.setMat4("view", glm::mat4(1.0f));
+            vertexShader.setMat4("projection", glm::mat4(1.0f));
+            vertexShader.setMat4("model", glm::mat4(1.0f));
+            cloud.render();
         }
+        t_render.stop();
+        t_debug.start();
         {
             float text_spacing = 15.0f;
             double x;
@@ -358,14 +361,15 @@ int main(int argc, char *argv[])
                 text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
             }
         }
+        t_debug.stop();
         // send result to projector queue
         glReadBuffer(GL_FRONT);
         if (use_pbo) // something fishy going on here. using pbo collapses program after a while
         {
-            t4.start();
+            t_download.start();
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
-            t4.stop();
+            t_download.stop();
 
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(frameCount + 1) % 2]);
             GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
@@ -382,9 +386,9 @@ int main(int argc, char *argv[])
         }
         else
         {
-            t4.start();
+            t_download.start();
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
-            t4.stop();
+            t_download.stop();
             // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
             projector_queue.push(colorBuffer);
         }
@@ -400,10 +404,10 @@ int main(int argc, char *argv[])
         // stride += (stride % 4) ? (4 - stride % 4) : 0;
         // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
         // swap buffers and poll IO events
-        t3.start();
+        t_swap.start();
         glfwSwapBuffers(window);
         glfwPollEvents();
-        t3.stop();
+        t_swap.stop();
     }
     // cleanup
     close_signal = true;
@@ -438,40 +442,6 @@ void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-    bool mod = false;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-    {
-        mod = true;
-        shift_modifier = true;
-    }
-    else
-    {
-        shift_modifier = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-    {
-        mod = true;
-        ctrl_modifier = true;
-    }
-    else
-    {
-        ctrl_modifier = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-    {
-        mod = true;
-        space_modifier = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
-    {
-        if (space_modifier)
-        {
-            space_modifier = false;
-        }
-    }
-    if (!mod)
-    {
-    }
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)

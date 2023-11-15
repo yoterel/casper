@@ -3,9 +3,9 @@ out vec4 FragColor;
 in vec2 TexCoord;
 
 uniform sampler2D src;
-uniform bool binary;
+uniform bool binary = false;
 uniform bool isGray = false;
-
+uniform bool allGreen = false;
 void main()
 {
     vec3 col;
@@ -13,6 +13,8 @@ void main()
         col = texture(src, TexCoord).rrr;
     else
         col = texture(src, TexCoord).rgb;
+    if (allGreen)
+        col = vec3(0.0, col.r, 0.0);
     if (binary)
     {
         float avg = (col.r + col.g + col.b) * 0.333333;

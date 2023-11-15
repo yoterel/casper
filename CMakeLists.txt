@@ -159,6 +159,7 @@ add_executable(coaxial_calib
     src/texture.cpp
     src/quad.cpp
     src/text.cpp
+    src/point_cloud.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
