@@ -75,7 +75,7 @@
                 "-no_proj",
                 "-fake_cam",
                 "-poll",
-                "-pbo"
+                // "-pbo"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build//Debug",

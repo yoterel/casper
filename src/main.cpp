@@ -47,8 +47,8 @@ bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std
 bool debug_mode = false;
 bool freecam_mode = false;
 bool use_cuda = false;
-bool producer_is_fake = false;
-bool use_pbo = false;
+bool producer_is_fake = true;
+bool use_pbo = true;
 bool use_projector = true;
 bool use_screen = true;
 bool poll_mode = false;
@@ -923,6 +923,7 @@ int main(int argc, char *argv[])
                     /* without camera texture */
                     skinnedShaderSimple.use();
                     skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+                    // glm::mat4 trans = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 20.0f));
                     skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                     skinnedShaderSimple.setInt("src", 0);
                     leftHandModel.Render(skinnedShaderSimple, bones_to_world_left, rotx);
@@ -1416,6 +1417,8 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     // some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 flip_x = glm::mat4(1.0f);
+    flip_x[0][0] = -1.0f;
     glm::mat4 flip_y = glm::mat4(1.0f);
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
@@ -1476,9 +1479,9 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     for (uint32_t h = 0; h < frame->nHands; h++)
     {
         LEAP_HAND *hand = &frame->pHands[h];
-        if (debug_vec.x > 0)
-            if (hand->type == eLeapHandType_Right)
-                chirality = flip_z;
+        // if (debug_vec.x > 0)
+        if (hand->type == eLeapHandType_Right)
+            chirality = flip_x;
         std::vector<glm::mat4> bones_to_world;
         // palm
         glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
@@ -1539,6 +1542,8 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
             bones_to_world_left = bones_to_world;
     }
     // Free the allocated buffer when done.
+    if (poll_mode)
+        free(frame->pHands);
     free(frame);
     return LEAP_STATUS::LEAP_NEWFRAME;
 }
