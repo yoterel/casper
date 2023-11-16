@@ -211,8 +211,16 @@ void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
         //        printf("num indices %d\n", Face.mNumIndices);
         //        assert(Face.mNumIndices == 3);
         m_Indices.push_back(Face.mIndices[0]);
-        m_Indices.push_back(Face.mIndices[1]);
-        m_Indices.push_back(Face.mIndices[2]);
+        if (m_leftChirality)
+        {
+            m_Indices.push_back(Face.mIndices[1]);
+            m_Indices.push_back(Face.mIndices[2]);
+        }
+        else
+        {
+            m_Indices.push_back(Face.mIndices[2]);
+            m_Indices.push_back(Face.mIndices[1]);
+        }
     }
 }
 

@@ -205,12 +205,13 @@ int main(int argc, char *argv[])
                                "../../resource/uv.png",
                                //   "C:/src/augmented_hands/resource/wood.jpg",
                                proj_width, proj_height,
-                               cam_width, cam_height);
+                               cam_width, cam_height); // GenericHand.fbx is a left hand model
     SkinnedModel rightHandModel("../../resource/GenericHand.fbx",
                                 "../../resource/uv.png",
                                 //   "C:/src/augmented_hands/resource/wood.jpg",
                                 proj_width, proj_height,
-                                cam_width, cam_height);
+                                cam_width, cam_height,
+                                false);
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
     // Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);

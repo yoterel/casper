@@ -109,13 +109,15 @@ class SkinnedModel
 public:
     SkinnedModel(const std::string &Filename, const std::string &ExternalTextureFileName = "",
                  const unsigned int proj_width = 0, const unsigned int proj_height = 0,
-                 const unsigned int cam_width = 0, const unsigned int cam_height = 0) : m_fbo(proj_width, proj_height)
+                 const unsigned int cam_width = 0, const unsigned int cam_height = 0,
+                 bool left_chirality = true) : m_fbo(proj_width, proj_height)
     {
         m_externalTextureFileName = ExternalTextureFileName;
         m_width = proj_width;
         m_height = proj_height;
         m_camHeight = cam_height;
         m_camWidth = cam_width;
+        m_leftChirality = left_chirality;
         bool success = LoadMesh(Filename);
         if (!success)
         {
@@ -173,6 +175,7 @@ private:
     std::string GetDirFromFilename(const std::string &Filename);
 
     unsigned int m_width, m_height;
+    bool m_leftChirality;
     unsigned int m_camWidth, m_camHeight;
     unsigned int m_VAO = 0;
     unsigned int m_Buffers[NUM_BUFFERS] = {0};
