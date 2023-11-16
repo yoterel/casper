@@ -364,8 +364,8 @@ int main(int argc, char *argv[])
                                     1500.0f,
                                     100.0f,
                                     true);
-            gl_camera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height, 2.0f, true);
-            gl_projector = GLCamera(w2vp, vproj_project, camera_mode, cam_width, cam_height, 2.0f, true);
+            gl_camera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height, 50.0f, true);
+            gl_projector = GLCamera(w2vp, vproj_project, camera_mode, cam_width, cam_height, 50.0f, false);
         }
         else
         {
@@ -427,6 +427,7 @@ int main(int argc, char *argv[])
     else
     {
         /* fake producer */
+        // see https://ja.docs.baslerweb.com/pylonapi/cpp/sample_code#utility_image for pylon image
         std::cout << "Using fake camera to produce images" << std::endl;
         producer_is_fake = true;
         std::string path = "../../resource/hand_capture";
