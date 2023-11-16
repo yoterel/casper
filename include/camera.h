@@ -24,7 +24,7 @@ public:
     {
         kill();
     }; /* PylonTerminate(); */
-    bool init(blocking_queue<CPylonImage> &camera_queue, bool &close_signal,
+    bool init(blocking_queue<CGrabResultPtr> &camera_queue, bool &close_signal,
               uint32_t height, uint32_t width,
               float exposureTime = 1850.0f, bool hardwareTrigger = false);
     void acquire();

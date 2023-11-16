@@ -133,20 +133,20 @@ public:
     bool LoadMesh(const std::string &Filename);
     void Render(Shader &shader, unsigned int camTex, bool useFBO);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                glm::mat4 local_to_world, bool use_bones = false);
+                const glm::mat4 &local_to_world, bool use_bones = false);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                glm::mat4 local_to_world, unsigned int camTex, bool useFBO = true, bool use_bones = false);
+                const glm::mat4 &local_to_world, unsigned int camTex, bool useFBO = true, bool use_bones = false);
     const Material &GetMaterial();
-    void GetBoneTransforms(std::vector<glm::mat4> &Transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world, const bool use_bones = false);
+    void GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world, const bool use_bones = false);
     glm::vec3 getCenterOfMass();
     std::string getBoneName(unsigned int index);
     unsigned int NumBones() const
     {
         return (unsigned int)m_BoneNameToIndexMap.size();
     };
-    void GetLocalToBoneTransforms(std::vector<glm::mat4> &Transforms, bool inverse = false, bool only_leap_bones = false);
-    void GetBoneFinalTransforms(std::vector<glm::mat4> &Transforms);
-    void GetBoneTransformRelativeToParent(std::vector<glm::mat4> &Transforms);
+    void GetLocalToBoneTransforms(std::vector<glm::mat4> &transforms, bool inverse = false, bool only_leap_bones = false);
+    void GetBoneFinalTransforms(std::vector<glm::mat4> &transforms);
+    void GetBoneTransformRelativeToParent(std::vector<glm::mat4> &transforms);
     FBO m_fbo;
 
 private:

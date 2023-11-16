@@ -39,10 +39,13 @@ bool use_pbo = true;
 bool use_projector = true;
 bool use_screen = true;
 bool poll_mode = false;
+bool cam_color_mode = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
 const unsigned int cam_height = 540;
+unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
+unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f;
 // global state
 float lastX = proj_width / 2.0f;
@@ -160,10 +163,10 @@ int main(int argc, char *argv[])
     bool close_signal = false;
     uint8_t *colorBuffer = new uint8_t[image_size];
     Texture camTexture = Texture();
-    camTexture.init(cam_width, cam_height, 4);
+    camTexture.init(cam_width, cam_height, n_cam_channels);
     // uint32_t cam_height = 0;
     // uint32_t cam_width = 0;
-    blocking_queue<CPylonImage> camera_queue;
+    blocking_queue<CGrabResultPtr> camera_queue;
     // queue_spsc<cv::Mat> camera_queue_cv(50);
     blocking_queue<cv::Mat> camera_queue_cv;
     // blocking_queue<std::vector<uint8_t>> projector_queue;
@@ -286,11 +289,10 @@ int main(int argc, char *argv[])
         t_misc.stop();
         t_cam.start();
         // retrieve camera image
-        CPylonImage pylonImage = camera_queue.pop();
-        uint8_t *buffer = (uint8_t *)pylonImage.GetBuffer();
+        CGrabResultPtr ptrGrabResult = camera_queue.pop();
         t_cam.stop();
         t_upload.start();
-        camTexture.load(buffer, true);
+        camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
         t_upload.stop();
         t_render.start();
         // render

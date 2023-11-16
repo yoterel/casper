@@ -47,15 +47,18 @@ bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std
 bool debug_mode = false;
 bool freecam_mode = false;
 bool use_cuda = false;
-bool producer_is_fake = true;
+bool producer_is_fake = false;
 bool use_pbo = true;
 bool use_projector = true;
 bool use_screen = true;
 bool poll_mode = false;
+bool cam_color_mode = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
 const unsigned int cam_height = 540;
+unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
+unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f;
 // global state
 float lastX = proj_width / 2.0f;
@@ -82,7 +85,6 @@ float downscale_factor = 2.0f;
 cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
 cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
 cv::Mat curFrame_gray, prevFrame_gray;
-cv::Mat FBORender;
 // GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
 GLCamera gl_flycamera;
 GLCamera gl_camera;
@@ -94,32 +96,32 @@ int main(int argc, char *argv[])
     /* parse cmd line options */
     if (checkCmdLineFlag(argc, (const char **)argv, "debug"))
     {
-        std::cout << "Debug mode on..." << std::endl;
+        std::cout << "Debug mode on" << std::endl;
         debug_mode = true;
     }
-    if (checkCmdLineFlag(argc, (const char **)argv, "freecam"))
+    if (checkCmdLineFlag(argc, (const char **)argv, "cam_free"))
     {
-        std::cout << "Freecam mode on..." << std::endl;
+        std::cout << "Camera free mode on" << std::endl;
         freecam_mode = true;
     }
     if (checkCmdLineFlag(argc, (const char **)argv, "cuda"))
     {
-        std::cout << "Using CUDA..." << std::endl;
+        std::cout << "Using CUDA" << std::endl;
         use_cuda = true;
     }
-    if (checkCmdLineFlag(argc, (const char **)argv, "fakecam"))
+    if (checkCmdLineFlag(argc, (const char **)argv, "cam_fake"))
     {
-        std::cout << "Fake camera on..." << std::endl;
+        std::cout << "Camera simulator mode on" << std::endl;
         producer_is_fake = true;
     }
-    if (checkCmdLineFlag(argc, (const char **)argv, "pbo"))
+    if (checkCmdLineFlag(argc, (const char **)argv, "download_pbo"))
     {
-        std::cout << "Using PBO for async unpacking..." << std::endl;
+        std::cout << "Using PBO for async unpacking" << std::endl;
         use_pbo = true;
     }
-    if (checkCmdLineFlag(argc, (const char **)argv, "no_proj"))
+    if (checkCmdLineFlag(argc, (const char **)argv, "proj_off"))
     {
-        std::cout << "No projector mode is on" << std::endl;
+        std::cout << "Projector will not be used" << std::endl;
         use_projector = false;
     }
     if (checkCmdLineFlag(argc, (const char **)argv, "no_screen"))
@@ -127,10 +129,15 @@ int main(int argc, char *argv[])
         std::cout << "No screen mode is on" << std::endl;
         use_screen = false;
     }
-    if (checkCmdLineFlag(argc, (const char **)argv, "poll"))
+    if (checkCmdLineFlag(argc, (const char **)argv, "leap_poll"))
     {
-        std::cout << "Poll mode is on" << std::endl;
+        std::cout << "Leap poll mode is on" << std::endl;
         poll_mode = true;
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "cam_color"))
+    {
+        std::cout << "Camera in color mode" << std::endl;
+        cam_color_mode = true;
     }
     Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_debug2;
     t_app.start();
@@ -201,12 +208,12 @@ int main(int argc, char *argv[])
     //                        //   "C:/src/augmented_hands/resource/wood.jpg",
     //                        proj_width, proj_height,
     //                        cam_width, cam_height);
-    SkinnedModel leftHandModel("../../resource/GenericHand.fbx",
+    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights.fbx",
                                "../../resource/uv.png",
                                //   "C:/src/augmented_hands/resource/wood.jpg",
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
-    SkinnedModel rightHandModel("../../resource/GenericHand.fbx",
+    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights.fbx",
                                 "../../resource/uv.png",
                                 //   "C:/src/augmented_hands/resource/wood.jpg",
                                 proj_width, proj_height,
@@ -312,11 +319,11 @@ int main(int argc, char *argv[])
     uint8_t *colorBuffer = new uint8_t[image_size];
     Texture camTexture = Texture();
     Texture flowTexture = Texture();
-    camTexture.init(cam_width, cam_height, 4);
+    camTexture.init(cam_width, cam_height, n_cam_channels);
     flowTexture.init(cam_width, cam_height, 2);
     // uint32_t cam_height = 0;
     // uint32_t cam_width = 0;
-    blocking_queue<CPylonImage> camera_queue;
+    blocking_queue<CGrabResultPtr> camera_queue;
     // queue_spsc<cv::Mat> camera_queue_cv(50);
     blocking_queue<cv::Mat> camera_queue_cv;
     // blocking_queue<std::vector<uint8_t>> projector_queue;
@@ -531,21 +538,11 @@ int main(int argc, char *argv[])
         /* deal with camera input */
         t_camera.start();
         // prevFrame = curFrame.clone();
-        uint8_t *buffer;
-        if (producer_is_fake)
-        {
-            // buffer = white_image.data;
-            cv::Mat cv_image = camera_queue_cv.pop();
-            buffer = cv_image.data;
-        }
-        else
-        {
-            CPylonImage pylonImage = camera_queue.pop();
-            buffer = (uint8_t *)pylonImage.GetBuffer();
-        }
+        CGrabResultPtr ptrGrabResult = camera_queue.pop();
+        // buffer = (uint8_t *)pylonImage.GetBuffer();
         // cv::Mat tmp(cam_height, cam_width, CV_8UC4, buffer);
         // curFrame = tmp.clone();
-        camTexture.load(buffer, true);
+        camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
 
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
         // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
@@ -591,7 +588,6 @@ int main(int argc, char *argv[])
                     rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx);
                     hands_fbo.unbind();
                     glDisable(GL_DEPTH_TEST);
-                    // FBORender = skinnedModel.m_fbo.toOpenCVMat();
                 }
             }
             else
@@ -1515,6 +1511,10 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                                                   hand->arm.rotation.z));
         // arm_rot = glm::rotate(arm_rot, glm::radians(debug_vec.x), glm::vec3(arm_rot[0][0], arm_rot[0][1], arm_rot[0][2]));
         glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
+        // translate arm joint in the local x direction to shorten the arm
+        glm::vec3 xforward = glm::normalize(glm::vec3(arm_rot[2][0], arm_rot[2][1], arm_rot[2][2])); // 3rd column of rotation matrix is local x
+        xforward *= -120.0f;
+        arm_translate = glm::translate(arm_translate, xforward);
         bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
         // fingers
         for (uint32_t f = 0; f < 5; f++)

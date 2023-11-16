@@ -71,11 +71,11 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "-debug",
-                "-freecam",
-                "-no_proj",
-                "-fake_cam",
-                "-poll",
-                // "-pbo"
+                "-cam_free",
+                "-leap_poll",
+                "-proj_off",
+                "-download_pbo"
+                // "-cam_fake",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build//Debug",
