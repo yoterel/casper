@@ -47,7 +47,7 @@ bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std
 bool debug_mode = false;
 bool freecam_mode = false;
 bool use_cuda = false;
-bool producer_is_fake = false;
+bool simulated_camera = false;
 bool use_pbo = true;
 bool use_projector = true;
 bool use_screen = true;
@@ -77,8 +77,8 @@ unsigned int n_bones = 0;
 float screen_z = -10.0f;
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
-const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
-cv::Mat white_image(cam_height, cam_width, CV_8UC4, cv::Scalar(255, 255, 255, 255));
+const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
+cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
 cv::Mat curFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
 cv::Mat prevFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
 float downscale_factor = 2.0f;
@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
     if (checkCmdLineFlag(argc, (const char **)argv, "cam_fake"))
     {
         std::cout << "Camera simulator mode on" << std::endl;
-        producer_is_fake = true;
+        simulated_camera = true;
     }
     if (checkCmdLineFlag(argc, (const char **)argv, "download_pbo"))
     {
@@ -228,6 +228,10 @@ int main(int argc, char *argv[])
                                            {-1.0f, -1.0f},
                                            {1.0f, -1.0f},
                                            {1.0f, 1.0f}};
+    // std::vector<glm::vec2> screen_verts = {{-0.785f, 0.464f},
+    //                                        {-0.815f, -0.857f},
+    //                                        {0.295f, -0.662f},
+    //                                        {0.307f, 0.372f}};
     glm::mat4 c2p_homography = postProcess.findHomography(screen_verts);
     glm::vec3 coa = leftHandModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
@@ -316,7 +320,8 @@ int main(int argc, char *argv[])
     size_t n_skeleton_primitives = 0;
     bool close_signal = false;
     int leap_time_delay = 50000; // us
-    uint8_t *colorBuffer = new uint8_t[image_size];
+    uint8_t *colorBuffer = new uint8_t[projected_image_size];
+    CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
     Texture flowTexture = Texture();
     camTexture.init(cam_width, cam_height, n_cam_channels);
@@ -415,7 +420,7 @@ int main(int argc, char *argv[])
     Quad vcamFarQuad(vcamFarVerts);
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
+    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !simulated_camera)
     {
         /* real producer */
         std::cout << "Using real camera to produce images" << std::endl;
@@ -429,7 +434,7 @@ int main(int argc, char *argv[])
         /* fake producer */
         // see https://ja.docs.baslerweb.com/pylonapi/cpp/sample_code#utility_image for pylon image
         std::cout << "Using fake camera to produce images" << std::endl;
-        producer_is_fake = true;
+        simulated_camera = true;
         std::string path = "../../resource/hand_capture";
         std::vector<cv::Mat> fake_cam_images;
         // white image
@@ -458,7 +463,7 @@ int main(int argc, char *argv[])
                     counter++;
                 else
                     counter = 0;
-                while (t_block.getElapsedTimeInMilliSec() < 2.0)
+                while (t_block.getElapsedTimeInMilliSec() < 1.9)
                 {
                 }
                 t_block.stop();
@@ -539,11 +544,18 @@ int main(int argc, char *argv[])
         /* deal with camera input */
         t_camera.start();
         // prevFrame = curFrame.clone();
-        CGrabResultPtr ptrGrabResult = camera_queue.pop();
+        if (simulated_camera)
+        {
+            cv::Mat tmp = camera_queue_cv.pop();
+            camTexture.load((uint8_t *)tmp.data, true, cam_buffer_format);
+        }
+        else
+        {
+            ptrGrabResult = camera_queue.pop();
+            camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+        }
         // buffer = (uint8_t *)pylonImage.GetBuffer();
-        // cv::Mat tmp(cam_height, cam_width, CV_8UC4, buffer);
         // curFrame = tmp.clone();
-        camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
 
         // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
         // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
@@ -945,7 +957,7 @@ int main(int argc, char *argv[])
                 lineShader.setMat4("model", glm::mat4(1.0f));
                 lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
                 glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
-                for (int i = 0; i < frustumCornerVertices.size(); ++i)
+                for (unsigned int i = 0; i < frustumCornerVertices.size(); i++)
                 {
                     glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
                     vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
@@ -1043,7 +1055,7 @@ int main(int argc, char *argv[])
                 // std::vector<uint8_t> data(src, src + image_size);
                 // tmpdata.assign(src, src + image_size);
                 // std::copy(src, src + tmpdata.size(), tmpdata.begin());
-                memcpy(colorBuffer, src, image_size);
+                memcpy(colorBuffer, src, projected_image_size);
                 projector_queue.push(colorBuffer);
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
             }
@@ -1081,7 +1093,7 @@ int main(int argc, char *argv[])
     camera.kill();
     glfwTerminate();
     delete[] colorBuffer;
-    if (producer_is_fake)
+    if (simulated_camera)
     {
         producer.join();
     }
@@ -1159,13 +1171,13 @@ void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO)
 void initGLBuffers(unsigned int *pbo)
 {
     // set up vertex data parameter
-    void *data = malloc(image_size);
+    void *data = malloc(projected_image_size);
     // create ping pong pbos
     glGenBuffers(2, pbo);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[0]);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, image_size, data, GL_STREAM_READ);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, projected_image_size, data, GL_STREAM_READ);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[1]);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, image_size, data, GL_STREAM_READ);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, projected_image_size, data, GL_STREAM_READ);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     free(data);
 }
