@@ -1437,6 +1437,7 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     int magic_leap_time_delay = 40000; // us
     float magic_scale_factor = 10.0f;
     float magic_wrist_offset = -65.0f;
+    float magic_arm_forward_offset = -120.0f;
     glm::mat4 magic_leap_basis_fix = roty * flip_z * flip_y;
     glm::mat4 chirality = glm::mat4(1.0f);
     // init
@@ -1526,7 +1527,7 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
         glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
         // translate arm joint in the local x direction to shorten the arm
         glm::vec3 xforward = glm::normalize(glm::vec3(arm_rot[2][0], arm_rot[2][1], arm_rot[2][2])); // 3rd column of rotation matrix is local x
-        xforward *= -120.0f;
+        xforward *= magic_arm_forward_offset;
         arm_translate = glm::translate(arm_translate, xforward);
         bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
         // fingers
