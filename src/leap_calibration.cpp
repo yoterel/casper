@@ -40,14 +40,17 @@ void initGLBuffers(unsigned int *pbo);
 bool debug_mode = false;
 bool freecam_mode = false;
 bool use_cuda = false;
-bool producer_is_fake = false;
+bool simulated_camera = false;
 bool use_pbo = false;
 bool use_projector = true;
 bool use_screen = true;
+bool cam_color_mode = false;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
 const unsigned int cam_height = 540;
+unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
+unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f;
 // global state
 float lastX = proj_width / 2.0f;
@@ -58,6 +61,7 @@ glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
 std::vector<glm::vec2> screen_vert = {{0.5f, 0.5f}};
 std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec2> proj_verts;
+std::vector<glm::vec2> cam_verts;
 std::vector<glm::vec2> leap1_verts;
 std::vector<glm::vec2> leap2_verts;
 float leap_width = 0.0f;
@@ -148,9 +152,10 @@ int main(int argc, char *argv[])
     uint64_t targetFrameSize = 0;
     bool close_signal = false;
     uint8_t *colorBuffer = new uint8_t[image_size];
+    CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
-    camTexture.init(cam_width, cam_height, 4);
-    blocking_queue<CPylonImage> camera_queue;
+    camTexture.init(cam_width, cam_height, n_cam_channels);
+    blocking_queue<CGrabResultPtr> camera_queue;
     // queue_spsc<cv::Mat> camera_queue_cv(50);
     blocking_queue<cv::Mat> camera_queue_cv;
     // blocking_queue<std::vector<uint8_t>> projector_queue;
@@ -168,33 +173,58 @@ int main(int argc, char *argv[])
     std::thread producer, consumer;
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    /* fake producer */
-    std::cout << "Using fake camera to produce images" << std::endl;
-    producer_is_fake = true;
-    std::string path = "../../resource/hand_capture";
-    std::vector<cv::Mat> fake_cam_images;
-    // white image
-    fake_cam_images.push_back(white_image);
-    producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
-        // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
-        Timer t_block;
-        int counter = 0;
-        t_block.start();
-        while (!close_signal)
-        {
-            camera_queue_cv.push(fake_cam_images[counter]);
-            if (counter < fake_cam_images.size() - 1)
-                counter++;
-            else
-                counter = 0;
-            while (t_block.getElapsedTimeInMilliSec() < 2.0)
-            {
-            }
-            t_block.stop();
+    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !simulated_camera)
+    {
+        /* real producer */
+        std::cout << "Using real camera to produce images" << std::endl;
+        projector.show();
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        // camera.balance_white();
+        camera.acquire();
+    }
+    else
+    {
+        /* fake producer */
+        // see https://ja.docs.baslerweb.com/pylonapi/cpp/sample_code#utility_image for pylon image
+        std::cout << "Using fake camera to produce images" << std::endl;
+        simulated_camera = true;
+        std::string path = "../../resource/hand_capture";
+        std::vector<cv::Mat> fake_cam_images;
+        // white image
+        fake_cam_images.push_back(white_image);
+        // images from folder
+        // int file_counter = 0;
+        // for (const auto &entry : fs::directory_iterator(path))
+        // {
+        //     std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
+        //     std::string file_path = entry.path().string();
+        //     cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
+        //     cv::Mat img4;
+        //     cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
+        //     fake_cam_images.push_back(img4);
+        //     file_counter++;
+        // }
+        producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
+            // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
+            Timer t_block;
+            int counter = 0;
             t_block.start();
-        }
-        std::cout << "Producer finish" << std::endl;
-    });
+            while (!close_signal)
+            {
+                camera_queue_cv.push(fake_cam_images[counter]);
+                if (counter < fake_cam_images.size() - 1)
+                    counter++;
+                else
+                    counter = 0;
+                while (t_block.getElapsedTimeInMilliSec() < 1.9)
+                {
+                }
+                t_block.stop();
+                t_block.start();
+            }
+            std::cout << "Producer finish" << std::endl;
+        });
+    }
     // image consumer (real projector = virtual camera)
     consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
         uint8_t *image;
@@ -234,22 +264,16 @@ int main(int argc, char *argv[])
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         /* deal with camera input */
         // prevFrame = curFrame.clone();
-        uint8_t *buffer;
-        if (producer_is_fake)
+        if (simulated_camera)
         {
-            // buffer = white_image.data;
-            cv::Mat cv_image = camera_queue_cv.pop();
-            buffer = cv_image.data;
+            cv::Mat tmp = camera_queue_cv.pop();
+            camTexture.load((uint8_t *)tmp.data, true, cam_buffer_format);
         }
         else
         {
-            CPylonImage pylonImage = camera_queue.pop();
-            auto test = pylonImage.GetImageSize();
-            buffer = (uint8_t *)pylonImage.GetBuffer();
+            ptrGrabResult = camera_queue.pop();
+            camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
         }
-        // cv::Mat tmp(cam_height, cam_width, CV_8UC4, buffer);
-        // curFrame = tmp.clone();
-        camTexture.load(buffer, true);
 
         // render
         if (finish_calibration)
@@ -297,17 +321,19 @@ int main(int argc, char *argv[])
                 object_points.push_back(point);
             }
             */
+            float baseline = 40.0f;
             for (int i = 0; i < leap1_rays_2d.size(); i++)
             {
                 // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
-                float z = 40 / (leap1_rays_2d[i].x - leap2_rays_2d[i].x);
+                float z = baseline / (leap1_rays_2d[i].x - leap2_rays_2d[i].x);
                 float y = z * leap1_rays_2d[i].y;
-                float x = z * leap1_rays_2d[i].x - 20;
+                float x = z * leap1_rays_2d[i].x - baseline / 2.0f;
                 object_points.push_back(cv::Point3f(x, -z, y));
             }
-            for (int i = 0; i < proj_verts.size(); i++)
+            for (int i = 0; i < cam_verts.size(); i++)
             {
-                image_points.push_back(cv::Point2f(proj_width * (proj_verts[i].x + 1) / 2, proj_height * (proj_verts[i].y + 1) / 2));
+                // image_points.push_back(cv::Point2f(proj_width * (proj_verts[i].x + 1) / 2, proj_height * (proj_verts[i].y + 1) / 2));
+                image_points.push_back(cv::Point2f(cam_width * (cam_verts[i].x + 1) / 2, cam_height * (cam_verts[i].y + 1) / 2));
             }
             // use solve pnp to find transformation of projector to leap space
             cv::Mat1f camera_matrix = cv::Mat::eye(3, 3, CV_32F);
@@ -343,10 +369,12 @@ int main(int argc, char *argv[])
             unsigned int cur_height;
             if (state_machine % 3 == 0)
             {
-                cur_width = proj_width;
-                cur_height = proj_height;
-                glfwSetWindowMonitor(window, NULL, secondary_screen_x + 100, secondary_screen_y + 100, proj_width, proj_height, GLFW_DONT_CARE);
-                glViewport(0, 0, proj_width, proj_height); // set viewport
+                // cur_width = proj_width;
+                // cur_height = proj_height;
+                cur_width = cam_width;
+                cur_height = cam_height;
+                glfwSetWindowMonitor(window, NULL, secondary_screen_x + 100, secondary_screen_y + 100, cur_width, cur_height, GLFW_DONT_CARE);
+                glViewport(0, 0, cur_width, cur_height); // set viewport
                 glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 textureShader.use();
@@ -439,7 +467,7 @@ int main(int argc, char *argv[])
     camera.kill();
     glfwTerminate();
     delete[] colorBuffer;
-    if (producer_is_fake)
+    if (simulated_camera)
     {
         producer.join();
     }
@@ -476,7 +504,8 @@ void processInput(GLFWwindow *window)
             {
                 if (state_machine % 3 == 0)
                 {
-                    proj_verts.push_back(screen_vert[0]);
+                    // proj_verts.push_back(screen_vert[0]);
+                    cam_verts.push_back(screen_vert[0]);
                 }
                 else if (state_machine % 3 == 1)
                 {
