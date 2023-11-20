@@ -1359,7 +1359,7 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     try
     {
         arr = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2p.npy");
-        my_npz = cnpy::npz_load("../../resource/calibrations/calibration/camproj_calibration.npz");
+        my_npz = cnpy::npz_load("../../resource/calibrations/camproj_calibration/calibration.npz");
     }
     catch (std::runtime_error &e)
     {

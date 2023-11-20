@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
-set(Python_EXECUTABLE "C:/Users/sens/miniconda3/envs/sd/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
+set(Python_EXECUTABLE "C:/Users/sens/.conda/envs/sandbox/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
 set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")
@@ -9,8 +9,8 @@ set(OPENCV_COMPILER "vc15")
 # set(OpenCV_DIR "C:/OpenCV_Build/install_debug")
 # set(OPENCV_COMPILER "vc16")
 set(CUDA_EXAMPLES "C:/src/cuda-samples")
-set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/lib/x64")  # 11.8
-set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/")  # 11.8
+set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64")  # 11.8, 12.2
+set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/")  # 11.8, 12.2
 # set(CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/third-party/opencv" ${CMAKE_PREFIX_PATH})
 cmake_policy(SET CMP0074 NEW)    # respect <PACKAGE>_ROOT variables in "find_package"
 include(CMakePrintHelpers)
