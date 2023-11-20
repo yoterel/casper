@@ -52,7 +52,7 @@ const unsigned int cam_width = 720;
 const unsigned int cam_height = 540;
 unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
-float exposure = 1850.0f;
+float exposure = 10000.0f;
 // global state
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
@@ -350,8 +350,10 @@ int main(int argc, char *argv[])
                 std::cout << e.what() << std::endl;
                 exit(1);
             }
-            glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
-            cv::solvePnP(object_points, image_points, camera_matrix, cv::Mat1f(), rvec, tvec);
+            // glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
+            cv::Mat camera_intrinsics(3, 3, CV_64F, my_npz["cam_intrinsics"].data<double>());
+            // std::cout << camera_intrinsics2 << std::endl;
+            cv::solvePnP(object_points, image_points, camera_intrinsics, cv::Mat1f(), rvec, tvec);
             cv::Mat1f rot_mat;
             cv::Rodrigues(rvec, rot_mat);
             cv::Mat1f w2c(4, 4, CV_32FC1);
@@ -371,8 +373,8 @@ int main(int argc, char *argv[])
             w2c.at<float>(3, 1) = 0.0f;
             w2c.at<float>(3, 2) = 0.0f;
             w2c.at<float>(3, 3) = 1.0f;
-            // cv::Mat c2w = w2c.inv();
-            // std::cout << c2w << std::endl;
+            cv::Mat c2w = w2c.inv();
+            std::cout << c2w << std::endl;
             cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c.data, {4, 4}, "w");
             glfwSetWindowShouldClose(window, true);
         }
