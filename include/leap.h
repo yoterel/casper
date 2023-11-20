@@ -7,14 +7,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
-#define WINDOWS_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#pragma warning(disable : 4996)
-#include <process.h>
+// #define WINDOWS_LEAN_AND_MEAN
+// #define NOMINMAX
+// #include <windows.h>
+// #pragma warning(disable : 4996)
+// #include <process.h>
 #include "LeapC.h"
-#define LockMutex EnterCriticalSection
-#define UnlockMutex LeaveCriticalSection
+// #define LockMutex EnterCriticalSection
+// #define UnlockMutex LeaveCriticalSection
 
 #ifdef PYTHON_BINDINGS_BUILD
 // #include <nanobind/ndarray.h>
@@ -33,35 +33,8 @@ enum class LEAP_STATUS
 class LeapConnect
 {
 public:
-    LeapConnect(bool pollMode = true, bool with_images = false)
-    {
-        OpenConnection();
-        while (!IsConnected)
-        {
-            std::cout << "Leap: waiting for connection..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        }
-        if (with_images)
-        {
-            LeapSetPolicyFlags(connectionHandle, eLeapPolicyFlag_Images, 0);
-        }
-        else
-        {
-            LeapSetPolicyFlags(connectionHandle, 0, 0);
-        }
-        // LeapSetPolicyFlags(connectionHandle,
-        //                    eLeapPolicyFlag_Images & eLeapPolicyFlag_MapPoints, 0);
-        // LeapSetPolicyFlags(connectionHandle,
-        //                    eLeapPolicyFlag_BackgroundFrames & eLeapPolicyFlag_Images, 0);
-        LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_HMD); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
-        // LeapRequestConfigValue();
-        // LeapSaveConfigValue();
-        m_poll = pollMode;
-    };
-    ~LeapConnect()
-    {
-        kill();
-    }
+    LeapConnect(bool pollMode = true, bool with_images = false);
+    ~LeapConnect();
     void OpenConnection(void);
     void kill(void);
     LEAP_CONNECTION *getConnectionHandle(void) { return &connectionHandle; };
@@ -99,7 +72,8 @@ private:
 
     // Threading variables
     std::thread pollingThread;
-    CRITICAL_SECTION dataLock;
+    std::mutex m_mutex;
+    // CRITICAL_SECTION dataLock;
     void serviceMessageLoop();
     void handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event);
     void handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event);

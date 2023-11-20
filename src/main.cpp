@@ -1447,7 +1447,7 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     if (poll_mode)
     {
         frame = leap.getFrame();
-        if (frame && (frame->tracking_frame_id > lastFrameID))
+        if (frame != NULL && (frame->tracking_frame_id > lastFrameID))
         {
             lastFrameID = frame->tracking_frame_id;
             skeleton_vertices.clear();

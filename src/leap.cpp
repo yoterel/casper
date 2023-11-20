@@ -1,5 +1,36 @@
 #include "leap.h"
 
+LeapConnect::LeapConnect(bool pollMode, bool with_images)
+{
+    OpenConnection();
+    while (!IsConnected)
+    {
+        std::cout << "Leap: waiting for connection..." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    if (with_images)
+    {
+        LeapSetPolicyFlags(connectionHandle, eLeapPolicyFlag_Images, 0);
+    }
+    else
+    {
+        LeapSetPolicyFlags(connectionHandle, 0, 0);
+    }
+    // LeapSetPolicyFlags(connectionHandle,
+    //                    eLeapPolicyFlag_Images & eLeapPolicyFlag_MapPoints, 0);
+    // LeapSetPolicyFlags(connectionHandle,
+    //                    eLeapPolicyFlag_BackgroundFrames & eLeapPolicyFlag_Images, 0);
+    LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_Desktop); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
+    // LeapRequestConfigValue();
+    // LeapSaveConfigValue();
+    m_poll = pollMode;
+}
+
+LeapConnect::~LeapConnect()
+{
+    kill();
+}
+
 /** Called by serviceMessageLoop() when a connection event is returned by LeapPollConnection(). */
 void LeapConnect::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event)
 {
@@ -182,7 +213,7 @@ void LeapConnect::OpenConnection(void)
         if (result == eLeapRS_Success)
         {
             _isRunning = true;
-            InitializeCriticalSection(&dataLock);
+            // InitializeCriticalSection(&dataLock);
             pollingThread = std::thread(&LeapConnect::serviceMessageLoop, this);
         }
     }
@@ -263,7 +294,7 @@ const char *LeapConnect::ResultString(eLeapRS r)
 
 void LeapConnect::setDevice(const LEAP_DEVICE_INFO *deviceProps)
 {
-    LockMutex(&dataLock);
+    std::lock_guard<std::mutex> guard(m_mutex);
     if (lastDevice)
     {
         free(lastDevice->serial);
@@ -275,16 +306,14 @@ void LeapConnect::setDevice(const LEAP_DEVICE_INFO *deviceProps)
     *lastDevice = *deviceProps;
     lastDevice->serial = (char *)malloc(deviceProps->serial_length);
     memcpy(lastDevice->serial, deviceProps->serial, deviceProps->serial_length);
-    UnlockMutex(&dataLock);
 }
 
 /** Returns a pointer to the cached device info. */
 LEAP_DEVICE_INFO *LeapConnect::GetDeviceProperties()
 {
     LEAP_DEVICE_INFO *currentDevice;
-    LockMutex(&dataLock);
+    std::lock_guard<std::mutex> guard(m_mutex);
     currentDevice = lastDevice;
-    UnlockMutex(&dataLock);
     return currentDevice;
 }
 
@@ -303,7 +332,7 @@ void LeapConnect::setImage(const LEAP_IMAGE_EVENT *imageEvent)
     const LEAP_IMAGE_PROPERTIES *properties = &imageEvent->image[0].properties;
     if (properties->bpp != 1)
         return;
-    LockMutex(&dataLock);
+    std::lock_guard<std::mutex> guard(m_mutex);
     m_imageFrameID = imageEvent->info.frame_id;
     if (properties->width * properties->height != m_imageSize)
     {
@@ -319,13 +348,12 @@ void LeapConnect::setImage(const LEAP_IMAGE_EVENT *imageEvent)
 
     memcpy(m_imageBuffer, (char *)imageEvent->image[0].data + imageEvent->image[0].offset, m_imageSize);
     memcpy((char *)m_imageBuffer + m_imageSize, (char *)imageEvent->image[1].data + imageEvent->image[1].offset, m_imageSize);
-    UnlockMutex(&dataLock);
     m_imageReady = true;
 }
 
 void LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height)
 {
-    LockMutex(&dataLock);
+    std::lock_guard<std::mutex> guard(m_mutex);
     if (m_imageReady)
     {
         std::vector<uint8_t> buffer1((char *)m_imageBuffer, (char *)m_imageBuffer + m_imageSize);
@@ -340,7 +368,6 @@ void LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &i
         width = 0;
         height = 0;
     }
-    UnlockMutex(&dataLock);
 }
 /**
  * Caches the newest frame by copying the tracking event struct returned by
@@ -353,7 +380,7 @@ void LeapConnect::setFrame(const LEAP_TRACKING_EVENT *frame)
     //     lastFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(*frame));
     // *lastFrame = *frame;
     // UnlockMutex(&dataLock);
-    LockMutex(&dataLock);
+    std::lock_guard<std::mutex> guard(m_mutex);
     if (!lastFrame)
     {
         lastFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(LEAP_TRACKING_EVENT));
@@ -364,29 +391,19 @@ void LeapConnect::setFrame(const LEAP_TRACKING_EVENT *frame)
     {
         deepCopyTrackingEvent(lastFrame, frame);
     }
-
-    UnlockMutex(&dataLock);
 }
 
 LEAP_TRACKING_EVENT *LeapConnect::getFrame()
 {
-    LEAP_TRACKING_EVENT *currentFrame = NULL;
-    if (currentFrame == NULL)
-    {
-        currentFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(LEAP_TRACKING_EVENT));
-        currentFrame->pHands = (LEAP_HAND *)malloc(2 * sizeof(LEAP_HAND));
-    }
-
-    LockMutex(&dataLock);
+    std::lock_guard<std::mutex> guard(m_mutex);
     if (lastFrame == NULL)
     {
-        UnlockMutex(&dataLock);
         return NULL;
     }
-
+    LEAP_TRACKING_EVENT *currentFrame = NULL;
+    currentFrame = (LEAP_TRACKING_EVENT *)malloc(sizeof(LEAP_TRACKING_EVENT));
+    currentFrame->pHands = (LEAP_HAND *)malloc(lastFrame->nHands * sizeof(LEAP_HAND));
     deepCopyTrackingEvent(currentFrame, lastFrame);
-    UnlockMutex(&dataLock);
-
     return currentFrame;
     // LEAP_TRACKING_EVENT *currentFrame = NULL;
     // LockMutex(&dataLock);
@@ -399,10 +416,8 @@ std::vector<float> LeapConnect::getIndexTip()
 {
     // todo: deep copy frame instead of assigning pointers
     LEAP_TRACKING_EVENT *currentFrame;
-
-    LockMutex(&dataLock);
+    std::lock_guard<std::mutex> guard(m_mutex);
     currentFrame = lastFrame;
-    UnlockMutex(&dataLock);
     std::vector<float> tip;
     if (NULL == currentFrame)
         return tip;

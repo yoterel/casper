@@ -540,8 +540,9 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
     shader.use();
     shader.SetMaterial(GetMaterial());
     std::vector<glm::mat4> transforms;
-    auto test = local_to_world[0][0];
-    GetBoneTransforms(transforms, bones_to_world, local_to_world, use_bones);
+    // todo: for unknown reason passing local_to_world fails, probably memory leak.
+    // GetBoneTransforms(transforms, bones_to_world, local_to_world, use_bones);
+    GetBoneTransformsHack(transforms, bones_to_world);
     for (unsigned int i = 0; i < transforms.size(); i++)
     {
         shader.SetBoneTransform(i, transforms[i]);
@@ -702,6 +703,7 @@ void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4> &tran
         transforms[BoneIndex] = NodeTransformation;
     }
 }
+
 void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world, const bool use_bones)
 {
     transforms.resize(m_BoneInfo.size());
@@ -723,6 +725,21 @@ void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &transforms, const s
             transforms[i] = local_to_world * iden;
         }
     }
+    // skin the mesh using the bone to world transforms from leap
+    // offset matrix is local to bone matrix ("inverse bind pose")
+    if (bones_to_world.size() > 0)
+    {
+        for (auto const &x : bone_leap_map)
+        {
+            unsigned int bone_index = m_BoneNameToIndexMap[x.first];
+            transforms[bone_index] = bones_to_world[x.second] * m_BoneInfo[bone_index].LocalToBoneTransform;
+        }
+    }
+}
+
+void SkinnedModel::GetBoneTransformsHack(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> bones_to_world)
+{
+    transforms.resize(m_BoneInfo.size());
     // skin the mesh using the bone to world transforms from leap
     // offset matrix is local to bone matrix ("inverse bind pose")
     if (bones_to_world.size() > 0)

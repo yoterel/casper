@@ -138,6 +138,7 @@ public:
                 const glm::mat4 &local_to_world, unsigned int camTex, bool useFBO = true, bool use_bones = false);
     const Material &GetMaterial();
     void GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world, const bool use_bones = false);
+    void GetBoneTransformsHack(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> bones_to_world);
     glm::vec3 getCenterOfMass();
     std::string getBoneName(unsigned int index);
     unsigned int NumBones() const
