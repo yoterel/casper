@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
-set(Python_EXECUTABLE "C:/Users/sens/.conda/envs/sandbox/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
+set(Python_EXECUTABLE "C:/Users/sens/miniconda3/envs/sd/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
 set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")
@@ -9,8 +9,8 @@ set(OPENCV_COMPILER "vc15")
 # set(OpenCV_DIR "C:/OpenCV_Build/install_debug")
 # set(OPENCV_COMPILER "vc16")
 set(CUDA_EXAMPLES "C:/src/cuda-samples")
-set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64")  # 11.8
-set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/")  # 11.8
+set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/lib/x64")  # 11.8
+set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/")  # 11.8
 # set(CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/third-party/opencv" ${CMAKE_PREFIX_PATH})
 cmake_policy(SET CMP0074 NEW)    # respect <PACKAGE>_ROOT variables in "find_package"
 include(CMakePrintHelpers)
@@ -152,7 +152,7 @@ target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 
 ####################################### coaxial calibration
 add_executable(coaxial_calib 
-    src/coaxial.cpp
+    src/coaxial_calibration.cpp
     src/display
     src/camera.cpp
     src/timer.cpp
@@ -185,10 +185,9 @@ target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-pa
 # freetype
 target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
 target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
-
 ####################################### leap->proejctor calibration
 add_executable(leap_calib 
-    src/calibration.cpp
+    src/leap_calibration.cpp
     src/display
     src/camera.cpp
     src/timer.cpp
@@ -197,6 +196,7 @@ add_executable(leap_calib
     src/text.cpp
     src/fbo.cpp
     src/leap.cpp
+    src/cnpy.cpp
     src/point_cloud.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
@@ -225,7 +225,9 @@ target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party
 target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
 # leap
 target_link_libraries(leap_calib PRIVATE LeapSDK::LeapC)
-
+# zlib
+target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
+target_link_libraries(leap_calib PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
 ######################################### cuda sample program
 # add_executable(cuda_example 
 #     # src/add.cu

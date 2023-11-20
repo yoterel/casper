@@ -1358,8 +1358,8 @@ bool loadCalibrationResults(glm::mat4 &vcam_project,
     cnpy::npz_t my_npz;
     try
     {
-        arr = cnpy::npy_load("C:/src/augmented_hands/debug/leap_calibration/w2p.npy");
-        my_npz = cnpy::npz_load("C:/src/augmented_hands/debug/calibration/calibration.npz");
+        arr = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2p.npy");
+        my_npz = cnpy::npz_load("../../resource/calibrations/calibration/camproj_calibration.npz");
     }
     catch (std::runtime_error &e)
     {

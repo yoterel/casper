@@ -11,6 +11,7 @@
 #include "queue.h"
 #include "camera.h"
 #include "display.h"
+#include "cnpy.h"
 #include "SerialPort.h"
 #include "shader.h"
 #include "skinned_shader.h"
@@ -118,7 +119,7 @@ int main(int argc, char *argv[])
     std::cout << std::endl;
 
     // glfwSwapInterval(0);                       // do not sync to monitor
-    glViewport(0, 0, proj_width, proj_height); // set viewport
+    glViewport(0, 0, cam_width, cam_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glPointSize(10.0f);
     glEnable(GL_CULL_FACE);
@@ -295,12 +296,12 @@ int main(int argc, char *argv[])
             std::vector<cv::Point3f> object_points;
 
             // second convert rays to 3D leap space using the extrinsics matrix
-            /*
-            std::vector<cv::Point3f> leap1_ray_dirs_3d, leap2_ray_dirs_3d;
             glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
             glm::mat4 leap2_extrinsic = glm::mat4(1.0f);
             LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, glm::value_ptr(leap1_extrinsic));
             LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, glm::value_ptr(leap2_extrinsic));
+            /*
+            std::vector<cv::Point3f> leap1_ray_dirs_3d, leap2_ray_dirs_3d;
             cv::Point3f leap1_origin = {leap1_extrinsic[3][0], leap1_extrinsic[3][1], leap1_extrinsic[3][2]};
             cv::Point3f leap2_origin = {leap2_extrinsic[3][0], leap2_extrinsic[3][1], leap2_extrinsic[3][2]};
             for (int i = 0; i < leap1_verts.size(); i++)
@@ -321,7 +322,7 @@ int main(int argc, char *argv[])
                 object_points.push_back(point);
             }
             */
-            float baseline = 40.0f;
+            float baseline = leap2_extrinsic[3][0] - leap1_extrinsic[3][0];
             for (int i = 0; i < leap1_rays_2d.size(); i++)
             {
                 // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
@@ -336,31 +337,43 @@ int main(int argc, char *argv[])
                 image_points.push_back(cv::Point2f(cam_width * (cam_verts[i].x + 1) / 2, cam_height * (cam_verts[i].y + 1) / 2));
             }
             // use solve pnp to find transformation of projector to leap space
-            cv::Mat1f camera_matrix = cv::Mat::eye(3, 3, CV_32F);
-            cv::Mat1f dist_coeffs = cv::Mat::zeros(8, 1, CV_32F);
+            cv::Mat1f camera_matrix = cv::Mat::eye(3, 3, CV_32F); // todo: fill up with camera info
+            cv::Mat1f dist_coeffs = cv::Mat::zeros(8, 1, CV_32F); // todo: fill up with camera info
             cv::Mat1f rvec, tvec;
+            cnpy::npz_t my_npz;
+            try
+            {
+                my_npz = cnpy::npz_load("../../resource/calibrations/calibration/camproj_calibration.npz");
+            }
+            catch (std::runtime_error &e)
+            {
+                std::cout << e.what() << std::endl;
+                exit(1);
+            }
+            glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
             cv::solvePnP(object_points, image_points, camera_matrix, cv::Mat1f(), rvec, tvec);
             cv::Mat1f rot_mat;
             cv::Rodrigues(rvec, rot_mat);
-            cv::Mat1f w2p(4, 4, CV_32FC1);
-            w2p.at<float>(0, 0) = rot_mat.at<float>(0, 0);
-            w2p.at<float>(0, 1) = rot_mat.at<float>(0, 1);
-            w2p.at<float>(0, 2) = rot_mat.at<float>(0, 2);
-            w2p.at<float>(0, 3) = tvec.at<float>(0, 0);
-            w2p.at<float>(1, 0) = rot_mat.at<float>(1, 0);
-            w2p.at<float>(1, 1) = rot_mat.at<float>(1, 1);
-            w2p.at<float>(1, 2) = rot_mat.at<float>(1, 2);
-            w2p.at<float>(1, 3) = tvec.at<float>(1, 0);
-            w2p.at<float>(2, 0) = rot_mat.at<float>(2, 0);
-            w2p.at<float>(2, 1) = rot_mat.at<float>(2, 1);
-            w2p.at<float>(2, 2) = rot_mat.at<float>(2, 2);
-            w2p.at<float>(2, 3) = tvec.at<float>(2, 0);
-            w2p.at<float>(3, 0) = 0.0f;
-            w2p.at<float>(3, 1) = 0.0f;
-            w2p.at<float>(3, 2) = 0.0f;
-            w2p.at<float>(3, 3) = 1.0f;
-            cv::Mat p2w = w2p.inv();
-            std::cout << p2w << std::endl;
+            cv::Mat1f w2c(4, 4, CV_32FC1);
+            w2c.at<float>(0, 0) = rot_mat.at<float>(0, 0);
+            w2c.at<float>(0, 1) = rot_mat.at<float>(0, 1);
+            w2c.at<float>(0, 2) = rot_mat.at<float>(0, 2);
+            w2c.at<float>(0, 3) = tvec.at<float>(0, 0);
+            w2c.at<float>(1, 0) = rot_mat.at<float>(1, 0);
+            w2c.at<float>(1, 1) = rot_mat.at<float>(1, 1);
+            w2c.at<float>(1, 2) = rot_mat.at<float>(1, 2);
+            w2c.at<float>(1, 3) = tvec.at<float>(1, 0);
+            w2c.at<float>(2, 0) = rot_mat.at<float>(2, 0);
+            w2c.at<float>(2, 1) = rot_mat.at<float>(2, 1);
+            w2c.at<float>(2, 2) = rot_mat.at<float>(2, 2);
+            w2c.at<float>(2, 3) = tvec.at<float>(2, 0);
+            w2c.at<float>(3, 0) = 0.0f;
+            w2c.at<float>(3, 1) = 0.0f;
+            w2c.at<float>(3, 2) = 0.0f;
+            w2c.at<float>(3, 3) = 1.0f;
+            // cv::Mat c2w = w2c.inv();
+            // std::cout << c2w << std::endl;
+            cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c.data, {4, 4}, "w");
             glfwSetWindowShouldClose(window, true);
         }
         else
