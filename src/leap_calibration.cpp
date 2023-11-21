@@ -399,6 +399,7 @@ int main(int argc, char *argv[])
                 textureShader.setBool("flipVer", true);
                 textureShader.setInt("src", 0);
                 textureShader.setBool("binary", false);
+                textureShader.setBool("isGray", true);
                 camTexture.bind();
                 fullScreenQuad.render();
             }

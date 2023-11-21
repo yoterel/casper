@@ -22,10 +22,10 @@ def reconstruct(root_path):
     calib_res_path = Path(root_path, "debug", "calibration")
     res = np.load(Path(calib_res_path, "calibration.npz"))
     calib_res = {k: res[k] for k in res.keys()}
-    cam_int, cam_dist,\
-        proj_int, proj_dist,\
-        proj_transform = calib_res["cam_intrinsics"], calib_res["cam_distortion"],\
-        calib_res["proj_intrinsics"], calib_res["proj_distortion"],\
+    cam_int, cam_dist, \
+        proj_int, proj_dist, \
+        proj_transform = calib_res["cam_intrinsics"], calib_res["cam_distortion"], \
+        calib_res["proj_intrinsics"], calib_res["proj_distortion"], \
         calib_res["proj_transform"]
     leap_calib_res_path = Path(root_path, "debug", "leap_calibration")
     world2projector = np.load(Path(leap_calib_res_path, "w2p.npy"))
@@ -264,7 +264,7 @@ def acq_leap_projector(root_path, n_sessions=10, manual=False):
                 leapmotion, proj, loc_2d)
         else:
             new_loc_x = np.random.randint(200, 824, size=(1,))
-            new_loc_y = np.random.randint(100, 668, size=(1,))
+            new_loc_y = np.random.randint(300, 668, size=(1,))
             loc_2d = np.array([new_loc_x, new_loc_y])
             image = np.zeros((768, 1024, 3), dtype=np.uint8)
             image[:, new_loc_x, :] = 255
@@ -300,8 +300,10 @@ def calibrate_leap_projector(root_path, force_calib=False):
         res = np.load(Path(dst_path, "calibration_data.npz"))
         res = {k: res[k] for k in res.keys()}
         image_locations = res["tip_locations_2d"].squeeze().astype(np.float32)
-        success, rotation_vector, translation_vector = cv2.solvePnP(res["tip_locations"], image_locations,
-                                                                    procam_calib_res["proj_intrinsics"], procam_calib_res["proj_distortion"])
+        # success, rotation_vector, translation_vector = cv2.solvePnP(res["tip_locations"], image_locations,
+        #                                                             procam_calib_res["proj_intrinsics"], procam_calib_res["proj_distortion"])
+        success, rotation_vector, translation_vector, inliers = cv2.solvePnPRansac(res["tip_locations"], image_locations,
+                                                                                   procam_calib_res["proj_intrinsics"], procam_calib_res["proj_distortion"])
         rot_mat, _ = cv2.Rodrigues(rotation_vector)
         translation_vector = translation_vector.squeeze()
         world2projector = gsoup.compose_rt(
@@ -335,11 +337,11 @@ def calibrate_leap_projector(root_path, force_calib=False):
 
 if __name__ == "__main__":
     root_path = Path("C:/src/augmented_hands")
-    # pix2pix(root_path)
-    # acq_procam(root_path)
-    # calibrate_procam(root_path)
-    acq_leap_projector(root_path, 20, False)
-    calibrate_leap_projector(root_path, False)
+    pix2pix(root_path)
+    acq_procam(root_path)
+    calibrate_procam(root_path)
+    # acq_leap_projector(root_path, 20, False)
+    # calibrate_leap_projector(root_path, True)
 
     # dst_path = Path(root_path, "debug", "leap_calibration")
     # res = np.load(Path(dst_path, "calibration_data_manual.npz"))
