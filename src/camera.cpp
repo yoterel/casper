@@ -346,16 +346,20 @@ public:
                 height = ptrGrabResult->GetHeight();
                 width = ptrGrabResult->GetWidth();
             }
-            CImageFormatConverter formatConverter;
-            formatConverter.OutputPixelFormat = PixelType_BGRA8packed; // PixelType_Mono8, PixelType_BGRA8packed
-            CPylonImage pylonImage;
-            formatConverter.Convert(pylonImage, ptrGrabResult);
-            // uint8_t* buffer = (uint8_t*) pylonImage.GetBuffer();
-            // std::cout << "Gray value of first pixel: " << (uint32_t) buffer[0] << std::endl;
-            // std::cout << "SizeX: " << ptrGrabResult->GetWidth() << std::endl;
-            // std::cout << "SizeY: " << ptrGrabResult->GetHeight() << std::endl;
-            // cv::Mat myimage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*) pylonImage.GetBuffer());
-            // cv::imwrite("test1.png", myimage);
+            /* pylon conversion
+            // CImageFormatConverter formatConverter;
+            // formatConverter.OutputPixelFormat = PixelType_BGRA8packed; // PixelType_Mono8, PixelType_BGRA8packed
+            // CPylonImage pylonImage;
+            // formatConverter.Convert(pylonImage, ptrGrabResult);
+            */
+            /* some tests
+                // uint8_t* buffer = (uint8_t*) pylonImage.GetBuffer();
+                // std::cout << "Gray value of first pixel: " << (uint32_t) buffer[0] << std::endl;
+                // std::cout << "SizeX: " << ptrGrabResult->GetWidth() << std::endl;
+                // std::cout << "SizeY: " << ptrGrabResult->GetHeight() << std::endl;
+                // cv::Mat myimage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*) pylonImage.GetBuffer());
+                // cv::imwrite("test1.png", myimage);
+            */
             myqueue.push(ptrGrabResult);
             // auto runtime = std::chrono::system_clock::now() - start;
             //     std::cout << "ms: "
@@ -452,8 +456,15 @@ void BaslerCamera::acquire()
 
 void BaslerCamera::balance_white()
 {
-    camera.LightSourcePreset.SetValue(LightSourcePreset_Off);
-    camera.BalanceWhiteAuto.SetValue(BalanceWhiteAuto_Once);
+    try
+    {
+        camera.LightSourcePreset.SetValue(LightSourcePreset_Off);
+        camera.BalanceWhiteAuto.SetValue(BalanceWhiteAuto_Once);
+    }
+    catch (const GenericException &e)
+    {
+        std::cerr << "Baser API: An exception occurred: " << e.GetDescription() << std::endl;
+    }
 }
 
 void BaslerCamera::kill()
