@@ -233,7 +233,7 @@ def acq_cam(root_path):
     dst_path = Path(root_path, "resource", "calibrations", "cam_calibration")
     dst_path.mkdir(parents=True, exist_ok=True)
     cam = basler.camera()
-    cam.init(12682.0)
+    cam.init(10000.0)
     cam.balance_white()
     for i in range(100):
         cam.capture()  # warmup
@@ -271,14 +271,36 @@ def acq_cam(root_path):
 def calibrate_cam(root_path, force_calib=False):
     CHECKERBOARD_WIDTH = 10
     CHECKERBOARD_HEIGHT = 7
-    square_size = 2
+    pattern_size = (CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+    objp = np.zeros((np.prod(pattern_size), 3), np.float32)
+    objp[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
+    objp *= chess_block_size
+    chess_block_size = 2
     dst_path = Path(root_path, "resource", "calibrations", "cam_calibration")
     if Path(dst_path, "calibration.npz").exists() and not force_calib:
         res = np.load(Path(dst_path, "calibration.npz"))
         res = {k: res[k] for k in res.keys()}
     else:
+        images = gsoup.load_images(Path(dst_path), "*.png")
+        imgpoints = []
+        objpoints = []
+        for image in images:
+            ret, corners = cv2.findChessboardCorners(
+                image,
+                pattern_size,
+                cv2.CALIB_CB_ADAPTIVE_THRESH
+                + cv2.CALIB_CB_FAST_CHECK
+                + cv2.CALIB_CB_NORMALIZE_IMAGE,
+            )
+            if ret:
+                corners2 = cv2.cornerSubPix(
+                    image, corners, (11, 11), (-1, -1), criteria
+                )
+                imgpoints.append(corners2)
+                objpoints.append(objp)
         ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-            objpoints, imgpoints, gray.shape[::-1], None, None
+            objpoints, imgpoints, images.shape[1::-1], None, None
         )
         res = {"cam_intrinsics": mtx, "cam_distortion": dist}
         np.savez(Path(dst_path, "calibration.npz"), **res)
@@ -293,26 +315,28 @@ def calibrate_cam(root_path, force_calib=False):
         frame = orig_frame.copy()
         ret, corners = cv2.findChessboardCorners(
             frame,
-            (CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT),
+            pattern_size,
             cv2.CALIB_CB_ADAPTIVE_THRESH
             + cv2.CALIB_CB_FAST_CHECK
             + cv2.CALIB_CB_NORMALIZE_IMAGE,
         )
-        cv2.drawChessboardCorners(
-            frame, (CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT), corners, ret
-        )
-        pattern_size = (CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT)
-        objp = np.zeros((np.prod(pattern_size), 3), np.float32)
-        objp[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
-        objp *= square_size
-        print("objp:", objp.shape)
-        print("corners:", corners.shape)
-        ret, rvec, tvec = cv2.solvePnP(
-            objp, corners, res["cam_intrinsics"], res["distortion"]
-        )
-        frame = cv2.drawFrameAxes(
-            frame, res["cam_intrinsics"], res["distortion"], rvec, tvec, square_size, 3
-        )
+        cv2.drawChessboardCorners(frame, pattern_size, corners, ret)
+        if ret:
+            print("objp:", objp.shape)
+            print("corners:", corners.shape)
+            ret, rvec, tvec = cv2.solvePnP(
+                objp, corners, res["cam_intrinsics"], res["distortion"]
+            )
+            if ret:
+                frame = cv2.drawFrameAxes(
+                    frame,
+                    res["cam_intrinsics"],
+                    res["distortion"],
+                    rvec,
+                    tvec,
+                    chess_block_size,
+                    3,
+                )
         cv2.imshow("frame: ", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
