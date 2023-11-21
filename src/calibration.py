@@ -238,7 +238,7 @@ def acq_cam(root_path):
     for i in range(100):
         cam.capture()  # warmup
     cur_session = 0
-    sessions = sorted([int(x.name) for x in Path(dst_path).glob("*")])
+    sessions = sorted([int(x.stem) for x in Path(dst_path).glob("*")])
     if len(sessions) > 0:
         cur_session = sessions[-1] + 1
     while True:
@@ -272,17 +272,17 @@ def calibrate_cam(root_path, force_calib=False):
     CHECKERBOARD_WIDTH = 10
     CHECKERBOARD_HEIGHT = 7
     pattern_size = (CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT)
+    chess_block_size = 2
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     objp = np.zeros((np.prod(pattern_size), 3), np.float32)
     objp[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
     objp *= chess_block_size
-    chess_block_size = 2
     dst_path = Path(root_path, "resource", "calibrations", "cam_calibration")
     if Path(dst_path, "calibration.npz").exists() and not force_calib:
         res = np.load(Path(dst_path, "calibration.npz"))
         res = {k: res[k] for k in res.keys()}
     else:
-        images = gsoup.load_images(Path(dst_path), "*.png")
+        images = gsoup.load_images(Path(dst_path), as_grayscale=True)
         imgpoints = []
         objpoints = []
         for image in images:
@@ -300,10 +300,10 @@ def calibrate_cam(root_path, force_calib=False):
                 imgpoints.append(corners2)
                 objpoints.append(objp)
         ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-            objpoints, imgpoints, images.shape[1::-1], None, None
+            objpoints, imgpoints, images[0].shape[::-1], None, None
         )
         res = {"cam_intrinsics": mtx, "cam_distortion": dist}
-        np.savez(Path(dst_path, "calibration.npz"), **res)
+        np.savez(Path(dst_path, "cam_calibration.npz"), **res)
 
     cam = basler.camera()
     cam.init(12682.0)
@@ -322,16 +322,16 @@ def calibrate_cam(root_path, force_calib=False):
         )
         cv2.drawChessboardCorners(frame, pattern_size, corners, ret)
         if ret:
-            print("objp:", objp.shape)
-            print("corners:", corners.shape)
+            # print("objp:", objp.shape)
+            # print("corners:", corners.shape)
             ret, rvec, tvec = cv2.solvePnP(
-                objp, corners, res["cam_intrinsics"], res["distortion"]
+                objp, corners, res["cam_intrinsics"], res["cam_distortion"]
             )
             if ret:
                 frame = cv2.drawFrameAxes(
                     frame,
                     res["cam_intrinsics"],
-                    res["distortion"],
+                    res["cam_distortion"],
                     rvec,
                     tvec,
                     chess_block_size,
@@ -502,7 +502,8 @@ def calibrate_leap_projector(root_path, force_calib=False):
 if __name__ == "__main__":
     root_path = Path("C:/src/augmented_hands")
     # pix2pix(root_path)
-    acq_cam(root_path)
+    # acq_cam(root_path)
+    calibrate_cam(root_path)
     # acq_procam(root_path)
     # calibrate_procam(root_path)
     # acq_leap_projector(root_path, 20, False)
