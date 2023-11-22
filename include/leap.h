@@ -45,6 +45,7 @@ public:
     LEAP_TRACKING_EVENT *getFrame();
     void setImage(const LEAP_IMAGE_EVENT *imageEvent);
     void getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height);
+    void getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height);
     // std::vector<float> getFrame();
     std::vector<float> getIndexTip();
     bool IsConnected = false;
@@ -60,8 +61,11 @@ private:
     LEAP_CLOCK_REBASER m_clockSynchronizer;
     int64_t m_targetFrameTime = 0;
     bool m_poll = false;
-    long long int m_imageFrameID = 0;
+    uint64_t m_imageFrameID = 0;
     void *m_imageBuffer = NULL;
+    void *distortion_buffer_left = NULL;
+    void *distortion_buffer_right = NULL;
+    uint64_t m_currentDistortionId = 0;
     uint64_t m_imageSize = 0;
     bool m_imageReady = false;
     bool m_textureChanged = false;

@@ -348,6 +348,16 @@ void LeapConnect::setImage(const LEAP_IMAGE_EVENT *imageEvent)
 
     memcpy(m_imageBuffer, (char *)imageEvent->image[0].data + imageEvent->image[0].offset, m_imageSize);
     memcpy((char *)m_imageBuffer + m_imageSize, (char *)imageEvent->image[1].data + imageEvent->image[1].offset, m_imageSize);
+    // Save the distortion data if it's version id changes
+    if (m_currentDistortionId != imageEvent->image[0].matrix_version)
+    {
+        size_t distortion_size = 64 * 64 * 2;
+        distortion_buffer_left = malloc(sizeof(float) * distortion_size);
+        distortion_buffer_right = malloc(sizeof(float) * distortion_size);
+        memcpy(distortion_buffer_left, imageEvent->image[0].distortion_matrix, sizeof(float) * distortion_size);
+        memcpy(distortion_buffer_right, imageEvent->image[1].distortion_matrix, sizeof(float) * distortion_size);
+        m_currentDistortionId = imageEvent->image[0].matrix_version;
+    }
     m_imageReady = true;
 }
 
@@ -362,6 +372,26 @@ void LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &i
         image2 = std::move(buffer2);
         width = m_imageWidth;
         height = m_imageHeight;
+    }
+    else
+    {
+        width = 0;
+        height = 0;
+    }
+}
+
+void LeapConnect::getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    size_t distortion_size = 64 * 64 * 2;
+    if (m_imageReady)
+    {
+        std::vector<float> buffer1((float *)distortion_buffer_left, (float *)distortion_buffer_left + distortion_size);
+        std::vector<float> buffer2((float *)distortion_buffer_right, (float *)distortion_buffer_right + distortion_size);
+        dist1 = std::move(buffer1);
+        dist2 = std::move(buffer2);
+        width = 64;
+        height = 64;
     }
     else
     {

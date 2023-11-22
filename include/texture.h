@@ -34,6 +34,7 @@ public:
     }
 
     GLuint getTexture() const { return m_textureObj; }
+    GLuint getActualTextureFormat() const { return m_actualTextureFormat; }
 
 private:
     void initInternal(void *image_data, unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
@@ -46,6 +47,7 @@ private:
     int m_imageHeight = 0;
     int m_imageBPP = 0;
     int m_sizeTexData = 0;
+    GLuint m_actualTextureFormat = GL_RGBA;
 };
 
 #endif /* TEXTURE_H */

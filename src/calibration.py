@@ -311,7 +311,18 @@ def calibrate_cam(root_path, force_calib=False):
         )
         res = {"cam_intrinsics": mtx, "cam_distortion": dist}
         np.savez(Path(dst_path, "cam_calibration.npz"), **res)
-
+        errors = []
+        for i in range(len(objpoints)):
+            imgpoints2, _ = cv2.projectPoints(
+                objpoints[i], rvecs[i], tvecs[i], mtx, dist
+            )
+            error = np.linalg.norm(imgpoints[i] - imgpoints2, axis=-1)
+            # error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2)
+            errors.append(error)
+        count, values = np.histogram(errors, bins=10)
+        print("counts: ", count)
+        print("errors: ", values)
+        print("average error (in pixel units): {}".format(np.mean(errors)))
     cam = basler.camera()
     cam.init(12682.0)
     cam.balance_white()

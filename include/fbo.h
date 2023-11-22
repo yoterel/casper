@@ -15,7 +15,7 @@ public:
     void bind(bool clear = true);
     void unbind();
     void saveColorToFile(std::string filepath);
-    cv::Mat toOpenCVMat();
+    std::vector<uchar> getBuffer();
     Texture *getTexture() { return &m_texture; };
 
 private:

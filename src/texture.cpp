@@ -108,16 +108,20 @@ void Texture::initInternal(void *image_data, unsigned int input_color_format, un
         switch (m_imageBPP)
         {
         case 1:
-            glTexImage2D(m_textureTarget, 0, GL_RED, m_imageWidth, m_imageHeight, 0, GL_RED, GL_UNSIGNED_BYTE, image_data);
+            m_actualTextureFormat = GL_RED;
+            glTexImage2D(m_textureTarget, 0, m_actualTextureFormat, m_imageWidth, m_imageHeight, 0, GL_RED, GL_UNSIGNED_BYTE, image_data);
             break;
         case 2:
-            glTexImage2D(m_textureTarget, 0, GL_RG32F, m_imageWidth, m_imageHeight, 0, GL_RG, GL_FLOAT, image_data);
+            m_actualTextureFormat = GL_RG32F;
+            glTexImage2D(m_textureTarget, 0, m_actualTextureFormat, m_imageWidth, m_imageHeight, 0, GL_RG, GL_FLOAT, image_data);
             break;
         case 3:
-            glTexImage2D(m_textureTarget, 0, GL_RGB, m_imageWidth, m_imageHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, image_data);
+            m_actualTextureFormat = GL_RGB;
+            glTexImage2D(m_textureTarget, 0, m_actualTextureFormat, m_imageWidth, m_imageHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, image_data);
             break;
         case 4:
-            glTexImage2D(m_textureTarget, 0, texture_color_format, m_imageWidth, m_imageHeight, 0, input_color_format, GL_UNSIGNED_BYTE, image_data);
+            m_actualTextureFormat = texture_color_format;
+            glTexImage2D(m_textureTarget, 0, m_actualTextureFormat, m_imageWidth, m_imageHeight, 0, input_color_format, GL_UNSIGNED_BYTE, image_data);
             break;
 
         default:

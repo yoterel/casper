@@ -4,10 +4,18 @@
 
 PointCloud::PointCloud(std::vector<glm::vec3> &vertices, std::vector<glm::vec3> &colors)
 {
+    bool single_color = false;
     if (colors.size() != vertices.size())
     {
-        std::cout << "Error: colors.size() != vertices.size()" << std::endl;
-        exit(1);
+        if (colors.size() != 1)
+        {
+            std::cout << "Error: colors.size() != vertices.size()" << std::endl;
+            exit(1);
+        }
+        else
+        {
+            single_color = true;
+        }
     }
     std::vector<float> verts;
     for (int i = 0; i < vertices.size(); i++)
@@ -15,19 +23,36 @@ PointCloud::PointCloud(std::vector<glm::vec3> &vertices, std::vector<glm::vec3> 
         verts.push_back(vertices[i].x);
         verts.push_back(vertices[i].y);
         verts.push_back(vertices[i].z);
-        verts.push_back(colors[i].x);
-        verts.push_back(colors[i].y);
-        verts.push_back(colors[i].z);
+        if (single_color)
+        {
+            verts.push_back(colors[0].x);
+            verts.push_back(colors[0].y);
+            verts.push_back(colors[0].z);
+        }
+        else
+        {
+            verts.push_back(colors[i].x);
+            verts.push_back(colors[i].y);
+            verts.push_back(colors[i].z);
+        }
     }
     m_verts = vertices.size();
     this->init(verts);
 }
 PointCloud::PointCloud(std::vector<glm::vec2> &vertices, std::vector<glm::vec3> &colors)
 {
+    bool single_color = false;
     if (colors.size() != vertices.size())
     {
-        std::cout << "Error: colors.size() != vertices.size()" << std::endl;
-        exit(1);
+        if (colors.size() != 1)
+        {
+            std::cout << "Error: colors.size() != vertices.size()" << std::endl;
+            exit(1);
+        }
+        else
+        {
+            single_color = true;
+        }
     }
     std::vector<float> verts;
     for (int i = 0; i < vertices.size(); i++)
@@ -35,9 +60,18 @@ PointCloud::PointCloud(std::vector<glm::vec2> &vertices, std::vector<glm::vec3> 
         verts.push_back(vertices[i].x);
         verts.push_back(vertices[i].y);
         verts.push_back(0.0f);
-        verts.push_back(colors[i].x);
-        verts.push_back(colors[i].y);
-        verts.push_back(colors[i].z);
+        if (single_color)
+        {
+            verts.push_back(colors[0].x);
+            verts.push_back(colors[0].y);
+            verts.push_back(colors[0].z);
+        }
+        else
+        {
+            verts.push_back(colors[i].x);
+            verts.push_back(colors[i].y);
+            verts.push_back(colors[i].z);
+        }
     }
     m_verts = vertices.size();
     this->init(verts);

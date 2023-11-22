@@ -99,26 +99,23 @@ void FBO::unbind()
 
 void FBO::saveColorToFile(std::string filepath)
 {
-    unsigned int nrChannels = 4;
-    std::vector<char> buffer(m_width * m_height * nrChannels);
-    GLsizei stride = nrChannels * m_width;
+    std::vector<unsigned char> buffer(m_width * m_height * m_channels);
+    GLsizei stride = m_channels * m_width;
     this->bind(false);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+    glReadPixels(0, 0, m_width, m_height, this->getTexture()->getActualTextureFormat(), GL_UNSIGNED_BYTE, buffer.data());
     stbi_flip_vertically_on_write(true);
-    stbi_write_png(filepath.c_str(), m_width, m_height, 4, buffer.data(), stride);
+    stbi_write_png(filepath.c_str(), m_width, m_height, m_channels, buffer.data(), stride);
     this->unbind();
 }
 
-cv::Mat FBO::toOpenCVMat()
+std::vector<uchar> FBO::getBuffer()
 {
-    unsigned int nrChannels = 4;
-    std::vector<char> buffer(m_width * m_height * nrChannels);
-    GLsizei stride = nrChannels * m_width;
+    std::vector<uchar> buffer(m_width * m_height * 1);
     this->bind(false);
+    // glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
-    cv::Mat fbo_image(m_height, m_width, CV_8UC4, buffer.data());
+    glReadPixels(0, 0, m_width, m_height, this->getTexture()->getActualTextureFormat(), GL_UNSIGNED_BYTE, buffer.data());
     this->unbind();
-    return fbo_image;
+    return buffer;
 }
