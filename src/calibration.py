@@ -278,8 +278,8 @@ def calibrate_cam(root_path, force_calib=False):
     objp[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
     objp *= chess_block_size
     dst_path = Path(root_path, "resource", "calibrations", "cam_calibration")
-    if Path(dst_path, "calibration.npz").exists() and not force_calib:
-        res = np.load(Path(dst_path, "calibration.npz"))
+    if Path(dst_path, "cam_calibration.npz").exists() and not force_calib:
+        res = np.load(Path(dst_path, "cam_calibration.npz"))
         res = {k: res[k] for k in res.keys()}
     else:
         images = gsoup.load_images(Path(dst_path), as_grayscale=True)
@@ -300,7 +300,14 @@ def calibrate_cam(root_path, force_calib=False):
                 imgpoints.append(corners2)
                 objpoints.append(objp)
         ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-            objpoints, imgpoints, images[0].shape[::-1], None, None
+            objpoints,
+            imgpoints,
+            images[0].shape[::-1],
+            None,
+            None,
+            None,
+            None,
+            cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_FIX_PRINCIPAL_POINT,
         )
         res = {"cam_intrinsics": mtx, "cam_distortion": dist}
         np.savez(Path(dst_path, "cam_calibration.npz"), **res)
