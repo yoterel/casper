@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include <glad/glad.h>
+#include <vector>
 
 class Texture
 {
@@ -26,6 +27,8 @@ public:
     void bind(GLenum TextureUnit = GL_TEXTURE0);
 
     void load(uint8_t *buffer, bool use_pbo = true, unsigned int buffer_color_format = GL_BGRA);
+
+    void load(std::vector<uint8_t> buffer, bool use_pbo, unsigned int buffer_color_format = GL_BGRA);
 
     void getImageSize(int &ImageWidth, int &ImageHeight)
     {

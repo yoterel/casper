@@ -361,7 +361,7 @@ void LeapConnect::setImage(const LEAP_IMAGE_EVENT *imageEvent)
     m_imageReady = true;
 }
 
-void LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height)
+bool LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     if (m_imageReady)
@@ -377,10 +377,12 @@ void LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &i
     {
         width = 0;
         height = 0;
+        return false;
     }
+    return true;
 }
 
-void LeapConnect::getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height)
+bool LeapConnect::getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     size_t distortion_size = 64 * 64 * 2;
@@ -397,7 +399,9 @@ void LeapConnect::getDistortion(std::vector<float> &dist1, std::vector<float> &d
     {
         width = 0;
         height = 0;
+        return false;
     }
+    return true;
 }
 /**
  * Caches the newest frame by copying the tracking event struct returned by

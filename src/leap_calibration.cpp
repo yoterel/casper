@@ -233,6 +233,7 @@ int main(int argc, char *argv[])
                 cv::TermCriteria criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 30, 0.001);
                 cv::cornerSubPix(cur_cam_image, cur_corner_pts, cv::Size(11, 11), cv::Size(-1, -1), criteria);
                 cv::drawChessboardCorners(cur_image_copy, cv::Size(CHECKERBOARD[0], CHECKERBOARD[1]), cur_corner_pts, success);
+                std::reverse(cur_corner_pts.begin(), cur_corner_pts.end());
                 cam_verts.clear();
                 for (int i = 0; i < max_user_locations; i++)
                 {
@@ -273,56 +274,20 @@ int main(int argc, char *argv[])
         {
             std::vector<uint8_t> buffer1, buffer2;
             uint32_t width, height;
-            leap.getImage(buffer1, buffer2, width, height);
+            if (!leap.getImage(buffer1, buffer2, width, height))
+                exit(1);
             leap_width = width;
             leap_height = height;
             FBO test_fbo(width, height, 1);
             Texture leapTexture = Texture();
             leapTexture.init(width, height, 1);
-            cv::Mat leap_image = cv::Mat(height, width, CV_8UC1, buffer1.data());
+            // cv::Mat leap_image = cv::Mat(height, width, CV_8UC1, buffer1.data());
             // cv::Mat leap_image2;
-            if (leap_undistort)
-            {
-                /*
-                std::vector<float> dist_coeffs_raw(8);
-                std::vector<float> intrinsics_raw(9);
-                LeapCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, intrinsics_raw.data());
-                cv::Mat intrinsics(3, 3, CV_32F, intrinsics_raw.data());
-                // intrinsics.convertTo(intrinsics, CV_64F);
-                LeapDistortionCoeffs(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, dist_coeffs_raw.data());
-                cv::Mat distortion_coeffs(8, 1, CV_32F, dist_coeffs_raw.data());
-                // distortion_coeffs.convertTo(distortion_coeffs, CV_64F);
-                // std::cout << intrinsics << std::endl;
-                // std::cout << distortion_coeffs << std::endl;
-                cv::undistort(leap_image, leap_image2, intrinsics, distortion_coeffs);
-                leapTexture.load((uint8_t *)leap_image2.data, true, cam_buffer_format);
-                */
-                leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
-                std::vector<float> dist_buffer1, dist_buffer2;
-                uint32_t dist_width, dist_height;
-                leap.getDistortion(dist_buffer1, dist_buffer2, dist_width, dist_height);
-                Texture distortionTexture = Texture();
-                distortionTexture.init((uint8_t *)dist_buffer1.data(), dist_width, dist_height, 2);
-                test_fbo.bind();
-                leapUndistortShader.use();
-                leapUndistortShader.setInt("src", 0);
-                leapUndistortShader.setInt("distortion_map", 1);
-                leapTexture.bind(GL_TEXTURE0);
-                distortionTexture.bind(GL_TEXTURE1);
-                fullScreenQuad.render();
-                test_fbo.unbind();
-                glViewport(0, 0, cam_width, cam_height);
-                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                // test_fbo.saveColorToFile("test.png");
-                test_fbo.getTexture()->bind(GL_TEXTURE0);
-            }
-            else
-            {
-                leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
-                // cv::resize(leap_image, leap_image, cv::Size(cam_width, cam_height));
-                leapTexture.bind();
-            }
+            // std::vector<uint8_t> leap_image_vector(leap_image.begin<uint8_t>(), leap_image.end<uint8_t>());
+            leapTexture.load(buffer1, true, cam_buffer_format);
+            // leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
+            // cv::resize(leap_image, leap_image, cv::Size(cam_width, cam_height));
+            leapTexture.bind();
             textureShader.use();
             textureShader.setMat4("view", glm::mat4(1.0f));
             textureShader.setMat4("projection", glm::mat4(1.0f));
@@ -343,7 +308,8 @@ int main(int argc, char *argv[])
         {
             std::vector<uint8_t> buffer1, buffer2;
             uint32_t width, height;
-            leap.getImage(buffer1, buffer2, width, height);
+            if (!leap.getImage(buffer1, buffer2, width, height))
+                exit(1);
             leap_width = width;
             leap_height = height;
             FBO test_fbo(width, height, 1);
@@ -370,7 +336,8 @@ int main(int argc, char *argv[])
                 leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
                 std::vector<float> dist_buffer1, dist_buffer2;
                 uint32_t dist_width, dist_height;
-                leap.getDistortion(dist_buffer1, dist_buffer2, dist_width, dist_height);
+                if (!leap.getDistortion(dist_buffer1, dist_buffer2, dist_width, dist_height))
+                    exit(1);
                 Texture distortionTexture = Texture();
                 distortionTexture.init((uint8_t *)dist_buffer2.data(), dist_width, dist_height, 2);
                 test_fbo.bind();
@@ -389,7 +356,9 @@ int main(int argc, char *argv[])
             }
             else
             {
-                leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
+                std::vector<uint8_t> leap_image_vector(leap_image.begin<uint8_t>(), leap_image.end<uint8_t>());
+                leapTexture.load(leap_image_vector, true, cam_buffer_format);
+                // leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
                 // cv::resize(leap_image, leap_image, cv::Size(cam_width, cam_height));
                 leapTexture.bind();
             }
@@ -430,6 +399,8 @@ int main(int argc, char *argv[])
             }
             std::vector<cv::Point2f> image_points;
             std::vector<cv::Point3f> object_points;
+            std::vector<float> obj_to_save;
+            std::vector<float> img_to_save;
 
             // second convert rays to 3D leap space using the extrinsics matrix
             glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
@@ -466,12 +437,17 @@ int main(int argc, char *argv[])
                 float y = z * leap1_rays_2d[i].y;
                 float x = z * leap1_rays_2d[i].x - baseline / 2.0f;
                 object_points.push_back(cv::Point3f(x, -z, y));
+                obj_to_save.push_back(x);
+                obj_to_save.push_back(-z);
+                obj_to_save.push_back(y);
             }
             for (int i = 0; i < cam_verts.size(); i++)
             {
                 // image_points.push_back(cv::Point2f(proj_width * (proj_verts[i].x + 1) / 2, proj_height * (proj_verts[i].y + 1) / 2));
                 glm::vec2 point = Helpers::NDCtoScreen(cam_verts[i], cam_width, cam_height, true);
                 image_points.push_back(cv::Point2f(point.x, point.y));
+                img_to_save.push_back(point.x);
+                img_to_save.push_back(point.y);
                 // image_points.push_back(cv::Point2f(cam_width * (cam_verts[i].x + 1) / 2, cam_height * (cam_verts[i].y + 1) / 2));
             }
             // use solve pnp to find transformation of projector to leap space
@@ -490,8 +466,8 @@ int main(int argc, char *argv[])
             // glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
             cv::Mat camera_intrinsics(3, 3, CV_64F, my_npz["cam_intrinsics"].data<double>());
             cv::Mat distortion_coeffs(5, 1, CV_64F, my_npz["cam_distortion"].data<double>());
-            std::cout << "camera_intrinsics: " << camera_intrinsics << std::endl;
-            std::cout << "distortion_coeffs: " << distortion_coeffs << std::endl;
+            // std::cout << "camera_intrinsics: " << camera_intrinsics << std::endl;
+            // std::cout << "distortion_coeffs: " << distortion_coeffs << std::endl;
             cv::solvePnP(object_points, image_points, camera_intrinsics, distortion_coeffs, rvec, tvec);
             std::vector<cv::Point2f> reproj_image_points;
             cv::projectPoints(object_points, rvec, tvec, camera_intrinsics, distortion_coeffs, reproj_image_points);
@@ -501,11 +477,11 @@ int main(int argc, char *argv[])
                 // glm::vec2 point = glm::vec2((2.0f * reproj_image_points[i].x / cam_width) - 1.0f, ((2.0f * reproj_image_points[i].y / cam_height) - 1.0f));
                 reprojected_image_points.push_back(point);
             }
-            std::cout << "rvec: " << rvec << std::endl;
-            std::cout << "tvec: " << tvec << std::endl;
+            // std::cout << "rvec: " << rvec << std::endl;
+            // std::cout << "tvec: " << tvec << std::endl;
             cv::Mat rot_mat(3, 3, CV_64FC1);
             cv::Rodrigues(rvec, rot_mat);
-            std::cout << "rotmat: " << rot_mat << std::endl;
+            // std::cout << "rotmat: " << rot_mat << std::endl;
             cv::Mat w2c(4, 4, CV_64FC1);
             w2c.at<double>(0, 0) = rot_mat.at<double>(0, 0);
             w2c.at<double>(0, 1) = rot_mat.at<double>(0, 1);
@@ -526,8 +502,11 @@ int main(int argc, char *argv[])
             std::cout << "w2c: " << w2c << std::endl;
             cv::Mat c2w = w2c.inv();
             std::cout << "c2w: " << c2w << std::endl;
-            cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c.data, {4, 4}, "w");
-            cnpy::npy_save("../../resource/calibrations/leap_calibration/c2w.npy", c2w.data, {4, 4}, "w");
+            std::vector<double> w2c_vec(w2c.begin<double>(), w2c.end<double>());
+            cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
+            cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", obj_to_save.data(), {20, 3}, "w");
+            cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", img_to_save.data(), {20, 2}, "w");
+            // cnpy::npy_save("../../resource/calibrations/leap_calibration/c2w.npy", c2w.data, {4, 4}, "w");
             state_machine += 1;
             break;
         }

@@ -162,6 +162,36 @@ void Texture::load(uint8_t *buffer, bool use_pbo, unsigned int buffer_color_form
     }
 }
 
+void Texture::load(std::vector<uint8_t> buffer, bool use_pbo, unsigned int buffer_color_format)
+{
+    if (buffer.size() != m_sizeTexData)
+    {
+        std::cout << "buffer size " << buffer.size() << " does not match texture size " << m_sizeTexData << std::endl;
+        exit(1);
+    }
+    if (use_pbo)
+    {
+        // transfer data from memory to GPU texture (using PBO)
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_PBO);
+        glBufferData(GL_PIXEL_UNPACK_BUFFER, m_sizeTexData, 0, GL_STREAM_DRAW);
+        GLubyte *ptr = (GLubyte *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+        if (ptr)
+        {
+            std::copy(buffer.begin(), buffer.end(), ptr);
+            // memcpy(ptr, buffer, m_sizeTexData);
+            glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release pointer to mapping buffer
+        }
+        glBindTexture(m_textureTarget, m_textureObj);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_imageWidth, m_imageHeight, buffer_color_format, GL_UNSIGNED_BYTE, 0);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
+    else
+    {
+        glBindTexture(GL_TEXTURE_2D, m_textureObj);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_imageWidth, m_imageHeight, buffer_color_format, GL_UNSIGNED_BYTE, buffer.data());
+    }
+}
+
 void Texture::bind(GLenum TextureUnit)
 {
     glActiveTexture(TextureUnit);
