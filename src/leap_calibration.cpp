@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h>
 #include "queue.h"
 #include "camera.h"
+#include "helpers.h"
 #include "display.h"
 #include "cnpy.h"
 #include "SerialPort.h"
@@ -28,25 +29,15 @@ namespace fs = std::filesystem;
 
 // forward declarations
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
-cv::Point3d approximate_ray_intersection(const cv::Point3d &v1, const cv::Point3d &q1,
-                                         const cv::Point3d &v2, const cv::Point3d &q2,
-                                         double *distance, double *out_lambda1, double *out_lambda2);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void processInput(GLFWwindow *window);
 void initGLBuffers(unsigned int *pbo);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
 // global settings
-bool debug_mode = false;
-bool freecam_mode = false;
-bool use_cuda = false;
-bool simulated_camera = false;
-bool use_pbo = false;
-bool use_projector = true;
-bool use_screen = true;
 bool cam_color_mode = false;
 bool leap_undistort = false;
-int points_to_display = 5;
+int points_to_display = 12;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
@@ -55,6 +46,8 @@ unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 10000.0f;
 // global state
+int cur_window_width = cam_width;
+int cur_window_height = cam_height;
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 int CHECKERBOARD[2]{10, 7};
@@ -92,7 +85,6 @@ float screen_z = -10.0f;
 bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int image_size = num_texels * 3 * sizeof(uint8_t);
-cv::Mat white_image(cam_height, cam_width, CV_8UC4, cv::Scalar(255, 255, 255, 255));
 
 int main(int argc, char *argv[])
 {
@@ -161,7 +153,6 @@ int main(int argc, char *argv[])
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     bool close_signal = false;
-    uint8_t *colorBuffer = new uint8_t[image_size];
     CGrabResultPtr ptrGrabResult;
     cv::Mat cur_cam_image;
     cv::Mat cur_image_copy;
@@ -173,90 +164,24 @@ int main(int argc, char *argv[])
     blocking_queue<CGrabResultPtr> camera_queue;
     // queue_spsc<cv::Mat> camera_queue_cv(50);
     blocking_queue<cv::Mat> camera_queue_cv;
-    // blocking_queue<std::vector<uint8_t>> projector_queue;
-    blocking_queue<uint8_t *> projector_queue;
     BaslerCamera camera;
-    DynaFlashProjector projector(true, false);
-    if (use_projector)
-    {
-        if (!projector.init())
-        {
-            std::cerr << "Failed to initialize projector\n";
-        }
-    }
     LeapConnect leap(true, true);
-    std::thread producer, consumer;
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !simulated_camera)
+    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure))
     {
         /* real producer */
         std::cout << "Using real camera to produce images" << std::endl;
-        projector.show();
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
         // camera.balance_white();
         camera.acquire();
     }
     else
     {
-        /* fake producer */
-        // see https://ja.docs.baslerweb.com/pylonapi/cpp/sample_code#utility_image for pylon image
-        std::cout << "Using fake camera to produce images" << std::endl;
-        simulated_camera = true;
-        std::string path = "../../resource/hand_capture";
-        std::vector<cv::Mat> fake_cam_images;
-        // white image
-        fake_cam_images.push_back(white_image);
-        // images from folder
-        // int file_counter = 0;
-        // for (const auto &entry : fs::directory_iterator(path))
-        // {
-        //     std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
-        //     std::string file_path = entry.path().string();
-        //     cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
-        //     cv::Mat img4;
-        //     cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
-        //     fake_cam_images.push_back(img4);
-        //     file_counter++;
-        // }
-        producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
-            // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
-            Timer t_block;
-            int counter = 0;
-            t_block.start();
-            while (!close_signal)
-            {
-                camera_queue_cv.push(fake_cam_images[counter]);
-                if (counter < fake_cam_images.size() - 1)
-                    counter++;
-                else
-                    counter = 0;
-                while (t_block.getElapsedTimeInMilliSec() < 1.9)
-                {
-                }
-                t_block.stop();
-                t_block.start();
-            }
-            std::cout << "Producer finish" << std::endl;
-        });
+        std::cout << "camera init failed" << std::endl;
+        exit(1);
     }
-    // image consumer (real projector = virtual camera)
-    consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
-        uint8_t *image;
-        // std::vector<uint8_t> image;
-        // int stride = 3 * proj_width;
-        // stride += (stride % 4) ? (4 - stride % 4) : 0;
-        bool sucess;
-        while (!close_signal)
-        {
-            sucess = projector_queue.pop_with_timeout(100, image);
-            if (sucess)
-                projector.show_buffer(image);
-            // projector.show_buffer(image.data());
-            // stbi_write_png("test.png", proj_width, proj_height, 3, image.data(), stride);
-        }
-        std::cout << "Consumer finish" << std::endl;
-    });
+
     /* main loop */
     while (!glfwWindowShouldClose(window))
     {
@@ -278,18 +203,9 @@ int main(int argc, char *argv[])
         processInput(window);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         /* deal with camera input */
-        // prevFrame = curFrame.clone();
-        if (simulated_camera)
-        {
-            cv::Mat tmp = camera_queue_cv.pop();
-            camTexture.load((uint8_t *)tmp.data, true, cam_buffer_format);
-        }
-        else
-        {
-            ptrGrabResult = camera_queue.pop();
-            cur_cam_image = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer());
-            camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
-        }
+        ptrGrabResult = camera_queue.pop();
+        cur_cam_image = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer());
+        camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
         switch (state_machine)
         {
         case 0:
@@ -320,7 +236,8 @@ int main(int argc, char *argv[])
                 cam_verts.clear();
                 for (int i = 0; i < max_user_locations; i++)
                 {
-                    glm::vec2 point = glm::vec2((2.0f * cur_corner_pts[i].x / cam_width) - 1.0f, ((2.0f * cur_corner_pts[i].y / cam_height) - 1.0f));
+                    glm::vec2 point = Helpers::ScreenToNDC(glm::vec2(cur_corner_pts[i].x, cur_corner_pts[i].y), cam_width, cam_height, true);
+                    // glm::vec2 point = glm::vec2((2.0f * cur_corner_pts[i].x / cam_width) - 1.0f, ((2.0f * cur_corner_pts[i].y / cam_height) - 1.0f));
                     cam_verts.push_back(point);
                 }
                 state_machine += 1;
@@ -500,11 +417,15 @@ int main(int argc, char *argv[])
             std::vector<LEAP_VECTOR> leap1_rays_2d, leap2_rays_2d;
             for (int i = 0; i < leap1_verts.size(); i++)
             {
-                LEAP_VECTOR l1_verts = {leap_width * (leap1_verts[i].x + 1) / 2, leap_height * (leap1_verts[i].y + 1) / 2, 1.0f};
-                LEAP_VECTOR l2_verts = {leap_width * (leap2_verts[i].x + 1) / 2, leap_height * (leap2_verts[i].y + 1) / 2, 1.0f};
-                LEAP_VECTOR l1_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_verts);
+                glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1_verts[i], leap_width, leap_height, true);
+                LEAP_VECTOR l1_vert_leap = {l1_vert.x, l1_vert.y, 1.0f};
+                glm::vec2 l2_vert = Helpers::NDCtoScreen(leap2_verts[i], leap_width, leap_height, true);
+                LEAP_VECTOR l2_vert_leap = {l2_vert.x, l2_vert.y, 1.0f};
+                // LEAP_VECTOR l1_verts = {leap_width * (leap1_verts[i].x + 1) / 2, leap_height * (leap1_verts[i].y + 1) / 2, 1.0f};
+                // LEAP_VECTOR l2_verts = {leap_width * (leap2_verts[i].x + 1) / 2, leap_height * (leap2_verts[i].y + 1) / 2, 1.0f};
+                LEAP_VECTOR l1_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_vert_leap);
                 leap1_rays_2d.push_back(l1_ray);
-                LEAP_VECTOR l2_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_verts);
+                LEAP_VECTOR l2_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_vert_leap);
                 leap2_rays_2d.push_back(l2_ray);
             }
             std::vector<cv::Point2f> image_points;
@@ -549,10 +470,13 @@ int main(int argc, char *argv[])
             for (int i = 0; i < cam_verts.size(); i++)
             {
                 // image_points.push_back(cv::Point2f(proj_width * (proj_verts[i].x + 1) / 2, proj_height * (proj_verts[i].y + 1) / 2));
-                image_points.push_back(cv::Point2f(cam_width * (cam_verts[i].x + 1) / 2, cam_height * (cam_verts[i].y + 1) / 2));
+                glm::vec2 point = Helpers::NDCtoScreen(cam_verts[i], cam_width, cam_height, true);
+                image_points.push_back(cv::Point2f(point.x, point.y));
+                // image_points.push_back(cv::Point2f(cam_width * (cam_verts[i].x + 1) / 2, cam_height * (cam_verts[i].y + 1) / 2));
             }
             // use solve pnp to find transformation of projector to leap space
-            cv::Mat1f rvec, tvec;
+            cv::Mat rvec = cv::Mat::zeros(3, 1, CV_64FC1);
+            cv::Mat tvec = cv::Mat::zeros(3, 1, CV_64FC1);
             cnpy::npz_t my_npz;
             try
             {
@@ -573,31 +497,32 @@ int main(int argc, char *argv[])
             cv::projectPoints(object_points, rvec, tvec, camera_intrinsics, distortion_coeffs, reproj_image_points);
             for (int i = 0; i < reproj_image_points.size(); i++)
             {
-                glm::vec2 point = glm::vec2((2.0f * reproj_image_points[i].x / cam_width) - 1.0f, ((2.0f * reproj_image_points[i].y / cam_height) - 1.0f));
+                glm::vec2 point = Helpers::ScreenToNDC(glm::vec2(reproj_image_points[i].x, reproj_image_points[i].y), cam_width, cam_height, true);
+                // glm::vec2 point = glm::vec2((2.0f * reproj_image_points[i].x / cam_width) - 1.0f, ((2.0f * reproj_image_points[i].y / cam_height) - 1.0f));
                 reprojected_image_points.push_back(point);
             }
             std::cout << "rvec: " << rvec << std::endl;
             std::cout << "tvec: " << tvec << std::endl;
-            cv::Mat1f rot_mat;
+            cv::Mat rot_mat(3, 3, CV_64FC1);
             cv::Rodrigues(rvec, rot_mat);
             std::cout << "rotmat: " << rot_mat << std::endl;
-            cv::Mat1f w2c(4, 4, CV_32FC1);
-            w2c.at<float>(0, 0) = rot_mat.at<float>(0, 0);
-            w2c.at<float>(0, 1) = rot_mat.at<float>(0, 1);
-            w2c.at<float>(0, 2) = rot_mat.at<float>(0, 2);
-            w2c.at<float>(0, 3) = tvec.at<float>(0, 0);
-            w2c.at<float>(1, 0) = rot_mat.at<float>(1, 0);
-            w2c.at<float>(1, 1) = rot_mat.at<float>(1, 1);
-            w2c.at<float>(1, 2) = rot_mat.at<float>(1, 2);
-            w2c.at<float>(1, 3) = tvec.at<float>(1, 0);
-            w2c.at<float>(2, 0) = rot_mat.at<float>(2, 0);
-            w2c.at<float>(2, 1) = rot_mat.at<float>(2, 1);
-            w2c.at<float>(2, 2) = rot_mat.at<float>(2, 2);
-            w2c.at<float>(2, 3) = tvec.at<float>(2, 0);
-            w2c.at<float>(3, 0) = 0.0f;
-            w2c.at<float>(3, 1) = 0.0f;
-            w2c.at<float>(3, 2) = 0.0f;
-            w2c.at<float>(3, 3) = 1.0f;
+            cv::Mat w2c(4, 4, CV_64FC1);
+            w2c.at<double>(0, 0) = rot_mat.at<double>(0, 0);
+            w2c.at<double>(0, 1) = rot_mat.at<double>(0, 1);
+            w2c.at<double>(0, 2) = rot_mat.at<double>(0, 2);
+            w2c.at<double>(0, 3) = tvec.at<double>(0, 0);
+            w2c.at<double>(1, 0) = rot_mat.at<double>(1, 0);
+            w2c.at<double>(1, 1) = rot_mat.at<double>(1, 1);
+            w2c.at<double>(1, 2) = rot_mat.at<double>(1, 2);
+            w2c.at<double>(1, 3) = tvec.at<double>(1, 0);
+            w2c.at<double>(2, 0) = rot_mat.at<double>(2, 0);
+            w2c.at<double>(2, 1) = rot_mat.at<double>(2, 1);
+            w2c.at<double>(2, 2) = rot_mat.at<double>(2, 2);
+            w2c.at<double>(2, 3) = tvec.at<double>(2, 0);
+            w2c.at<double>(3, 0) = 0.0f;
+            w2c.at<double>(3, 1) = 0.0f;
+            w2c.at<double>(3, 2) = 0.0f;
+            w2c.at<double>(3, 3) = 1.0f;
             std::cout << "w2c: " << w2c << std::endl;
             cv::Mat c2w = w2c.inv();
             std::cout << "c2w: " << c2w << std::endl;
@@ -631,6 +556,7 @@ int main(int argc, char *argv[])
             break;
         }
         }
+        // render user marked points
         {
             screen_vert.clear();
             if (dragging)
@@ -638,7 +564,8 @@ int main(int argc, char *argv[])
                 double x;
                 double y;
                 glfwGetCursorPos(window, &x, &y);
-                cur_mouse_pos = glm::vec2((2.0f * x / cam_width) - 1.0f, -1.0f * ((2.0f * y / cam_height) - 1.0f));
+                cur_mouse_pos = Helpers::ScreenToNDC(glm::vec2(x, y), cur_window_width, cur_window_height, true);
+                // cur_mouse_pos = glm::vec2((2.0f * x / cam_width) - 1.0f, -1.0f * ((2.0f * y / cam_height) - 1.0f));
             }
             screen_vert.push_back(cur_mouse_pos);
             if (state_machine == 2)
@@ -647,7 +574,7 @@ int main(int argc, char *argv[])
                 {
                     for (int i = 0; i < points_to_display; i++)
                     {
-                        screen_vert.push_back(glm::vec2(cam_verts[i].x, -cam_verts[i].y));
+                        screen_vert.push_back(glm::vec2(cam_verts[i].x, cam_verts[i].y));
                     }
                 }
             }
@@ -657,7 +584,7 @@ int main(int argc, char *argv[])
                 {
                     for (int i = 0; i < leap1_verts.size(); i++)
                     {
-                        screen_vert.push_back(glm::vec2(leap1_verts[i].x, -leap1_verts[i].y));
+                        screen_vert.push_back(glm::vec2(leap1_verts[i].x, leap1_verts[i].y));
                     }
                 }
             }
@@ -667,7 +594,7 @@ int main(int argc, char *argv[])
                 {
                     for (int i = 0; i < leap2_verts.size(); i++)
                     {
-                        screen_vert.push_back(glm::vec2(leap2_verts[i].x, -leap2_verts[i].y));
+                        screen_vert.push_back(glm::vec2(leap2_verts[i].x, leap2_verts[i].y));
                     }
                 }
             }
@@ -678,6 +605,7 @@ int main(int argc, char *argv[])
             PointCloud pointCloud(screen_vert, screen_vert_color);
             pointCloud.render();
         }
+        // render text on screen
         {
             float text_spacing = 25.0f;
             std::vector<std::string> texts_to_render = {
@@ -691,106 +619,21 @@ int main(int argc, char *argv[])
                 text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 0.50f, glm::vec3(1.0f, 1.0f, 1.0f));
             }
         }
-        // LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
-        // display projector screen, where mouse can control the projector output
-        // display the leap camera images side by side, where mouse can control where to mark
-        // https://docs.ultraleap.com/api-reference/tracking-api/group/group___functions.html#_CPPv422LeapPixelToRectilinear15LEAP_CONNECTION20eLeapPerspectiveType11LEAP_VECTOR
-        // use LeapPixelToRectilinear to get the 3d ray of the mouse (x2)
-        // use LeapExtrinsicCameraMatrix (inverted) to convert rays to leap 3d tracking space
-        // use solve pnp to find transformation of projector to leap space
-        // send result to projector queue
-        // glReadBuffer(GL_FRONT);
-        // glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
-        // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
-        // projector_queue.push(colorBuffer);
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
     // cleanup
     close_signal = true;
-    consumer.join();
-    projector.kill();
     camera.kill();
     glfwTerminate();
-    delete[] colorBuffer;
-    if (simulated_camera)
-    {
-        producer.join();
-    }
     return 0;
 }
-
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-    {
-        right_pressed = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-    {
-        left_pressed = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-    {
-        up_pressed = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-    {
-        down_pressed = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
-    {
-        enter_pressed = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_RELEASE)
-    {
-        if (up_pressed)
-        {
-            if (points_to_display < max_user_locations)
-            {
-                points_to_display += 1;
-            }
-        }
-        up_pressed = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_RELEASE)
-    {
-        if (down_pressed)
-        {
-            if (points_to_display > 0)
-            {
-                points_to_display -= 1;
-            }
-        }
-        down_pressed = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE)
-    {
-        if (enter_pressed)
-        {
-            // leap_undistort = !leap_undistort;
-        }
-        enter_pressed = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_RELEASE)
-    {
-        if (left_pressed)
-        {
-            if (state_machine >= 9)
-            {
-                state_machine = 6;
-            }
-            else
-            {
-                state_machine = state_machine / 3;
-            }
-        }
-        left_pressed = false;
-    }
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_RELEASE)
     {
         if (right_pressed)
@@ -815,6 +658,71 @@ void processInput(GLFWwindow *window)
         }
         right_pressed = false;
     }
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_RELEASE)
+    {
+        if (up_pressed)
+        {
+            if (points_to_display < max_user_locations)
+            {
+                points_to_display += 1;
+            }
+        }
+        up_pressed = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_RELEASE)
+    {
+        if (down_pressed)
+        {
+            if (points_to_display > 0)
+            {
+                points_to_display -= 1;
+            }
+        }
+        down_pressed = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+    {
+        right_pressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+    {
+        left_pressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+    {
+        up_pressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+    {
+        down_pressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+    {
+        enter_pressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE)
+    {
+        if (enter_pressed)
+        {
+            // leap_undistort = !leap_undistort;
+        }
+        enter_pressed = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_RELEASE)
+    {
+        // if (left_pressed)
+        // {
+        //     if (state_machine >= 9)
+        //     {
+        //         state_machine = 6;
+        //     }
+        //     else
+        //     {
+        //         state_machine = state_machine / 3;
+        //     }
+        // }
+        left_pressed = false;
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -824,6 +732,8 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     // make sure the viewport matches the new window dimensions; note that width and
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
+    cur_window_width = width;
+    cur_window_height = height;
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
@@ -839,72 +749,4 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     {
         dragging = false;
     }
-}
-
-cv::Point3d approximate_ray_intersection(const cv::Point3d &v1, const cv::Point3d &q1,
-                                         const cv::Point3d &v2, const cv::Point3d &q2,
-                                         double *distance, double *out_lambda1, double *out_lambda2)
-{
-    cv::Mat v1mat = cv::Mat(v1);
-    cv::Mat v2mat = cv::Mat(v2);
-
-    double v1tv1 = cv::Mat(v1mat.t() * v1mat).at<double>(0, 0);
-    double v2tv2 = cv::Mat(v2mat.t() * v2mat).at<double>(0, 0);
-    double v1tv2 = cv::Mat(v1mat.t() * v2mat).at<double>(0, 0);
-    double v2tv1 = cv::Mat(v2mat.t() * v1mat).at<double>(0, 0);
-
-    // cv::Mat V(2, 2, CV_64FC1);
-    // V.at<double>(0,0) = v1tv1;  V.at<double>(0,1) = -v1tv2;
-    // V.at<double>(1,0) = -v2tv1; V.at<double>(1,1) = v2tv2;
-    // std::cout << " V: "<< V << std::endl;
-
-    cv::Mat Vinv(2, 2, CV_64FC1);
-    double detV = v1tv1 * v2tv2 - v1tv2 * v2tv1;
-    Vinv.at<double>(0, 0) = v2tv2 / detV;
-    Vinv.at<double>(0, 1) = v1tv2 / detV;
-    Vinv.at<double>(1, 0) = v2tv1 / detV;
-    Vinv.at<double>(1, 1) = v1tv1 / detV;
-    // std::cout << " V.inv(): "<< V.inv() << std::endl << " Vinv: " << Vinv << std::endl;
-
-    // cv::Mat Q(2, 1, CV_64FC1);
-    // Q.at<double>(0,0) = cv::Mat(v1mat.t()*(cv::Mat(q2-q1))).at<double>(0,0);
-    // Q.at<double>(1,0) = cv::Mat(v2mat.t()*(cv::Mat(q1-q2))).at<double>(0,0);
-    // std::cout << " Q: "<< Q << std::endl;
-
-    cv::Point3d q2_q1 = q2 - q1;
-    double Q1 = v1.x * q2_q1.x + v1.y * q2_q1.y + v1.z * q2_q1.z;
-    double Q2 = -(v2.x * q2_q1.x + v2.y * q2_q1.y + v2.z * q2_q1.z);
-
-    // cv::Mat L = V.inv()*Q;
-    // cv::Mat L = Vinv*Q;
-    // std::cout << " L: "<< L << std::endl;
-
-    double lambda1 = (v2tv2 * Q1 + v1tv2 * Q2) / detV;
-    double lambda2 = (v2tv1 * Q1 + v1tv1 * Q2) / detV;
-    // std::cout << "lambda1: " << lambda1 << " lambda2: " << lambda2 << std::endl;
-
-    // cv::Mat p1 = L.at<double>(0,0)*v1mat + cv::Mat(q1); //ray1
-    // cv::Mat p2 = L.at<double>(1,0)*v2mat + cv::Mat(q2); //ray2
-    // cv::Point3d p1 = L.at<double>(0,0)*v1 + q1; //ray1
-    // cv::Point3d p2 = L.at<double>(1,0)*v2 + q2; //ray2
-    cv::Point3d p1 = lambda1 * v1 + q1; // ray1
-    cv::Point3d p2 = lambda2 * v2 + q2; // ray2
-
-    // cv::Point3d p = cv::Point3d(cv::Mat((p1+p2)/2.0));
-    cv::Point3d p = 0.5 * (p1 + p2);
-
-    if (distance != NULL)
-    {
-        *distance = cv::norm(p2 - p1);
-    }
-    if (out_lambda1)
-    {
-        *out_lambda1 = lambda1;
-    }
-    if (out_lambda2)
-    {
-        *out_lambda2 = lambda2;
-    }
-
-    return p;
 }

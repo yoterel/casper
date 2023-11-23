@@ -198,6 +198,7 @@ add_executable(leap_calib
     src/leap.cpp
     src/cnpy.cpp
     src/point_cloud.cpp
+    src/helpers.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
