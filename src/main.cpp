@@ -40,7 +40,7 @@ void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_frustrum_buffers(unsigned int &VAO, unsigned int &VBO);
 void initGLBuffers(unsigned int *pbo);
-bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vp, glm::mat4 &w2vc);
+bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vc);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
 // global settings
@@ -228,10 +228,10 @@ int main(int argc, char *argv[])
                                            {-1.0f, -1.0f},
                                            {1.0f, -1.0f},
                                            {1.0f, 1.0f}};
-    // std::vector<glm::vec2> screen_verts = {{-0.785f, 0.464f},
-    //                                        {-0.815f, -0.857f},
-    //                                        {0.295f, -0.662f},
-    //                                        {0.307f, 0.372f}};
+    // std::vector<glm::vec2> screen_verts = {{-1.2441f, 0.7188f},
+    //                                        {-1.1543f, -1.2344f},
+    //                                        {0.7227f, -1.2578f},
+    //                                        {0.8066f, 0.6224}};
     glm::mat4 c2p_homography = postProcess.findHomography(screen_verts);
     glm::vec3 coa = leftHandModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
@@ -347,20 +347,20 @@ int main(int argc, char *argv[])
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer;
     // load calibration results if they exist
-    glm::mat4 vproj_project;
-    glm::mat4 vcam_project;
+    glm::mat4 cam_project;
+    glm::mat4 proj_project;
     std::vector<double> camera_distortion;
-    glm::mat4 w2vp;
-    glm::mat4 w2vc;
+    glm::mat4 w2c;
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    if (loadCalibrationResults(vcam_project, vproj_project, camera_distortion, w2vp, w2vc))
+    if (loadCalibrationResults(proj_project, cam_project, camera_distortion, w2c))
     {
+        glm::mat4 w2p = w2c;
         std::cout << "Using calibration data for camera and projector settings" << std::endl;
         if (freecam_mode)
         {
-            // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA);
-            // gl_flycamera = GLCamera(w2vc, vcam_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 10.0f);
-            gl_flycamera = GLCamera(glm::vec3(70.0f, -150.0f, 1008.0f),
+            // gl_flycamera = GLCamera(w2vc, proj_project, Camera_Mode::FREE_CAMERA);
+            // gl_flycamera = GLCamera(w2vc, proj_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 10.0f);
+            gl_flycamera = GLCamera(glm::vec3(-120.0f, -540.0f, 675.0f),
                                     glm::vec3(0.0f, 0.0f, 0.0f),
                                     glm::vec3(0.0f, -1.0f, 0.0f),
                                     camera_mode,
@@ -369,14 +369,14 @@ int main(int argc, char *argv[])
                                     1500.0f,
                                     100.0f,
                                     true);
-            gl_camera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height, 50.0f, true);
-            gl_projector = GLCamera(w2vp, vproj_project, camera_mode, cam_width, cam_height, 50.0f, false);
+            gl_camera = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height, 50.0f, true);
+            gl_projector = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height, 50.0f, true);
         }
         else
         {
-            gl_camera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height);
-            gl_projector = GLCamera(w2vp, vproj_project, camera_mode, cam_width, cam_height);
-            gl_flycamera = GLCamera(w2vc, vcam_project, camera_mode, proj_width, proj_height);
+            gl_camera = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height);
+            gl_projector = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height);
+            gl_flycamera = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height);
         }
     }
     else
@@ -1344,76 +1344,83 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     }
 }
 
-bool loadCalibrationResults(glm::mat4 &vcam_project,
-                            glm::mat4 &vproj_project,
+bool loadCalibrationResults(glm::mat4 &proj_project,
+                            glm::mat4 &cam_project,
                             std::vector<double> &camera_distortion,
-                            glm::mat4 &w2vp, glm::mat4 &w2vc)
+                            glm::mat4 &w2c)
 {
     // vp = virtual projector
     // vc = virtual camera
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
     flipYZ[2][2] = -1.0f;
-    cnpy::NpyArray arr;
-    cnpy::npz_t my_npz;
+    cnpy::NpyArray w2c_npy;
+    cnpy::npz_t projcam_npz;
+    cnpy::npz_t cam_npz;
     try
     {
-        arr = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2p.npy");
-        my_npz = cnpy::npz_load("../../resource/calibrations/camproj_calibration/calibration.npz");
+        w2c_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2c.npy");
+        cam_npz = cnpy::npz_load("../../resource/calibrations/cam_calibration/cam_calibration.npz");
+        projcam_npz = cnpy::npz_load("../../resource/calibrations/camproj_calibration/calibration.npz");
     }
     catch (std::runtime_error &e)
     {
         std::cout << e.what() << std::endl;
         return false;
     }
-    w2vc = glm::make_mat4(arr.data<double>());
-    glm::mat4 vc2w = glm::inverse(w2vc);
+    w2c = glm::make_mat4(w2c_npy.data<double>());
+    glm::mat4 c2w = glm::inverse(w2c);
+    c2w = flipYZ * c2w; // flip y and z columns (corresponding to camera directions)
+    w2c = glm::inverse(c2w);
+    w2c = glm::transpose(w2c);
+    // w2c = glm::inverse(w2c);
 
     float ffar = 1500.0f;
     float nnear = 1.0f;
-    glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
-    float vpfx = camera_intrinsics[0][0];
-    float vpfy = camera_intrinsics[1][1];
-    float vpcx = camera_intrinsics[0][2];
-    float vpcy = camera_intrinsics[1][2];
-    vproj_project = glm::mat4(0.0);
-    vproj_project[0][0] = 2 * vpfx / cam_width;
-    vproj_project[0][2] = (cam_width - 2 * vpcx) / cam_width;
-    vproj_project[1][1] = 2 * vpfy / cam_height;
-    vproj_project[1][2] = -(cam_height - 2 * vpcy) / cam_height;
-    vproj_project[2][2] = -(ffar + nnear) / (ffar - nnear);
-    vproj_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
-    vproj_project[3][2] = -1.0f;
-    vproj_project = glm::transpose(vproj_project);
-    glm::mat3 projector_intrinsics = glm::make_mat3(my_npz["proj_intrinsics"].data<double>());
-    float vcfx = projector_intrinsics[0][0];
-    float vcfy = projector_intrinsics[1][1];
-    float vccx = projector_intrinsics[0][2];
-    float vccy = projector_intrinsics[1][2];
-    vcam_project = glm::mat4(0.0);
-    vcam_project[0][0] = 2 * vcfx / proj_width;
-    vcam_project[0][2] = (proj_width - 2 * vccx) / proj_width;
-    vcam_project[1][1] = 2 * vcfy / proj_height;
-    vcam_project[1][2] = -(proj_height - 2 * vccy) / proj_height;
-    vcam_project[2][2] = -(ffar + nnear) / (ffar - nnear);
-    vcam_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
-    vcam_project[3][2] = -1.0f;
-    vcam_project = glm::transpose(vcam_project);
-    camera_distortion = my_npz["cam_distortion"].as_vec<double>();
-    glm::mat4 vp2vc = glm::make_mat4(my_npz["proj_transform"].data<double>()); // this is the camera to projector transform
-    glm::mat4 vp2w = vp2vc * vc2w;                                             // since glm uses column major, we multiply from the left...
-    vp2w = flipYZ * vp2w;
+    glm::mat3 camera_intrinsics = glm::make_mat3(cam_npz["cam_intrinsics"].data<double>());
+    camera_distortion = cam_npz["cam_distortion"].as_vec<double>();
+    float cfx = camera_intrinsics[0][0];
+    float cfy = camera_intrinsics[1][1];
+    float ccx = camera_intrinsics[0][2];
+    float ccy = camera_intrinsics[1][2];
+    cam_project = glm::mat4(0.0);
+    cam_project[0][0] = 2 * cfx / cam_width;
+    cam_project[0][2] = (cam_width - 2 * ccx) / cam_width;
+    cam_project[1][1] = 2 * cfy / cam_height;
+    cam_project[1][2] = -(cam_height - 2 * ccy) / cam_height;
+    cam_project[2][2] = -(ffar + nnear) / (ffar - nnear);
+    cam_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
+    cam_project[3][2] = -1.0f;
+    cam_project = glm::transpose(cam_project);
+    // glm::mat3 projector_intrinsics = glm::make_mat3(projcam_npz["proj_intrinsics"].data<double>());
+    // float pfx = projector_intrinsics[0][0];
+    // float pfy = projector_intrinsics[1][1];
+    // float pcx = projector_intrinsics[0][2];
+    // float pcy = projector_intrinsics[1][2];
+    // proj_project = glm::mat4(0.0);
+    // proj_project[0][0] = 2 * pfx / proj_width;
+    // proj_project[0][2] = (proj_width - 2 * pcx) / proj_width;
+    // proj_project[1][1] = 2 * pfy / proj_height;
+    // proj_project[1][2] = -(proj_height - 2 * pcy) / proj_height;
+    // proj_project[2][2] = -(ffar + nnear) / (ffar - nnear);
+    // proj_project[2][3] = -2 * ffar * nnear / (ffar - nnear);
+    // proj_project[3][2] = -1.0f;
+    // proj_project = glm::transpose(proj_project);
+    proj_project = cam_project;
+    // glm::mat4 vp2vc = glm::make_mat4(my_npz["proj_transform"].data<double>()); // this is the camera to projector transform
+    // glm::mat4 vp2w = vp2vc * vc2w;                                             // since glm uses column major, we multiply from the left...
+    // vp2w = flipYZ * vp2w;
     // vp2w[0][3] *= 0.1f;
     // vp2w[1][3] *= 0.1f;
     // vp2w[2][3] *= 0.1f;
-    w2vp = glm::inverse(vp2w);
-    w2vp = glm::transpose(w2vp);
-    vc2w = flipYZ * vc2w;
+    // w2vp = glm::inverse(vp2w);
+    // w2vp = glm::transpose(w2vp);
+    // vc2w = flipYZ * vc2w;
     // w2vc[0][3] *= 0.1f;
     // w2vc[1][3] *= 0.1f;
     // w2vc[2][3] *= 0.1f;
-    w2vc = glm::inverse(vc2w);
-    w2vc = glm::transpose(w2vc);
+    // w2vc = glm::inverse(vc2w);
+    // w2vc = glm::transpose(w2vc);
     return true;
 }
 

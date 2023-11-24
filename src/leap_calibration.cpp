@@ -37,7 +37,9 @@ void initGLBuffers(unsigned int *pbo);
 // global settings
 bool cam_color_mode = false;
 bool leap_undistort = false;
-int points_to_display = 12;
+bool load_calib = true;
+bool load_points = true;
+int points_to_display = 0;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
@@ -56,6 +58,10 @@ glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
 glm::vec2 cur_mouse_pos = glm::vec2(0.5f, 0.5f);
 std::vector<glm::vec2> screen_vert = {{0.5f, 0.5f}};
 std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
+std::vector<cv::Point2f> image_points;
+std::vector<cv::Point3f> object_points;
+std::vector<float> obj_to_save;
+std::vector<float> img_to_save;
 std::vector<glm::vec2> reprojected_image_points;
 std::vector<glm::vec2> proj_verts;
 std::vector<glm::vec2> cam_verts;
@@ -73,7 +79,7 @@ bool ctrl_modifier = false;
 unsigned int n_bones = 0;
 int state_machine = 0;
 int n_user_locations = 0;
-const int max_user_locations = 20;
+const int max_user_locations = 30;
 bool right_pressed = false;
 bool confirm_flag = false;
 bool left_pressed = false;
@@ -157,8 +163,8 @@ int main(int argc, char *argv[])
     cv::Mat cur_cam_image;
     cv::Mat cur_image_copy;
     std::vector<cv::Point2f> cur_corner_pts;
-    Texture camTexture = Texture();
-    camTexture.init(cam_width, cam_height, n_cam_channels);
+    // Texture camTexture = Texture();
+    // camTexture.init(cam_width, cam_height, n_cam_channels);
     Texture displayTexture = Texture();
     displayTexture.init(cam_width, cam_height, n_cam_channels);
     blocking_queue<CGrabResultPtr> camera_queue;
@@ -166,6 +172,53 @@ int main(int argc, char *argv[])
     blocking_queue<cv::Mat> camera_queue_cv;
     BaslerCamera camera;
     LeapConnect leap(true, true);
+    cv::Mat tvec, rvec;
+    if (load_calib)
+    {
+        try
+        {
+            cnpy::NpyArray w2c_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2c.npy");
+            cv::Mat w2c(4, 4, CV_64FC1, w2c_npy.data<double>());
+            cv::Mat rot_mat = w2c(cv::Range(0, 3), cv::Range(0, 3)).clone();
+            tvec = w2c(cv::Range(0, 3), cv::Range(3, 4)).clone();
+            rvec = cv::Mat::zeros(3, 1, CV_64FC1);
+            // cv::Mat tvec = cv::Mat::zeros(3, 1, CV_64FC1);
+            cv::Rodrigues(rot_mat, rvec);
+            // std::cout << "w2c: " << w2c << std::endl;
+            // std::cout << "tvec: " << tvec << std::endl;
+            // std::cout << "rot_mat: " << rot_mat << std::endl;
+            // std::cout << "rvec: " << rvec << std::endl;
+        }
+        catch (std::runtime_error &e)
+        {
+            std::cout << e.what() << std::endl;
+            exit(1);
+        }
+    }
+    if (load_points)
+    {
+        try
+        {
+            cnpy::NpyArray points_2d_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/2dpoints.npy");
+            cnpy::NpyArray points_3d_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/3dpoints.npy");
+            img_to_save = std::vector<float>(points_2d_npy.data<float>(), points_2d_npy.data<float>() + points_2d_npy.num_vals);
+            obj_to_save = std::vector<float>(points_3d_npy.data<float>(), points_3d_npy.data<float>() + points_3d_npy.num_vals);
+            for (int i = 0; i < img_to_save.size(); i += 2)
+            {
+                image_points.push_back(cv::Point2f(img_to_save[i], img_to_save[i + 1]));
+            }
+            for (int i = 0; i < obj_to_save.size(); i += 3)
+            {
+                object_points.push_back(cv::Point3f(obj_to_save[i], obj_to_save[i + 1], obj_to_save[i + 2]));
+            }
+        }
+        catch (std::runtime_error &e)
+        {
+            std::cout << e.what() << std::endl;
+            exit(1);
+        }
+        state_machine = 5;
+    }
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure))
@@ -205,7 +258,8 @@ int main(int argc, char *argv[])
         /* deal with camera input */
         ptrGrabResult = camera_queue.pop();
         cur_cam_image = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer());
-        camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+        cv::flip(cur_cam_image, cur_cam_image, 1);
+        // camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
         switch (state_machine)
         {
         case 0:
@@ -216,11 +270,20 @@ int main(int argc, char *argv[])
             textureShader.setMat4("projection", glm::mat4(1.0f));
             textureShader.setMat4("model", glm::mat4(1.0f));
             textureShader.setBool("flipHor", false);
-            textureShader.setInt("src", 0);
+            textureShader.setBool("flipVer", true);
             textureShader.setBool("binary", false);
             textureShader.setBool("isGray", true);
+            textureShader.setInt("src", 0);
             displayTexture.bind();
             fullScreenQuad.render();
+            if (load_calib)
+            {
+                if (n_user_locations >= max_user_locations)
+                {
+                    n_user_locations = 0;
+                    state_machine += 3;
+                }
+            }
             break;
         }
         case 1:
@@ -237,7 +300,7 @@ int main(int argc, char *argv[])
                 cam_verts.clear();
                 for (int i = 0; i < max_user_locations; i++)
                 {
-                    glm::vec2 point = Helpers::ScreenToNDC(glm::vec2(cur_corner_pts[i].x, cur_corner_pts[i].y), cam_width, cam_height, true);
+                    glm::vec2 point = Helpers::ScreenToNDC(glm::vec2(cur_corner_pts[i].x, cur_corner_pts[i].y), cam_width, cam_height, false);
                     // glm::vec2 point = glm::vec2((2.0f * cur_corner_pts[i].x / cam_width) - 1.0f, ((2.0f * cur_corner_pts[i].y / cam_height) - 1.0f));
                     cam_verts.push_back(point);
                 }
@@ -246,11 +309,7 @@ int main(int argc, char *argv[])
             }
             else
             {
-                n_user_locations += 1;
-            }
-            if (n_user_locations > 10)
-            {
-                state_machine -= 1;
+                state_machine = 0;
                 n_user_locations = 0;
             }
             break;
@@ -333,35 +392,32 @@ int main(int argc, char *argv[])
                 cv::undistort(leap_image, leap_image2, intrinsics, distortion_coeffs);
                 leapTexture.load((uint8_t *)leap_image2.data, true, cam_buffer_format);
                 */
-                leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
-                std::vector<float> dist_buffer1, dist_buffer2;
-                uint32_t dist_width, dist_height;
-                if (!leap.getDistortion(dist_buffer1, dist_buffer2, dist_width, dist_height))
-                    exit(1);
-                Texture distortionTexture = Texture();
-                distortionTexture.init((uint8_t *)dist_buffer2.data(), dist_width, dist_height, 2);
-                test_fbo.bind();
-                leapUndistortShader.use();
-                leapUndistortShader.setInt("src", 0);
-                leapUndistortShader.setInt("distortion_map", 1);
-                leapTexture.bind(GL_TEXTURE0);
-                distortionTexture.bind(GL_TEXTURE1);
-                fullScreenQuad.render();
-                test_fbo.unbind();
-                glViewport(0, 0, cam_width, cam_height);
-                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                // test_fbo.saveColorToFile("test.png");
-                test_fbo.getTexture()->bind(GL_TEXTURE0);
-            }
-            else
-            {
-                std::vector<uint8_t> leap_image_vector(leap_image.begin<uint8_t>(), leap_image.end<uint8_t>());
-                leapTexture.load(leap_image_vector, true, cam_buffer_format);
                 // leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
-                // cv::resize(leap_image, leap_image, cv::Size(cam_width, cam_height));
-                leapTexture.bind();
+                // std::vector<float> dist_buffer1, dist_buffer2;
+                // uint32_t dist_width, dist_height;
+                // if (!leap.getDistortion(dist_buffer1, dist_buffer2, dist_width, dist_height))
+                //     exit(1);
+                // Texture distortionTexture = Texture();
+                // distortionTexture.init((uint8_t *)dist_buffer2.data(), dist_width, dist_height, 2);
+                // test_fbo.bind();
+                // leapUndistortShader.use();
+                // leapUndistortShader.setInt("src", 0);
+                // leapUndistortShader.setInt("distortion_map", 1);
+                // leapTexture.bind(GL_TEXTURE0);
+                // distortionTexture.bind(GL_TEXTURE1);
+                // fullScreenQuad.render();
+                // test_fbo.unbind();
+                // glViewport(0, 0, cam_width, cam_height);
+                // glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                // // test_fbo.saveColorToFile("test.png");
+                // test_fbo.getTexture()->bind(GL_TEXTURE0);
             }
+            // std::vector<uint8_t> leap_image_vector(leap_image.begin<uint8_t>(), leap_image.end<uint8_t>());
+            leapTexture.load(buffer2, true, cam_buffer_format);
+            // leapTexture.load((uint8_t *)leap_image.data, true, cam_buffer_format);
+            // cv::resize(leap_image, leap_image, cv::Size(cam_width, cam_height));
+            leapTexture.bind();
             textureShader.use();
             textureShader.setMat4("view", glm::mat4(1.0f));
             textureShader.setMat4("projection", glm::mat4(1.0f));
@@ -380,79 +436,87 @@ int main(int argc, char *argv[])
         }
         case 5:
         {
-            // extract 3d points from leap1_verts and leap2_verts
-
-            // first get rays from the leap camera corrected for distortion, in 2D camera space
-            std::vector<LEAP_VECTOR> leap1_rays_2d, leap2_rays_2d;
-            for (int i = 0; i < leap1_verts.size(); i++)
+            if (!load_points)
             {
-                glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1_verts[i], leap_width, leap_height, true);
-                LEAP_VECTOR l1_vert_leap = {l1_vert.x, l1_vert.y, 1.0f};
-                glm::vec2 l2_vert = Helpers::NDCtoScreen(leap2_verts[i], leap_width, leap_height, true);
-                LEAP_VECTOR l2_vert_leap = {l2_vert.x, l2_vert.y, 1.0f};
-                // LEAP_VECTOR l1_verts = {leap_width * (leap1_verts[i].x + 1) / 2, leap_height * (leap1_verts[i].y + 1) / 2, 1.0f};
-                // LEAP_VECTOR l2_verts = {leap_width * (leap2_verts[i].x + 1) / 2, leap_height * (leap2_verts[i].y + 1) / 2, 1.0f};
-                LEAP_VECTOR l1_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_vert_leap);
-                leap1_rays_2d.push_back(l1_ray);
-                LEAP_VECTOR l2_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_vert_leap);
-                leap2_rays_2d.push_back(l2_ray);
+                // extract 3d points from leap1_verts and leap2_verts
+                // first get rays from the leap camera corrected for distortion, in 2D camera space
+                std::vector<LEAP_VECTOR> leap1_rays_2d, leap2_rays_2d;
+                for (int i = 0; i < leap1_verts.size(); i++)
+                {
+                    glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1_verts[i], leap_width, leap_height, false);
+                    LEAP_VECTOR l1_vert_leap = {l1_vert.x, l1_vert.y, 1.0f};
+                    glm::vec2 l2_vert = Helpers::NDCtoScreen(leap2_verts[i], leap_width, leap_height, false);
+                    LEAP_VECTOR l2_vert_leap = {l2_vert.x, l2_vert.y, 1.0f};
+                    // LEAP_VECTOR l1_verts = {leap_width * (leap1_verts[i].x + 1) / 2, leap_height * (leap1_verts[i].y + 1) / 2, 1.0f};
+                    // LEAP_VECTOR l2_verts = {leap_width * (leap2_verts[i].x + 1) / 2, leap_height * (leap2_verts[i].y + 1) / 2, 1.0f};
+                    LEAP_VECTOR l1_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_vert_leap);
+                    leap1_rays_2d.push_back(l1_ray);
+                    LEAP_VECTOR l2_ray = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_vert_leap);
+                    leap2_rays_2d.push_back(l2_ray);
+                }
+                // second convert rays to 3D leap space using the extrinsics matrix
+                glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
+                glm::mat4 leap2_extrinsic = glm::mat4(1.0f);
+                LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, glm::value_ptr(leap1_extrinsic));
+                LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, glm::value_ptr(leap2_extrinsic));
+                /*
+                std::vector<cv::Point3f> leap1_ray_dirs_3d, leap2_ray_dirs_3d;
+                cv::Point3f leap1_origin = {leap1_extrinsic[3][0], leap1_extrinsic[3][1], leap1_extrinsic[3][2]};
+                cv::Point3f leap2_origin = {leap2_extrinsic[3][0], leap2_extrinsic[3][1], leap2_extrinsic[3][2]};
+                for (int i = 0; i < leap1_verts.size(); i++)
+                {
+                    glm::vec4 leap1_ray_3d = glm::inverse(leap1_extrinsic) * glm::vec4(leap1_rays_2d[i].x, leap1_rays_2d[i].y, leap1_rays_2d[i].z, 1.0f);
+                    leap1_ray_3d.x /= leap1_ray_3d.z;
+                    leap1_ray_3d.y /= leap1_ray_3d.z;
+                    leap1_ray_dirs_3d.push_back(cv::Point3f(leap1_ray_3d.x, leap1_ray_3d.y, 1.0f));
+                    glm::vec4 leap2_ray_3d = glm::inverse(leap2_extrinsic) * glm::vec4(leap2_rays_2d[i].x, leap2_rays_2d[i].y, leap2_rays_2d[i].z, 1.0f);
+                    leap2_ray_3d.x /= leap2_ray_3d.z;
+                    leap2_ray_3d.y /= leap2_ray_3d.z;
+                    leap2_ray_dirs_3d.push_back(cv::Point3f(leap2_ray_3d.x, leap2_ray_3d.y, 1.0f));
+                }
+                // triangulate the 3D rays to get the 3D points
+                for (int i = 0; i < leap2_ray_dirs_3d.size(); i++)
+                {
+                    cv::Point3f point = approximate_ray_intersection(leap1_ray_dirs_3d[i], leap1_origin, leap2_ray_dirs_3d[i], leap2_origin, NULL, NULL, NULL);
+                    object_points.push_back(point);
+                }
+                */
+                float baseline = leap2_extrinsic[3][0] - leap1_extrinsic[3][0];
+                for (int i = 0; i < leap1_rays_2d.size(); i++)
+                {
+                    // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
+                    float z = baseline / (leap2_rays_2d[i].x - leap1_rays_2d[i].x);
+                    float alty1 = z * -leap2_rays_2d[i].y; // reason for negative is that the y direction is flipped in openGL
+                    float alty2 = z * -leap1_rays_2d[i].y; // reason for negative is that the y direction is flipped in openGL
+                    float x = z * leap2_rays_2d[i].x - baseline / 2.0f;
+                    float altx = z * leap1_rays_2d[i].x + baseline / 2.0f;
+                    float y = (alty1 + alty2) / 2.0f;
+                    object_points.push_back(cv::Point3f(x, -z, y));
+                    obj_to_save.push_back(x);
+                    obj_to_save.push_back(-z);
+                    obj_to_save.push_back(y);
+                }
+                for (int i = 0; i < cam_verts.size(); i++)
+                {
+                    // image_points.push_back(cv::Point2f(proj_width * (proj_verts[i].x + 1) / 2, proj_height * (proj_verts[i].y + 1) / 2));
+                    glm::vec2 point = Helpers::NDCtoScreen(cam_verts[i], cam_width, cam_height, false);
+                    image_points.push_back(cv::Point2f(point.x, point.y));
+                    img_to_save.push_back(point.x);
+                    img_to_save.push_back(point.y);
+                    // image_points.push_back(cv::Point2f(cam_width * (cam_verts[i].x + 1) / 2, cam_height * (cam_verts[i].y + 1) / 2));
+                }
             }
-            std::vector<cv::Point2f> image_points;
-            std::vector<cv::Point3f> object_points;
-            std::vector<float> obj_to_save;
-            std::vector<float> img_to_save;
-
-            // second convert rays to 3D leap space using the extrinsics matrix
-            glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
-            glm::mat4 leap2_extrinsic = glm::mat4(1.0f);
-            LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, glm::value_ptr(leap1_extrinsic));
-            LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, glm::value_ptr(leap2_extrinsic));
-            /*
-            std::vector<cv::Point3f> leap1_ray_dirs_3d, leap2_ray_dirs_3d;
-            cv::Point3f leap1_origin = {leap1_extrinsic[3][0], leap1_extrinsic[3][1], leap1_extrinsic[3][2]};
-            cv::Point3f leap2_origin = {leap2_extrinsic[3][0], leap2_extrinsic[3][1], leap2_extrinsic[3][2]};
-            for (int i = 0; i < leap1_verts.size(); i++)
+            std::cout << "object_points: " << std::endl;
+            for (int i = 0; i < object_points.size(); i++)
             {
-                glm::vec4 leap1_ray_3d = glm::inverse(leap1_extrinsic) * glm::vec4(leap1_rays_2d[i].x, leap1_rays_2d[i].y, leap1_rays_2d[i].z, 1.0f);
-                leap1_ray_3d.x /= leap1_ray_3d.z;
-                leap1_ray_3d.y /= leap1_ray_3d.z;
-                leap1_ray_dirs_3d.push_back(cv::Point3f(leap1_ray_3d.x, leap1_ray_3d.y, 1.0f));
-                glm::vec4 leap2_ray_3d = glm::inverse(leap2_extrinsic) * glm::vec4(leap2_rays_2d[i].x, leap2_rays_2d[i].y, leap2_rays_2d[i].z, 1.0f);
-                leap2_ray_3d.x /= leap2_ray_3d.z;
-                leap2_ray_3d.y /= leap2_ray_3d.z;
-                leap2_ray_dirs_3d.push_back(cv::Point3f(leap2_ray_3d.x, leap2_ray_3d.y, 1.0f));
+                std::cout << object_points[i] << std::endl;
             }
-            // triangulate the 3D rays to get the 3D points
-            for (int i = 0; i < leap2_ray_dirs_3d.size(); i++)
+            std::cout << "image_points: " << std::endl;
+            for (int i = 0; i < image_points.size(); i++)
             {
-                cv::Point3f point = approximate_ray_intersection(leap1_ray_dirs_3d[i], leap1_origin, leap2_ray_dirs_3d[i], leap2_origin, NULL, NULL, NULL);
-                object_points.push_back(point);
-            }
-            */
-            float baseline = leap2_extrinsic[3][0] - leap1_extrinsic[3][0];
-            for (int i = 0; i < leap1_rays_2d.size(); i++)
-            {
-                // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
-                float z = baseline / (leap1_rays_2d[i].x - leap2_rays_2d[i].x);
-                float y = z * leap1_rays_2d[i].y;
-                float x = z * leap1_rays_2d[i].x - baseline / 2.0f;
-                object_points.push_back(cv::Point3f(x, -z, y));
-                obj_to_save.push_back(x);
-                obj_to_save.push_back(-z);
-                obj_to_save.push_back(y);
-            }
-            for (int i = 0; i < cam_verts.size(); i++)
-            {
-                // image_points.push_back(cv::Point2f(proj_width * (proj_verts[i].x + 1) / 2, proj_height * (proj_verts[i].y + 1) / 2));
-                glm::vec2 point = Helpers::NDCtoScreen(cam_verts[i], cam_width, cam_height, true);
-                image_points.push_back(cv::Point2f(point.x, point.y));
-                img_to_save.push_back(point.x);
-                img_to_save.push_back(point.y);
-                // image_points.push_back(cv::Point2f(cam_width * (cam_verts[i].x + 1) / 2, cam_height * (cam_verts[i].y + 1) / 2));
+                std::cout << image_points[i] << std::endl;
             }
             // use solve pnp to find transformation of projector to leap space
-            cv::Mat rvec = cv::Mat::zeros(3, 1, CV_64FC1);
-            cv::Mat tvec = cv::Mat::zeros(3, 1, CV_64FC1);
             cnpy::npz_t my_npz;
             try
             {
@@ -468,59 +532,93 @@ int main(int argc, char *argv[])
             cv::Mat distortion_coeffs(5, 1, CV_64F, my_npz["cam_distortion"].data<double>());
             // std::cout << "camera_intrinsics: " << camera_intrinsics << std::endl;
             // std::cout << "distortion_coeffs: " << distortion_coeffs << std::endl;
-            cv::solvePnP(object_points, image_points, camera_intrinsics, distortion_coeffs, rvec, tvec);
+            if (!load_calib)
+            {
+                // rvec = cv::Mat::zeros(3, 1, CV_64FC1);
+                // tvec = cv::Mat::zeros(3, 1, CV_64FC1);
+                // construct initial guess with magic numbers
+                cv::Mat transform = cv::Mat::zeros(4, 4, CV_64FC1);
+                transform.at<double>(0, 0) = -1.0f;
+                transform.at<double>(1, 1) = 1.0f;
+                transform.at<double>(2, 2) = -1.0f;
+                transform.at<double>(3, 3) = 1.0f;
+                transform.at<double>(0, 3) = 0.0f;
+                transform.at<double>(1, 3) = 300.0f;
+                transform.at<double>(2, 3) = 1000.0f;
+                // std::cout << "transform: " << transform << std::endl;
+                // cv::Mat rotmat = transform(cv::Range(0, 3), cv::Range(0, 3)).clone();
+                // std::cout << "rot_mat: " << rotmat << std::endl;
+                // tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
+                // std::cout << "tvec: " << tvec << std::endl;
+                cv::invert(transform, transform);
+                // std::cout << "transform_inverse: " << transform << std::endl;
+                cv::Mat rotmat_inverse = transform(cv::Range(0, 3), cv::Range(0, 3)).clone();
+                // std::cout << "rot_mat_inverse: " << transform << std::endl;
+                cv::Rodrigues(rotmat_inverse, rvec);
+                // std::cout << "rvec_inverse: " << rvec << std::endl;
+                tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
+                // std::cout << "tvec_inverse: " << tvec << std::endl;
+                cv::solvePnP(object_points, image_points, camera_intrinsics, distortion_coeffs, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
+                // std::cout << "rvec: " << rvec << std::endl;
+                // std::cout << "tvec: " << tvec << std::endl;
+                cv::Mat rot_mat(3, 3, CV_64FC1);
+                cv::Rodrigues(rvec, rot_mat);
+                // std::cout << "rotmat: " << rot_mat << std::endl;
+                cv::Mat w2c(4, 4, CV_64FC1);
+                w2c.at<double>(0, 0) = rot_mat.at<double>(0, 0);
+                w2c.at<double>(0, 1) = rot_mat.at<double>(0, 1);
+                w2c.at<double>(0, 2) = rot_mat.at<double>(0, 2);
+                w2c.at<double>(0, 3) = tvec.at<double>(0, 0);
+                w2c.at<double>(1, 0) = rot_mat.at<double>(1, 0);
+                w2c.at<double>(1, 1) = rot_mat.at<double>(1, 1);
+                w2c.at<double>(1, 2) = rot_mat.at<double>(1, 2);
+                w2c.at<double>(1, 3) = tvec.at<double>(1, 0);
+                w2c.at<double>(2, 0) = rot_mat.at<double>(2, 0);
+                w2c.at<double>(2, 1) = rot_mat.at<double>(2, 1);
+                w2c.at<double>(2, 2) = rot_mat.at<double>(2, 2);
+                w2c.at<double>(2, 3) = tvec.at<double>(2, 0);
+                w2c.at<double>(3, 0) = 0.0f;
+                w2c.at<double>(3, 1) = 0.0f;
+                w2c.at<double>(3, 2) = 0.0f;
+                w2c.at<double>(3, 3) = 1.0f;
+                std::cout << "w2c: " << w2c << std::endl;
+                cv::Mat c2w = w2c.inv();
+                std::cout << "c2w: " << c2w << std::endl;
+                std::vector<double> w2c_vec(w2c.begin<double>(), w2c.end<double>());
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", obj_to_save.data(), {20, 3}, "w");
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", img_to_save.data(), {20, 2}, "w");
+                // cnpy::npy_save("../../resource/calibrations/leap_calibration/c2w.npy", c2w.data, {4, 4}, "w");
+            }
             std::vector<cv::Point2f> reproj_image_points;
             cv::projectPoints(object_points, rvec, tvec, camera_intrinsics, distortion_coeffs, reproj_image_points);
+            std::cout << "reprojected: " << std::endl;
+            for (int i = 0; i < reproj_image_points.size(); i++)
+            {
+                std::cout << reproj_image_points[i] << std::endl;
+            }
             for (int i = 0; i < reproj_image_points.size(); i++)
             {
                 glm::vec2 point = Helpers::ScreenToNDC(glm::vec2(reproj_image_points[i].x, reproj_image_points[i].y), cam_width, cam_height, true);
                 // glm::vec2 point = glm::vec2((2.0f * reproj_image_points[i].x / cam_width) - 1.0f, ((2.0f * reproj_image_points[i].y / cam_height) - 1.0f));
                 reprojected_image_points.push_back(point);
             }
-            // std::cout << "rvec: " << rvec << std::endl;
-            // std::cout << "tvec: " << tvec << std::endl;
-            cv::Mat rot_mat(3, 3, CV_64FC1);
-            cv::Rodrigues(rvec, rot_mat);
-            // std::cout << "rotmat: " << rot_mat << std::endl;
-            cv::Mat w2c(4, 4, CV_64FC1);
-            w2c.at<double>(0, 0) = rot_mat.at<double>(0, 0);
-            w2c.at<double>(0, 1) = rot_mat.at<double>(0, 1);
-            w2c.at<double>(0, 2) = rot_mat.at<double>(0, 2);
-            w2c.at<double>(0, 3) = tvec.at<double>(0, 0);
-            w2c.at<double>(1, 0) = rot_mat.at<double>(1, 0);
-            w2c.at<double>(1, 1) = rot_mat.at<double>(1, 1);
-            w2c.at<double>(1, 2) = rot_mat.at<double>(1, 2);
-            w2c.at<double>(1, 3) = tvec.at<double>(1, 0);
-            w2c.at<double>(2, 0) = rot_mat.at<double>(2, 0);
-            w2c.at<double>(2, 1) = rot_mat.at<double>(2, 1);
-            w2c.at<double>(2, 2) = rot_mat.at<double>(2, 2);
-            w2c.at<double>(2, 3) = tvec.at<double>(2, 0);
-            w2c.at<double>(3, 0) = 0.0f;
-            w2c.at<double>(3, 1) = 0.0f;
-            w2c.at<double>(3, 2) = 0.0f;
-            w2c.at<double>(3, 3) = 1.0f;
-            std::cout << "w2c: " << w2c << std::endl;
-            cv::Mat c2w = w2c.inv();
-            std::cout << "c2w: " << c2w << std::endl;
-            std::vector<double> w2c_vec(w2c.begin<double>(), w2c.end<double>());
-            cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
-            cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", obj_to_save.data(), {20, 3}, "w");
-            cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", img_to_save.data(), {20, 2}, "w");
-            // cnpy::npy_save("../../resource/calibrations/leap_calibration/c2w.npy", c2w.data, {4, 4}, "w");
             state_machine += 1;
             break;
         }
         case 6:
         {
+            displayTexture.load((uint8_t *)cur_cam_image.data, true, cam_buffer_format);
             textureShader.use();
             textureShader.setMat4("view", glm::mat4(1.0f));
             textureShader.setMat4("projection", glm::mat4(1.0f));
             textureShader.setMat4("model", glm::mat4(1.0f));
+            textureShader.setBool("flipHor", false);
             textureShader.setBool("flipVer", true);
-            textureShader.setInt("src", 0);
             textureShader.setBool("binary", false);
             textureShader.setBool("isGray", true);
-            camTexture.bind();
+            textureShader.setInt("src", 0);
+            displayTexture.bind();
             fullScreenQuad.render();
             vertexShader.use();
             vertexShader.setMat4("view", glm::mat4(1.0f));
@@ -543,17 +641,22 @@ int main(int argc, char *argv[])
                 double x;
                 double y;
                 glfwGetCursorPos(window, &x, &y);
-                cur_mouse_pos = Helpers::ScreenToNDC(glm::vec2(x, y), cur_window_width, cur_window_height, true);
+                cur_mouse_pos = Helpers::ScreenToNDC(glm::vec2(x, y), cur_window_width, cur_window_height, false);
                 // cur_mouse_pos = glm::vec2((2.0f * x / cam_width) - 1.0f, -1.0f * ((2.0f * y / cam_height) - 1.0f));
             }
-            screen_vert.push_back(cur_mouse_pos);
-            if (state_machine == 2)
+            screen_vert.push_back(glm::vec2(cur_mouse_pos.x, -cur_mouse_pos.y));
+            if (state_machine < 3)
             {
                 if (cam_verts.size() > 0)
                 {
-                    for (int i = 0; i < points_to_display; i++)
+                    int limit;
+                    if (load_calib)
+                        limit = n_user_locations;
+                    else
+                        limit = points_to_display;
+                    for (int i = 0; i < limit; i++)
                     {
-                        screen_vert.push_back(glm::vec2(cam_verts[i].x, cam_verts[i].y));
+                        screen_vert.push_back(glm::vec2(cam_verts[i].x, -cam_verts[i].y));
                     }
                 }
             }
@@ -563,7 +666,7 @@ int main(int argc, char *argv[])
                 {
                     for (int i = 0; i < leap1_verts.size(); i++)
                     {
-                        screen_vert.push_back(glm::vec2(leap1_verts[i].x, leap1_verts[i].y));
+                        screen_vert.push_back(glm::vec2(leap1_verts[i].x, -leap1_verts[i].y));
                     }
                 }
             }
@@ -573,7 +676,7 @@ int main(int argc, char *argv[])
                 {
                     for (int i = 0; i < leap2_verts.size(); i++)
                     {
-                        screen_vert.push_back(glm::vec2(leap2_verts[i].x, leap2_verts[i].y));
+                        screen_vert.push_back(glm::vec2(leap2_verts[i].x, -leap2_verts[i].y));
                     }
                 }
             }
@@ -619,7 +722,15 @@ void processInput(GLFWwindow *window)
         {
             if (state_machine < 3)
             {
-                state_machine += 1;
+                if (load_calib)
+                {
+                    cam_verts.push_back(cur_mouse_pos);
+                    n_user_locations += 1;
+                }
+                else
+                {
+                    state_machine += 1;
+                }
             }
             else
             {
@@ -636,6 +747,18 @@ void processInput(GLFWwindow *window)
             }
         }
         right_pressed = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_RELEASE)
+    {
+        if (left_pressed)
+        {
+            state_machine = 0;
+            cam_verts.clear();
+            leap1_verts.clear();
+            leap2_verts.clear();
+            n_user_locations = 0;
+        }
+        left_pressed = false;
     }
     if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_RELEASE)
     {
@@ -659,6 +782,22 @@ void processInput(GLFWwindow *window)
         }
         down_pressed = false;
     }
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE)
+    {
+        if (enter_pressed)
+        {
+            if (load_calib)
+            {
+                if (state_machine == 0)
+                    state_machine += 3;
+                else
+                    state_machine += 1;
+                n_user_locations = 0;
+            }
+            // leap_undistort = !leap_undistort;
+        }
+        enter_pressed = false;
+    }
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
     {
         right_pressed = true;
@@ -678,29 +817,6 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
     {
         enter_pressed = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE)
-    {
-        if (enter_pressed)
-        {
-            // leap_undistort = !leap_undistort;
-        }
-        enter_pressed = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_RELEASE)
-    {
-        // if (left_pressed)
-        // {
-        //     if (state_machine >= 9)
-        //     {
-        //         state_machine = 6;
-        //     }
-        //     else
-        //     {
-        //         state_machine = state_machine / 3;
-        //     }
-        // }
-        left_pressed = false;
     }
 }
 

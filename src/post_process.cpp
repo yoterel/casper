@@ -111,8 +111,9 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, un
     NN_shader.setInt("src", 0);
     NN_shader.setInt("jfa", 1);
     NN_shader.setInt("mask", 2);
-    NN_shader.setBool("flipVer", false);
-    NN_shader.setBool("flipMaskVer", false);
+    NN_shader.setBool("flipVer", true);
+    NN_shader.setBool("flipMaskVer", true);
+    NN_shader.setBool("flipMaskHor", true);
     NN_shader.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
     m_quad.render();
     // result will be contained in the first ping pong buffer texture
