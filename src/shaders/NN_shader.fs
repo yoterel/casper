@@ -6,7 +6,7 @@ uniform sampler2D jfa;
 uniform sampler2D src;
 uniform sampler2D mask;
 uniform vec2 resolution;
-uniform bool flipMaskVer;
+uniform bool flipMaskVer = true;
 uniform bool flipMaskHor = true;
 
 void main()

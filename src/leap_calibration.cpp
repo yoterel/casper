@@ -37,8 +37,8 @@ void initGLBuffers(unsigned int *pbo);
 // global settings
 bool cam_color_mode = false;
 bool leap_undistort = false;
-bool load_calib = true;
-bool load_points = true;
+bool load_calib = false;
+bool load_points = false;
 int points_to_display = 0;
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
@@ -140,8 +140,8 @@ int main(int argc, char *argv[])
     Timer t_app;
     t_app.start();
     Text text("../../resource/arial.ttf");
-    FBO hands_fbo(proj_width, proj_height);
-    FBO postprocess_fbo(proj_width, proj_height);
+    // FBO hands_fbo(proj_width, proj_height);
+    // FBO postprocess_fbo(proj_width, proj_height);
     /* setup shaders*/
     Shader leapUndistortShader("../../src/shaders/leap_undistort.vs", "../../src/shaders/leap_undistort.fs");
     Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
@@ -337,7 +337,7 @@ int main(int argc, char *argv[])
                 exit(1);
             leap_width = width;
             leap_height = height;
-            FBO test_fbo(width, height, 1);
+            // FBO test_fbo(width, height, 1);
             Texture leapTexture = Texture();
             leapTexture.init(width, height, 1);
             // cv::Mat leap_image = cv::Mat(height, width, CV_8UC1, buffer1.data());
@@ -371,7 +371,7 @@ int main(int argc, char *argv[])
                 exit(1);
             leap_width = width;
             leap_height = height;
-            FBO test_fbo(width, height, 1);
+            // FBO test_fbo(width, height, 1);
             Texture leapTexture = Texture();
             leapTexture.init(width, height, 1);
             cv::Mat leap_image = cv::Mat(height, width, CV_8UC1, buffer2.data());
@@ -558,7 +558,7 @@ int main(int argc, char *argv[])
                 // std::cout << "rvec_inverse: " << rvec << std::endl;
                 tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
                 // std::cout << "tvec_inverse: " << tvec << std::endl;
-                cv::solvePnP(object_points, image_points, camera_intrinsics, distortion_coeffs, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
+                cv::solvePnP(object_points, image_points, camera_intrinsics, distortion_coeffs, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
                 // std::cout << "rvec: " << rvec << std::endl;
                 // std::cout << "tvec: " << tvec << std::endl;
                 cv::Mat rot_mat(3, 3, CV_64FC1);
@@ -586,8 +586,8 @@ int main(int argc, char *argv[])
                 std::cout << "c2w: " << c2w << std::endl;
                 std::vector<double> w2c_vec(w2c.begin<double>(), w2c.end<double>());
                 cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
-                cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", obj_to_save.data(), {20, 3}, "w");
-                cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", img_to_save.data(), {20, 2}, "w");
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", obj_to_save.data(), {max_user_locations, 3}, "w");
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", img_to_save.data(), {max_user_locations, 2}, "w");
                 // cnpy::npy_save("../../resource/calibrations/leap_calibration/c2w.npy", c2w.data, {4, 4}, "w");
             }
             std::vector<cv::Point2f> reproj_image_points;

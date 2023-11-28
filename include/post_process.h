@@ -12,6 +12,7 @@ class PostProcess
 public:
     PostProcess(unsigned int srcWidth, unsigned int srcHeight,
                 unsigned int dstWidth, unsigned int dstHeight);
+    void mask(Shader &mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo);
     void jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo = NULL);
     glm::mat4 findHomography(std::vector<glm::vec2> screen_verts);
     void optical_flow(Shader &shader, Texture renderedSceneTexture, Texture camTexture);

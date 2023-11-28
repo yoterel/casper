@@ -85,6 +85,13 @@ add_executable(ahand
     src/cnpy.cpp
     src/fbo.cpp
     src/quad.cpp
+    third-party/imgui/imgui.cpp
+    third-party/imgui/imgui_draw.cpp
+    third-party/imgui/imgui_tables.cpp
+    third-party/imgui/imgui_widgets.cpp
+    third-party/imgui/imgui_demo.cpp
+    third-party/imgui/backends/imgui_impl_glfw.cpp
+    third-party/imgui/backends/imgui_impl_opengl3.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
@@ -139,6 +146,9 @@ target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/
 # zlib
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
 target_link_libraries(ahand PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
+# imgui
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp

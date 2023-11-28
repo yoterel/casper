@@ -1,4 +1,5 @@
 #include "gl_camera.h"
+#include <glm/gtc/matrix_transform.hpp>
 
 GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
                    float width, float height, float far, float speed, bool inverted) : MovementSpeed(speed),
@@ -15,7 +16,7 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
     if (m_mode == Camera_Mode::FIXED_CAMERA)
     {
         glm::vec3 front = glm::normalize(at - eye);
-        Front = glm::normalize(front);
+        Front = front;
         Position = eye;
         WorldUp = up;
         Right = glm::normalize(glm::cross(Front, WorldUp)); // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
@@ -25,11 +26,13 @@ GLCamera::GLCamera(glm::vec3 eye, glm::vec3 at, glm::vec3 up, Camera_Mode mode,
     else
     {
         glm::vec3 front = glm::normalize(at - eye);
-        Pitch = glm::degrees(asin(front.y));
-        Yaw = glm::degrees(atan2(front.z, front.x));
+        Front = front;
         Position = eye;
         WorldUp = up;
-        updateCameraVectors();
+        Pitch = glm::degrees(asin(front.y));
+        Yaw = glm::degrees(atan2(front.z, front.x));
+        calcViewMatrixFromCameraVectors();
+        // updateCameraVectors();
     }
 }
 GLCamera::GLCamera(glm::vec3 position, glm::vec3 up, glm::vec3 front,
@@ -70,18 +73,45 @@ GLCamera::GLCamera(glm::mat4 world2local, glm::mat4 projection, Camera_Mode mode
     // world2local[3][2] *= 0.1f;
     // viewMatrix = glm::transpose(openglMatrix);
     viewMatrix = world2local;
-    glm::mat4 local2world = getLocal2WorldMatrix();
-    glm::vec3 front = glm::vec3(-local2world[2][0], -local2world[2][1], -local2world[2][2]);
-    Pitch = glm::degrees(asin(front.y));
-    Yaw = glm::degrees(atan2(front.z, front.x));
-    Position = glm::vec3(local2world[3][0], local2world[3][1], local2world[3][2]);
-    WorldUp = glm::vec3(local2world[1][0], local2world[1][1], local2world[1][2]);
-    updateCameraVectors();
+    WorldUp = glm::vec3(0.0f, 0.0f, -1.0f);
+    calcCameraVectorsFromViewMatrix();
+    // glm::mat4 local2world = getLocal2WorldMatrix();
+    // glm::vec3 front = glm::vec3(-local2world[2][0], -local2world[2][1], -local2world[2][2]);
+    // Pitch = glm::degrees(asin(front.y));
+    // Yaw = glm::degrees(atan2(front.z, front.x));
+    // Position = glm::vec3(local2world[3][0], local2world[3][1], local2world[3][2]);
+    // WorldUp = glm::vec3(local2world[1][0], local2world[1][1], local2world[1][2]);
+    // updateCameraVectors();
     // std::cout << "OpenCV matrix: " << std::endl;
     // Position = glm::vec3(openglMatrix[0][3] / 10, openglMatrix[1][3] / 10, openglMatrix[2][3] / 10);
     // Right = glm::vec3(openglMatrix[0][0], openglMatrix[1][0], openglMatrix[2][0]);
     // Up = glm::vec3(-openglMatrix[0][1], -openglMatrix[1][1], -openglMatrix[2][1]);
     // Front = glm::vec3(-openglMatrix[0][2], -openglMatrix[1][2], -openglMatrix[2][2]);
+}
+
+void GLCamera::calcCameraVectorsFromViewMatrix()
+{
+    // call only after setting viewMatrix
+    glm::mat4 local2world = getLocal2WorldMatrix();
+    glm::vec3 front = glm::vec3(-local2world[2][0], -local2world[2][1], -local2world[2][2]);
+    Pitch = glm::degrees(asin(front.y));
+    Yaw = glm::degrees(atan2(front.z, front.x));
+    Position = glm::vec3(local2world[3][0], local2world[3][1], local2world[3][2]);
+    // WorldUp = glm::vec3(local2world[1][0], local2world[1][1], local2world[1][2]);
+}
+
+void GLCamera::calcViewMatrixFromCameraVectors()
+{
+    // call only after setting Yaw, Pitch, Position, and WorldUp
+    glm::vec3 front;
+    front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+    front.z = -sin(glm::radians(Pitch));
+    front.y = -sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+    Front = glm::normalize(front);
+    // also re-calculate the Right and Up vector
+    Right = glm::normalize(glm::cross(Front, WorldUp)); // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+    Up = glm::normalize(glm::cross(Right, Front));
+    viewMatrix = glm::lookAt(Position, Position + Front, Up);
 }
 
 // returns the view matrix calculated using Euler Angles and the LookAt Matrix
@@ -93,6 +123,7 @@ glm::mat4 GLCamera::getViewMatrix() // world to local
 void GLCamera::setViewMatrix(glm::mat4 newViewMatrix) // world to local
 {
     viewMatrix = newViewMatrix;
+    calcCameraVectorsFromViewMatrix();
 }
 
 glm::mat4 GLCamera::getProjectionMatrix() // world to local
@@ -155,7 +186,7 @@ void GLCamera::processMouseMovement(float xoffset, float yoffset, GLboolean cons
         if (m_inverted)
         {
             xoffset *= -1;
-            yoffset *= -1;
+            // yoffset *= -1;
         }
         Yaw += xoffset;
         Pitch += yoffset;
@@ -200,15 +231,7 @@ void GLCamera::updateCameraVectors()
     case Camera_Mode::FREE_CAMERA:
     {
         // calculate the new Front vector
-        glm::vec3 front;
-        front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-        front.y = sin(glm::radians(Pitch));
-        front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-        Front = glm::normalize(front);
-        // also re-calculate the Right and Up vector
-        Right = glm::normalize(glm::cross(Front, WorldUp)); // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
-        Up = glm::normalize(glm::cross(Right, Front));
-        viewMatrix = glm::lookAt(Position, Position + Front, Up);
+        calcViewMatrixFromCameraVectors();
         break;
     }
     case Camera_Mode::FIXED_CAMERA:

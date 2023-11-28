@@ -53,6 +53,26 @@ glm::mat4 PostProcess::findHomography(std::vector<glm::vec2> screen_verts)
     return projection;
 }
 
+void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo)
+{
+    // bind fbo
+    target_fbo->bind();
+    // bind textures
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, renderedSceneTexture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, camTexture);
+    // render
+    mask_shader.use();
+    mask_shader.setInt("src", 0);
+    mask_shader.setInt("mask", 1);
+    mask_shader.setBool("flipVer", false);
+    mask_shader.setBool("flipMaskVer", true);
+    mask_shader.setBool("flipMaskHor", true);
+    m_quad.render();
+    // unbind fbo
+    target_fbo->unbind();
+}
 void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo)
 {
     // init jump flood seeds
@@ -111,7 +131,7 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, un
     NN_shader.setInt("src", 0);
     NN_shader.setInt("jfa", 1);
     NN_shader.setInt("mask", 2);
-    NN_shader.setBool("flipVer", true);
+    NN_shader.setBool("flipVer", false);
     NN_shader.setBool("flipMaskVer", true);
     NN_shader.setBool("flipMaskHor", true);
     NN_shader.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));

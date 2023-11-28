@@ -27,9 +27,13 @@
 #include "stb_image_write.h"
 #include <helper_string.h>
 #include <filesystem>
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 namespace fs = std::filesystem;
 
 // forward declarations
+void openIMGUIFrame();
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
@@ -61,6 +65,8 @@ unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f;
 // global state
+bool jumpFlood = true;
+int magic_leap_time_delay = 40000; // us
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
@@ -73,6 +79,8 @@ int64_t lastFrameID = 0;
 bool space_modifier = false;
 bool shift_modifier = false;
 bool ctrl_modifier = false;
+bool activateGUI = false;
+bool tab_pressed = false;
 unsigned int n_bones = 0;
 float screen_z = -10.0f;
 bool hand_in_frame = false;
@@ -85,11 +93,11 @@ float downscale_factor = 2.0f;
 cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
 cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
 cv::Mat curFrame_gray, prevFrame_gray;
-// GLCamera gl_camera(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
+// GLCamera gl_projector(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
 GLCamera gl_flycamera;
-GLCamera gl_camera;
 GLCamera gl_projector;
-// GLCamera gl_camera(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
+GLCamera gl_camera;
+// GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
 
 int main(int argc, char *argv[])
 {
@@ -183,6 +191,15 @@ int main(int argc, char *argv[])
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    /* Setup Dear ImGui context */
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+    /* Setup Platform/Renderer backends */
+    ImGui_ImplGlfw_InitForOpenGL(window, true); // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
+    ImGui_ImplOpenGL3_Init();
     /* setup global GL buffers */
     unsigned int skeletonVAO = 0;
     unsigned int skeletonVBO = 0;
@@ -284,6 +301,7 @@ int main(int argc, char *argv[])
     FBO c2p_fbo(proj_width, proj_height);
     /* setup shaders*/
     Shader NNShader("../../src/shaders/NN_shader.vs", "../../src/shaders/NN_shader.fs");
+    Shader maskShader("../../src/shaders/mask.vs", "../../src/shaders/mask.fs");
     Shader jfaInitShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa_init.fs");
     Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
     Shader fastTrackerShader("../../src/shaders/fast_tracker.vs", "../../src/shaders/fast_tracker.fs");
@@ -360,36 +378,36 @@ int main(int argc, char *argv[])
         {
             // gl_flycamera = GLCamera(w2vc, proj_project, Camera_Mode::FREE_CAMERA);
             // gl_flycamera = GLCamera(w2vc, proj_project, Camera_Mode::FREE_CAMERA, proj_width, proj_height, 10.0f);
-            gl_flycamera = GLCamera(glm::vec3(-120.0f, -540.0f, 675.0f),
-                                    glm::vec3(0.0f, 0.0f, 0.0f),
-                                    glm::vec3(0.0f, -1.0f, 0.0f),
+            gl_flycamera = GLCamera(glm::vec3(20.0f, -160.0f, 190.0f),
+                                    glm::vec3(-50.0f, 200.0f, -30.0f),
+                                    glm::vec3(0.0f, 0.0f, -1.0f),
                                     camera_mode,
                                     proj_width,
                                     proj_height,
                                     1500.0f,
-                                    100.0f,
+                                    25.0f,
                                     true);
-            gl_camera = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height, 50.0f, true);
-            gl_projector = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height, 50.0f, true);
+            gl_projector = GLCamera(w2c, proj_project, camera_mode, proj_width, proj_height, 25.0f, true);
+            gl_camera = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height, 25.0f, true);
         }
         else
         {
-            gl_camera = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height);
-            gl_projector = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height);
+            gl_projector = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height);
+            gl_camera = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height);
             gl_flycamera = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height);
         }
     }
     else
     {
         std::cout << "Using hard-coded values for camera and projector settings" << std::endl;
-        gl_camera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
-                             glm::vec3(0.0f, 0.0f, 0.0f),
-                             glm::vec3(0.0f, 1.0f, 0.0f),
-                             camera_mode, proj_width, proj_height, 500.0f, 2.0f);
-        gl_projector = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
+        gl_projector = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
                                 glm::vec3(0.0f, 0.0f, 0.0f),
-                                glm::vec3(0.0f, -1.0f, 0.0f),
+                                glm::vec3(0.0f, 1.0f, 0.0f),
                                 camera_mode, proj_width, proj_height, 500.0f, 2.0f);
+        gl_camera = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
+                             glm::vec3(0.0f, 0.0f, 0.0f),
+                             glm::vec3(0.0f, -1.0f, 0.0f),
+                             camera_mode, proj_width, proj_height, 500.0f, 2.0f);
         gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
                                 glm::vec3(0.0f, 0.0f, 0.0f),
                                 glm::vec3(0.0f, 1.0f, 0.0f),
@@ -401,10 +419,10 @@ int main(int argc, char *argv[])
                                            {1.0f, 1.0f, 1.0f}};
     std::vector<glm::vec3> vcamFarVerts(4);
     // unproject points
-    glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
-    glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
-    glm::mat4 vproj_view_transform = gl_projector.getViewMatrix();
-    glm::mat4 vproj_projection_transform = gl_projector.getProjectionMatrix();
+    glm::mat4 vcam_view_transform = gl_projector.getViewMatrix();
+    glm::mat4 vcam_projection_transform = gl_projector.getProjectionMatrix();
+    glm::mat4 vproj_view_transform = gl_camera.getViewMatrix();
+    glm::mat4 vproj_projection_transform = gl_camera.getProjectionMatrix();
     glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
     glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
     for (int i = 0; i < far_frustrum.size(); ++i)
@@ -537,7 +555,17 @@ int main(int argc, char *argv[])
             t_debug.reset();
         }
         /* deal with user input */
+        glfwPollEvents();
         processInput(window);
+        if (activateGUI)
+        {
+            openIMGUIFrame(); // create imgui frame
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+        else
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         t_misc.stop();
 
@@ -617,10 +645,10 @@ int main(int argc, char *argv[])
         }
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
-        glm::mat4 vcam_view_transform = gl_camera.getViewMatrix();
-        glm::mat4 vcam_projection_transform = gl_camera.getProjectionMatrix();
-        glm::mat4 vproj_view_transform = gl_projector.getViewMatrix();
-        glm::mat4 vproj_projection_transform = gl_projector.getProjectionMatrix();
+        glm::mat4 vcam_view_transform = gl_projector.getViewMatrix();
+        glm::mat4 vcam_projection_transform = gl_projector.getProjectionMatrix();
+        glm::mat4 vproj_view_transform = gl_camera.getViewMatrix();
+        glm::mat4 vproj_projection_transform = gl_camera.getProjectionMatrix();
         glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
         glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
         t_leap.stop();
@@ -695,13 +723,17 @@ int main(int argc, char *argv[])
         // projectorOnlyShader.setBool("src", 0);
         /* render hand with jfa */
         // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
-        postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo);
+        if (jumpFlood)
+            postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo);
+        else
+            postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo);
         c2p_fbo.bind();
         textureShader.use();
         textureShader.setMat4("view", glm::mat4(1.0f));
         textureShader.setMat4("projection", c2p_homography);
         textureShader.setMat4("model", glm::mat4(1.0f));
-        textureShader.setBool("flipVer", true);
+        textureShader.setBool("flipVer", false);
+        textureShader.setBool("flipHor", false);
         textureShader.setInt("src", 0);
         textureShader.setBool("binary", false);
         postprocess_fbo.getTexture()->bind();
@@ -991,6 +1023,7 @@ int main(int argc, char *argv[])
                 // directly render camera input or any other texture
                 textureShader.use();
                 textureShader.setBool("flipVer", false);
+                textureShader.setBool("flipHor", false);
                 textureShader.setMat4("projection", flycam_projection_transform);
                 textureShader.setMat4("view", flycam_view_transform);
                 textureShader.setMat4("model", glm::mat4(1.0f));
@@ -1007,6 +1040,7 @@ int main(int argc, char *argv[])
                 t_warp.start();
                 textureShader.use();
                 textureShader.setBool("flipVer", false);
+                textureShader.setBool("flipHor", false);
                 textureShader.setMat4("projection", flycam_projection_transform);
                 textureShader.setMat4("view", flycam_view_transform);
                 textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
@@ -1019,15 +1053,15 @@ int main(int argc, char *argv[])
             // draws text
             {
                 float text_spacing = 10.0f;
-                glm::vec3 cam_pos = gl_flycamera.getPos();
-                glm::vec3 cam_front = gl_flycamera.getFront();
-                glm::vec3 proj_pos = gl_projector.getPos();
+                glm::vec3 cur_cam_pos = gl_flycamera.getPos();
+                glm::vec3 cur_cam_front = gl_flycamera.getFront();
+                glm::vec3 cam_pos = gl_camera.getPos();
                 std::vector<std::string> texts_to_render = {
                     std::format("debug_vector: {:.02f}, {:.02f}, {:.02f}", debug_vec.x, debug_vec.y, debug_vec.z),
                     std::format("ms_per_frame: {:.02f}, fps: {}", ms_per_frame, fps),
-                    std::format("vcamera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_flycamera.Zoom),
-                    std::format("vcamera front: {:.02f}, {:.02f}, {:.02f}", cam_front.x, cam_front.y, cam_front.z),
-                    std::format("vproj pos: {:.02f}, {:.02f}, {:.02f}, proj fov: {:.02f}", proj_pos.x, proj_pos.y, proj_pos.z, gl_projector.Zoom),
+                    std::format("cur_camera pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cur_cam_pos.x, cur_cam_pos.y, cur_cam_pos.z, gl_flycamera.Zoom),
+                    std::format("cur_camera front: {:.02f}, {:.02f}, {:.02f}", cur_cam_front.x, cur_cam_front.y, cur_cam_front.z),
+                    std::format("cam pos: {:.02f}, {:.02f}, {:.02f}, cam fov: {:.02f}", cam_pos.x, cam_pos.y, cam_pos.z, gl_camera.Zoom),
                     std::format("Rhand visible? {}", bones_to_world_right.size() > 0 ? "yes" : "no"),
                     std::format("Lhand visible? {}", bones_to_world_left.size() > 0 ? "yes" : "no"),
                     std::format("modifiers : shift: {}, ctrl: {}, space: {}", shift_modifier ? "on" : "off", ctrl_modifier ? "on" : "off", space_modifier ? "on" : "off")};
@@ -1041,7 +1075,7 @@ int main(int argc, char *argv[])
 
         // send result to projector queue
         glReadBuffer(GL_FRONT);
-        if (use_pbo) // something fishy going on here. using pbo collapses program after a while
+        if (use_pbo)
         {
             t_download.start();
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
@@ -1082,8 +1116,12 @@ int main(int argc, char *argv[])
         // stbi_write_png("test.png", proj_width, proj_height, 3, colorBuffer, stride);
         // swap buffers and poll IO events
         t_swap.start();
+        if (activateGUI)
+        {
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        }
         glfwSwapBuffers(window);
-        glfwPollEvents();
         t_swap.stop();
     }
     // cleanup
@@ -1097,6 +1135,9 @@ int main(int argc, char *argv[])
     {
         producer.join();
     }
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
     /* setup trigger */
     // char* portName = "\\\\.\\COM4";
     // #define DATA_LENGTH 255
@@ -1187,32 +1228,23 @@ void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+    if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS)
+    {
+        tab_pressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_RELEASE)
+    {
+        if (tab_pressed)
+            activateGUI = !activateGUI;
+        tab_pressed = false;
+    }
+    if (activateGUI) // dont allow moving cameras when GUI active
+        return;
     bool mod = false;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
     {
         mod = true;
         shift_modifier = true;
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-            gl_camera.processKeyboard(FORWARD, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            gl_camera.processKeyboard(BACKWARD, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            gl_camera.processKeyboard(LEFT, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            gl_camera.processKeyboard(RIGHT, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-            gl_camera.processKeyboard(UP, deltaTime);
-        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-            gl_camera.processKeyboard(DOWN, deltaTime);
-    }
-    else
-    {
-        shift_modifier = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-    {
-        mod = true;
-        ctrl_modifier = true;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             gl_projector.processKeyboard(FORWARD, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -1225,6 +1257,27 @@ void processInput(GLFWwindow *window)
             gl_projector.processKeyboard(UP, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
             gl_projector.processKeyboard(DOWN, deltaTime);
+    }
+    else
+    {
+        shift_modifier = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+    {
+        mod = true;
+        ctrl_modifier = true;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            gl_camera.processKeyboard(FORWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            gl_camera.processKeyboard(BACKWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            gl_camera.processKeyboard(LEFT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            gl_camera.processKeyboard(RIGHT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            gl_camera.processKeyboard(UP, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            gl_camera.processKeyboard(DOWN, deltaTime);
     }
     else
     {
@@ -1271,13 +1324,13 @@ void processInput(GLFWwindow *window)
             gl_flycamera.processKeyboard(DOWN, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_KP_0) == GLFW_PRESS)
         {
-            gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
-            gl_flycamera.setProjectionMatrix(gl_camera.getProjectionMatrix());
+            gl_flycamera.setViewMatrix(gl_projector.getViewMatrix());
+            gl_flycamera.setProjectionMatrix(gl_projector.getProjectionMatrix());
         }
         if (glfwGetKey(window, GLFW_KEY_KP_1) == GLFW_PRESS)
         {
-            gl_flycamera.setViewMatrix(gl_projector.getViewMatrix());
-            gl_flycamera.setProjectionMatrix(gl_projector.getProjectionMatrix());
+            gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
+            gl_flycamera.setProjectionMatrix(gl_camera.getProjectionMatrix());
         }
     }
 }
@@ -1291,6 +1344,35 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+void openIMGUIFrame()
+{
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    // ImGui::ShowDemoWindow(); // Show demo window! :)
+    if (ImGui::Button("cam2view"))
+    {
+        gl_camera.setViewMatrix(gl_flycamera.getViewMatrix());
+        gl_projector.setViewMatrix(gl_flycamera.getViewMatrix());
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("view2cam"))
+    {
+        gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("save extrinsics"))
+    {
+        glm::mat4 w2c = gl_camera.getViewMatrix();
+        const float *pSource = (const float *)glm::value_ptr(w2c);
+        std::vector<float> w2c_vec(pSource, pSource + 16);
+        cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c_user.npy", w2c_vec.data(), {4, 4}, "w");
+        // ImGui::SameLine();
+        // ImGui::Text("saved extrinsics !");
+    }
+    ImGui::SliderInt("delay", &magic_leap_time_delay, 1, 100000);
+    ImGui::Checkbox("Jump Flood", &jumpFlood);
+}
 // glfw: whenever the mouse moves, this callback is called
 // -------------------------------------------------------
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
@@ -1310,15 +1392,17 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 
     lastX = xpos;
     lastY = ypos;
+    if (activateGUI)
+        return;
     if (shift_modifier)
     {
-        gl_camera.processMouseMovement(xoffset, yoffset);
+        gl_projector.processMouseMovement(xoffset, yoffset);
     }
     else
     {
         if (ctrl_modifier)
         {
-            gl_projector.processMouseMovement(xoffset, yoffset);
+            gl_camera.processMouseMovement(xoffset, yoffset);
         }
         else
         {
@@ -1333,12 +1417,12 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     if (shift_modifier)
     {
-        gl_camera.processMouseScroll(static_cast<float>(yoffset));
+        gl_projector.processMouseScroll(static_cast<float>(yoffset));
     }
     else
     {
         if (ctrl_modifier)
-            gl_projector.processMouseScroll(static_cast<float>(yoffset));
+            gl_camera.processMouseScroll(static_cast<float>(yoffset));
         else
             gl_flycamera.processMouseScroll(static_cast<float>(yoffset));
     }
@@ -1357,9 +1441,20 @@ bool loadCalibrationResults(glm::mat4 &proj_project,
     cnpy::NpyArray w2c_npy;
     cnpy::npz_t projcam_npz;
     cnpy::npz_t cam_npz;
+    bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
     try
     {
-        w2c_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2c.npy");
+        const fs::path path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
+        if (fs::exists(path))
+        {
+            user_defined = true;
+            w2c_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2c_user.npy");
+        }
+        else
+        {
+            user_defined = false;
+            w2c_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2c.npy");
+        }
         cam_npz = cnpy::npz_load("../../resource/calibrations/cam_calibration/cam_calibration.npz");
         projcam_npz = cnpy::npz_load("../../resource/calibrations/camproj_calibration/calibration.npz");
     }
@@ -1368,11 +1463,18 @@ bool loadCalibrationResults(glm::mat4 &proj_project,
         std::cout << e.what() << std::endl;
         return false;
     }
-    w2c = glm::make_mat4(w2c_npy.data<double>());
-    glm::mat4 c2w = glm::inverse(w2c);
-    c2w = flipYZ * c2w; // flip y and z columns (corresponding to camera directions)
-    w2c = glm::inverse(c2w);
-    w2c = glm::transpose(w2c);
+    if (!user_defined)
+    {
+        w2c = glm::make_mat4(w2c_npy.data<double>());
+        glm::mat4 c2w = glm::inverse(w2c);
+        c2w = flipYZ * c2w; // flip y and z columns (corresponding to camera directions)
+        w2c = glm::inverse(c2w);
+        w2c = glm::transpose(w2c);
+    }
+    else
+    {
+        w2c = glm::make_mat4(w2c_npy.data<float>());
+    }
     // w2c = glm::inverse(w2c);
 
     float ffar = 1500.0f;
@@ -1441,7 +1543,6 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     // magic numbers
-    int magic_leap_time_delay = 40000; // us
     float magic_scale_factor = 10.0f;
     float magic_wrist_offset = -65.0f;
     float magic_arm_forward_offset = -120.0f;
@@ -1577,7 +1678,7 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
 // mesh_model_mat = glm::scale(mesh_model_mat, glm::vec3(0.5f, 0.5f, 0.5f));
 // // glm::mat4 canvas_projection_mat = glm::ortho(0.0f, (float)proj_width, 0.0f, (float)proj_height, 0.1f, 100.0f);
 // // canvas_model_mat = glm::scale(canvas_model_mat, glm::vec3(0.75f, 0.75f, 1.0f));  // 2.0f, 2.0f, 2.0f
-// glm::mat4 view_mat = gl_camera.GetViewMatrix();
+// glm::mat4 view_mat = gl_projector.GetViewMatrix();
 // // glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  10.0f);
 // // glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 // // glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);

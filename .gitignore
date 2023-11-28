@@ -6,3 +6,6 @@ unity_augmented_hands/Assets/Plugins/Windows/x64/*
 /benchmark
 resource/hand_capture
 resource/calibrations/cam_calibration/*.png
+*.ini
+third-party/imgui/examples
+third-party/imgui/docs
