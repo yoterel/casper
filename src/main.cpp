@@ -66,6 +66,7 @@ unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f;
 // global state
 bool jumpFlood = true;
+bool useCoaxialCalib = true;
 int magic_leap_time_delay = 40000; // us
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
@@ -93,6 +94,14 @@ float downscale_factor = 2.0f;
 cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
 cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
 cv::Mat curFrame_gray, prevFrame_gray;
+std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
+                                       {-1.0f, -1.0f},
+                                       {1.0f, -1.0f},
+                                       {1.0f, 1.0f}};
+std::vector<glm::vec2> calib_screen_verts = {{-1.0801f, 1.0859f},
+                                             {-0.9687, -0.9844},
+                                             {0.7949, -0.9714f},
+                                             {0.8887, 0.8724}};
 // GLCamera gl_projector(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
 GLCamera gl_flycamera;
 GLCamera gl_projector;
@@ -240,16 +249,8 @@ int main(int argc, char *argv[])
     n_bones = leftHandModel.NumBones();
     // Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
     PostProcess postProcess(cam_width, cam_height, proj_width, proj_height);
+    glm::mat4 c2p_homography = postProcess.findHomography(calib_screen_verts);
     Quad fullScreenQuad(0.0f);
-    std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
-                                           {-1.0f, -1.0f},
-                                           {1.0f, -1.0f},
-                                           {1.0f, 1.0f}};
-    // std::vector<glm::vec2> screen_verts = {{-1.2441f, 0.7188f},
-    //                                        {-1.1543f, -1.2344f},
-    //                                        {0.7227f, -1.2578f},
-    //                                        {0.8066f, 0.6224}};
-    glm::mat4 c2p_homography = postProcess.findHomography(screen_verts);
     glm::vec3 coa = leftHandModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
 
@@ -417,25 +418,25 @@ int main(int argc, char *argv[])
                                            {-1.0f, -1.0f, 1.0f},
                                            {1.0f, -1.0f, 1.0f},
                                            {1.0f, 1.0f, 1.0f}};
-    std::vector<glm::vec3> vcamFarVerts(4);
+    std::vector<glm::vec3> projFarVerts(4);
     // unproject points
-    glm::mat4 vcam_view_transform = gl_projector.getViewMatrix();
-    glm::mat4 vcam_projection_transform = gl_projector.getProjectionMatrix();
-    glm::mat4 vproj_view_transform = gl_camera.getViewMatrix();
-    glm::mat4 vproj_projection_transform = gl_camera.getProjectionMatrix();
-    glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-    glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+    glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
+    glm::mat4 proj_projection_transform = gl_projector.getProjectionMatrix();
+    glm::mat4 cam_view_transform = gl_camera.getViewMatrix();
+    glm::mat4 cam_projection_transform = gl_camera.getProjectionMatrix();
+    glm::mat4 projUnprojectionMat = glm::inverse(proj_projection_transform * proj_view_transform);
+    glm::mat4 camUnprojectionMat = glm::inverse(cam_projection_transform * cam_view_transform);
     for (int i = 0; i < far_frustrum.size(); ++i)
     {
-        glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
-        vcamFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
+        glm::vec4 unprojected = projUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
+        projFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
     }
-    glm::vec3 normal = glm::triangleNormal(vcamFarVerts[0], vcamFarVerts[1], vcamFarVerts[2]);
+    glm::vec3 normal = glm::triangleNormal(projFarVerts[0], projFarVerts[1], projFarVerts[2]);
     for (int i = 0; i < far_frustrum.size(); ++i)
     {
-        vcamFarVerts[i] += 0.1f * normal;
+        projFarVerts[i] += 0.1f * normal;
     }
-    Quad vcamFarQuad(vcamFarVerts);
+    Quad projFarQuad(projFarVerts);
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !simulated_camera)
@@ -622,7 +623,7 @@ int main(int argc, char *argv[])
                     /* render skinned mesh to fbo, in camera space*/
                     skinnedShaderSimple.use();
                     skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
+                    skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
                     skinnedShaderSimple.setInt("src", 0);
                     hands_fbo.bind();
                     glEnable(GL_DEPTH_TEST);
@@ -645,20 +646,20 @@ int main(int argc, char *argv[])
         }
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
-        glm::mat4 vcam_view_transform = gl_projector.getViewMatrix();
-        glm::mat4 vcam_projection_transform = gl_projector.getProjectionMatrix();
-        glm::mat4 vproj_view_transform = gl_camera.getViewMatrix();
-        glm::mat4 vproj_projection_transform = gl_camera.getProjectionMatrix();
+        glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
+        glm::mat4 proj_projection_transform = gl_projector.getProjectionMatrix();
+        glm::mat4 cam_view_transform = gl_camera.getViewMatrix();
+        glm::mat4 cam_projection_transform = gl_camera.getProjectionMatrix();
         glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
         glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
         t_leap.stop();
         /* render warped cam image */
         // projectorOnlyShader.use();
-        // projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-        // projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+        // projectorOnlyShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
+        // projectorOnlyShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
         // projectorOnlyShader.setBool("binary", true);
         // projectorOnlyShader.setBool("src", 0);
-        // canvas.renderTexture(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
+        // canvas.renderTexture(camTexture.getTexture(), projectorOnlyShader, projFarQuad);
 
         /* skin hand mesh with leap input */
         t_skin.start();
@@ -667,7 +668,7 @@ int main(int argc, char *argv[])
             /* render skinned mesh to fbo, in camera space*/
             skinnedShaderSimple.use();
             skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
+            skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
             skinnedShaderSimple.setInt("src", 0);
             hands_fbo.bind(true);
             glEnable(GL_DEPTH_TEST);
@@ -678,8 +679,8 @@ int main(int argc, char *argv[])
             /* render skinned mesh to fbo, in projector space */
             // skinnedShader.use();
             // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-            // skinnedShader.SetWorldTransform(vcam_projection_transform * vcam_view_transform);
-            // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+            // skinnedShader.SetWorldTransform(proj_projection_transform * proj_view_transform);
+            // skinnedShader.SetProjectorTransform(cam_projection_transform * cam_view_transform);
             // skinnedShader.setBool("binary", true);
             // skinnedShader.setInt("src", 0);
             // skinnedShader.setInt("projTexture", 1);
@@ -687,8 +688,8 @@ int main(int argc, char *argv[])
             /* render another mesh to fbo */
             // projectorShader.use();
             // projectorShader.setBool("flipVer", false);
-            // projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-            // projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+            // projectorShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
+            // projectorShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
             // projectorShader.setBool("binary", true);
             // dinosaur.Render(projectorShader, camTexture.getTexture(), true);
         }
@@ -697,7 +698,7 @@ int main(int argc, char *argv[])
             /* render skinned mesh to fbo, in camera space*/
             skinnedShaderSimple.use();
             skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShaderSimple.SetWorldTransform(vproj_projection_transform * vproj_view_transform);
+            skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
             skinnedShaderSimple.setInt("src", 0);
             hands_fbo.bind(bones_to_world_right.size() == 0);
             glEnable(GL_DEPTH_TEST);
@@ -717,12 +718,12 @@ int main(int argc, char *argv[])
         // canvasShader.setInt("src", 0);
         // canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
         // projectorOnlyShader.use();
-        // projectorOnlyShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
-        // projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+        // projectorOnlyShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
+        // projectorOnlyShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
         // projectorOnlyShader.setBool("binary", true);
         // projectorOnlyShader.setBool("src", 0);
         /* render hand with jfa */
-        // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, vcamFarQuad);
+        // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, projFarQuad);
         if (jumpFlood)
             postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo);
         else
@@ -730,7 +731,10 @@ int main(int argc, char *argv[])
         c2p_fbo.bind();
         textureShader.use();
         textureShader.setMat4("view", glm::mat4(1.0f));
-        textureShader.setMat4("projection", c2p_homography);
+        if (useCoaxialCalib)
+            textureShader.setMat4("projection", c2p_homography);
+        else
+            textureShader.setMat4("projection", glm::mat4(1.0f));
         textureShader.setMat4("model", glm::mat4(1.0f));
         textureShader.setBool("flipVer", false);
         textureShader.setBool("flipHor", false);
@@ -783,52 +787,52 @@ int main(int argc, char *argv[])
                                                    {-1.0f, -1.0f, 1.0f},
                                                    {1.0f, -1.0f, 1.0f},
                                                    {1.0f, 1.0f, 1.0f}};
-            std::vector<glm::vec3> vcamNearVerts(4);
-            std::vector<glm::vec3> vcamMidVerts(4);
-            std::vector<glm::vec3> vcamFarVerts(4);
-            std::vector<glm::vec3> vprojNearVerts(4);
-            std::vector<glm::vec3> vprojMidVerts(4);
+            std::vector<glm::vec3> projNearVerts(4);
+            std::vector<glm::vec3> projMidVerts(4);
+            std::vector<glm::vec3> projFarVerts(4);
+            std::vector<glm::vec3> camNearVerts(4);
+            std::vector<glm::vec3> camMidVerts(4);
             // unproject points
-            glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
-            glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+            glm::mat4 projUnprojectionMat = glm::inverse(proj_projection_transform * proj_view_transform);
+            glm::mat4 camUnprojectionMat = glm::inverse(cam_projection_transform * cam_view_transform);
             for (int i = 0; i < mid_frustrum.size(); ++i)
             {
-                glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
-                vcamMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = vcamUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
-                vcamNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = vcamUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
-                vcamFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = vprojUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
-                vprojMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = vprojUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
-                vprojNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                glm::vec4 unprojected = projUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                projMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = projUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                projNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = projUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
+                projFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = camUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                camMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                unprojected = camUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                camNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
             }
-            Quad vcamNearQuad(vcamNearVerts);
-            Quad vcamMidQuad(vcamMidVerts);
-            Quad vcamFarQuad(vcamFarVerts);
-            Quad vprojNearQuad(vprojNearVerts);
-            Quad vprojMidQuad(vprojMidVerts);
+            Quad projNearQuad(projNearVerts);
+            // Quad projMidQuad(projMidVerts);
+            Quad projFarQuad(projFarVerts);
+            Quad camNearQuad(camNearVerts);
+            // Quad camMidQuad(camMidVerts);
             // draws some mesh (lit by camera input)
             {
                 /* quad at vcam far plane, shined by vproj (perspective corrected) */
                 // projectorOnlyShader.use();
                 // projectorOnlyShader.setBool("flipVer", false);
                 // projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                // projectorOnlyShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                // projectorOnlyShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                 // projectorOnlyShader.setBool("binary", false);
                 // camTexture.bind();
                 // projectorOnlyShader.setInt("src", 0);
-                // vcamFarQuad.render();
+                // projFarQuad.render();
 
                 /* dinosaur */
                 // projectorShader.use();
                 // projectorShader.setBool("flipVer", false);
                 // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                // projectorShader.setMat4("projTransform", vproj_projection_transform * vproj_view_transform);
+                // projectorShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                 // projectorShader.setBool("binary", true);
                 // dinosaur.Render(projectorShader, camTexture.getTexture(), false);
-                // projectorShader.setMat4("camTransform", vcam_projection_transform * vcam_view_transform);
+                // projectorShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
                 // dinosaur.Render(projectorShader, camTexture.getTexture(), true);
                 // textureShader.use();
                 // textureShader.setBool("flipVer", false);
@@ -839,7 +843,7 @@ int main(int argc, char *argv[])
                 // textureShader.setInt("src", 0);
                 // glActiveTexture(GL_TEXTURE0);
                 // glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
-                // vcamNearQuad.render();
+                // projNearQuad.render();
             }
             // draws global coordinate system gizmo at origin
             {
@@ -929,7 +933,7 @@ int main(int argc, char *argv[])
                     // skinnedShader.use();
                     // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                     // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    // skinnedShader.SetProjectorTransform(cam_projection_transform * cam_view_transform);
                     // skinnedShader.setBool("binary", false);
                     // skinnedShader.setInt("src", 0);
                     // skinnedShader.setInt("projTexture", 1);
@@ -973,7 +977,7 @@ int main(int argc, char *argv[])
                     // skinnedShader.use();
                     // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                     // skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    // skinnedShader.SetProjectorTransform(vproj_projection_transform * vproj_view_transform);
+                    // skinnedShader.SetProjectorTransform(cam_projection_transform * cam_view_transform);
                     // skinnedShader.setBool("binary", true);
                     // skinnedShader.setInt("src", 0);
                     // skinnedShader.setInt("projTexture", 1);
@@ -988,10 +992,10 @@ int main(int argc, char *argv[])
                 lineShader.setMat4("view", flycam_view_transform);
                 lineShader.setMat4("model", glm::mat4(1.0f));
                 lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
-                glm::mat4 vprojUnprojectionMat = glm::inverse(vproj_projection_transform * vproj_view_transform);
+                glm::mat4 camUnprojectionMat = glm::inverse(cam_projection_transform * cam_view_transform);
                 for (unsigned int i = 0; i < frustumCornerVertices.size(); i++)
                 {
-                    glm::vec4 unprojected = vprojUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
+                    glm::vec4 unprojected = camUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
                     vprojFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
                 }
                 glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
@@ -1007,10 +1011,10 @@ int main(int argc, char *argv[])
                 lineShader.setMat4("view", flycam_view_transform);
                 lineShader.setMat4("model", glm::mat4(1.0f));
                 lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
-                glm::mat4 vcamUnprojectionMat = glm::inverse(vcam_projection_transform * vcam_view_transform);
+                glm::mat4 projUnprojectionMat = glm::inverse(proj_projection_transform * proj_view_transform);
                 for (int i = 0; i < frustumCornerVertices.size(); ++i)
                 {
-                    glm::vec4 unprojected = vcamUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
+                    glm::vec4 unprojected = projUnprojectionMat * glm::vec4(frustumCornerVertices[i], 1.0f);
                     vcamFrustumVerticesData[i] = glm::vec3(unprojected) / unprojected.w;
                 }
                 glBindBuffer(GL_ARRAY_BUFFER, frustrumVBO);
@@ -1033,7 +1037,7 @@ int main(int argc, char *argv[])
                 // glBindTexture(GL_TEXTURE_2D, resTexture);
                 postprocess_fbo.getTexture()->bind();
                 // hands_fbo.getTexture()->bind();
-                vprojNearQuad.render();
+                camNearQuad.render();
             }
             // draw projector output to near plane of vcam frustrum
             {
@@ -1047,7 +1051,7 @@ int main(int argc, char *argv[])
                 textureShader.setBool("binary", false);
                 textureShader.setInt("src", 0);
                 c2p_fbo.getTexture()->bind();
-                vcamNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, vcamNearQuad);
+                projNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, projNearQuad);
                 t_warp.stop();
             }
             // draws text
@@ -1350,6 +1354,7 @@ void openIMGUIFrame()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     // ImGui::ShowDemoWindow(); // Show demo window! :)
+    // return;
     if (ImGui::Button("cam2view"))
     {
         gl_camera.setViewMatrix(gl_flycamera.getViewMatrix());
@@ -1372,6 +1377,24 @@ void openIMGUIFrame()
     }
     ImGui::SliderInt("delay", &magic_leap_time_delay, 1, 100000);
     ImGui::Checkbox("Jump Flood", &jumpFlood);
+    ImGui::Checkbox("Use Coaxial Calib", &useCoaxialCalib);
+    if (ImGui::BeginTable("Cam2Proj vertices", 2))
+    {
+        std::vector<glm::vec2> tmpVerts;
+        if (useCoaxialCalib)
+            tmpVerts = calib_screen_verts;
+        else
+            tmpVerts = screen_verts;
+        for (int row = 0; row < tmpVerts.size(); row++)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Vert %d", row);
+            ImGui::TableNextColumn();
+            ImGui::Text("%f, %f", tmpVerts[row][0], tmpVerts[row][1]);
+        }
+        ImGui::EndTable();
+    }
 }
 // glfw: whenever the mouse moves, this callback is called
 // -------------------------------------------------------
