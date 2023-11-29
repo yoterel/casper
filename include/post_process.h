@@ -5,6 +5,7 @@
 #include "shader.h"
 #include "quad.h"
 #include "fbo.h"
+#include "skinned_model.h"
 #include <glad/glad.h>
 
 class PostProcess
@@ -16,6 +17,7 @@ public:
     void jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo = NULL);
     glm::mat4 findHomography(std::vector<glm::vec2> screen_verts);
     void optical_flow(Shader &shader, Texture renderedSceneTexture, Texture camTexture);
+    void bake(Shader &uvShader, unsigned int textureToBake, unsigned int TextureUV, const std::string &filepath);
     void saveColorToFile(std::string filepath, unsigned int fbo_id);
 
 private:

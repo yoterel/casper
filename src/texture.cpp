@@ -41,8 +41,26 @@ bool Texture::init()
     }
     m_sizeTexData = sizeof(GLubyte) * m_imageWidth * m_imageHeight * m_imageBPP;
     std::cout << "Width " << m_imageWidth << ", height " << m_imageHeight << ", bpp " << m_imageBPP << std::endl;
-    initInternal(image_data, GL_RGBA);
-    load(image_data, false);
+    if (m_imageBPP == 1)
+    {
+        initInternal(image_data, GL_RED);
+        load(image_data, false, GL_RED);
+    }
+    else if (m_imageBPP == 2)
+    {
+        initInternal(image_data, GL_RG, GL_RG32F);
+        load(image_data, false, GL_RG);
+    }
+    else if (m_imageBPP == 3)
+    {
+        initInternal(image_data, GL_RGB);
+        load(image_data, false, GL_RGB);
+    }
+    else
+    {
+        initInternal(image_data, GL_RGBA);
+        load(image_data, false, GL_RGBA);
+    }
     return true;
 }
 

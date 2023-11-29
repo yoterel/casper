@@ -535,7 +535,7 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
     }
 }
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                          const glm::mat4 &local_to_world, bool use_bones)
+                          const glm::mat4 &local_to_world, bool use_bones, Texture *customDiffuseTexture)
 {
     shader.use();
     shader.SetMaterial(GetMaterial());
@@ -555,11 +555,17 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
 
         assert(MaterialIndex < m_Materials.size());
 
-        if (m_Materials[MaterialIndex].pDiffuse)
+        if (customDiffuseTexture != NULL)
         {
-            m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
+            customDiffuseTexture->bind(GL_TEXTURE0);
         }
-
+        else
+        {
+            if (m_Materials[MaterialIndex].pDiffuse)
+            {
+                m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
+            }
+        }
         if (m_Materials[MaterialIndex].pSpecularExponent)
         {
             m_Materials[MaterialIndex].pSpecularExponent->bind(GL_TEXTURE6);
@@ -572,6 +578,41 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
                                  m_Meshes[i].BaseVertex);
     }
     // Make sure the VAO is not changed from the outside
+    glBindVertexArray(0);
+}
+
+void SkinnedModel::Render(Shader &shader, Texture *customDiffuseTexture)
+{
+    shader.use();
+    shader.setInt("src", 0);
+    glBindVertexArray(m_VAO);
+    for (unsigned int i = 0; i < m_Meshes.size(); i++)
+    {
+        unsigned int MaterialIndex = m_Meshes[i].MaterialIndex;
+
+        assert(MaterialIndex < m_Materials.size());
+
+        if (customDiffuseTexture != NULL)
+        {
+            customDiffuseTexture->bind(GL_TEXTURE0);
+        }
+        else
+        {
+            if (m_Materials[MaterialIndex].pDiffuse)
+            {
+                m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
+            }
+        }
+        if (m_Materials[MaterialIndex].pSpecularExponent)
+        {
+            m_Materials[MaterialIndex].pSpecularExponent->bind(GL_TEXTURE6);
+        }
+        glDrawElementsBaseVertex(GL_TRIANGLES,
+                                 m_Meshes[i].NumIndices,
+                                 GL_UNSIGNED_INT,
+                                 (void *)(sizeof(unsigned int) * m_Meshes[i].BaseIndex),
+                                 m_Meshes[i].BaseVertex);
+    }
     glBindVertexArray(0);
 }
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,

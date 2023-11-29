@@ -53,6 +53,25 @@ glm::mat4 PostProcess::findHomography(std::vector<glm::vec2> screen_verts)
     return projection;
 }
 
+void PostProcess::bake(Shader &uvShader, unsigned int textureToBake, unsigned int TextureUV, const std::string &filepath)
+{
+    // render models uvcoordinates into an offscreen texture
+    FBO fbo(1024, 1024);
+    fbo.bind();
+    uvShader.use();
+    uvShader.setInt("toBake", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureToBake);
+    uvShader.setInt("uvTexture", 1);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, TextureUV);
+    m_quad.render();
+    fbo.unbind();
+    fbo.saveColorToFile(filepath.c_str());
+    // model.Render(uvShader, 0, false);
+    // render screen sized quad and look up texture coordinates from the baked texture
+}
+
 void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo)
 {
     // bind fbo

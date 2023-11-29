@@ -92,6 +92,7 @@ add_executable(ahand
     third-party/imgui/imgui_demo.cpp
     third-party/imgui/backends/imgui_impl_glfw.cpp
     third-party/imgui/backends/imgui_impl_opengl3.cpp
+    third-party/imgui/misc/cpp/imgui_stdlib.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
@@ -149,6 +150,7 @@ target_link_libraries(ahand PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zli
 # imgui
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
 ####################################### unity plugin
 add_library(AHUnityPlugin SHARED 
     src/UnityPlugin.cpp
