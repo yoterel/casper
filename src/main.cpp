@@ -71,7 +71,7 @@ bool use_projector = true;
 bool use_screen = true;
 bool poll_mode = false;
 bool cam_color_mode = false;
-bool use_leap_calib_results = true;
+bool use_leap_calib_results = false;
 std::string testFile("../../resource/uv2.jpg");
 std::string bakeFile("../../resource/baked.png");
 std::string uvUnwrapFile("../../resource/UVUnwrapFile.png");
