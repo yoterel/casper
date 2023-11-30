@@ -86,20 +86,3 @@ void saveImage(char *filepath, GLFWwindow *w)
     stbi_flip_vertically_on_write(true);
     stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
 }
-
-void saveImage(std::string filepath, unsigned int texture, unsigned int width, unsigned int height, Shader &shader)
-{
-    unsigned int nrChannels = 4;
-    GLsizei stride = nrChannels * width;
-    FBO fbo(width, height);
-    Quad quad(0.0f);
-    shader.use();
-    shader.setInt("src", 0);
-    shader.setBool("flipVer", false);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    fbo.bind();
-    quad.render();
-    fbo.unbind();
-    fbo.saveColorToFile(filepath);
-}

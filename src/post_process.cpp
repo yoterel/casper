@@ -72,7 +72,7 @@ void PostProcess::bake(Shader &uvShader, unsigned int textureToBake, unsigned in
     // render screen sized quad and look up texture coordinates from the baked texture
 }
 
-void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo)
+void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
 {
     // bind fbo
     target_fbo->bind();
@@ -85,6 +85,7 @@ void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, u
     mask_shader.use();
     mask_shader.setInt("src", 0);
     mask_shader.setInt("mask", 1);
+    mask_shader.setFloat("threshold", threshold);
     mask_shader.setBool("flipVer", false);
     mask_shader.setBool("flipMaskVer", true);
     mask_shader.setBool("flipMaskHor", true);
@@ -92,7 +93,7 @@ void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, u
     // unbind fbo
     target_fbo->unbind();
 }
-void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo)
+void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
 {
     // init jump flood seeds
     glActiveTexture(GL_TEXTURE0);
@@ -150,6 +151,7 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, un
     NN_shader.setInt("src", 0);
     NN_shader.setInt("jfa", 1);
     NN_shader.setInt("mask", 2);
+    NN_shader.setFloat("threshold", threshold);
     NN_shader.setBool("flipVer", false);
     NN_shader.setBool("flipMaskVer", true);
     NN_shader.setBool("flipMaskHor", true);

@@ -39,13 +39,19 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime, std::vector<glm::mat4> &bones_to_world_left, std::vector<glm::mat4> &bones_to_world_right, std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
+LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
+                         std::vector<glm::mat4> &bones_to_world_left,
+                         std::vector<glm::mat4> &bones_to_world_right,
+                         std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
 void setup_skeleton_hand_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_gizmo_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_cube_buffers(unsigned int &VAO, unsigned int &VBO);
 void setup_frustrum_buffers(unsigned int &VAO, unsigned int &VBO);
 void initGLBuffers(unsigned int *pbo);
-bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project, std::vector<double> &camera_distortion, glm::mat4 &w2vc);
+bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
+                            std::vector<double> &camera_distortion,
+                            glm::mat4 &w2c_auto,
+                            glm::mat4 &w2c_user);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 enum class PostProcessMode
 {
@@ -54,7 +60,7 @@ enum class PostProcessMode
     JUMP_FLOOD = 2,
     OF = 3,
 };
-// global settings
+// global state
 bool debug_mode = false;
 bool bakeRequest = false;
 bool freecam_mode = false;
@@ -65,6 +71,7 @@ bool use_projector = true;
 bool use_screen = true;
 bool poll_mode = false;
 bool cam_color_mode = false;
+bool use_leap_calib_results = true;
 std::string testFile("../../resource/uv2.jpg");
 std::string bakeFile("../../resource/baked.png");
 std::string uvUnwrapFile("../../resource/UVUnwrapFile.png");
@@ -87,6 +94,7 @@ float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
 float deltaTime = 0.0f;
+float masking_threshold = 0.01f;
 glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
 float ms_per_frame = 0;
@@ -121,6 +129,10 @@ std::vector<glm::vec2> calib_screen_verts = {{-1.0801f, 1.0859f},
 GLCamera gl_flycamera;
 GLCamera gl_projector;
 GLCamera gl_camera;
+glm::mat4 w2c_auto, w2c_user;
+glm::mat4 proj_project;
+glm::mat4 cam_project;
+std::vector<double> camera_distortion;
 // GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
 
 int main(int argc, char *argv[])
@@ -205,7 +217,7 @@ int main(int argc, char *argv[])
 
     glfwSwapInterval(0);                       // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height); // set viewport
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glPointSize(10.0f);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
@@ -387,13 +399,14 @@ int main(int argc, char *argv[])
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer;
     // load calibration results if they exist
-    glm::mat4 cam_project;
-    glm::mat4 proj_project;
-    std::vector<double> camera_distortion;
-    glm::mat4 w2c;
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    if (loadCalibrationResults(proj_project, cam_project, camera_distortion, w2c))
+    if (loadCalibrationResults(proj_project, cam_project, camera_distortion, w2c_auto, w2c_user))
     {
+        glm::mat4 w2c;
+        if (use_leap_calib_results)
+            w2c = w2c_auto;
+        else
+            w2c = w2c_user;
         glm::mat4 w2p = w2c;
         std::cout << "Using calibration data for camera and projector settings" << std::endl;
         if (freecam_mode)
@@ -409,14 +422,14 @@ int main(int argc, char *argv[])
                                     1500.0f,
                                     25.0f,
                                     true);
-            gl_projector = GLCamera(w2c, proj_project, camera_mode, proj_width, proj_height, 25.0f, true);
+            gl_projector = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height, 25.0f, true);
             gl_camera = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height, 25.0f, true);
         }
         else
         {
             gl_projector = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height);
             gl_camera = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height);
-            gl_flycamera = GLCamera(w2p, proj_project, camera_mode, proj_width, proj_height);
+            gl_flycamera = GLCamera(w2c, proj_project, camera_mode, proj_width, proj_height);
         }
     }
     else
@@ -790,12 +803,12 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(PostProcessMode::MASK):
         {
-            postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo);
+            postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
             break;
         }
         case static_cast<int>(PostProcessMode::JUMP_FLOOD):
         {
-            postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo);
+            postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
             break;
         }
         case static_cast<int>(PostProcessMode::OF):
@@ -1442,11 +1455,29 @@ void openIMGUIFrame()
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    // ImGui::ShowDemoWindow(); // Show demo window! :)
+    ImGuiWindowFlags window_flags = 0;
+    window_flags |= ImGuiWindowFlags_NoNav;
+    window_flags |= ImGuiWindowFlags_NoTitleBar;
+    ImGui::Begin("augmented hands", NULL, window_flags);
+    // ImGui::ShowDemoWindow(); // Show demo window
     // return;
     ImGui::Checkbox("Debug Mode", &debug_mode);
     ImGui::Checkbox("Show Camera", &showCamera);
     ImGui::Checkbox("Show Projector", &showProjector);
+    if (ImGui::Checkbox("Use Leap Calib. Results", &use_leap_calib_results))
+    {
+        Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
+        if (use_leap_calib_results)
+        {
+            gl_projector = GLCamera(w2c_auto, proj_project, camera_mode, proj_width, proj_height, 25.0f, true);
+            gl_camera = GLCamera(w2c_auto, cam_project, camera_mode, cam_width, cam_height, 25.0f, true);
+        }
+        else
+        {
+            gl_projector = GLCamera(w2c_user, proj_project, camera_mode, proj_width, proj_height, 25.0f, true);
+            gl_camera = GLCamera(w2c_user, cam_project, camera_mode, cam_width, cam_height, 25.0f, true);
+        }
+    };
     if (ImGui::Button("Cam2view"))
     {
         gl_camera.setViewMatrix(gl_flycamera.getViewMatrix());
@@ -1475,6 +1506,7 @@ void openIMGUIFrame()
             dynamicTexture = nullptr;
         }
     }
+    ImGui::SameLine();
     if (ImGui::Button("Bake"))
     {
         bakeRequest = true;
@@ -1483,6 +1515,7 @@ void openIMGUIFrame()
     ImGui::InputText("Baked Texture File", &bakeFile, 20);
     ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
     ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
+    ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 0.1f);
     ImGui::Text("Post Processing");
     ImGui::SameLine();
     ImGui::RadioButton("None ", &postprocess_mode, 0);
@@ -1511,6 +1544,7 @@ void openIMGUIFrame()
         }
         ImGui::EndTable();
     }
+    ImGui::End();
 }
 // glfw: whenever the mouse moves, this callback is called
 // -------------------------------------------------------
@@ -1572,29 +1606,39 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 bool loadCalibrationResults(glm::mat4 &proj_project,
                             glm::mat4 &cam_project,
                             std::vector<double> &camera_distortion,
-                            glm::mat4 &w2c)
+                            glm::mat4 &w2c_auto,
+                            glm::mat4 &w2c_user)
 {
     // vp = virtual projector
     // vc = virtual camera
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
     flipYZ[2][2] = -1.0f;
-    cnpy::NpyArray w2c_npy;
+    cnpy::NpyArray w2c_user_npy, w2c_auto_npy;
     cnpy::npz_t projcam_npz;
     cnpy::npz_t cam_npz;
     bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
     try
     {
-        const fs::path path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
-        if (fs::exists(path))
+        const fs::path user_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
+        const fs::path auto_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
+        if (fs::exists(user_path))
         {
             user_defined = true;
-            w2c_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2c_user.npy");
+            w2c_user_npy = cnpy::npy_load(user_path.string());
         }
         else
         {
+            return false;
+        }
+        if (fs::exists(auto_path))
+        {
             user_defined = false;
-            w2c_npy = cnpy::npy_load("../../resource/calibrations/leap_calibration/w2c.npy");
+            w2c_auto_npy = cnpy::npy_load(auto_path.string());
+        }
+        else
+        {
+            return false;
         }
         cam_npz = cnpy::npz_load("../../resource/calibrations/cam_calibration/cam_calibration.npz");
         projcam_npz = cnpy::npz_load("../../resource/calibrations/camproj_calibration/calibration.npz");
@@ -1604,18 +1648,12 @@ bool loadCalibrationResults(glm::mat4 &proj_project,
         std::cout << e.what() << std::endl;
         return false;
     }
-    if (!user_defined)
-    {
-        w2c = glm::make_mat4(w2c_npy.data<double>());
-        glm::mat4 c2w = glm::inverse(w2c);
-        c2w = flipYZ * c2w; // flip y and z columns (corresponding to camera directions)
-        w2c = glm::inverse(c2w);
-        w2c = glm::transpose(w2c);
-    }
-    else
-    {
-        w2c = glm::make_mat4(w2c_npy.data<float>());
-    }
+    w2c_auto = glm::make_mat4(w2c_auto_npy.data<double>());
+    glm::mat4 c2w_auto = glm::inverse(w2c_auto);
+    c2w_auto = flipYZ * c2w_auto; // flip y and z columns (corresponding to camera directions)
+    w2c_auto = glm::inverse(c2w_auto);
+    w2c_auto = glm::transpose(w2c_auto);
+    w2c_user = glm::make_mat4(w2c_user_npy.data<float>());
     // w2c = glm::inverse(w2c);
 
     float ffar = 1500.0f;

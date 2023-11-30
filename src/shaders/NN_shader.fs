@@ -8,6 +8,7 @@ uniform sampler2D mask;
 uniform vec2 resolution;
 uniform bool flipMaskVer = true;
 uniform bool flipMaskHor = true;
+uniform float threshold = 0.01;
 
 void main()
 {
@@ -20,7 +21,7 @@ void main()
     vec4 maskCol = texture(mask, mask_uv);
     float avgMask = (maskCol.r + maskCol.g + maskCol.b) * 0.333333;
     // FragColor = texture(src, loc.xy / resolution);  // full frame jump flood
-    if (avgMask > 0.01) { // select only pixels that are not black from the jump flood image
+    if (avgMask >= threshold) { // select only pixels that are not black from the jump flood image
         FragColor = texture(src, loc.xy / resolution); // sample texture using the locations of the nearest seeds
     } else {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);
