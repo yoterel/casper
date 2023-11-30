@@ -72,7 +72,7 @@ void Diffuse::txt2img(const std::string prompt)
         {"do_not_save_samples", false},
         {"do_not_save_grid", false},
         {"eta", 0},
-        {"denoising_strength", 0},
+        {"denoising_strength", 0.75},
         {"s_min_uncond", 0},
         {"s_churn", 0},
         {"s_tmax", 0},
@@ -116,7 +116,7 @@ void Diffuse::txt2img(const std::string prompt)
         std::string decoded = base64_decode(std::string(j["images"][0]));
         std::vector<char> data(decoded.begin(), decoded.end());
         cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
-        cv::imwrite("output.png", img);
+        cv::imwrite("output_txt2img.png", img);
         auto stop = high_resolution_clock::now();
         auto duration = duration_cast<microseconds>(stop - start);
         std::cout << "parse time:" << duration.count() << std::endl;
@@ -128,6 +128,89 @@ void Diffuse::txt2img(const std::string prompt)
     }
 }
 
+void Diffuse::img2img(const std::string prompt, cv::Mat img)
+{
+    // std::cout << "using prompt: " << prompt << std::endl;
+    std::vector<uint8_t> buffer;
+    cv::imencode(".png", img, buffer);
+    json j2 = {// json::array() = None, json::object() = {}, [] = {""}
+               {"prompt", prompt.c_str()},
+               {"negative_prompt", ""},
+               {"styles", {""}},
+               {"seed", -1},
+               {"subseed", -1},
+               {"subseed_strength", 0},
+               {"seed_resize_from_h", -1},
+               {"seed_resize_from_w", -1},
+               {"sampler_name", "Euler a"},
+               {"batch_size", 1},
+               {"n_iter", 1},
+               {"steps", 20},
+               {"cfg_scale", 7},
+               {"width", 512},
+               {"height", 512},
+               {"restore_faces", false},
+               {"tiling", false},
+               {"do_not_save_samples", false},
+               {"do_not_save_grid", false},
+               {"eta", 0},
+               {"denoising_strength", 0.75},
+               {"s_min_uncond", 0},
+               {"s_churn", 0},
+               {"s_tmax", 0},
+               {"s_tmin", 0},
+               {"s_noise", 0},
+               {"override_settings", json::object()},
+               {"override_settings_restore_afterwards", true},
+               {"refiner_checkpoint", ""},
+               {"refiner_switch_at", 0},
+               {"disable_extra_networks", false},
+               {"comments", json::object()},
+               {"init_images", base64_encode(std::string(buffer.begin(), buffer.end()))},
+               {"resize_mode", 0},
+               {"image_cfg_scale", 0},
+               {"mask", ""},
+               {"mask_blur_x", 4},
+               {"mask_blur_y", 4},
+               {"mask_blur", 0},
+               {"inpainting_fill", 0},
+               {"inpaint_full_res", true},
+               {"inpaint_full_res_padding", 0},
+               {"inpainting_mask_invert", 0},
+               {"initial_noise_multiplier", 0},
+               {"latent_mask", ""},
+               {"sampler_index", ""},
+               {"include_init_images", false},
+               {"script_name", ""},
+               {"script_args", json::array()},
+               {"send_images", true},
+               {"save_images", false},
+               {"alwayson_scripts", json::object()}};
+    // std::cout << j2 << std::endl;
+    try
+    {
+        http::Request request{"http://127.0.0.1:7860/sdapi/v1/img2img"};
+        const std::string body = j2.dump();
+        const auto response = request.send("POST", body, {{"Content-Type", "application/json"}});
+        auto start = high_resolution_clock::now();
+        json j = json::parse(response.body);
+        // std::cout << std::setw(4) << j << std::endl;
+        // std::cout << j["images"] << std::endl;
+        // std::cout <<  std::string(j["images"][0]) << std::endl;
+        std::string decoded = base64_decode(std::string(j["images"][0]));
+        std::vector<char> data(decoded.begin(), decoded.end());
+        cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
+        cv::imwrite("output_img2img.png", img);
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        std::cout << "parse time:" << duration.count() << std::endl;
+        // std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Request failed, error: " << e.what() << '\n';
+    }
+}
 // std::string Diffuse::base64_decode(const std::string &encoded_string)
 // {
 //     int in_len = encoded_string.size();
