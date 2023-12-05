@@ -84,10 +84,11 @@ def reconstruct(root_path):
     )
 
 
-def pix2pix(root_path):
+def pix2pix(root_path, find_homography=False, coaxial_setup=True):
     output_path = Path(root_path, "debug", "pix2pix")
     resource_path = Path(root_path, "resource")
     proj_wh = (1024, 768)
+    cam_wh = (720, 540)
     # test_pattern = gsoup.load_image(
     #     Path(resource_path, "XGA_colorbars_hor.png"))
     test_pattern = gsoup.generate_checkerboard(proj_wh[1], proj_wh[0], 20)
@@ -104,7 +105,7 @@ def pix2pix(root_path):
     # proj.kill()
 
     cam = basler.camera()
-    cam.init(12682.0)
+    cam.init(2500.0)
     cam.balance_white()
     for i in range(100):
         cam.capture()  # warmup
@@ -118,6 +119,8 @@ def pix2pix(root_path):
     proj.kill()
     cam.kill()
     captures = np.array(captures)
+    if coaxial_setup:  # flip the captures as there is a mirror in the setup
+        captures = captures[:, :, ::-1, :]
     gsoup.save_images(captures, Path(output_path, "captures"))
     forward, fg = gray.decode(captures, proj_wh, output_dir=output_path, debug=True)
     composed = forward * fg[..., None]
@@ -136,6 +139,31 @@ def pix2pix(root_path):
         Path(output_path, "texturey.tiff"),
         extension="tiff",
     )
+    if find_homography:
+        src_points = np.stack(
+            np.meshgrid(np.arange(cam_wh[1]), np.arange(cam_wh[0]), indexing="ij"),
+            axis=-1,
+        )
+        mask = np.zeros_like(src_points[..., 0], dtype=bool)
+        mask[102:500, 183:437] = True  # filter some points from image
+        src_points = src_points[mask]
+        src_points = src_points.reshape(-1, 2)
+        src_points = src_points / (np.array(cam_wh) - 1)[::-1]
+        src_points = src_points * 2 - 1
+        # mask = fg
+        # src_points = np.argwhere(fg) / (np.array(cam_wh) - 1)[::-1]
+        dst_points = forward[mask] / (np.array(proj_wh) - 1)[::-1]
+        dst_points = dst_points * 2 - 1
+        h_mat, inliers = cv2.findHomography(
+            np.array(src_points),
+            np.array(dst_points),
+            cv2.RANSAC,
+        )
+        my_points = np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]])
+        hom_points = gsoup.to_hom(my_points)
+        transformed_points = h_mat @ hom_points.transpose()
+        gsoup.homogenize(transformed_points.T)
+        print(transformed_points)
 
 
 def acq_procam(root_path):
@@ -519,9 +547,9 @@ def calibrate_leap_projector(root_path, force_calib=False):
 
 if __name__ == "__main__":
     root_path = Path("C:/src/augmented_hands")
-    # pix2pix(root_path)
+    pix2pix(root_path, True)
     # acq_cam(root_path)
-    calibrate_cam(root_path)
+    # calibrate_cam(root_path)
     # acq_procam(root_path)
     # calibrate_procam(root_path)
     # acq_leap_projector(root_path, 20, False)

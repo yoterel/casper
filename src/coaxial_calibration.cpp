@@ -344,7 +344,7 @@ int main(int argc, char *argv[])
         t_render.stop();
         t_debug.start();
         {
-            float text_spacing = 15.0f;
+            float text_spacing = 20.0f;
             double x;
             double y;
             glfwGetCursorPos(window, &x, &y);

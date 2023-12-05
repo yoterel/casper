@@ -46,7 +46,7 @@ NB_MODULE(basler, m)
         .def(nb::init<>(), "a class to control a basler camera")
         .def("init", &BaslerCamera::init_single, nb::arg("exposure_time") = 1850.0, "initializes the camera for single image captures")
         .def("balance_white", &BaslerCamera::balance_white, "balances the white level of the camera once")
-        .def("capture", &BaslerCamera::capture_single, "returns a numpy array of the captured image h,w,3 uint8")
+        .def("capture", &BaslerCamera::capture_single, "returns a numpy array of the captured image (h,w,3) uint8")
         .def("kill", &BaslerCamera::kill, "kills the camera");
 }
 #endif
