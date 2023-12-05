@@ -77,11 +77,9 @@ add_executable(ahand
     src/texture.cpp
     src/skinned_model.cpp
     src/skinned_shader.cpp
-    src/canvas.cpp
     src/post_process.cpp
     src/utils.cpp
     src/cuda/cuda2gl.cu
-    src/image_process.cpp
     src/cnpy.cpp
     src/fbo.cpp
     src/quad.cpp
@@ -100,27 +98,26 @@ add_executable(ahand
 # target_compile_definitions(ahand PRIVATE CV_IGNORE_DEBUG_BUILD_GUARD)
 set_target_properties(ahand PROPERTIES CUDA_ARCHITECTURES "72")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common")
 # cuda
+target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common")
 target_include_directories(ahand PRIVATE "$ENV{CUDA_PATH}/include")
-target_link_libraries(ahand PRIVATE "$ENV{CUDA_PATH}/lib/x64/cudart.lib")
-# npp
-set_target_properties(ahand PROPERTIES CUDA_ARCHITECTURES "72")
+# target_link_libraries(ahand PRIVATE "$ENV{CUDA_PATH}/lib/x64/cudart.lib")
 # target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common")
-target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common/UtilNPP")
 # target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common/FreeImage/Dist/x64")
-target_link_libraries(ahand PRIVATE 
-                        "${CUDA_NPP_LIBS_LOC}/nppc.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppial.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppicc.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppidei.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppif.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppig.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppim.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppist.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppisu.lib"
-                        "${CUDA_NPP_LIBS_LOC}/nppitc.lib"
-                        "${CUDA_NPP_LIBS_LOC}/npps.lib")
+# npp
+target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common/UtilNPP")
+# target_link_libraries(ahand PRIVATE 
+#                         "${CUDA_NPP_LIBS_LOC}/nppc.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppial.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppicc.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppidei.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppif.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppig.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppim.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppist.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppisu.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/nppitc.lib"
+#                         "${CUDA_NPP_LIBS_LOC}/npps.lib")
 # pylon
 target_link_libraries(ahand PRIVATE pylon::pylon)
 # opencv

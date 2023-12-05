@@ -19,7 +19,6 @@
 #include "timer.h"
 #include "leap.h"
 #include "text.h"
-#include "canvas.h"
 #include "post_process.h"
 #include "utils.h"
 #include "cnpy.h"
@@ -133,7 +132,7 @@ glm::mat4 cam_project;
 std::vector<double> camera_distortion;
 // GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
 FBO hands_fbo(proj_width, proj_height, 4, false);
-FBO debug_fbo(proj_width, proj_height, 4, false);
+FBO debug_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(proj_width, proj_height, 4, false);
 FBO c2p_fbo(proj_width, proj_height, 4, false);
 
@@ -354,7 +353,7 @@ int main(int argc, char *argv[])
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
     /* more inits */
-    NPP_wrapper::printfNPPinfo();
+    // NPP_wrapper::printfNPPinfo();
     double previousAppTime = t_app.getElapsedTimeInSec();
     double previousSecondAppTime = t_app.getElapsedTimeInSec();
     double currentAppTime = t_app.getElapsedTimeInSec();
