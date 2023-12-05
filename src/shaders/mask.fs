@@ -20,9 +20,9 @@ void main()
     // FragColor = texture(src, loc.xy / resolution);  // full frame jump flood
     if (avgMask >= threshold) { // select only pixels that are not black from the jump flood image
         FragColor = texture(src, TexCoord); // sample texture using the locations of the nearest seeds
-        // if (FragColor.w == 0.0) {
-        //     FragColor = vec4(1.0, 0.0, 0.0, 1.0);
-        // }
+        if (FragColor.w == 0.0) {
+            FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        }
     } else {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     }

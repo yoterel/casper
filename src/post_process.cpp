@@ -89,7 +89,7 @@ void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, u
     mask_shader.setBool("flipVer", false);
     mask_shader.setBool("flipMaskVer", true);
     mask_shader.setBool("flipMaskHor", true);
-    m_quad.render();
+    m_quad.render(false, false, true);
     // unbind fbo
     target_fbo->unbind();
 }
@@ -105,7 +105,7 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, un
     glViewport(0, 0, m_dstWidth, m_dstHeight);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    m_quad.render();
+    m_quad.render(false, false, true);
     glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[1]);
     glViewport(0, 0, m_dstWidth, m_dstHeight);

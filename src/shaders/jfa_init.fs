@@ -9,10 +9,10 @@ void main(){
     // vec2 fragCoords = gl_FragCoord.xy;
     vec2 uv = gl_FragCoord.xy / resolution;  // (0:W-1, 0:H-1)
     vec4 col = texture(src, uv);  // color at uv
-    float avg = (col.r + col.g + col.b) * 0.333333;
+    // float avg = (col.r + col.g + col.b) * 0.333333;
     vec4 outcol;
     //CHECK IF SEED
-    if(avg > 0.1){
+    if(col.w > 0){
         //store coordinates if not empty
         outcol = vec4(gl_FragCoord.x, gl_FragCoord.y, 0., 1.);
         // outcol = vec4(0.0, 0.0, 1.0, 1.);
