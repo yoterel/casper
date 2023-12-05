@@ -85,6 +85,7 @@ add_executable(ahand
     src/cnpy.cpp
     src/fbo.cpp
     src/quad.cpp
+    src/helpers.cpp
     third-party/imgui/imgui.cpp
     third-party/imgui/imgui_draw.cpp
     third-party/imgui/imgui_tables.cpp

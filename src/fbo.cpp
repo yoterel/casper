@@ -4,9 +4,13 @@
 #include <vector>
 #include "stb_image_write.h"
 
-FBO::FBO(unsigned int width, unsigned int height, unsigned int channels) : m_width(width), m_height(height), m_channels(channels), m_texture()
+FBO::FBO(unsigned int width, unsigned int height, unsigned int channels, bool auto_init) : m_width(width),
+                                                                                           m_height(height),
+                                                                                           m_channels(channels),
+                                                                                           m_texture()
 {
-    init();
+    if (auto_init)
+        init();
 }
 
 FBO::~FBO()
@@ -87,7 +91,7 @@ void FBO::bind(bool clear)
     if (clear)
     {
         glViewport(0, 0, m_width, m_height);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 }

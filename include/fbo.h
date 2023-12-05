@@ -7,7 +7,7 @@
 class FBO
 {
 public:
-    FBO(unsigned int width, unsigned int height, unsigned int channels = 4);
+    FBO(unsigned int width, unsigned int height, unsigned int channels = 4, bool auto_init = true);
     ~FBO();
     FBO(const FBO &) = delete;
     FBO &operator=(const FBO &) = delete;

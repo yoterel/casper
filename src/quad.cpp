@@ -97,11 +97,12 @@ void Quad::init(std::vector<float> &verts)
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
-void Quad::render(bool wireFrame, bool points)
+void Quad::render(bool wireFrame, bool points, bool alphaBlend)
 {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
+    if (!alphaBlend)
+        glDisable(GL_BLEND);
     if (wireFrame)
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glBindVertexArray(m_VAO);
@@ -112,7 +113,8 @@ void Quad::render(bool wireFrame, bool points)
     if (wireFrame)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glEnable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
+    if (!alphaBlend)
+        glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glBindVertexArray(0);
 }

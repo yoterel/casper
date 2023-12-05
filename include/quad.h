@@ -10,7 +10,7 @@ public:
     Quad(std::vector<glm::vec3> &vertices);
     Quad(std::vector<glm::vec2> &vertices);
     ~Quad();
-    void render(bool wireFrame = false, bool points = false);
+    void render(bool wireFrame = false, bool points = false, bool alphaBlend = false);
     Quad(const Quad &) = delete;
     Quad &operator=(const Quad &) = delete;
 

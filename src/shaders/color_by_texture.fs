@@ -8,13 +8,13 @@ uniform bool isGray = false;
 uniform bool allGreen = false;
 void main()
 {
-    vec3 col;
+    vec4 col;
     if (isGray)
-        col = texture(src, TexCoord).rrr;
+        col = vec4(texture(src, TexCoord).rrr, 1.0);
     else
-        col = texture(src, TexCoord).rgb;
+        col = texture(src, TexCoord);
     if (allGreen)
-        col = vec3(0.0, col.r, 0.0);
+        col = vec4(0.0, col.r, 0.0, 1.0);
     if (binary)
     {
         float avg = (col.r + col.g + col.b) * 0.333333;
@@ -25,6 +25,6 @@ void main()
     }
     else
     {
-	    FragColor = vec4(col, 1.0);
+	    FragColor = col;
     }
 }
