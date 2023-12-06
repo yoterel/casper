@@ -71,7 +71,7 @@ bool cam_color_mode = false;
 bool use_leap_calib_results = false;
 std::string testFile("../../resource/uv2.jpg");
 std::string bakeFile("../../resource/baked.png");
-std::string uvUnwrapFile("../../resource/UVUnwrapFile.png");
+// std::string uvUnwrapFile("../../resource/UVUnwrapFile.png");
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
@@ -84,6 +84,7 @@ int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
 bool useCoaxialCalib = true;
 bool showCamera = true;
 bool showProjector = true;
+bool baked = false;
 Texture *dynamicTexture = nullptr;
 int magic_leap_time_delay = 40000; // us
 float magic_leap_scale_factor = 10.0f;
@@ -247,6 +248,10 @@ int main(int argc, char *argv[])
     unsigned int cubeVAO = 0;
     unsigned int cubeVBO = 0;
     Helpers::setupCubeBuffers(cubeVAO, cubeVBO);
+    unsigned int tcubeVAO = 0;
+    unsigned int tcubeVBO1 = 0;
+    unsigned int tcubeVBO2 = 0;
+    Helpers::setupCubeTexturedBuffers(tcubeVAO, tcubeVBO1, tcubeVBO2);
     unsigned int frustrumVAO = 0;
     unsigned int frustrumVBO = 0;
     Helpers::setupFrustrumBuffers(frustrumVAO, frustrumVBO);
@@ -274,6 +279,9 @@ int main(int argc, char *argv[])
                                 proj_width, proj_height,
                                 cam_width, cam_height,
                                 false);
+    dynamicTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
+    dynamicTexture->init();
+    // dynamicTexture->bind();
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
     // Canvas canvas(cam_width, cam_height, proj_width, proj_height, use_cuda);
@@ -346,8 +354,8 @@ int main(int argc, char *argv[])
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
     // SkinningShader skinnedShader("../../src/shaders/skin_hand.vs", "../../src/shaders/skin_hand.fs");
     SkinningShader skinnedShaderSimple("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
-    Shader skinnedShaderUV("../../src/shaders/skin_hand_uv.vs", "../../src/shaders/skin_hand_uv.fs");
-    Shader projectiveBakingShader("../../src/shaders/baking.vs", "../../src/shaders/baking.fs");
+    Shader bakeSimple("../../src/shaders/bake_proj_simple.vs", "../../src/shaders/bake_proj_simple.fs");
+    Shader bakeSkinned("../../src/shaders/bake_skinned.vs", "../../src/shaders/bake_skinned.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
@@ -676,7 +684,7 @@ int main(int argc, char *argv[])
             skinnedShaderSimple.setInt("src", 0);
             hands_fbo.bind(true);
             glEnable(GL_DEPTH_TEST);
-            rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, dynamicTexture);
+            rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, nullptr /* dynamicTexture */);
             hands_fbo.unbind();
             glDisable(GL_DEPTH_TEST);
             if (bakeRequest)
@@ -686,19 +694,38 @@ int main(int argc, char *argv[])
                     delete dynamicTexture;
                     dynamicTexture = nullptr;
                 }
-                skinnedShaderUV.use();
-                skinnedShaderUV.setVec2("resolution", glm::vec2(proj_width, proj_height));
+                // textureShader.use();
+                // textureShader.setInt("src", 0);
+                // textureShader.setBool("flipVer", false);
+                // textureShader.setBool("flipHor", false);
+                // textureShader.setBool("onlyGreen", true);
+                // textureShader.setMat4("projection", glm::mat4(1.0f));
+                // glm::mat4 rot = glm::rotate(glm::mat4(1.0f), glm::radians(25.0f), glm::vec3(1.0, 0.3, 0.2));
+                // textureShader.setMat4("view", glm::mat4(1.0f));
+                // textureShader.setMat4("model", rot);
+                bakeSimple.use();
+                bakeSimple.setInt("src", 0);
+                bakeSimple.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                bakeSimple.setMat4("projTransform", proj_projection_transform * proj_view_transform);
                 debug_fbo.bind(true);
                 // glEnable(GL_DEPTH_TEST);
                 dynamicTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
                 dynamicTexture->init();
-                // dynamicTexture->bind();
+                dynamicTexture->bind();
                 // fullScreenQuad.render();
-                rightHandModel.Render(skinnedShaderUV, dynamicTexture);
+                glEnable(GL_DEPTH_TEST);
+                glDisable(GL_CULL_FACE);
+                // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                glBindVertexArray(tcubeVAO);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+                glEnable(GL_CULL_FACE);
+                glEnable(GL_DEPTH_TEST);
+                // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                // rightHandModel.Render(skinnedShaderUV, dynamicTexture);
                 debug_fbo.unbind();
                 // glDisable(GL_DEPTH_TEST);
-                debug_fbo.saveColorToFile(uvUnwrapFile);
-                postProcess.bake(projectiveBakingShader, testTexture.getTexture(), debug_fbo.getTexture()->getTexture(), bakeFile);
+                debug_fbo.saveColorToFile(bakeFile);
+                // postProcess.bake(projectiveBakingShader, testTexture.getTexture(), debug_fbo.getTexture()->getTexture(), bakeFile);
                 bakeRequest = false;
             }
 
@@ -916,15 +943,38 @@ int main(int argc, char *argv[])
             }
             // draws cube at world origin
             {
-                vcolorShader.use();
-                vcolorShader.setMat4("projection", flycam_projection_transform);
-                vcolorShader.setMat4("view", flycam_view_transform);
-                vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f)));
+                // vcolorShader.use();
+                // vcolorShader.setMat4("projection", flycam_projection_transform);
+                // vcolorShader.setMat4("view", flycam_view_transform);
+                // vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f)));
+                if (baked)
+                {
+                    textureShader.use();
+                    textureShader.setBool("flipVer", false);
+                    textureShader.setBool("flipHor", false);
+                    textureShader.setMat4("projection", flycam_projection_transform);
+                    textureShader.setMat4("view", flycam_view_transform);
+                    textureShader.setMat4("model", glm::mat4(1.0f));
+                    textureShader.setBool("binary", false);
+                    textureShader.setInt("src", 0);
+                    debug_fbo.getTexture()->bind();
+                }
+                else
+                {
+                    projectorOnlyShader.use();
+                    projectorOnlyShader.setBool("flipVer", false);
+                    // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+                    projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
+                    projectorOnlyShader.setMat4("projTransform", proj_projection_transform * proj_view_transform);
+                    projectorOnlyShader.setBool("binary", false);
+                    projectorOnlyShader.setInt("src", 0);
+                    dynamicTexture->bind();
+                }
                 glEnable(GL_DEPTH_TEST);
-                glDisable(GL_CULL_FACE);
-                glBindVertexArray(cubeVAO);
+                // glDisable(GL_CULL_FACE);
+                glBindVertexArray(tcubeVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
-                glEnable(GL_CULL_FACE);
+                // glEnable(GL_CULL_FACE);
             }
             if (bones_to_world_right.size() > 0)
             {
@@ -988,7 +1038,7 @@ int main(int argc, char *argv[])
                     skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
                     skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                     skinnedShaderSimple.setInt("src", 0);
-                    rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, dynamicTexture);
+                    rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, nullptr /* dynamicTexture */);
                     /* with camera texture */
                     // skinnedShader.use();
                     // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
@@ -1387,6 +1437,7 @@ void openIMGUIFrame()
     ImGui::Checkbox("Show Camera", &showCamera);
     ImGui::SameLine();
     ImGui::Checkbox("Show Projector", &showProjector);
+    ImGui::Checkbox("Baked", &baked);
     if (ImGui::Checkbox("Use Leap Calib. Results", &use_leap_calib_results))
     {
         create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);

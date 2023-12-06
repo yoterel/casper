@@ -588,30 +588,14 @@ void SkinnedModel::Render(Shader &shader, Texture *customDiffuseTexture)
     glBindVertexArray(m_VAO);
     for (unsigned int i = 0; i < m_Meshes.size(); i++)
     {
-        unsigned int MaterialIndex = m_Meshes[i].MaterialIndex;
-
-        assert(MaterialIndex < m_Materials.size());
-
-        if (customDiffuseTexture != NULL)
-        {
-            customDiffuseTexture->bind(GL_TEXTURE0);
-        }
-        else
-        {
-            if (m_Materials[MaterialIndex].pDiffuse)
-            {
-                m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
-            }
-        }
-        if (m_Materials[MaterialIndex].pSpecularExponent)
-        {
-            m_Materials[MaterialIndex].pSpecularExponent->bind(GL_TEXTURE6);
-        }
+        customDiffuseTexture->bind(GL_TEXTURE0);
+        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDrawElementsBaseVertex(GL_TRIANGLES,
                                  m_Meshes[i].NumIndices,
                                  GL_UNSIGNED_INT,
                                  (void *)(sizeof(unsigned int) * m_Meshes[i].BaseIndex),
                                  m_Meshes[i].BaseVertex);
+        // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     glBindVertexArray(0);
 }

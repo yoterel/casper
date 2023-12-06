@@ -330,7 +330,7 @@ int main(int argc, char *argv[])
             textureShader.setMat4("model", glm::mat4(1.0f));
             // textureShader.setBool("flipVer", true);
             textureShader.setInt("src", 0);
-            textureShader.setBool("allGreen", true);
+            textureShader.setBool("justGreen", true);
             // textureShader.setBool("isGray", true);
             camTexture.bind();
             screen.render();

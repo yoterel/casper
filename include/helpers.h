@@ -20,6 +20,7 @@ public:
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupFrustrumBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupCubeBuffers(unsigned int &VAO, unsigned int &VBO);
+    static void setupCubeTexturedBuffers(unsigned int &VAO, unsigned int &VBO1, unsigned int &VBO2);
     static void setupSkeletonBuffers(unsigned int &VAO, unsigned int &VBO);
 
 private:
