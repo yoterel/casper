@@ -1,6 +1,7 @@
 #version 330
 
 in vec2 TexCoord0;
+in vec3 ProjTexCoord;
 flat in ivec4 BoneIDs00;
 flat in ivec2 BoneIDs11;
 in vec4 Weights00;
@@ -16,9 +17,20 @@ struct Material
 };
 uniform Material material;
 uniform sampler2D src;
+uniform bool useProjector = false;
 
 void main()
 {
-    vec4 diffuse_color = texture(src, TexCoord0);
-    FragColor = diffuse_color;
+    if (useProjector)
+    {
+        float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
+        float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
+        vec3 projColor = texture(src, vec2(u, v)).rgb;
+        FragColor = vec4(projColor, 1.0);
+    }
+    else
+    {
+        vec4 diffuse_color = texture(src, TexCoord0);
+        FragColor = diffuse_color;
+    }
 }

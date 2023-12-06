@@ -581,14 +581,13 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
     glBindVertexArray(0);
 }
 
-void SkinnedModel::Render(Shader &shader, Texture *customDiffuseTexture)
+void SkinnedModel::Render(Shader &shader)
 {
-    shader.use();
-    shader.setInt("src", 0);
+    // shader.setInt("src", 0);
     glBindVertexArray(m_VAO);
     for (unsigned int i = 0; i < m_Meshes.size(); i++)
     {
-        customDiffuseTexture->bind(GL_TEXTURE0);
+        // customDiffuseTexture->bind(GL_TEXTURE0);
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDrawElementsBaseVertex(GL_TRIANGLES,
                                  m_Meshes[i].NumIndices,
