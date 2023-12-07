@@ -581,23 +581,6 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
     glBindVertexArray(0);
 }
 
-void SkinnedModel::Render(Shader &shader)
-{
-    // shader.setInt("src", 0);
-    glBindVertexArray(m_VAO);
-    for (unsigned int i = 0; i < m_Meshes.size(); i++)
-    {
-        // customDiffuseTexture->bind(GL_TEXTURE0);
-        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDrawElementsBaseVertex(GL_TRIANGLES,
-                                 m_Meshes[i].NumIndices,
-                                 GL_UNSIGNED_INT,
-                                 (void *)(sizeof(unsigned int) * m_Meshes[i].BaseIndex),
-                                 m_Meshes[i].BaseVertex);
-        // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-    glBindVertexArray(0);
-}
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                           const glm::mat4 &local_to_world, unsigned int camTex, bool useFBO, bool use_bones)
 {

@@ -22,7 +22,7 @@ uniform mat4 gTransform;
 uniform mat4 projTransform;
 uniform mat4 gBones[MAX_BONES];
 uniform int gDisplayBoneIndex;
-
+uniform bool bake = false;
 void main()
 {
     mat4 BoneTransform = gBones[BoneIDs0[0]] * Weights0[0];
@@ -32,9 +32,15 @@ void main()
     BoneTransform     += gBones[BoneIDs1[0]] * Weights1[0];
     BoneTransform     += gBones[BoneIDs1[1]] * Weights1[1];
     
-    
     vec4 pos = BoneTransform * vec4(Position, 1.0);
-    gl_Position = gTransform * pos;
+    if (bake)
+    {
+        gl_Position = vec4((TexCoord.x*2) - 1, (TexCoord.y*2) - 1, 0.0, 1.0);
+    }
+    else
+    {
+        gl_Position = gTransform * pos;
+    }
     vec4 proj_pos = projTransform * pos;
     ProjTexCoord = vec3(proj_pos.x, proj_pos.y, proj_pos.z);
     TexCoord0 = TexCoord;

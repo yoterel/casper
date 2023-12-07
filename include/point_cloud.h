@@ -9,7 +9,7 @@ public:
     PointCloud(std::vector<glm::vec3> &vertices, std::vector<glm::vec3> &colors);
     PointCloud(std::vector<glm::vec2> &vertices, std::vector<glm::vec3> &colors);
     ~PointCloud();
-    void render();
+    void render(float pointSize = 10.0f);
     PointCloud(const PointCloud &) = delete;
     PointCloud &operator=(const PointCloud &) = delete;
 

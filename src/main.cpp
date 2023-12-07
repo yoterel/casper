@@ -17,6 +17,7 @@
 #include "skinned_shader.h"
 #include "skinned_model.h"
 #include "timer.h"
+#include "point_cloud.h"
 #include "leap.h"
 #include "text.h"
 #include "post_process.h"
@@ -99,6 +100,7 @@ bool useCoaxialCalib = true;
 bool showCamera = true;
 bool showProjector = true;
 Texture *dynamicTexture = nullptr;
+Texture *bakedTexture = nullptr;
 int magic_leap_time_delay = 40000; // us
 float magic_leap_scale_factor = 10.0f;
 float lastX = proj_width / 2.0f;
@@ -285,7 +287,8 @@ int main(int argc, char *argv[])
                                 false);
     dynamicTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
     dynamicTexture->init();
-    // dynamicTexture->bind();
+    bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
+    bakedTexture->init();
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
     PostProcess postProcess(cam_width, cam_height, proj_width, proj_height);
@@ -629,6 +632,8 @@ int main(int argc, char *argv[])
                     skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
                     skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
                     // skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                    // skinnedShaderSimple.setBool("useProjector", false);
+                    // skinnedShaderSimple.setBool("bake", false);
                     skinnedShaderSimple.setInt("src", 0);
                     hands_fbo.bind();
                     glEnable(GL_DEPTH_TEST);
@@ -674,6 +679,8 @@ int main(int argc, char *argv[])
             skinnedShaderSimple.use();
             skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
+            skinnedShaderSimple.setBool("useProjector", false);
+            skinnedShaderSimple.setBool("bake", false);
             // skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
             skinnedShaderSimple.setInt("src", 0);
             hands_fbo.bind(true);
@@ -691,7 +698,7 @@ int main(int argc, char *argv[])
                 debug_fbo.bind(true);
                 // dynamicTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
                 // dynamicTexture->init();
-                dynamicTexture->bind();
+
                 /* cube */
                 // bakeSimple.use();
                 // bakeSimple.setInt("src", 0);
@@ -705,14 +712,40 @@ int main(int argc, char *argv[])
                 // glEnable(GL_CULL_FACE);
                 // glEnable(GL_DEPTH_TEST);
                 /* hand */
-                bakeSkinned.use();
-                bakeSkinned.setInt("src", 0);
-                bakeSkinned.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                bakeSkinned.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                rightHandModel.Render(bakeSkinned);
+                glDisable(GL_CULL_FACE);
+                glEnable(GL_DEPTH_TEST);
+                skinnedShaderSimple.use();
+                skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+                skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                skinnedShaderSimple.setBool("useProjector", true);
+                skinnedShaderSimple.setBool("bake", true);
+                skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShaderSimple.setInt("src", 0);
+                // dynamicTexture->bind();
+                rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, dynamicTexture);
+                /* debug points */
+                // vcolorShader.use();
+                // vcolorShader.setMat4("view", glm::mat4(1.0f));
+                // vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                // std::vector<glm::vec2> points;
+                // rightHandModel.getUnrolledTexCoords(points);
+                // Helpers::UV2NDC(points);
+                // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
+                // PointCloud cloud(points, screen_vert_color);
+                // cloud.render();
                 debug_fbo.unbind();
+                glDisable(GL_DEPTH_TEST);
+                glEnable(GL_CULL_FACE);
                 // glDisable(GL_DEPTH_TEST);
                 debug_fbo.saveColorToFile(bakeFile);
+                if (bakedTexture != nullptr)
+                {
+                    delete bakedTexture;
+                    bakedTexture = nullptr;
+                }
+                bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
+                bakedTexture->init();
                 // postProcess.bake(projectiveBakingShader, testTexture.getTexture(), debug_fbo.getTexture()->getTexture(), bakeFile);
                 bakeRequest = false;
             }
@@ -740,6 +773,8 @@ int main(int argc, char *argv[])
             skinnedShaderSimple.use();
             skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
+            skinnedShaderSimple.setBool("useProjector", false);
+            skinnedShaderSimple.setBool("bake", false);
             skinnedShaderSimple.setInt("src", 0);
             hands_fbo.bind(bones_to_world_right.size() == 0);
             glEnable(GL_DEPTH_TEST);
@@ -1034,6 +1069,7 @@ int main(int argc, char *argv[])
                         skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShaderSimple.setBool("useProjector", false);
+                        skinnedShaderSimple.setBool("bake", false);
                         skinnedShaderSimple.setInt("src", 0);
                         rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx);
                         break;
@@ -1049,18 +1085,20 @@ int main(int argc, char *argv[])
                         skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                         skinnedShaderSimple.setBool("useProjector", true);
+                        skinnedShaderSimple.setBool("bake", false);
                         skinnedShaderSimple.setInt("src", 0);
                         rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, dynamicTexture);
                         break;
                     }
                     case static_cast<int>(TextureMode::BAKED):
                     {
-                        bakeSkinned.use();
-                        bakeSkinned.setInt("src", 0);
-                        bakeSkinned.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                        bakeSkinned.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                        debug_fbo.getTexture()->bind();
-                        rightHandModel.Render(bakeSkinned);
+                        skinnedShaderSimple.use();
+                        skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+                        skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShaderSimple.setBool("useProjector", false);
+                        skinnedShaderSimple.setBool("bake", false);
+                        skinnedShaderSimple.setInt("src", 0);
+                        rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, bakedTexture);
                         break;
                     }
                     default:

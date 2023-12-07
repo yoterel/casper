@@ -9,6 +9,7 @@ class Helpers
 public:
     static glm::vec2 ScreenToNDC(const glm::vec2 &pixel, int width, int height, bool flip_y = false);
     static glm::vec2 NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool flip_y = false);
+    static void UV2NDC(std::vector<glm::vec2> &uv);
     static void saveTexture(std::string filepath,
                             unsigned int texture,
                             unsigned int width,

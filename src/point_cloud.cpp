@@ -111,8 +111,9 @@ void PointCloud::init(std::vector<float> &verts)
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
-void PointCloud::render()
+void PointCloud::render(float pointSize)
 {
+    glPointSize(pointSize);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);

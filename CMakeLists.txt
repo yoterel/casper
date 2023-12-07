@@ -81,6 +81,7 @@ add_executable(ahand
     src/utils.cpp
     src/cuda/cuda2gl.cu
     src/cnpy.cpp
+    src/point_cloud.cpp
     src/fbo.cpp
     src/quad.cpp
     src/helpers.cpp

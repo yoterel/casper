@@ -24,6 +24,14 @@ glm::vec2 Helpers::NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool
     return pixel;
 }
 
+void Helpers::UV2NDC(std::vector<glm::vec2> &uv)
+{
+    for (int i = 0; i < uv.size(); i++)
+    {
+        uv[i] = glm::vec2(uv[i].x * 2.0f - 1.0f, uv[i].y * 2.0f - 1.0f);
+    }
+}
+
 void Helpers::saveTexture(std::string filepath,
                           unsigned int texture,
                           unsigned int width,

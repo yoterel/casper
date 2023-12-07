@@ -136,7 +136,6 @@ public:
                 const glm::mat4 &local_to_world, bool use_bones = false, Texture *customDiffuseTexture = NULL);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                 const glm::mat4 &local_to_world, unsigned int camTex, bool useFBO = true, bool use_bones = false);
-    void Render(Shader &shader);
     const Material &GetMaterial();
     void GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world, const bool use_bones = false);
     void GetBoneTransformsHack(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> bones_to_world);
