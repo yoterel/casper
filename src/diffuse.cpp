@@ -2,18 +2,11 @@
 #include "HTTPRequest.h"
 #include "json.hpp"
 #include "base64.h"
-#include "opencv2/opencv.hpp"
 #include <chrono>
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "timer.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
-#include "timer.h"
 using json = nlohmann::json;
-
-Diffuse::Diffuse()
-{
-}
 
 void Diffuse::print_backend_config()
 {

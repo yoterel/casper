@@ -1,19 +1,22 @@
 #include "diffuse.h"
 #include <stdio.h>
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image.h"
+#include "stb_image_write.h"
 
 using namespace std::chrono;
 
 int main(int argc, char *argv[])
 {
-    Diffuse diffuseObject = Diffuse();
     // txt2img
     int requested_width = 512;
     int requested_height = 512;
     int txt2img_width, txt2img_height;
-    std::vector<uint8_t> txt2img_data = diffuseObject.txt2img("A snow squirrel",
-                                                              txt2img_width, txt2img_height,
-                                                              1003,
-                                                              requested_width, requested_height, false);
+    std::vector<uint8_t> txt2img_data = Diffuse::txt2img("A snow squirrel",
+                                                         txt2img_width, txt2img_height,
+                                                         1003,
+                                                         requested_width, requested_height, false);
     // cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
     cv::Mat txt2img_result = cv::Mat(txt2img_height, txt2img_width, CV_8UC3, txt2img_data.data()).clone();
     cv::cvtColor(txt2img_result, txt2img_result, cv::COLOR_RGB2BGR);
@@ -31,10 +34,10 @@ int main(int argc, char *argv[])
     std::vector<uint8_t> mask_buffer(mask.data, mask.data + mask.total() * mask.elemSize());
     // std::vector<uint8_t> mask_buffer;
     int img2img_width, img2img_height;
-    std::vector<uint8_t> img2img_data = diffuseObject.img2img("A glowing (red:1.5) fire squirrel",
-                                                              img2img_width, img2img_height,
-                                                              txt2img_data, mask_buffer, 333,
-                                                              txt2img_width, txt2img_height, false, false);
+    std::vector<uint8_t> img2img_data = Diffuse::img2img("A glowing (red:1.5) fire squirrel",
+                                                         img2img_width, img2img_height,
+                                                         txt2img_data, mask_buffer, 333,
+                                                         txt2img_width, txt2img_height, false, false);
     cv::Mat img2img_result = cv::Mat(img2img_height, img2img_width, CV_8UC3, img2img_data.data());
     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
     cv::imwrite("output_img2img.png", img2img_result);

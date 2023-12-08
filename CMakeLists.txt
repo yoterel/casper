@@ -75,6 +75,8 @@ add_executable(ahand
     src/timer.cpp
     src/leap.cpp
     src/texture.cpp
+    src/diffuse.cpp
+    src/base64.cpp
     src/skinned_model.cpp
     src/skinned_shader.cpp
     src/post_process.cpp
@@ -123,6 +125,8 @@ target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common/UtilNPP")
 target_link_libraries(ahand PRIVATE pylon::pylon)
 # opencv
 target_link_libraries(ahand PRIVATE ${OpenCV_LIBS})
+# winsock
+target_link_libraries(ahand PRIVATE wsock32 ws2_32)
 # dynaflash
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
 target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")

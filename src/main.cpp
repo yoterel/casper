@@ -32,6 +32,11 @@
 #include "imgui_stdlib.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "diffuse.h"
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image.h"
+#include "stb_image_write.h"
 namespace fs = std::filesystem;
 
 // forward declarations
@@ -287,7 +292,11 @@ int main(int argc, char *argv[])
                                 false);
     dynamicTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
     dynamicTexture->init();
-    bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
+    const fs::path user_path{bakeFile};
+    if (fs::exists(user_path))
+        bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
+    else
+        bakedTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
     bakedTexture->init();
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
@@ -688,27 +697,7 @@ int main(int argc, char *argv[])
             glDisable(GL_DEPTH_TEST);
             if (bakeRequest)
             {
-                // if (dynamicTexture != nullptr)
-                // {
-                //     delete dynamicTexture;
-                //     dynamicTexture = nullptr;
-                // }
                 debug_fbo.bind(true);
-                // dynamicTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
-                // dynamicTexture->init();
-
-                /* cube */
-                // bakeSimple.use();
-                // bakeSimple.setInt("src", 0);
-                // bakeSimple.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-                // bakeSimple.setMat4("projTransform", proj_projection_transform * proj_view_transform);
-                // glEnable(GL_DEPTH_TEST);
-                // glEnable(GL_DEPTH_TEST);
-                // glDisable(GL_CULL_FACE);
-                // glBindVertexArray(tcubeVAO);
-                // glDrawArrays(GL_TRIANGLES, 0, 36);
-                // glEnable(GL_CULL_FACE);
-                // glEnable(GL_DEPTH_TEST);
                 /* hand */
                 glDisable(GL_CULL_FACE);
                 glEnable(GL_DEPTH_TEST);
@@ -744,26 +733,8 @@ int main(int argc, char *argv[])
                 }
                 bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
                 bakedTexture->init();
-                // postProcess.bake(projectiveBakingShader, testTexture.getTexture(), debug_fbo.getTexture()->getTexture(), bakeFile);
                 bakeRequest = false;
             }
-
-            /* render skinned mesh to fbo, in projector space */
-            // skinnedShader.use();
-            // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-            // skinnedShader.SetWorldTransform(proj_projection_transform * proj_view_transform);
-            // skinnedShader.SetProjectorTransform(cam_projection_transform * cam_view_transform);
-            // skinnedShader.setBool("binary", true);
-            // skinnedShader.setInt("src", 0);
-            // skinnedShader.setInt("projTexture", 1);
-            // skinnedModel.Render(skinnedShader, bones_to_world_right, rotx, camTexture.getTexture(), true);
-            /* render another mesh to fbo */
-            // projectorShader.use();
-            // projectorShader.setBool("flipVer", false);
-            // projectorShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
-            // projectorShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-            // projectorShader.setBool("binary", true);
-            // dinosaur.Render(projectorShader, camTexture.getTexture(), true);
         }
         if (bones_to_world_left.size() > 0)
         {
