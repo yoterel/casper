@@ -17,15 +17,25 @@ int main(int argc, char *argv[])
                                                          txt2img_width, txt2img_height,
                                                          1003,
                                                          requested_width, requested_height, false);
-    // cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
     cv::Mat txt2img_result = cv::Mat(txt2img_height, txt2img_width, CV_8UC3, txt2img_data.data()).clone();
     cv::cvtColor(txt2img_result, txt2img_result, cv::COLOR_RGB2BGR);
     cv::imwrite("output_txt2img.png", txt2img_result);
+
     // img2img
-    // cv::Mat input_img = cv::imread("output_txt2img.png");
-    // std::vector<uint8_t> buffer(input_img.data, input_img.data + input_img.total() * input_img.elemSize());
-    // cv::resize(input_img, input_img, cv::Size(512, 512));
-    // cv::Mat mask(txt2img_height, txt2img_width, CV_8UC3, cv::Scalar(255, 255, 255));
+    int img2img_width, img2img_height;
+    cv::Mat img2img_result;
+    std::vector<uint8_t> img2img_data;
+    /* cv::mat */
+    // cv::Mat input_img = cv::imread("camera_image.png");
+    // cv::Mat input_mask = cv::imread("camera_mask.png");
+    // img2img_data = Diffuse::img2img("a human hand with its palm in front, with a colorful parrot tattoo, super realistic",
+    //                                 img2img_width, img2img_height,
+    //                                 input_img, input_mask, 13,
+    //                                 512, 512, false);
+    // img2img_result = cv::Mat(img2img_height, img2img_width, CV_8UC3, img2img_data.data());
+    // cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
+    // cv::imwrite("output_img2img_test.png", img2img_result);
+    /* raw buffers */
     cv::Mat gray, mask;
     cv::cvtColor(txt2img_result, gray, cv::COLOR_BGR2GRAY);
     cv::threshold(gray, mask, 127, 255, cv::THRESH_BINARY);
@@ -33,12 +43,11 @@ int main(int argc, char *argv[])
     cv::cvtColor(mask, mask, cv::COLOR_GRAY2RGB);
     std::vector<uint8_t> mask_buffer(mask.data, mask.data + mask.total() * mask.elemSize());
     // std::vector<uint8_t> mask_buffer;
-    int img2img_width, img2img_height;
-    std::vector<uint8_t> img2img_data = Diffuse::img2img("A glowing (red:1.5) fire squirrel",
-                                                         img2img_width, img2img_height,
-                                                         txt2img_data, mask_buffer, 333,
-                                                         txt2img_width, txt2img_height, false, false);
-    cv::Mat img2img_result = cv::Mat(img2img_height, img2img_width, CV_8UC3, img2img_data.data());
+    img2img_data = Diffuse::img2img("A glowing red fire squirrel",
+                                    img2img_width, img2img_height,
+                                    txt2img_data, mask_buffer, 333,
+                                    txt2img_width, txt2img_height, 3, 512, 512, false, false);
+    img2img_result = cv::Mat(img2img_height, img2img_width, CV_8UC3, img2img_data.data());
     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
     cv::imwrite("output_img2img.png", img2img_result);
     return 0;

@@ -113,13 +113,32 @@ void FBO::saveColorToFile(std::string filepath)
     this->unbind();
 }
 
-std::vector<uchar> FBO::getBuffer()
+std::vector<uchar> FBO::getBuffer(int n_channels)
 {
-    std::vector<uchar> buffer(m_width * m_height * 1);
+    int texFormat;
+    switch (n_channels)
+    {
+    case 4:
+        texFormat = GL_RGBA;
+        break;
+    case 3:
+        texFormat = GL_RGB;
+        break;
+    case 2:
+        texFormat = GL_RG;
+        break;
+    case 1:
+        texFormat = GL_RED;
+        break;
+    default:
+        std::cout << "FBO ERROR: Unsupported texture format." << std::endl;
+        exit(1);
+    }
+    std::vector<uchar> buffer(m_width * m_height * n_channels);
     this->bind(false);
     // glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glReadPixels(0, 0, m_width, m_height, this->getTexture()->getActualTextureFormat(), GL_UNSIGNED_BYTE, buffer.data());
+    glReadPixels(0, 0, m_width, m_height, texFormat, GL_UNSIGNED_BYTE, buffer.data());
     this->unbind();
     return buffer;
 }

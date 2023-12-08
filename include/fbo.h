@@ -15,7 +15,7 @@ public:
     void bind(bool clear = true);
     void unbind();
     void saveColorToFile(std::string filepath);
-    std::vector<uchar> getBuffer();
+    std::vector<uchar> getBuffer(int n_channels);
     Texture *getTexture() { return &m_texture; };
 
 private:
