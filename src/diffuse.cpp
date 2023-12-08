@@ -124,15 +124,22 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
                                       int width_in, int height_in,
                                       bool inputIsPNGEncoded, bool OpenCVDecode) // if OpenCVDecode output channels will be BGR
 {
-    std::string encoded_buffer;
+    std::string encoded_buffer, encoded_mask_buffer;
     if (inputIsPNGEncoded)
     {
         encoded_buffer = std::string("data:image/png;base64,") + base64_encode(std::string(img.begin(), img.end()));
+        if (mask.size() > 0)
+            encoded_mask_buffer = std::string("data:image/png;base64,") + base64_encode(std::string(mask.begin(), mask.end()));
     }
     else
     {
         std::vector<uint8_t> p = encode_png(img, width_in, height_in, 3);
         encoded_buffer = std::string("data:image/png;base64,") + base64_encode(std::string(p.begin(), p.end()));
+        if (mask.size() > 0)
+        {
+            std::vector<uint8_t> p2 = encode_png(mask, width_in, height_in, 3);
+            encoded_mask_buffer = std::string("data:image/png;base64,") + base64_encode(std::string(p2.begin(), p2.end()));
+        }
     }
     json j2 = {
         {"prompt", prompt.c_str()},
@@ -170,7 +177,6 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
         {"init_images", {encoded_buffer.c_str()}},
         {"resize_mode", 0},
         {"image_cfg_scale", 1.5},
-        // {"mask", ""},
         // {"mask_blur_x", 4},
         // {"mask_blur_y", 4},
         {"mask_blur", 4},
@@ -188,6 +194,8 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
         {"save_images", false},
         {"alwayson_scripts", json::object()},
     };
+    if (mask.size() > 0)
+        j2["mask"] = encoded_mask_buffer.c_str();
     // std::cout << j2 << std::endl;
     try
     {
