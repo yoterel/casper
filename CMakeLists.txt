@@ -276,11 +276,13 @@ add_executable(diffuse_example
     src/diffuse_example.cpp
     src/diffuse.cpp
     src/base64.cpp
+    src/timer.cpp
 )
 # target_include_directories(diffuse_example PRIVATE ${PYTHON_INCLUDE_DIRS})
 # target_link_libraries(diffuse_example PRIVATE )
 target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
+target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 # target_link_libraries(diffuse_example PRIVATE ${PYTHON_LIBRARIES})
 # target_link_libraries(diffuse_example PRIVATE Python::Python)  # Python::NumPy
 # target_link_libraries(diffuse_example PRIVATE ${Python_LIBRARY_DIRS}/python310.lib)

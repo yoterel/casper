@@ -15,8 +15,25 @@ class Diffuse
 public:
     Diffuse();
     void print_backend_config();
-    void txt2img(const std::string prompt);
-    void img2img(const std::string prompt, cv::Mat img);
+    std::vector<uint8_t> txt2img(const std::string prompt,
+                                 int &width_out, int &height_out,
+                                 int seed = -1,
+                                 int width_in = 512, int height_in = 512,
+                                 bool OpenCVDecode = false);
+    std::vector<uint8_t> img2img(const std::string prompt,
+                                 int &width_out, int &height_out,
+                                 std::vector<uint8_t> img,
+                                 std::vector<uint8_t> mask,
+                                 int seed = -1,
+                                 int width_in = 512, int height_in = 512, bool inputIsPNGEncoded = false, bool OpenCVDecode = false);
+    std::vector<uint8_t> img2img(const std::string prompt,
+                                 int &width_out, int &height_out,
+                                 cv::Mat img,
+                                 cv::Mat mask,
+                                 int seed = -1,
+                                 int width_in = 512, int height_in = 512, bool OpenCVDecode = true);
+    std::vector<uint8_t> decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV = false);
+    std::vector<uint8_t> encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels = 3);
 
 private:
     // std::string base64_decode(const std::string& input);

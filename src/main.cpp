@@ -349,10 +349,8 @@ int main(int argc, char *argv[])
     Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
     Shader coordShader("../../src/shaders/coords.vs", "../../src/shaders/coords.fs");
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
-    // SkinningShader skinnedShader("../../src/shaders/skin_hand.vs", "../../src/shaders/skin_hand.fs");
-    SkinningShader skinnedShaderSimple("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
+    SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     Shader bakeSimple("../../src/shaders/bake_proj_simple.vs", "../../src/shaders/bake_proj_simple.fs");
-    Shader bakeSkinned("../../src/shaders/bake_skinned.vs", "../../src/shaders/bake_skinned.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
@@ -628,16 +626,16 @@ int main(int argc, char *argv[])
                 if (bones_to_world_right.size() > 0)
                 {
                     /* render skinned mesh to fbo, in camera space*/
-                    skinnedShaderSimple.use();
-                    skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
-                    // skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                    // skinnedShaderSimple.setBool("useProjector", false);
-                    // skinnedShaderSimple.setBool("bake", false);
-                    skinnedShaderSimple.setInt("src", 0);
+                    skinnedShader.use();
+                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                    // skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                    // skinnedShader.setBool("useProjector", false);
+                    // skinnedShader.setBool("bake", false);
+                    skinnedShader.setInt("src", 0);
                     hands_fbo.bind();
                     glEnable(GL_DEPTH_TEST);
-                    rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx);
+                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx);
                     hands_fbo.unbind();
                     glDisable(GL_DEPTH_TEST);
                 }
@@ -676,16 +674,16 @@ int main(int argc, char *argv[])
         if (bones_to_world_right.size() > 0)
         {
             /* render skinned mesh to fbo, in camera space*/
-            skinnedShaderSimple.use();
-            skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
-            skinnedShaderSimple.setBool("useProjector", false);
-            skinnedShaderSimple.setBool("bake", false);
-            // skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-            skinnedShaderSimple.setInt("src", 0);
+            skinnedShader.use();
+            skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+            skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+            skinnedShader.setBool("useProjector", false);
+            skinnedShader.setBool("bake", false);
+            // skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+            skinnedShader.setInt("src", 0);
             hands_fbo.bind(true);
             glEnable(GL_DEPTH_TEST);
-            rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, nullptr /* dynamicTexture */);
+            rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr /* dynamicTexture */);
             hands_fbo.unbind();
             glDisable(GL_DEPTH_TEST);
             if (bakeRequest)
@@ -714,15 +712,15 @@ int main(int argc, char *argv[])
                 /* hand */
                 glDisable(GL_CULL_FACE);
                 glEnable(GL_DEPTH_TEST);
-                skinnedShaderSimple.use();
-                skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-                skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
-                skinnedShaderSimple.setBool("useProjector", true);
-                skinnedShaderSimple.setBool("bake", true);
-                skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShaderSimple.setInt("src", 0);
+                skinnedShader.use();
+                skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                skinnedShader.setBool("useProjector", true);
+                skinnedShader.setBool("bake", true);
+                skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShader.setInt("src", 0);
                 // dynamicTexture->bind();
-                rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, dynamicTexture);
+                rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
                 /* debug points */
                 // vcolorShader.use();
                 // vcolorShader.setMat4("view", glm::mat4(1.0f));
@@ -770,15 +768,15 @@ int main(int argc, char *argv[])
         if (bones_to_world_left.size() > 0)
         {
             /* render skinned mesh to fbo, in camera space*/
-            skinnedShaderSimple.use();
-            skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-            skinnedShaderSimple.SetWorldTransform(cam_projection_transform * cam_view_transform);
-            skinnedShaderSimple.setBool("useProjector", false);
-            skinnedShaderSimple.setBool("bake", false);
-            skinnedShaderSimple.setInt("src", 0);
+            skinnedShader.use();
+            skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+            skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+            skinnedShader.setBool("useProjector", false);
+            skinnedShader.setBool("bake", false);
+            skinnedShader.setInt("src", 0);
             hands_fbo.bind(bones_to_world_right.size() == 0);
             glEnable(GL_DEPTH_TEST);
-            leftHandModel.Render(skinnedShaderSimple, bones_to_world_left, rotx);
+            leftHandModel.Render(skinnedShader, bones_to_world_left, rotx);
             hands_fbo.unbind();
             glDisable(GL_DEPTH_TEST);
         }
@@ -1065,13 +1063,13 @@ int main(int argc, char *argv[])
                     {
                     case static_cast<int>(TextureMode::ORIGINAL):
                     {
-                        skinnedShaderSimple.use();
-                        skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-                        skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                        skinnedShaderSimple.setBool("useProjector", false);
-                        skinnedShaderSimple.setBool("bake", false);
-                        skinnedShaderSimple.setInt("src", 0);
-                        rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx);
+                        skinnedShader.use();
+                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShader.setBool("useProjector", false);
+                        skinnedShader.setBool("bake", false);
+                        skinnedShader.setInt("src", 0);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx);
                         break;
                     }
                     case static_cast<int>(TextureMode::FROM_FILE):
@@ -1080,25 +1078,25 @@ int main(int argc, char *argv[])
                     }
                     case static_cast<int>(TextureMode::PROJECTIVE):
                     {
-                        skinnedShaderSimple.use();
-                        skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-                        skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                        skinnedShaderSimple.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                        skinnedShaderSimple.setBool("useProjector", true);
-                        skinnedShaderSimple.setBool("bake", false);
-                        skinnedShaderSimple.setInt("src", 0);
-                        rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, dynamicTexture);
+                        skinnedShader.use();
+                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                        skinnedShader.setBool("useProjector", true);
+                        skinnedShader.setBool("bake", false);
+                        skinnedShader.setInt("src", 0);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
                         break;
                     }
                     case static_cast<int>(TextureMode::BAKED):
                     {
-                        skinnedShaderSimple.use();
-                        skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
-                        skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                        skinnedShaderSimple.setBool("useProjector", false);
-                        skinnedShaderSimple.setBool("bake", false);
-                        skinnedShaderSimple.setInt("src", 0);
-                        rightHandModel.Render(skinnedShaderSimple, bones_to_world_right, rotx, false, bakedTexture);
+                        skinnedShader.use();
+                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShader.setBool("useProjector", false);
+                        skinnedShader.setBool("bake", false);
+                        skinnedShader.setInt("src", 0);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bakedTexture);
                         break;
                     }
                     default:
@@ -1133,12 +1131,12 @@ int main(int argc, char *argv[])
                 // draw skinned mesh in 3D
                 {
                     /* without camera texture */
-                    skinnedShaderSimple.use();
-                    skinnedShaderSimple.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShader.use();
+                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                     // glm::mat4 trans = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 20.0f));
-                    skinnedShaderSimple.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                    skinnedShaderSimple.setInt("src", 0);
-                    leftHandModel.Render(skinnedShaderSimple, bones_to_world_left, rotx);
+                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                    skinnedShader.setInt("src", 0);
+                    leftHandModel.Render(skinnedShader, bones_to_world_left, rotx);
                     /* with camera texture */
                     // skinnedShader.use();
                     // skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
