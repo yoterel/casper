@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <random>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -107,6 +108,7 @@ bool showProjector = true;
 Texture *dynamicTexture = nullptr;
 Texture *bakedTexture = nullptr;
 int magic_leap_time_delay = 40000; // us
+int diffuse_seed = 0;
 float magic_leap_scale_factor = 10.0f;
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
@@ -135,6 +137,26 @@ float downscale_factor = 2.0f;
 cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
 cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
 cv::Mat curFrame_gray, prevFrame_gray;
+// cv::Mat curCamImage;
+// std::vector<uint8_t> curCamBuf;
+cv::Mat curCamThresholded;
+std::vector<std::string> animals{
+    "a fish",
+    "an elephant",
+    "a giraffe",
+    "a tiger",
+    "a lion",
+    "a cat",
+    "a dog",
+    "a horse",
+    "a cow",
+    "a sheep",
+    "a pig",
+    "a rabbit",
+    "a squirrel",
+    "a monkey",
+    "a gorilla",
+    "a panda"};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                        {-1.0f, -1.0f},
                                        {1.0f, -1.0f},
@@ -153,7 +175,7 @@ glm::mat4 cam_project;
 std::vector<double> camera_distortion;
 // GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
 FBO hands_fbo(proj_width, proj_height, 4, false);
-FBO debug_fbo(1024, 1024, 4, false);
+FBO bake_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(proj_width, proj_height, 4, false);
 FBO c2p_fbo(proj_width, proj_height, 4, false);
 
@@ -278,7 +300,7 @@ int main(int argc, char *argv[])
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
-    debug_fbo.init();
+    bake_fbo.init();
     postprocess_fbo.init();
     c2p_fbo.init();
     SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights.fbx",
@@ -595,6 +617,8 @@ int main(int argc, char *argv[])
         else
         {
             ptrGrabResult = camera_queue.pop();
+            // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+            // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
             camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
         }
         // buffer = (uint8_t *)pylonImage.GetBuffer();
@@ -627,40 +651,6 @@ int main(int argc, char *argv[])
             // get leap frame
         }
         LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
-        if (poll_mode && false)
-        {
-            if (status == LEAP_STATUS::LEAP_NEWFRAME)
-            {
-                // render frame to texture
-                if (bones_to_world_right.size() > 0)
-                {
-                    /* render skinned mesh to fbo, in camera space*/
-                    skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
-                    // skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                    // skinnedShader.setBool("useProjector", false);
-                    // skinnedShader.setBool("bake", false);
-                    skinnedShader.setInt("src", 0);
-                    hands_fbo.bind();
-                    glEnable(GL_DEPTH_TEST);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx);
-                    hands_fbo.unbind();
-                    glDisable(GL_DEPTH_TEST);
-                }
-            }
-            else
-            {
-                if (status == LEAP_STATUS::LEAP_NONEWFRAME)
-                {
-                    // use optical flow to warp texture
-                    cv::cvtColor(curFrame, curFrame_gray, cv::COLOR_RGBA2GRAY);
-                    cv::resize(curFrame_gray, curFrame_gray, down_size);
-                    cv::calcOpticalFlowFarneback(prevFrame_gray, curFrame_gray, flow, 0.5, 5, 15, 3, 5, 1.2, cv::OPTFLOW_USE_INITIAL_FLOW);
-                    prevFrame_gray = curFrame_gray.clone();
-                }
-            }
-        }
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
@@ -686,18 +676,94 @@ int main(int argc, char *argv[])
             skinnedShader.use();
             skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
             skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
-            skinnedShader.setBool("useProjector", false);
             skinnedShader.setBool("bake", false);
             // skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
             skinnedShader.setInt("src", 0);
             hands_fbo.bind(true);
             glEnable(GL_DEPTH_TEST);
-            rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr /* dynamicTexture */);
+            switch (texture_mode)
+            {
+            case static_cast<int>(TextureMode::ORIGINAL):
+                skinnedShader.setBool("useProjector", false);
+                rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+            case static_cast<int>(TextureMode::BAKED):
+                skinnedShader.setBool("useProjector", false);
+                rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bakedTexture);
+                break;
+            case static_cast<int>(TextureMode::PROJECTIVE):
+                skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShader.setBool("useProjector", true);
+                rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
+                break;
+            default:
+                skinnedShader.setBool("useProjector", false);
+                rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                break;
+            }
             hands_fbo.unbind();
             glDisable(GL_DEPTH_TEST);
             if (bakeRequest)
             {
-                debug_fbo.bind(true);
+                // download camera image to cpu
+                bake_fbo.bind(true);
+                textureShader.use();
+                textureShader.setMat4("view", glm::mat4(1.0f));
+                textureShader.setMat4("projection", glm::mat4(1.0f));
+                textureShader.setMat4("model", glm::mat4(1.0f));
+                textureShader.setBool("isGray", true);
+                textureShader.setBool("flipVer", true);
+                textureShader.setBool("flipHor", true);
+                textureShader.setInt("src", 0);
+                textureShader.setBool("binary", false);
+                camTexture.bind();
+                fullScreenQuad.render();
+                bake_fbo.unbind();
+                // bake_fbo.saveColorToFile("../../resource/camera_image.png");
+                std::vector<uint8_t> buf = bake_fbo.getBuffer(1);
+                // download camera image thresholded to cpu (eww)
+                bake_fbo.bind(true);
+                textureShader.use();
+                textureShader.setMat4("view", glm::mat4(1.0f));
+                textureShader.setMat4("projection", glm::mat4(1.0f));
+                textureShader.setMat4("model", glm::mat4(1.0f));
+                textureShader.setBool("isGray", true);
+                textureShader.setBool("flipVer", true);
+                textureShader.setBool("flipHor", true);
+                textureShader.setFloat("threshold", masking_threshold);
+                textureShader.setInt("src", 0);
+                textureShader.setBool("binary", true);
+                camTexture.bind();
+                fullScreenQuad.render();
+                bake_fbo.unbind();
+                // bake_fbo.saveColorToFile("../../resource/camera_mask.png");
+                std::vector<uint8_t> buf_mask = bake_fbo.getBuffer(1);
+                // send camera image to stable diffusion
+                int outwidth, outheight;
+                // cv::threshold(curCamImage, curCamThresholded, 10, 255, cv::THRESH_BINARY);
+                // cv::imwrite("../../resource/input_image.png", curCamImage);
+                // cv::imwrite("../../resource/input_mask.png", curCamThresholded);
+                // std::vector<uint8_t> tmp;
+                std::vector<std::string> random_animal;
+                std::sample(animals.begin(),
+                            animals.end(),
+                            std::back_inserter(random_animal),
+                            1,
+                            std::mt19937{std::random_device{}()});
+                // "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin"
+                std::vector<uint8_t> img2img_data = Diffuse::img2img(random_animal[0].c_str(),
+                                                                     outwidth, outheight,
+                                                                     buf, buf_mask, diffuse_seed,
+                                                                     1024, 1024, 1,
+                                                                     512, 512, false, false);
+                cv::Mat img2img_result = cv::Mat(outheight, outwidth, CV_8UC3, img2img_data.data());
+                cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
+                cv::imwrite(std::format("../../resource/{}_{}.png", random_animal[0].c_str(), diffuse_seed), img2img_result);
+                if (dynamicTexture != nullptr)
+                    delete dynamicTexture;
+                dynamicTexture = new Texture(GL_TEXTURE_2D);
+                dynamicTexture->init(outwidth, outheight, 3);
+                dynamicTexture->load(img2img_data.data(), true, GL_RGB);
+                bake_fbo.bind(true);
                 /* hand */
                 glDisable(GL_CULL_FACE);
                 glEnable(GL_DEPTH_TEST);
@@ -721,11 +787,11 @@ int main(int argc, char *argv[])
                 // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
                 // PointCloud cloud(points, screen_vert_color);
                 // cloud.render();
-                debug_fbo.unbind();
+                bake_fbo.unbind();
                 glDisable(GL_DEPTH_TEST);
                 glEnable(GL_CULL_FACE);
                 // glDisable(GL_DEPTH_TEST);
-                debug_fbo.saveColorToFile(bakeFile);
+                bake_fbo.saveColorToFile(bakeFile);
                 if (bakedTexture != nullptr)
                 {
                     delete bakedTexture;
@@ -817,8 +883,8 @@ int main(int argc, char *argv[])
         textureShader.setMat4("model", glm::mat4(1.0f));
         textureShader.setBool("flipVer", false);
         textureShader.setBool("flipHor", false);
-        textureShader.setInt("src", 0);
         textureShader.setBool("binary", false);
+        textureShader.setInt("src", 0);
         postprocess_fbo.getTexture()->bind();
         fullScreenQuad.render();
         c2p_fbo.unbind();
@@ -956,7 +1022,7 @@ int main(int argc, char *argv[])
                 //     textureShader.setMat4("model", glm::mat4(1.0f));
                 //     textureShader.setBool("binary", false);
                 //     textureShader.setInt("src", 0);
-                //     debug_fbo.getTexture()->bind();
+                //     bake_fbo.getTexture()->bind();
                 // }
                 // else
                 // {
@@ -1512,6 +1578,7 @@ void openIMGUIFrame()
     ImGui::SameLine();
     ImGui::RadioButton("Baked", &texture_mode, 3);
     // ImGui::Checkbox("Projective Texture", &projectiveTexture);
+    ImGui::InputInt("Diffuse Seed", &diffuse_seed);
     if (ImGui::Button("Bake Projective Texture"))
     {
         bakeRequest = true;

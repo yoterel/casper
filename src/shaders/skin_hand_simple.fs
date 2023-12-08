@@ -17,7 +17,6 @@ struct Material
 };
 uniform Material material;
 uniform sampler2D src;
-uniform bool flipVer = false;
 uniform bool useProjector = false;
 
 void main()
@@ -26,10 +25,6 @@ void main()
     {
         float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
         float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
-        if (flipVer)
-        {
-            v = 1.0 - v;
-        }
         vec3 projColor = texture(src, vec2(u, v)).rgb;
         FragColor = vec4(projColor, 1.0);
     }

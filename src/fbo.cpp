@@ -101,14 +101,17 @@ void FBO::unbind()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void FBO::saveColorToFile(std::string filepath)
+void FBO::saveColorToFile(std::string filepath, bool flip_vertically)
 {
     std::vector<unsigned char> buffer(m_width * m_height * m_channels);
     GLsizei stride = m_channels * m_width;
     this->bind(false);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
     glReadPixels(0, 0, m_width, m_height, this->getTexture()->getActualTextureFormat(), GL_UNSIGNED_BYTE, buffer.data());
-    stbi_flip_vertically_on_write(true);
+    if (flip_vertically)
+        stbi_flip_vertically_on_write(true);
+    else
+        stbi_flip_vertically_on_write(false);
     stbi_write_png(filepath.c_str(), m_width, m_height, m_channels, buffer.data(), stride);
     this->unbind();
 }

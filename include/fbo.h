@@ -14,7 +14,7 @@ public:
     void init(unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
     void bind(bool clear = true);
     void unbind();
-    void saveColorToFile(std::string filepath);
+    void saveColorToFile(std::string filepath, bool flip_vertically = true);
     std::vector<uchar> getBuffer(int n_channels);
     Texture *getTexture() { return &m_texture; };
 

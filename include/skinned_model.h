@@ -133,7 +133,7 @@ public:
     bool LoadMesh(const std::string &Filename);
     void Render(Shader &shader, unsigned int camTex, bool useFBO);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                const glm::mat4 &local_to_world, bool use_bones = false, Texture *customDiffuseTexture = NULL);
+                const glm::mat4 &local_to_world, bool use_bones = false, Texture *customDiffuseTexture = nullptr);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                 const glm::mat4 &local_to_world, unsigned int camTex, bool useFBO = true, bool use_bones = false);
     const Material &GetMaterial();
