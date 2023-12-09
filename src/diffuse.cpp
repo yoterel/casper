@@ -116,7 +116,8 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
                                       int seed,
                                       int width_in, int height_in, int channels_in,
                                       int width_request, int height_request,
-                                      bool inputIsPNGEncoded, bool OpenCVDecode) // if OpenCVDecode output channels will be BGR
+                                      bool inputIsPNGEncoded, bool OpenCVDecode,
+                                      int mask_mode) // if OpenCVDecode output channels will be BGR
 {
     std::string encoded_buffer, encoded_mask_buffer;
     if (inputIsPNGEncoded)
@@ -174,8 +175,8 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
         // {"mask_blur_x", 4},
         // {"mask_blur_y", 4},
         {"mask_blur", 4},
-        {"inpainting_fill", 2},      // masked content - 0: fill, 1: original, 2: latent noise, 3: latent nothing
-        {"inpaint_full_res", false}, // inpaint all, or only inpaint mask
+        {"inpainting_fill", mask_mode}, // masked content - 0: fill, 1: original, 2: latent noise, 3: latent nothing
+        {"inpaint_full_res", false},    // inpaint all, or only inpaint mask
         {"inpaint_full_res_padding", 0},
         {"inpainting_mask_invert", 0},
         {"initial_noise_multiplier", 1},
@@ -216,7 +217,7 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
                                       cv::Mat mask,
                                       int seed,
                                       int width_request, int height_request,
-                                      bool OpenCVDecode) // if OpenCVDecode output channels will be BGR
+                                      bool OpenCVDecode, int mask_mode) // if OpenCVDecode output channels will be BGR
 {
     std::vector<uint8_t> img_buffer, mask_buffer;
     cv::imencode(".png", img, img_buffer);
@@ -227,7 +228,7 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
                    mask_buffer, seed,
                    img.cols, img.rows, img.channels(),
                    width_request, height_request,
-                   true, OpenCVDecode);
+                   true, OpenCVDecode, mask_mode);
 }
 
 std::vector<uint8_t> Diffuse::decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV)

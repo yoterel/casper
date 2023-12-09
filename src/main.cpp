@@ -118,9 +118,11 @@ int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
 int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+int sd_mask_mode = 2;
 bool useCoaxialCalib = true;
 bool showCamera = true;
 bool showProjector = true;
+bool saveIntermed = false;
 Texture *dynamicTexture = nullptr;
 Texture *bakedTexture = nullptr;
 int magic_leap_time_delay = 40000; // us
@@ -735,7 +737,8 @@ int main(int argc, char *argv[])
                 camTexture.bind();
                 fullScreenQuad.render();
                 bake_fbo.unbind();
-                // bake_fbo.saveColorToFile("../../resource/camera_image.png", false);
+                if (saveIntermed)
+                    bake_fbo.saveColorToFile("../../resource/camera_image.png", false);
                 std::vector<uint8_t> buf = bake_fbo.getBuffer(1);
                 // cv::Mat test = cv::Mat(1024, 1024, CV_8UC1, buf.data());
                 // cv::imwrite("../../resource/camera_image1.png", test);
@@ -754,7 +757,8 @@ int main(int argc, char *argv[])
                 camTexture.bind();
                 fullScreenQuad.render();
                 bake_fbo.unbind();
-                // bake_fbo.saveColorToFile("../../resource/camera_mask.png", false);
+                if (saveIntermed)
+                    bake_fbo.saveColorToFile("../../resource/camera_mask.png", false);
                 std::vector<uint8_t> buf_mask = bake_fbo.getBuffer(1);
                 // send camera image to stable diffusion
                 int outwidth, outheight;
@@ -785,10 +789,13 @@ int main(int argc, char *argv[])
                                                                      outwidth, outheight,
                                                                      buf, buf_mask, diffuse_seed,
                                                                      1024, 1024, 1,
-                                                                     512, 512, false, false);
-                // cv::Mat img2img_result = cv::Mat(outheight, outwidth, CV_8UC3, img2img_data.data());
-                // cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
-                // cv::imwrite(std::format("../../resource/{}_{}.png", random_animal[0].c_str(), diffuse_seed), img2img_result);
+                                                                     512, 512, false, false, sd_mask_mode);
+                if (saveIntermed)
+                {
+                    cv::Mat img2img_result = cv::Mat(outheight, outwidth, CV_8UC3, img2img_data.data()).clone();
+                    cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
+                    cv::imwrite("../../resource/sd_result.png", img2img_result);
+                }
                 if (dynamicTexture != nullptr)
                     delete dynamicTexture;
                 dynamicTexture = new Texture(GL_TEXTURE_2D);
@@ -1663,7 +1670,7 @@ void openIMGUIFrame()
             }
             ImGui::TreePop();
         }
-        if (ImGui::TreeNode("Hands Material"))
+        if (ImGui::TreeNode("Material"))
         {
             ImGui::Text("Material Type");
             ImGui::RadioButton("Diffuse", &material_mode, 0);
@@ -1690,6 +1697,8 @@ void openIMGUIFrame()
             {
                 bakeRequest = true;
             }
+            ImGui::SameLine();
+            ImGui::Checkbox("Save Intermediate Outputs", &saveIntermed);
             ImGui::InputText("Baked Texture File", &bakeFile);
             ImGui::InputText("Prompt", &sd_prompt);
             ImGui::Text("Stable Diffusion Mode");
@@ -1699,6 +1708,15 @@ void openIMGUIFrame()
             ImGui::RadioButton("Random Animal", &sd_mode, 1);
             ImGui::SameLine();
             ImGui::RadioButton("Gesture", &sd_mode, 2);
+            ImGui::Text("Mask Mode");
+            ImGui::SameLine();
+            ImGui::RadioButton("Fill", &sd_mask_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Original", &sd_mask_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Latent Noise", &sd_mask_mode, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("Latent Nothing", &sd_mask_mode, 3);
             ImGui::TreePop();
         }
         if (ImGui::TreeNode("Post Process"))
