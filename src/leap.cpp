@@ -31,6 +31,11 @@ LeapConnect::~LeapConnect()
     kill();
 }
 
+void LeapConnect::setPollMode(bool pollMode)
+{
+    m_poll = pollMode;
+}
+
 /** Called by serviceMessageLoop() when a connection event is returned by LeapPollConnection(). */
 void LeapConnect::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event)
 {

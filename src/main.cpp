@@ -50,7 +50,7 @@ void process_input(GLFWwindow *window);
 LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
-                         std::vector<glm::vec3> &skeleton_vertices, bool poll_mode, int64_t &lastFrameID);
+                         std::vector<glm::vec3> &skeleton_vertices, bool leap_poll_mode, int64_t &lastFrameID);
 void initGLBuffers(unsigned int *pbo);
 bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                             std::vector<double> &camera_distortion,
@@ -98,7 +98,7 @@ bool simulated_camera = false;
 bool use_pbo = true;
 bool use_projector = true;
 bool use_screen = true;
-bool poll_mode = false;
+bool leap_poll_mode = false;
 bool cam_color_mode = false;
 int use_leap_calib_results = static_cast<int>(CalibrationMode::USER);
 std::string testFile("../../resource/uv.png");
@@ -196,6 +196,7 @@ FBO hands_fbo(proj_width, proj_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(proj_width, proj_height, 4, false);
 FBO c2p_fbo(proj_width, proj_height, 4, false);
+LeapConnect leap(leap_poll_mode);
 
 int main(int argc, char *argv[])
 {
@@ -238,7 +239,8 @@ int main(int argc, char *argv[])
     if (checkCmdLineFlag(argc, (const char **)argv, "leap_poll"))
     {
         std::cout << "Leap poll mode is on" << std::endl;
-        poll_mode = true;
+        leap_poll_mode = true;
+        leap.setPollMode(leap_poll_mode);
     }
     if (checkCmdLineFlag(argc, (const char **)argv, "cam_color"))
     {
@@ -442,7 +444,6 @@ int main(int argc, char *argv[])
             std::cerr << "Failed to initialize projector\n";
         }
     }
-    LeapConnect leap(poll_mode);
     LEAP_CLOCK_REBASER clockSynchronizer;
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer;
@@ -570,7 +571,7 @@ int main(int argc, char *argv[])
         currentAppTime = t_app.getElapsedTimeInSec(); // glfwGetTime();
         deltaTime = static_cast<float>(currentAppTime - previousAppTime);
         previousAppTime = currentAppTime;
-        if (!poll_mode)
+        if (!leap_poll_mode)
         {
             std::modf(currentAppTime, &whole);
             LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
@@ -661,14 +662,14 @@ int main(int argc, char *argv[])
 
         /* deal with leap input */
         t_leap.start();
-        if (!poll_mode)
+        if (!leap_poll_mode)
         {
             // sync leap clock
             std::modf(glfwGetTime(), &whole);
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
             // get leap frame
         }
-        LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, poll_mode, lastFrameID);
+        LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
@@ -1736,6 +1737,10 @@ void openIMGUIFrame()
         }
         if (ImGui::TreeNode("Leap Control"))
         {
+            if (ImGui::Checkbox("Leap Polling Mode", &leap_poll_mode))
+            {
+                leap.setPollMode(leap_poll_mode);
+            }
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
             ImGui::TreePop();
@@ -1914,7 +1919,7 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &skeleton_vertices,
-                         bool poll_mode,
+                         bool leap_poll_mode,
                          int64_t &lastFrameID)
 {
     // some defs
@@ -1935,7 +1940,7 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     glm::mat4 scalar = glm::scale(glm::mat4(1.0f), glm::vec3(magic_leap_scale_factor));
     uint64_t targetFrameSize = 0;
     LEAP_TRACKING_EVENT *frame = nullptr;
-    if (poll_mode)
+    if (leap_poll_mode)
     {
         frame = leap.getFrame();
         if (frame != NULL && (frame->tracking_frame_id > lastFrameID))
@@ -2048,7 +2053,7 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
             bones_to_world_left = bones_to_world;
     }
     // Free the allocated buffer when done.
-    if (poll_mode)
+    if (leap_poll_mode)
         free(frame->pHands);
     free(frame);
     return LEAP_STATUS::LEAP_NEWFRAME;

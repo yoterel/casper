@@ -17,11 +17,11 @@ SkinningShader::SkinningShader(const std::string &vertexPath, const std::string 
     // NumPointLightsLocation = GetUniformLocation("gNumPointLights");
     // NumSpotLightsLocation = GetUniformLocation("gNumSpotLights");
     displayBoneIndexLocation = GetUniformLocation("gDisplayBoneIndex");
-    if (displayBoneIndexLocation == INVALID_UNIFORM_LOCATION)
-    {
-        std::cout << "Error: displayBoneIndexLocation is invalid" << std::endl;
-        exit(0);
-    }
+    // if (displayBoneIndexLocation == INVALID_UNIFORM_LOCATION)
+    // {
+    //     std::cout << "Error: displayBoneIndexLocation is invalid" << std::endl;
+    //     exit(0);
+    // }
     // for (unsigned int i = 0 ; i < sizeof(PointLightsLocation)/sizeof(PointLightsLocation[0]) ; i++) {
     //     char Name[128];
     //     memset(Name, 0, sizeof(Name));
