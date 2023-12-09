@@ -44,6 +44,7 @@ public:
     void setFrame(const LEAP_TRACKING_EVENT *frame);
     LEAP_TRACKING_EVENT *getFrame();
     void setImage(const LEAP_IMAGE_EVENT *imageEvent);
+    void setPollMode(bool pollMode);
     bool getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height);
     bool getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height);
     // std::vector<float> getFrame();
