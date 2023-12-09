@@ -18,13 +18,17 @@ struct Material
 uniform Material material;
 uniform sampler2D src;
 uniform bool useProjector = false;
-
+uniform bool flipTexVertically = false;
 void main()
 {
     if (useProjector)
     {
         float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
         float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
+        if (flipTexVertically)
+        {
+            v = 1.0 - v;
+        }
         vec3 projColor = texture(src, vec2(u, v)).rgb;
         FragColor = vec4(projColor, 1.0);
     }

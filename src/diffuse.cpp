@@ -246,6 +246,7 @@ std::vector<uint8_t> Diffuse::decode_png(const std::string &png_data, int &width
     else
     {
         int response_bpp;
+        stbi_set_flip_vertically_on_load(0);
         uint8_t *tmp = stbi_load_from_memory(reinterpret_cast<const unsigned char *>(png_data.c_str()),
                                              png_data.size(), &width, &height, &response_bpp, NULL);
         // cv::Mat img2img_mat = cv::imdecode(img2img_data, cv::IMREAD_UNCHANGED); // todo which decoding is faster?
@@ -261,6 +262,7 @@ std::vector<uint8_t> Diffuse::decode_png(const std::string &png_data, int &width
 std::vector<uint8_t> Diffuse::encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels)
 {
     int out_len;
+    stbi_flip_vertically_on_write(false);
     uint8_t *png = stbi_write_png_to_mem(raw_data.data(), channels * width, width, height, channels, &out_len);
     std::vector<uint8_t> data(png, png + out_len);
     return data;
