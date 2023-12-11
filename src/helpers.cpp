@@ -7,7 +7,7 @@ glm::vec2 Helpers::ScreenToNDC(const glm::vec2 &pixel, int width, int height, bo
 {
     glm::vec2 uv;
     uv.x = (2.0f * pixel.x / width) - 1.0f;
-    uv.y = ((2.0f * pixel.y / height) - 1.0f);
+    uv.y = (2.0f * pixel.y / height) - 1.0f;
     if (flip_y)
     {
         uv.y *= -1.0f;
