@@ -129,6 +129,10 @@ void DynaFlashProjector::gracefully_close()
 {
 	if (initialized)
 	{
+		/* first set flag and sleep (let other threads finish) */
+		// todo protect shared projector buffer with mutex instead
+		initialized = false;
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 		/* stop projection */
 		pDynaFlash->Stop();
 
@@ -143,7 +147,6 @@ void DynaFlashProjector::gracefully_close()
 
 		/* release instance of DynaFlash class */
 		ReleaseDynaFlash(&pDynaFlash);
-		initialized = false;
 		std::cout << "dynaflash killed." << std::endl;
 	}
 }
