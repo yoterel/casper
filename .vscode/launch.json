@@ -13,7 +13,7 @@
                 "-download_pbo",
                 "-cam_free",
                 "-leap_poll",
-                "-proj_off",
+                // "-proj_off",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build//Debug",
