@@ -1989,8 +1989,7 @@ void openIMGUIFrame()
                     const float *pSource = (const float *)glm::value_ptr(w2c);
                     std::vector<float> w2c_vec(pSource, pSource + 16);
                     cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c_user.npy", w2c_vec.data(), {4, 4}, "w");
-                    // ImGui::SameLine();
-                    // ImGui::Text("saved extrinsics !");
+                    w2c_user = w2c;
                 }
                 break;
             }
@@ -2574,7 +2573,7 @@ void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCa
     else
         w2c = w2c_user;
     glm::mat4 w2p = w2c;
-    std::cout << "Using calibration data for camera and projector settings" << std::endl;
+    // std::cout << "Using calibration data for camera and projector settings" << std::endl;
     if (freecam_mode)
     {
         // gl_flycamera = GLCamera(w2vc, proj_project, Camera_Mode::FREE_CAMERA);
