@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
+// #include <glm/glm.hpp>
 // #define WINDOWS_LEAN_AND_MEAN
 // #define NOMINMAX
 // #include <windows.h>
@@ -45,10 +46,17 @@ public:
     LEAP_TRACKING_EVENT *getFrame();
     void setImage(const LEAP_IMAGE_EVENT *imageEvent);
     void setPollMode(bool pollMode);
+    void setImageMode(bool imageMode);
     bool getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height);
     bool getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height);
     // std::vector<float> getFrame();
     std::vector<float> getIndexTip();
+    // glm::vec3 triangulate(const glm::vec2 &leap1,
+    //                       const glm::vec2 &leap2,
+    //                       const int leap_width, const int leap_height);
+    // std::vector<glm::vec3> triangulate(const std::vector<glm::vec2> &leap1,
+    //                                    const std::vector<glm::vec2> &leap2,
+    //                                    const int leap_width, const int leap_height);
     bool IsConnected = false;
 
 private:

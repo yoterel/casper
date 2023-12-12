@@ -36,6 +36,14 @@ void LeapConnect::setPollMode(bool pollMode)
     m_poll = pollMode;
 }
 
+void LeapConnect::setImageMode(bool imageMode)
+{
+    if (imageMode)
+        LeapSetPolicyFlags(connectionHandle, eLeapPolicyFlag_Images, 0);
+    else
+        LeapSetPolicyFlags(connectionHandle, 0, eLeapPolicyFlag_Images);
+}
+
 /** Called by serviceMessageLoop() when a connection event is returned by LeapPollConnection(). */
 void LeapConnect::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event)
 {
@@ -473,6 +481,103 @@ std::vector<float> LeapConnect::getIndexTip()
     }
     return tip;
 }
+
+// glm::vec3 LeapConnect::triangulate(const glm::vec2 &leap1,
+//                                    const glm::vec2 &leap2,
+//                                    const int leap_width, const int leap_height)
+// {
+//     // leap image plane is x right, and y up like opengl...
+//     glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1, leap_width, leap_height, false);
+//     LEAP_VECTOR l1_vert_leap = {l1_vert.x, l1_vert.y, 1.0f};
+//     glm::vec2 l2_vert = Helpers::NDCtoScreen(leap2, leap_width, leap_height, false);
+//     LEAP_VECTOR l2_vert_leap = {l2_vert.x, l2_vert.y, 1.0f};
+//     LEAP_VECTOR leap1_rays_2d = LeapPixelToRectilinear(*getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_vert_leap);
+//     LEAP_VECTOR leap2_rays_2d = LeapPixelToRectilinear(*getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_vert_leap);
+//     // glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
+//     // glm::mat4 leap2_extrinsic = glm::mat4(1.0f);
+//     // LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, glm::value_ptr(leap1_extrinsic));
+//     // LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, glm::value_ptr(leap2_extrinsic));
+//     float baseline = 40.0f;
+//     // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
+//     float z = baseline / (leap2_rays_2d.x - leap1_rays_2d.x);
+//     float alty1 = z * leap2_rays_2d.y;
+//     float alty2 = z * leap1_rays_2d.y;
+//     float x = z * leap2_rays_2d.x - baseline / 2.0f;
+//     // float altx = z * leap1_rays_2d.x + baseline / 2.0f;
+//     float y = (alty1 + alty2) / 2.0f;
+//     glm::vec3 point_3d = glm::vec3(x, -z, y);
+//     return point_3d;
+// }
+// std::vector<glm::vec3> LeapConnect::triangulate(const std::vector<glm::vec2> &leap1,
+//                                                 const std::vector<glm::vec2> &leap2,
+//                                                 const int leap_width, const int leap_height)
+// {
+//     // extract 3d points from leap1_verts and leap2_verts
+//     // first get rays from the leap camera corrected for distortion, in 2D camera space
+//     if (leap1.size() != leap2.size())
+//     {
+//         std::cout << "leap1 and leap2 must be the same size" << std::endl;
+//         exit(1);
+//     }
+//     std::vector<LEAP_VECTOR> leap1_rays_2d, leap2_rays_2d;
+//     for (int i = 0; i < leap1.size(); i++)
+//     {
+//         glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1[i], leap_width, leap_height, false);
+//         LEAP_VECTOR l1_vert_leap = {l1_vert.x, l1_vert.y, 1.0f};
+//         glm::vec2 l2_vert = Helpers::NDCtoScreen(leap2[i], leap_width, leap_height, false);
+//         LEAP_VECTOR l2_vert_leap = {l2_vert.x, l2_vert.y, 1.0f};
+//         // LEAP_VECTOR l1_verts = {leap_width * (leap1_verts[i].x + 1) / 2, leap_height * (leap1_verts[i].y + 1) / 2, 1.0f};
+//         // LEAP_VECTOR l2_verts = {leap_width * (leap2_verts[i].x + 1) / 2, leap_height * (leap2_verts[i].y + 1) / 2, 1.0f};
+//         LEAP_VECTOR l1_ray = LeapPixelToRectilinear(*getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_vert_leap);
+//         leap1_rays_2d.push_back(l1_ray);
+//         LEAP_VECTOR l2_ray = LeapPixelToRectilinear(*getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_vert_leap);
+//         leap2_rays_2d.push_back(l2_ray);
+//     }
+//     // second convert rays to 3D leap space using the extrinsics matrix
+//     glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
+//     glm::mat4 leap2_extrinsic = glm::mat4(1.0f);
+//     LeapExtrinsicCameraMatrix(*getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, glm::value_ptr(leap1_extrinsic));
+//     LeapExtrinsicCameraMatrix(*getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, glm::value_ptr(leap2_extrinsic));
+//     /*
+//     std::vector<cv::Point3f> leap1_ray_dirs_3d, leap2_ray_dirs_3d;
+//     cv::Point3f leap1_origin = {leap1_extrinsic[3][0], leap1_extrinsic[3][1], leap1_extrinsic[3][2]};
+//     cv::Point3f leap2_origin = {leap2_extrinsic[3][0], leap2_extrinsic[3][1], leap2_extrinsic[3][2]};
+//     for (int i = 0; i < leap1_verts.size(); i++)
+//     {
+//         glm::vec4 leap1_ray_3d = glm::inverse(leap1_extrinsic) * glm::vec4(leap1_rays_2d[i].x, leap1_rays_2d[i].y, leap1_rays_2d[i].z, 1.0f);
+//         leap1_ray_3d.x /= leap1_ray_3d.z;
+//         leap1_ray_3d.y /= leap1_ray_3d.z;
+//         leap1_ray_dirs_3d.push_back(cv::Point3f(leap1_ray_3d.x, leap1_ray_3d.y, 1.0f));
+//         glm::vec4 leap2_ray_3d = glm::inverse(leap2_extrinsic) * glm::vec4(leap2_rays_2d[i].x, leap2_rays_2d[i].y, leap2_rays_2d[i].z, 1.0f);
+//         leap2_ray_3d.x /= leap2_ray_3d.z;
+//         leap2_ray_3d.y /= leap2_ray_3d.z;
+//         leap2_ray_dirs_3d.push_back(cv::Point3f(leap2_ray_3d.x, leap2_ray_3d.y, 1.0f));
+//     }
+//     // triangulate the 3D rays to get the 3D points
+//     for (int i = 0; i < leap2_ray_dirs_3d.size(); i++)
+//     {
+//         cv::Point3f point = approximate_ray_intersection(leap1_ray_dirs_3d[i], leap1_origin, leap2_ray_dirs_3d[i], leap2_origin, NULL, NULL, NULL);
+//         object_points.push_back(point);
+//     }
+//     */
+//     std::vector<glm::vec3> points;
+//     float baseline = leap2_extrinsic[3][0] - leap1_extrinsic[3][0];
+//     for (int i = 0; i < leap1_rays_2d.size(); i++)
+//     {
+//         // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
+//         float z = baseline / (leap2_rays_2d[i].x - leap1_rays_2d[i].x);
+//         float alty1 = z * -leap2_rays_2d[i].y; // reason for negative is that the y direction is flipped in openGL
+//         float alty2 = z * -leap1_rays_2d[i].y; // reason for negative is that the y direction is flipped in openGL
+//         float x = z * leap2_rays_2d[i].x - baseline / 2.0f;
+//         float altx = z * leap1_rays_2d[i].x + baseline / 2.0f;
+//         float y = (alty1 + alty2) / 2.0f;
+//         points.push_back(glm::vec3(x, -z, y));
+//         // obj_to_save.push_back(x);
+//         // obj_to_save.push_back(-z);
+//         // obj_to_save.push_back(y);
+//     }
+//     return points;
+// }
 
 // std::vector<float> LeapConnect::getFrame()
 // {
