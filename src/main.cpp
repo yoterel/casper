@@ -678,15 +678,20 @@ int main(int argc, char *argv[])
         // else
         // {
         // std::cout << "before: " << camera_queue.size_approx() << std::endl;
-        camera_queue.wait_dequeue(ptrGrabResult);
+        camera_queue.wait_dequeue_latest(ptrGrabResult);
+        // camera_queue.wait_dequeue(ptrGrabResult);
         // std::cout << "after: " << camera_queue.size_approx() << std::endl;
         // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
         // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
-        camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+
         if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
         {
             camImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
             cv::flip(camImage, camImage, 1);
+        }
+        else
+        {
+            camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
         }
         // }
         // buffer = (uint8_t *)pylonImage.GetBuffer();
@@ -711,17 +716,20 @@ int main(int argc, char *argv[])
 
         /* deal with leap input */
         t_leap.start();
-        if (!leap_poll_mode)
+        if (calib_mode != static_cast<int>(CalibrationMode::LEAP))
         {
-            // sync leap clock
-            std::modf(glfwGetTime(), &whole);
-            LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-            // get leap frame
+            if (!leap_poll_mode)
+            {
+                // sync leap clock
+                std::modf(glfwGetTime(), &whole);
+                LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+                // get leap frame
+            }
+            LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
+            // bones_to_world_left.clear();
+            // bones_to_world_right.clear();
+            // skeleton_vertices.clear();
         }
-        LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
-        // bones_to_world_left.clear();
-        // bones_to_world_right.clear();
-        // skeleton_vertices.clear();
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
@@ -1937,6 +1945,24 @@ void openIMGUIFrame()
             {
             case 0:
             {
+                ImGui::Text("Cam2World (row major, OpenGL convention)");
+                if (ImGui::BeginTable("Cam2World", 4))
+                {
+                    glm::mat4 c2w = glm::transpose(glm::inverse(gl_camera.getViewMatrix()));
+                    for (int row = 0; row < 4; row++)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f", c2w[row][0]);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f", c2w[row][1]);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f", c2w[row][2]);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f", c2w[row][3]);
+                    }
+                    ImGui::EndTable();
+                }
                 if (ImGui::Button("Save Extrinsics"))
                 {
                     glm::mat4 w2c = gl_camera.getViewMatrix();
@@ -2279,7 +2305,7 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     cnpy::NpyArray w2c_user_npy, w2c_auto_npy;
     cnpy::npz_t projcam_npz;
     cnpy::npz_t cam_npz;
-    bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
+    // bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
     try
     {
 
@@ -2287,7 +2313,7 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
         const fs::path auto_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
         if (fs::exists(user_path))
         {
-            user_defined = true;
+            // user_defined = true;
             w2c_user_npy = cnpy::npy_load(user_path.string());
         }
         else
@@ -2296,7 +2322,7 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
         }
         if (fs::exists(auto_path))
         {
-            user_defined = false;
+            // user_defined = false;
             w2c_auto_npy = cnpy::npy_load(auto_path.string());
         }
         else
@@ -2311,11 +2337,11 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
         std::cout << e.what() << std::endl;
         return false;
     }
-    w2c_auto = glm::make_mat4(w2c_auto_npy.data<double>());
-    glm::mat4 c2w_auto = glm::inverse(w2c_auto);
-    c2w_auto = flipYZ * c2w_auto; // flip y and z columns (corresponding to camera directions)
-    w2c_auto = glm::inverse(c2w_auto);
-    w2c_auto = glm::transpose(w2c_auto);
+    w2c_auto = glm::make_mat4(w2c_auto_npy.data<float>());
+    // glm::mat4 c2w_auto = glm::inverse(w2c_auto);
+    // c2w_auto = flipYZ * c2w_auto; // flip y and z columns (corresponding to camera directions)
+    // w2c_auto = glm::inverse(c2w_auto);
+    // w2c_auto = glm::transpose(w2c_auto);
     w2c_user = glm::make_mat4(w2c_user_npy.data<float>());
     // w2c = glm::inverse(w2c);
 
