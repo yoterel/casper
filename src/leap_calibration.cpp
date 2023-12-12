@@ -267,17 +267,20 @@ int main(int argc, char *argv[])
         {
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
-            // std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
+            std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
             // std::cout << "total app: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
+            frameCount = 0;
+            previousSecondAppTime = currentAppTime;
         }
         /* deal with user input */
         processInput(window);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         /* deal with camera input */
-        camera_queue.wait_dequeue(ptrGrabResult);
-        cur_cam_image = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer());
-        cv::flip(cur_cam_image, cur_cam_image, 1);
-        cur_image_copy = cur_cam_image.clone();
+        int test = camera_queue.wait_dequeue_latest(ptrGrabResult);
+        std::cout << "test: " << test << std::endl;
+        cur_cam_image = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+        cv::flip(cur_cam_image, cur_image_copy, 1);
+        // cur_image_copy = cur_cam_image.clone();
         // camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
         switch (state_machine)
         {
@@ -424,7 +427,18 @@ int main(int argc, char *argv[])
                 cv::Mat c2w = w2c.inv();
                 std::cout << "c2w: " << c2w << std::endl;
                 std::vector<double> w2c_vec(w2c.begin<double>(), w2c.end<double>());
-                cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
+
+                glm::mat4 flipYZ = glm::mat4(1.0f);
+                flipYZ[1][1] = -1.0f;
+                flipYZ[2][2] = -1.0f;
+                glm::mat4 w2c_glm = glm::make_mat4(w2c_vec.data());
+                glm::mat4 c2w_auto = glm::inverse(w2c_glm);
+                c2w_auto = flipYZ * c2w_auto; // flip y and z columns (corresponding to camera directions)
+                w2c_glm = glm::inverse(c2w_auto);
+                w2c_glm = glm::transpose(w2c_glm);
+                float *raw_pointer = glm::value_ptr(w2c_glm);
+                std::vector<float> w2c_flat(raw_pointer, raw_pointer + 16);
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_flat.data(), {4, 4}, "w");
             }
             // cur_corner_pts.clear();
             // bool success = cv::findChessboardCorners(cur_cam_image, cv::Size(CHECKERBOARD[0], CHECKERBOARD[1]), cur_corner_pts, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
