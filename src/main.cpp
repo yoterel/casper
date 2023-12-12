@@ -43,6 +43,8 @@ namespace fs = std::filesystem;
 // forward declarations
 void openIMGUIFrame();
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
+glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
+bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
@@ -53,11 +55,11 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &skeleton_vertices, bool leap_poll_mode, int64_t &lastFrameID);
 void initGLBuffers(unsigned int *pbo);
-bool loadCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
-                            std::vector<double> &camera_distortion,
-                            glm::mat4 &w2c_auto,
-                            glm::mat4 &w2c_user,
-                            std::vector<glm::vec2> &cur_screen_verts);
+bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
+                                std::vector<double> &camera_distortion,
+                                glm::mat4 &w2c_auto,
+                                glm::mat4 &w2c_user);
+bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
 enum class TextureMode
@@ -82,11 +84,12 @@ enum class MaterialMode
 enum class PostProcessMode
 {
     NONE = 0,
-    MASK = 1,
-    JUMP_FLOOD = 2,
-    OF = 3,
+    CAM_FEED = 1,
+    MASK = 2,
+    JUMP_FLOOD = 3,
+    OF = 4,
 };
-enum class CalibrationSettings
+enum class LeapCalibrationSettings
 {
     AUTO = 0,
     USER = 1,
@@ -104,11 +107,13 @@ bool freecam_mode = false;
 bool use_cuda = false;
 bool simulated_camera = false;
 bool use_pbo = true;
-bool use_projector = true;
+bool use_projector = false;
 bool use_screen = true;
 bool leap_poll_mode = false;
 bool cam_color_mode = false;
-int use_leap_calib_results = static_cast<int>(CalibrationSettings::USER);
+bool ready_to_calibrate = false;
+bool leap_calibration_collecting = true;
+int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
 std::string testFile("../../resource/uv.png");
 std::string bakeFile("../../resource/baked.png");
@@ -119,9 +124,12 @@ const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
 const unsigned int cam_height = 540;
+uint32_t leap_width = 640;
+uint32_t leap_height = 240;
 unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f;
+int leap_calib_n_points = 500;
 // global state
 int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
@@ -188,6 +196,8 @@ std::vector<std::string> animals{
     "a monkey",
     "a gorilla",
     "a panda"};
+std::vector<glm::vec3> points_3d;
+std::vector<glm::vec2> points_2d;
 std::vector<glm::vec3> screen_verts_color = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                        {-1.0f, -1.0f},
@@ -197,10 +207,6 @@ std::vector<glm::vec2> cur_screen_verts = {{-1.0f, 1.0f},
                                            {-1.0f, -1.0f},
                                            {1.0f, -1.0f},
                                            {1.0f, 1.0f}};
-std::vector<glm::vec2> calib_screen_verts = {{-1.0801f, 1.0859f},
-                                             {-0.9687, -0.9844},
-                                             {0.7949, -0.9714f},
-                                             {0.8887, 0.8724}};
 // GLCamera gl_projector(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
 GLCamera gl_flycamera;
 GLCamera gl_projector;
@@ -246,10 +252,10 @@ int main(int argc, char *argv[])
         std::cout << "Using PBO for async unpacking" << std::endl;
         use_pbo = true;
     }
-    if (checkCmdLineFlag(argc, (const char **)argv, "proj_off"))
+    if (checkCmdLineFlag(argc, (const char **)argv, "proj_on"))
     {
-        std::cout << "Projector will not be used" << std::endl;
-        use_projector = false;
+        std::cout << "Projector will be used" << std::endl;
+        use_projector = true;
     }
     if (checkCmdLineFlag(argc, (const char **)argv, "no_screen"))
     {
@@ -443,10 +449,10 @@ int main(int argc, char *argv[])
     uint8_t *colorBuffer = new uint8_t[projected_image_size];
     CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
+    cv::Mat camImage;
     Texture flowTexture = Texture();
-    std::string path("../../resource/uv2.jpg");
-    Texture testTexture(path.c_str(), GL_TEXTURE_2D);
-    testTexture.init();
+    Texture displayTexture = Texture();
+    displayTexture.init(cam_width, cam_height, n_cam_channels);
     camTexture.init(cam_width, cam_height, n_cam_channels);
     flowTexture.init(cam_width, cam_height, 2);
     // uint32_t cam_height = 0;
@@ -462,6 +468,7 @@ int main(int argc, char *argv[])
         if (!projector.init())
         {
             std::cerr << "Failed to initialize projector\n";
+            use_projector = false;
         }
     }
     LEAP_CLOCK_REBASER clockSynchronizer;
@@ -469,7 +476,7 @@ int main(int argc, char *argv[])
     std::thread producer, consumer;
     // load calibration results if they exist
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    if (loadCalibrationResults(proj_project, cam_project, camera_distortion, w2c_auto, w2c_user, cur_screen_verts))
+    if (loadLeapCalibrationResults(proj_project, cam_project, camera_distortion, w2c_auto, w2c_user))
     {
         create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
     }
@@ -489,6 +496,7 @@ int main(int argc, char *argv[])
                                 glm::vec3(0.0f, 1.0f, 0.0f),
                                 camera_mode, proj_width, proj_height, 1500.0f, 50.0f);
     }
+    loadCoaxialCalibrationResults(cur_screen_verts);
     c2p_homography = PostProcess::findHomography(cur_screen_verts);
     std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
                                            {-1.0f, -1.0f, 1.0f},
@@ -521,7 +529,7 @@ int main(int argc, char *argv[])
         std::cout << "Using real camera to produce images" << std::endl;
         projector.show();
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        // camera.balance_white();
+        camera.balance_white();
         camera.acquire();
     }
     else
@@ -610,7 +618,7 @@ int main(int argc, char *argv[])
             std::cout << "cam: " << t_camera.averageLapInMilliSec() << std::endl;
             std::cout << "leap: " << t_leap.averageLapInMilliSec() << std::endl;
             std::cout << "skinning: " << t_skin.averageLapInMilliSec() << std::endl;
-            std::cout << "debug info: " << t_debug.averageLapInMilliSec() << std::endl;
+            std::cout << "debug: " << t_debug.averageLapInMilliSec() << std::endl;
             std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
             std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
             std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
@@ -671,7 +679,12 @@ int main(int argc, char *argv[])
             ptrGrabResult = camera_queue.pop();
             // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
             // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
-            camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+            // camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+            if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
+            {
+                camImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                cv::flip(camImage, camImage, 1);
+            }
         }
         // buffer = (uint8_t *)pylonImage.GetBuffer();
         // curFrame = tmp.clone();
@@ -703,6 +716,9 @@ int main(int argc, char *argv[])
             // get leap frame
         }
         LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
+        // bones_to_world_left.clear();
+        // bones_to_world_right.clear();
+        // skeleton_vertices.clear();
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
@@ -933,6 +949,23 @@ int main(int argc, char *argv[])
                 postprocess_fbo.unbind();
                 break;
             }
+            case static_cast<int>(PostProcessMode::CAM_FEED):
+            {
+                postprocess_fbo.bind();
+                camTexture.bind();
+                textureShader.use();
+                textureShader.setInt("src", 0);
+                textureShader.setBool("flipVer", true);
+                textureShader.setBool("flipHor", true);
+                textureShader.setMat4("projection", glm::mat4(1.0f));
+                textureShader.setBool("isGray", true);
+                textureShader.setBool("binary", true);
+                textureShader.setMat4("view", glm::mat4(1.0f));
+                textureShader.setMat4("model", glm::mat4(1.0f));
+                fullScreenQuad.render();
+                postprocess_fbo.unbind();
+                break;
+            }
             case static_cast<int>(PostProcessMode::MASK):
             {
                 postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
@@ -1046,6 +1079,162 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(CalibrationMode::LEAP):
         {
+            if (leap_calibration_collecting)
+            {
+                // render camera image as binary, and centroid as red dot
+                cv::Mat thr;
+                cv::threshold(camImage, thr, 250, 255, cv::THRESH_BINARY);
+                glm::vec2 center, center_leap1, center_leap2;
+                if (extract_centroid(thr, center))
+                {
+                    displayTexture.load((uint8_t *)thr.data, true, cam_buffer_format);
+                    textureShader.use();
+                    textureShader.setMat4("view", glm::mat4(1.0f));
+                    textureShader.setMat4("projection", glm::mat4(1.0f));
+                    textureShader.setMat4("model", glm::mat4(1.0f));
+                    textureShader.setBool("flipHor", false);
+                    textureShader.setBool("flipVer", true);
+                    textureShader.setBool("binary", false);
+                    textureShader.setBool("isGray", true);
+                    textureShader.setInt("src", 0);
+                    displayTexture.bind();
+                    fullScreenQuad.render();
+                    vcolorShader.use();
+                    vcolorShader.setMat4("view", glm::mat4(1.0f));
+                    vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                    vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    glm::vec2 center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
+                    std::vector<glm::vec2> test = {center_NDC};
+                    PointCloud pointCloud(test, screen_verts_color);
+                    pointCloud.render();
+                    cv::Mat leap1_thr, leap2_thr;
+                    std::vector<uint8_t> buffer1, buffer2;
+                    uint32_t ignore1, ignore2;
+                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                    {
+                        // Texture leapTexture1 = Texture();
+                        // leapTexture1.init(leap_width, leap_height, 1);
+                        // leapTexture1.load(buffer1, true, cam_buffer_format);
+                        // Texture leapTexture2 = Texture();
+                        // leapTexture2.init(leap_width, leap_height, 1);
+                        // leapTexture2.load(buffer2, true, cam_buffer_format);
+                        cv::Mat leap1(leap_height, leap_width, CV_8UC1, buffer1.data());
+                        cv::Mat leap2(leap_height, leap_width, CV_8UC1, buffer2.data());
+                        cv::threshold(leap1, leap1_thr, 250, 255, cv::THRESH_BINARY);
+                        cv::threshold(leap2, leap2_thr, 250, 255, cv::THRESH_BINARY);
+                        if (extract_centroid(leap1_thr, center_leap1) && extract_centroid(leap2_thr, center_leap2))
+                        {
+                            glm::vec2 center_NDC_leap1 = Helpers::ScreenToNDC(center_leap1, leap_width, leap_height, true);
+                            glm::vec2 center_NDC_leap2 = Helpers::ScreenToNDC(center_leap2, leap_width, leap_height, true);
+                            glm::vec3 cur_3d_point = triangulate(leap, center_NDC_leap1, center_NDC_leap2);
+                            glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
+                            if (ready_to_calibrate)
+                            {
+                                points_3d.push_back(cur_3d_point);
+                                points_2d.push_back(cur_2d_point);
+                            }
+                            // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
+                            // std::cout << "leap2 2d:" << center_NDC_leap2.x << " " << center_NDC_leap2.y << std::endl;
+                            // std::cout << point_3d.x << " " << point_3d.y << " " << point_3d.z << std::endl;
+                        }
+                    }
+                    else
+                    {
+                        std::cout << "Failed to get leap image" << std::endl;
+                    }
+                }
+                if (points_2d.size() > leap_calib_n_points)
+                {
+                    leap_calibration_collecting = false;
+                }
+            }
+            else
+            {
+                std::vector<float> flatten_image_points = Helpers::flatten_glm(points_2d);
+                std::vector<float> flatten_object_points = Helpers::flatten_glm(points_3d);
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", flatten_image_points.data(), {flatten_image_points.size(), 2}, "w");
+                cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", flatten_object_points.data(), {flatten_object_points.size(), 3}, "w");
+                std::vector<cv::Point2f> points_2d_cv;
+                std::vector<cv::Point3f> points_3d_cv;
+                for (int i = 0; i < points_2d.size(); i++)
+                {
+                    points_2d_cv.push_back(cv::Point2f(points_2d[i].x, points_2d[i].y));
+                    points_3d_cv.push_back(cv::Point3f(points_3d[i].x, points_3d[i].y, points_3d[i].z));
+                }
+                cnpy::npz_t my_npz;
+                try
+                {
+                    my_npz = cnpy::npz_load("../../resource/calibrations/cam_calibration/cam_calibration.npz");
+                }
+                catch (std::runtime_error &e)
+                {
+                    std::cout << e.what() << std::endl;
+                    exit(1);
+                }
+                // glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
+                cv::Mat camera_intrinsics(3, 3, CV_64F, my_npz["cam_intrinsics"].data<double>());
+                cv::Mat distortion_coeffs(5, 1, CV_64F, my_npz["cam_distortion"].data<double>());
+                // initial guess
+                cv::Mat transform = cv::Mat::zeros(4, 4, CV_64FC1);
+                transform.at<double>(0, 0) = -1.0f;
+                transform.at<double>(1, 2) = 1.0f;
+                transform.at<double>(2, 1) = 1.0f;
+                transform.at<double>(0, 3) = -50.0f;
+                transform.at<double>(1, 3) = 100.0f;
+                transform.at<double>(2, 3) = 300.0f;
+                transform.at<double>(3, 3) = 1.0f;
+                // std::cout << "transform: " << transform << std::endl;
+                // cv::Mat rotmat = transform(cv::Range(0, 3), cv::Range(0, 3)).clone();
+                // std::cout << "rot_mat: " << rotmat << std::endl;
+                // tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
+                // std::cout << "tvec: " << tvec << std::endl;
+                std::cout << "initial c2w guess: " << transform << std::endl;
+                cv::invert(transform, transform);
+                // std::cout << "transform_inverse: " << transform << std::endl;
+                cv::Mat rotmat_inverse = transform(cv::Range(0, 3), cv::Range(0, 3)).clone();
+                // std::cout << "rot_mat_inverse: " << transform << std::endl;
+                cv::Mat tvec, rvec;
+                cv::Rodrigues(rotmat_inverse, rvec);
+                // std::cout << "rvec_inverse: " << rvec << std::endl;
+                tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
+                cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics, distortion_coeffs, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
+                cv::Mat rot_mat(3, 3, CV_64FC1);
+                cv::Rodrigues(rvec, rot_mat);
+                // std::cout << "rotmat: " << rot_mat << std::endl;
+                cv::Mat w2c(4, 4, CV_64FC1);
+                w2c.at<double>(0, 0) = rot_mat.at<double>(0, 0);
+                w2c.at<double>(0, 1) = rot_mat.at<double>(0, 1);
+                w2c.at<double>(0, 2) = rot_mat.at<double>(0, 2);
+                w2c.at<double>(0, 3) = tvec.at<double>(0, 0);
+                w2c.at<double>(1, 0) = rot_mat.at<double>(1, 0);
+                w2c.at<double>(1, 1) = rot_mat.at<double>(1, 1);
+                w2c.at<double>(1, 2) = rot_mat.at<double>(1, 2);
+                w2c.at<double>(1, 3) = tvec.at<double>(1, 0);
+                w2c.at<double>(2, 0) = rot_mat.at<double>(2, 0);
+                w2c.at<double>(2, 1) = rot_mat.at<double>(2, 1);
+                w2c.at<double>(2, 2) = rot_mat.at<double>(2, 2);
+                w2c.at<double>(2, 3) = tvec.at<double>(2, 0);
+                w2c.at<double>(3, 0) = 0.0f;
+                w2c.at<double>(3, 1) = 0.0f;
+                w2c.at<double>(3, 2) = 0.0f;
+                w2c.at<double>(3, 3) = 1.0f;
+                std::cout << "w2c: " << w2c << std::endl;
+                cv::Mat c2w = w2c.inv();
+                std::cout << "c2w: " << c2w << std::endl;
+                std::vector<double> w2c_vec(w2c.begin<double>(), w2c.end<double>());
+                // convert row major, opencv matrix to column major open gl matrix
+                glm::mat4 flipYZ = glm::mat4(1.0f);
+                flipYZ[1][1] = -1.0f;
+                flipYZ[2][2] = -1.0f;
+                w2c_auto = glm::make_mat4(w2c_vec.data());
+                glm::mat4 c2w_auto = glm::inverse(w2c_auto);
+                c2w_auto = flipYZ * c2w_auto; // flip y and z columns (corresponding to camera directions)
+                w2c_auto = glm::inverse(c2w_auto);
+                w2c_auto = glm::transpose(w2c_auto);
+                use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
+                create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+                ready_to_calibrate = false;
+            }
             break;
         }
         default:
@@ -1458,36 +1647,38 @@ int main(int argc, char *argv[])
             }
             t_debug.stop();
         }
-
-        // send result to projector queue
-        glReadBuffer(GL_FRONT);
-        if (use_pbo)
+        if (use_projector)
         {
-            t_download.start();
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
-            glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
-            t_download.stop();
-
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(frameCount + 1) % 2]);
-            GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
-            if (src)
+            // send result to projector queue
+            glReadBuffer(GL_FRONT);
+            if (use_pbo)
             {
-                // std::vector<uint8_t> data(src, src + image_size);
-                // tmpdata.assign(src, src + image_size);
-                // std::copy(src, src + tmpdata.size(), tmpdata.begin());
-                memcpy(colorBuffer, src, projected_image_size);
-                projector_queue.push(colorBuffer);
-                glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
+                t_download.start();
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
+                glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
+                t_download.stop();
+
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(frameCount + 1) % 2]);
+                GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+                if (src)
+                {
+                    // std::vector<uint8_t> data(src, src + image_size);
+                    // tmpdata.assign(src, src + image_size);
+                    // std::copy(src, src + tmpdata.size(), tmpdata.begin());
+                    memcpy(colorBuffer, src, projected_image_size);
+                    projector_queue.push(colorBuffer);
+                    glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
+                }
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
             }
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-        }
-        else
-        {
-            t_download.start();
-            glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
-            t_download.stop();
-            // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
-            projector_queue.push(colorBuffer);
+            else
+            {
+                t_download.start();
+                glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
+                t_download.stop();
+                // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
+                projector_queue.push(colorBuffer);
+            }
         }
         // glCheckError();
         // glCheckError();
@@ -1695,7 +1886,11 @@ void openIMGUIFrame()
             {
                 if (use_projector)
                 {
-                    projector.init();
+                    if (!projector.init())
+                    {
+                        std::cerr << "Failed to initialize projector\n";
+                        use_projector = false;
+                    }
                 }
                 else
                 {
@@ -1715,11 +1910,91 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Calibration"))
         {
             ImGui::Text("Calibration Mode");
-            ImGui::RadioButton("Off", &calib_mode, 0);
+            if (ImGui::RadioButton("Off", &calib_mode, 0))
+            {
+                leap.setImageMode(false);
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("Coaxial Calibration", &calib_mode, 1);
+            if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 1))
+            {
+                debug_mode = false;
+                leap.setImageMode(false);
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("Leap Calibration", &calib_mode, 2);
+            if (ImGui::RadioButton("Leap Calibration", &calib_mode, 2))
+            {
+                projector.kill();
+                use_projector = false;
+                leap.setImageMode(true);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                debug_mode = false;
+            }
+            switch (calib_mode)
+            {
+            case 0:
+            {
+                if (ImGui::Button("Save Extrinsics"))
+                {
+                    glm::mat4 w2c = gl_camera.getViewMatrix();
+                    const float *pSource = (const float *)glm::value_ptr(w2c);
+                    std::vector<float> w2c_vec(pSource, pSource + 16);
+                    cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c_user.npy", w2c_vec.data(), {4, 4}, "w");
+                    // ImGui::SameLine();
+                    // ImGui::Text("saved extrinsics !");
+                }
+                break;
+            }
+            case 1:
+            {
+                if (ImGui::Button("Save Coaxial Calibration"))
+                {
+                    cnpy::npy_save("../../resource/calibrations/coaxial_calibration/coax_user.npy", cur_screen_verts.data(), {4, 2}, "w");
+                }
+                if (ImGui::BeginTable("Cam2Proj Vertices", 2))
+                {
+                    std::vector<glm::vec2> tmpVerts;
+                    if (useCoaxialCalib)
+                        tmpVerts = cur_screen_verts;
+                    else
+                        tmpVerts = screen_verts;
+                    for (int row = 0; row < tmpVerts.size(); row++)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Vert %d", row);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f, %f", tmpVerts[row][0], tmpVerts[row][1]);
+                    }
+                    ImGui::EndTable();
+                }
+                break;
+            }
+            case 2:
+            {
+                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 10, 1000);
+                if (ImGui::Checkbox("Ready To Calibrate", &ready_to_calibrate))
+                {
+                    if (ready_to_calibrate)
+                    {
+                        leap_calibration_collecting = true;
+                    }
+                }
+                float calib_progress = points_2d.size() / (float)leap_calib_n_points;
+                char buf[32];
+                sprintf(buf, "%d/%d", (int)(calib_progress * leap_calib_n_points), leap_calib_n_points);
+                ImGui::ProgressBar(calib_progress, ImVec2(0.f, 0.f), buf);
+                if (ImGui::Button("Save Calibration Extrinsics"))
+                {
+                    glm::mat4 w2c = gl_camera.getViewMatrix();
+                    const float *pSource = (const float *)glm::value_ptr(w2c);
+                    std::vector<float> w2c_vec(pSource, pSource + 16);
+                    cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
+                }
+                break;
+            }
+            default:
+                break;
+            }
             ImGui::Text("Calibration Source");
             if (ImGui::RadioButton("Auto", &use_leap_calib_results, 0))
             {
@@ -1731,41 +2006,10 @@ void openIMGUIFrame()
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
             }
             ImGui::SameLine();
-            if (ImGui::Button("Save Extrinsics"))
-            {
-                glm::mat4 w2c = gl_camera.getViewMatrix();
-                const float *pSource = (const float *)glm::value_ptr(w2c);
-                std::vector<float> w2c_vec(pSource, pSource + 16);
-                cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c_user.npy", w2c_vec.data(), {4, 4}, "w");
-                // ImGui::SameLine();
-                // ImGui::Text("saved extrinsics !");
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Save Coaxial Calib."))
-            {
-                cnpy::npy_save("../../resource/calibrations/coaxial_calibration/coax_user.npy", cur_screen_verts.data(), {4, 2}, "w");
-            }
             if (ImGui::Checkbox("Use Coaxial Calib", &useCoaxialCalib))
             {
                 if (useCoaxialCalib)
                     c2p_homography = PostProcess::findHomography(cur_screen_verts);
-            }
-            if (ImGui::BeginTable("Cam2Proj Vertices", 2))
-            {
-                std::vector<glm::vec2> tmpVerts;
-                if (useCoaxialCalib)
-                    tmpVerts = cur_screen_verts;
-                else
-                    tmpVerts = screen_verts;
-                for (int row = 0; row < tmpVerts.size(); row++)
-                {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Vert %d", row);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%f, %f", tmpVerts[row][0], tmpVerts[row][1]);
-                }
-                ImGui::EndTable();
             }
             ImGui::TreePop();
         }
@@ -1849,11 +2093,13 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::RadioButton("None", &postprocess_mode, 0);
             ImGui::SameLine();
-            ImGui::RadioButton("Mask", &postprocess_mode, 1);
+            ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
             ImGui::SameLine();
-            ImGui::RadioButton("Jump Flood", &postprocess_mode, 2);
+            ImGui::RadioButton("Mask", &postprocess_mode, 2);
             ImGui::SameLine();
-            ImGui::RadioButton("OF", &postprocess_mode, 3);
+            ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
+            ImGui::SameLine();
+            ImGui::RadioButton("OF", &postprocess_mode, 4);
 
             ImGui::TreePop();
         }
@@ -1997,37 +2243,44 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     }
 }
 
-bool loadCalibrationResults(glm::mat4 &proj_project,
-                            glm::mat4 &cam_project,
-                            std::vector<double> &camera_distortion,
-                            glm::mat4 &w2c_auto,
-                            glm::mat4 &w2c_user,
-                            std::vector<glm::vec2> &cur_screen_verts)
+bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts)
+{
+    const fs::path coax_path("../../resource/calibrations/coaxial_calibration/coax_user.npy");
+    cnpy::NpyArray coax_npy;
+    if (fs::exists(coax_path))
+    {
+        cur_screen_verts.clear();
+        coax_npy = cnpy::npy_load(coax_path.string());
+        std::vector<float> extract = coax_npy.as_vec<float>();
+        for (int i = 0; i < extract.size(); i += 2)
+        {
+            cur_screen_verts.push_back(glm::vec2(extract[i], extract[i + 1]));
+        }
+        return true;
+    }
+    return false;
+}
+
+bool loadLeapCalibrationResults(glm::mat4 &proj_project,
+                                glm::mat4 &cam_project,
+                                std::vector<double> &camera_distortion,
+                                glm::mat4 &w2c_auto,
+                                glm::mat4 &w2c_user)
 {
     // vp = virtual projector
     // vc = virtual camera
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
     flipYZ[2][2] = -1.0f;
-    cnpy::NpyArray w2c_user_npy, w2c_auto_npy, coax_npy;
+    cnpy::NpyArray w2c_user_npy, w2c_auto_npy;
     cnpy::npz_t projcam_npz;
     cnpy::npz_t cam_npz;
     bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
     try
     {
-        const fs::path coax_path("../../resource/calibrations/coaxial_calibration/coax_user.npy");
+
         const fs::path user_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
         const fs::path auto_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
-        if (fs::exists(coax_path))
-        {
-            cur_screen_verts.clear();
-            coax_npy = cnpy::npy_load(coax_path.string());
-            std::vector<float> extract = coax_npy.as_vec<float>();
-            for (int i = 0; i < extract.size(); i += 2)
-            {
-                cur_screen_verts.push_back(glm::vec2(extract[i], extract[i + 1]));
-            }
-        }
         if (fs::exists(user_path))
         {
             user_defined = true;
@@ -2118,7 +2371,8 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                          bool leap_poll_mode,
                          int64_t &lastFrameID)
 {
-    // some defs
+    // todo: most likely leaks memory / stack overflow here
+    //  some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 flip_x = glm::mat4(1.0f);
@@ -2244,9 +2498,9 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
             }
         }
         if (hand->type == eLeapHandType_Right)
-            bones_to_world_right = bones_to_world;
+            bones_to_world_right = std::move(bones_to_world);
         else
-            bones_to_world_left = bones_to_world;
+            bones_to_world_left = std::move(bones_to_world);
     }
     // Free the allocated buffer when done.
     if (leap_poll_mode)
@@ -2259,7 +2513,7 @@ void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCa
 {
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
     glm::mat4 w2c;
-    if (use_leap_calib_results == static_cast<int>(CalibrationSettings::AUTO))
+    if (use_leap_calib_results == static_cast<int>(LeapCalibrationSettings::AUTO))
         w2c = w2c_auto;
     else
         w2c = w2c_user;
@@ -2287,4 +2541,40 @@ void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCa
         gl_camera = GLCamera(w2c, cam_project, camera_mode, cam_width, cam_height);
         gl_flycamera = GLCamera(w2c, proj_project, camera_mode, proj_width, proj_height);
     }
+}
+
+bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid)
+{
+    // find moments of the image
+    cv::Moments m = cv::moments(binary_image, true);
+    if ((m.m00 == 0) || (m.m01 == 0) || (m.m10 == 0))
+        return false;
+    glm::vec2 cur_center(m.m10 / m.m00, m.m01 / m.m00);
+    centeroid = cur_center;
+    return true;
+}
+
+glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
+{
+    // leap image plane is x right, and y up like opengl...
+    glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1, leap_width, leap_height, false);
+    LEAP_VECTOR l1_vert_leap = {l1_vert.x, l1_vert.y, 1.0f};
+    glm::vec2 l2_vert = Helpers::NDCtoScreen(leap2, leap_width, leap_height, false);
+    LEAP_VECTOR l2_vert_leap = {l2_vert.x, l2_vert.y, 1.0f};
+    LEAP_VECTOR leap1_rays_2d = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, l1_vert_leap);
+    LEAP_VECTOR leap2_rays_2d = LeapPixelToRectilinear(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, l2_vert_leap);
+    // glm::mat4 leap1_extrinsic = glm::mat4(1.0f);
+    // glm::mat4 leap2_extrinsic = glm::mat4(1.0f);
+    // LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_left, glm::value_ptr(leap1_extrinsic));
+    // LeapExtrinsicCameraMatrix(*leap.getConnectionHandle(), eLeapPerspectiveType::eLeapPerspectiveType_stereo_right, glm::value_ptr(leap2_extrinsic));
+    float baseline = 40.0f;
+    // see https://forums.leapmotion.com/t/sdk-2-1-raw-data-get-pixel-position-xyz/1604/12
+    float z = baseline / (leap2_rays_2d.x - leap1_rays_2d.x);
+    float alty1 = z * leap2_rays_2d.y;
+    float alty2 = z * leap1_rays_2d.y;
+    float x = z * leap2_rays_2d.x - baseline / 2.0f;
+    // float altx = z * leap1_rays_2d.x + baseline / 2.0f;
+    float y = (alty1 + alty2) / 2.0f;
+    glm::vec3 point_3d = glm::vec3(x, -z, y);
+    return point_3d;
 }
