@@ -541,8 +541,8 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
     shader.SetMaterial(GetMaterial());
     std::vector<glm::mat4> transforms;
     // todo: for unknown reason passing local_to_world fails, probably memory leak.
-    // GetBoneTransforms(transforms, bones_to_world, local_to_world, use_bones);
-    GetBoneTransformsHack(transforms, bones_to_world);
+    GetBoneTransforms(transforms, bones_to_world, local_to_world, use_bones);
+    // GetBoneTransformsHack(transforms, bones_to_world);
     for (unsigned int i = 0; i < transforms.size(); i++)
     {
         shader.SetBoneTransform(i, transforms[i]);

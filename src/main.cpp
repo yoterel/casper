@@ -9,7 +9,7 @@
 #include <glm/gtx/normal.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include "queue.h"
+#include "readerwritercircularbuffer.h"
 #include "camera.h"
 #include "gl_camera.h"
 #include "display.h"
@@ -153,7 +153,7 @@ int dragging_vert = 0;
 int closest_vert = 0;
 float min_dist = 100000.0f;
 float deltaTime = 0.0f;
-float masking_threshold = 0.01f;
+float masking_threshold = 0.035f;
 glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
 float ms_per_frame = 0;
@@ -352,11 +352,11 @@ int main(int argc, char *argv[])
     postprocess_fbo.init();
     c2p_fbo.init();
     SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights.fbx",
-                               "../../resource/mytexture.png", // uv.png
+                               "../../resource/uv.png", // uv.png
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
     SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights.fbx",
-                                "../../resource/mytexture.png", // uv.png
+                                "../../resource/uv.png", // uv.png
                                 proj_width, proj_height,
                                 cam_width, cam_height,
                                 false);
@@ -457,11 +457,13 @@ int main(int argc, char *argv[])
     flowTexture.init(cam_width, cam_height, 2);
     // uint32_t cam_height = 0;
     // uint32_t cam_width = 0;
-    blocking_queue<CGrabResultPtr> camera_queue;
+    // blocking_queue<CGrabResultPtr> camera_queue;
+    moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
     // queue_spsc<cv::Mat> camera_queue_cv(50);
-    blocking_queue<cv::Mat> camera_queue_cv;
+    // blocking_queue<cv::Mat> camera_queue_cv;
     // blocking_queue<std::vector<uint8_t>> projector_queue;
-    blocking_queue<uint8_t *> projector_queue;
+    // blocking_queue<uint8_t *> projector_queue;
+    moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
     BaslerCamera camera;
     if (use_projector)
     {
@@ -554,26 +556,26 @@ int main(int argc, char *argv[])
         //     fake_cam_images.push_back(img4);
         //     file_counter++;
         // }
-        producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
-            // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
-            Timer t_block;
-            int counter = 0;
-            t_block.start();
-            while (!close_signal)
-            {
-                camera_queue_cv.push(fake_cam_images[counter]);
-                if (counter < fake_cam_images.size() - 1)
-                    counter++;
-                else
-                    counter = 0;
-                while (t_block.getElapsedTimeInMilliSec() < 1.9)
-                {
-                }
-                t_block.stop();
-                t_block.start();
-            }
-            std::cout << "Producer finish" << std::endl;
-        });
+        // producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
+        //     // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
+        //     Timer t_block;
+        //     int counter = 0;
+        //     t_block.start();
+        //     while (!close_signal)
+        //     {
+        //         camera_queue_cv.push(fake_cam_images[counter]);
+        //         if (counter < fake_cam_images.size() - 1)
+        //             counter++;
+        //         else
+        //             counter = 0;
+        //         while (t_block.getElapsedTimeInMilliSec() < 1.9)
+        //         {
+        //         }
+        //         t_block.stop();
+        //         t_block.start();
+        //     }
+        //     std::cout << "Producer finish" << std::endl;
+        // });
     }
     // image consumer (real projector = virtual camera)
     consumer = std::thread([&projector_queue, &close_signal]() { //, &projector
@@ -584,7 +586,7 @@ int main(int argc, char *argv[])
         bool sucess;
         while (!close_signal)
         {
-            sucess = projector_queue.pop_with_timeout(100, image);
+            sucess = projector_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
             if (sucess)
                 projector.show_buffer(image);
             // projector.show_buffer(image.data());
@@ -606,7 +608,6 @@ int main(int argc, char *argv[])
             LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
         }
         frameCount++;
-
         /* display stats */
         if (currentAppTime - previousSecondAppTime >= 1.0)
         {
@@ -624,9 +625,9 @@ int main(int argc, char *argv[])
             std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
             std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
             // std::cout << "project time: " << t4.averageLap() << std::endl;
-            std::cout << "cam q1 size: " << camera_queue.size() << std::endl;
-            std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
-            std::cout << "proj q size: " << projector_queue.size() << std::endl;
+            std::cout << "cam q1 size: " << camera_queue.size_approx() << std::endl;
+            // std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
+            std::cout << "proj q size: " << projector_queue.size_approx() << std::endl;
             frameCount = 0;
             previousSecondAppTime = currentAppTime;
             t_camera.reset();
@@ -669,23 +670,25 @@ int main(int argc, char *argv[])
         /* deal with camera input */
         t_camera.start();
         // prevFrame = curFrame.clone();
-        if (simulated_camera)
+        // if (simulated_camera)
+        // {
+        //     cv::Mat tmp = camera_queue_cv.pop();
+        //     camTexture.load((uint8_t *)tmp.data, true, cam_buffer_format);
+        // }
+        // else
+        // {
+        // std::cout << "before: " << camera_queue.size_approx() << std::endl;
+        camera_queue.wait_dequeue(ptrGrabResult);
+        // std::cout << "after: " << camera_queue.size_approx() << std::endl;
+        // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+        // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
+        camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+        if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
         {
-            cv::Mat tmp = camera_queue_cv.pop();
-            camTexture.load((uint8_t *)tmp.data, true, cam_buffer_format);
+            camImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+            cv::flip(camImage, camImage, 1);
         }
-        else
-        {
-            ptrGrabResult = camera_queue.pop();
-            // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-            // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
-            // camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
-            if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
-            {
-                camImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-                cv::flip(camImage, camImage, 1);
-            }
-        }
+        // }
         // buffer = (uint8_t *)pylonImage.GetBuffer();
         // curFrame = tmp.clone();
 
@@ -962,6 +965,7 @@ int main(int argc, char *argv[])
                 textureShader.setBool("binary", true);
                 textureShader.setMat4("view", glm::mat4(1.0f));
                 textureShader.setMat4("model", glm::mat4(1.0f));
+                textureShader.setFloat("threshold", masking_threshold);
                 fullScreenQuad.render();
                 postprocess_fbo.unbind();
                 break;
@@ -1666,7 +1670,7 @@ int main(int argc, char *argv[])
                     // tmpdata.assign(src, src + image_size);
                     // std::copy(src, src + tmpdata.size(), tmpdata.begin());
                     memcpy(colorBuffer, src, projected_image_size);
-                    projector_queue.push(colorBuffer);
+                    projector_queue.try_enqueue(colorBuffer);
                     glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
                 }
                 glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -1677,7 +1681,7 @@ int main(int argc, char *argv[])
                 glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
                 t_download.stop();
                 // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
-                projector_queue.push(colorBuffer);
+                projector_queue.try_enqueue(colorBuffer);
             }
         }
         // glCheckError();

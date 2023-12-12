@@ -8,7 +8,7 @@
 #include <glm/gtx/normal.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include "queue.h"
+#include "readerwritercircularbuffer.h"
 #include "camera.h"
 #include "helpers.h"
 #include "display.h"
@@ -177,9 +177,9 @@ int main(int argc, char *argv[])
     // camTexture.init(cam_width, cam_height, n_cam_channels);
     Texture displayTexture = Texture();
     displayTexture.init(cam_width, cam_height, n_cam_channels);
-    blocking_queue<CGrabResultPtr> camera_queue;
+    moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
     // queue_spsc<cv::Mat> camera_queue_cv(50);
-    blocking_queue<cv::Mat> camera_queue_cv;
+    // blocking_queue<cv::Mat> camera_queue_cv;
     BaslerCamera camera;
     LeapConnect leap(true, true);
     std::vector<uint8_t> dummy_buffer1, dummybuffer2;
@@ -274,7 +274,7 @@ int main(int argc, char *argv[])
         processInput(window);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         /* deal with camera input */
-        ptrGrabResult = camera_queue.pop();
+        camera_queue.wait_dequeue(ptrGrabResult);
         cur_cam_image = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer());
         cv::flip(cur_cam_image, cur_cam_image, 1);
         cur_image_copy = cur_cam_image.clone();

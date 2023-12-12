@@ -86,6 +86,7 @@ void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, u
     mask_shader.setInt("src", 0);
     mask_shader.setInt("mask", 1);
     mask_shader.setFloat("threshold", threshold);
+    mask_shader.setBool("maskIsGray", true);
     mask_shader.setBool("flipVer", false);
     mask_shader.setBool("flipMaskVer", true);
     mask_shader.setBool("flipMaskHor", true);
@@ -153,6 +154,7 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, un
     NN_shader.setInt("mask", 2);
     NN_shader.setFloat("threshold", threshold);
     NN_shader.setBool("flipVer", false);
+    NN_shader.setBool("maskIsGray", true);
     NN_shader.setBool("flipMaskVer", true);
     NN_shader.setBool("flipMaskHor", true);
     NN_shader.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));

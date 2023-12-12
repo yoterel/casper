@@ -22,7 +22,7 @@ void main()
     if (binary)
     {
         float avg = (col.r + col.g + col.b) * 0.333333;
-        if (avg > threshold)
+        if (avg >= threshold)
 		    FragColor = vec4(1.0, 1.0, 1.0, 1.0);
 	    else
 		    FragColor = vec4(0.0, 0.0, 0.0, 1.0);

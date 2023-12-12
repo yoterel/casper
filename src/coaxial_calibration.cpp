@@ -8,7 +8,7 @@
 #include <glm/gtx/normal.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include "queue.h"
+#include "readerwritercircularbuffer.h"
 #include "camera.h"
 #include "display.h"
 #include "shader.h"
@@ -170,11 +170,11 @@ int main(int argc, char *argv[])
     camTexture.init(cam_width, cam_height, n_cam_channels);
     // uint32_t cam_height = 0;
     // uint32_t cam_width = 0;
-    blocking_queue<CGrabResultPtr> camera_queue;
+    moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
     // queue_spsc<cv::Mat> camera_queue_cv(50);
-    blocking_queue<cv::Mat> camera_queue_cv;
+    // blocking_queue<cv::Mat> camera_queue_cv;
     // blocking_queue<std::vector<uint8_t>> projector_queue;
-    blocking_queue<uint8_t *> projector_queue;
+    moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
     BaslerCamera camera;
     DynaFlashProjector projector(true, false);
     if (use_projector)
@@ -204,38 +204,39 @@ int main(int argc, char *argv[])
     }
     else
     {
+        exit(1);
         /* fake producer */
-        std::vector<cv::Mat> fake_cam_images;
-        std::cout << "Using fake camera to produce images" << std::endl;
-        producer_is_fake = true;
-        std::string file_path = "../../resource/uv.png";
-        cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
-        cv::resize(img3, img3, cv::Size(cam_width, cam_height));
-        cv::Mat img4;
-        cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
-        fake_cam_images.push_back(img4);
-        // cam_height = 540;
-        // cam_width = 720;
-        producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
-            // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
-            Timer t_block;
-            int counter = 0;
-            t_block.start();
-            while (!close_signal)
-            {
-                camera_queue_cv.push(fake_cam_images[counter]);
-                if (counter < fake_cam_images.size() - 1)
-                    counter++;
-                else
-                    counter = 0;
-                while (t_block.getElapsedTimeInMicroSec() < 1000.0)
-                {
-                }
-                t_block.stop();
-                t_block.start();
-            }
-            std::cout << "Producer finish" << std::endl;
-        });
+        // std::vector<cv::Mat> fake_cam_images;
+        // std::cout << "Using fake camera to produce images" << std::endl;
+        // producer_is_fake = true;
+        // std::string file_path = "../../resource/uv.png";
+        // cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
+        // cv::resize(img3, img3, cv::Size(cam_width, cam_height));
+        // cv::Mat img4;
+        // cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
+        // fake_cam_images.push_back(img4);
+        // // cam_height = 540;
+        // // cam_width = 720;
+        // producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
+        //     // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
+        //     Timer t_block;
+        //     int counter = 0;
+        //     t_block.start();
+        //     while (!close_signal)
+        //     {
+        //         camera_queue_cv.push(fake_cam_images[counter]);
+        //         if (counter < fake_cam_images.size() - 1)
+        //             counter++;
+        //         else
+        //             counter = 0;
+        //         while (t_block.getElapsedTimeInMicroSec() < 1000.0)
+        //         {
+        //         }
+        //         t_block.stop();
+        //         t_block.start();
+        //     }
+        //     std::cout << "Producer finish" << std::endl;
+        // });
     }
     // image consumer (real projector = virtual camera)
     consumer = std::thread([&projector_queue, &projector, &close_signal]() { //, &projector
@@ -246,7 +247,7 @@ int main(int argc, char *argv[])
         bool sucess;
         while (!close_signal)
         {
-            sucess = projector_queue.pop_with_timeout(100, image);
+            sucess = projector_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
             if (sucess)
                 projector.show_buffer(image);
             // projector.show_buffer(image.data());
@@ -275,9 +276,9 @@ int main(int argc, char *argv[])
             std::cout << "swap buffers time: " << t_swap.averageLapInMilliSec() << std::endl;
             std::cout << "GPU->CPU time: " << t_download.averageLapInMilliSec() << std::endl;
             std::cout << "debug time: " << t_debug.averageLapInMilliSec() << std::endl;
-            std::cout << "cam q1 size: " << camera_queue.size() << std::endl;
-            std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
-            std::cout << "proj q size: " << projector_queue.size() << std::endl;
+            std::cout << "cam q1 size: " << camera_queue.size_approx() << std::endl;
+            // std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
+            std::cout << "proj q size: " << projector_queue.size_approx() << std::endl;
             frameCount = 0;
             previousSecondAppTime = currentAppTime;
             t_misc.reset();
@@ -293,7 +294,8 @@ int main(int argc, char *argv[])
         t_misc.stop();
         t_cam.start();
         // retrieve camera image
-        CGrabResultPtr ptrGrabResult = camera_queue.pop();
+        CGrabResultPtr ptrGrabResult;
+        camera_queue.wait_dequeue(ptrGrabResult);
         t_cam.stop();
         t_upload.start();
         camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
@@ -385,7 +387,7 @@ int main(int argc, char *argv[])
                 // tmpdata.assign(src, src + image_size);
                 // std::copy(src, src + tmpdata.size(), tmpdata.begin());
                 memcpy(colorBuffer, src, image_size);
-                projector_queue.push(colorBuffer);
+                projector_queue.try_enqueue(colorBuffer);
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
             }
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -396,7 +398,7 @@ int main(int argc, char *argv[])
             glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
             t_download.stop();
             // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
-            projector_queue.push(colorBuffer);
+            projector_queue.try_enqueue(colorBuffer);
         }
         // glCheckError();
         // glCheckError();

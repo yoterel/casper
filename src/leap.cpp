@@ -20,7 +20,7 @@ LeapConnect::LeapConnect(bool pollMode, bool with_images)
     //                    eLeapPolicyFlag_Images & eLeapPolicyFlag_MapPoints, 0);
     // LeapSetPolicyFlags(connectionHandle,
     //                    eLeapPolicyFlag_BackgroundFrames & eLeapPolicyFlag_Images, 0);
-    LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_HMD); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
+    LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_ScreenTop); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
     // LeapRequestConfigValue();
     // LeapSaveConfigValue();
     m_poll = pollMode;

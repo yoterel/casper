@@ -296,8 +296,8 @@ private:
 class MyImageEventHandler : public CImageEventHandler
 {
 public:
-    MyImageEventHandler(blocking_queue<CGrabResultPtr> &camera_queue, bool &close_signal, uint32_t &height, uint32_t &width) : myqueue(camera_queue), close_signal(close_signal), height(height), width(width) {}
-    blocking_queue<CGrabResultPtr> &myqueue;
+    MyImageEventHandler(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal, uint32_t &height, uint32_t &width) : myqueue(camera_queue), close_signal(close_signal), height(height), width(width) {}
+    moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &myqueue;
     bool &close_signal;
     uint32_t &height;
     uint32_t &width;
@@ -360,7 +360,9 @@ public:
                 // cv::Mat myimage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*) pylonImage.GetBuffer());
                 // cv::imwrite("test1.png", myimage);
             */
-            myqueue.push(ptrGrabResult);
+            // std::cout << "before: " << myqueue.size_approx() << std::endl;
+            myqueue.wait_enqueue(ptrGrabResult);
+            // std::cout << "after: " << myqueue.size_approx() << std::endl;
             // auto runtime = std::chrono::system_clock::now() - start;
             //     std::cout << "ms: "
             //     << (std::chrono::duration_cast<std::chrono::microseconds>(runtime)).count()*1.0/1000
@@ -373,7 +375,7 @@ public:
     }
 };
 
-bool BaslerCamera::init(blocking_queue<CGrabResultPtr> &camera_queue, bool &close_signal,
+bool BaslerCamera::init(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal,
                         uint32_t height, uint32_t width, float exposureTime, bool hardwareTrigger)
 {
     PylonInitialize();

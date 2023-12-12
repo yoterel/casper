@@ -6,6 +6,7 @@
 #include <pylon/BaslerUniversalInstantCamera.h>
 // #include <pylon/PylonGUI.h>
 #include "queue.h"
+#include "readerwritercircularbuffer.h"
 #include "opencv2/opencv.hpp"
 #ifdef PYTHON_BINDINGS_BUILD
 #include <nanobind/ndarray.h>
@@ -24,7 +25,7 @@ public:
     {
         kill();
     }; /* PylonTerminate(); */
-    bool init(blocking_queue<CGrabResultPtr> &camera_queue, bool &close_signal,
+    bool init(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal,
               uint32_t height, uint32_t width,
               float exposureTime = 1850.0f, bool hardwareTrigger = false);
     void acquire();
