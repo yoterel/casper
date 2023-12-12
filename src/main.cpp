@@ -129,7 +129,7 @@ uint32_t leap_height = 240;
 unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f; // 1850.0f;
-int leap_calib_n_points = 500;
+int leap_calib_n_points = 1000;
 // global state
 int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
@@ -450,7 +450,7 @@ int main(int argc, char *argv[])
     uint8_t *colorBuffer = new uint8_t[projected_image_size];
     CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
-    cv::Mat camImage;
+    cv::Mat camImage, camImageOrig;
     Texture flowTexture = Texture();
     Texture displayTexture = Texture();
     displayTexture.init(cam_width, cam_height, n_cam_channels);
@@ -686,8 +686,8 @@ int main(int argc, char *argv[])
 
         if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
         {
-            camImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-            cv::flip(camImage, camImage, 1);
+            camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+            cv::flip(camImageOrig, camImage, 1);
         }
         else
         {
@@ -1144,6 +1144,10 @@ int main(int argc, char *argv[])
                             {
                                 points_3d.push_back(cur_3d_point);
                                 points_2d.push_back(cur_2d_point);
+                                if (points_2d.size() >= leap_calib_n_points)
+                                {
+                                    leap_calibration_collecting = false;
+                                }
                             }
                             // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
                             // std::cout << "leap2 2d:" << center_NDC_leap2.x << " " << center_NDC_leap2.y << std::endl;
@@ -1154,10 +1158,6 @@ int main(int argc, char *argv[])
                     {
                         std::cout << "Failed to get leap image" << std::endl;
                     }
-                }
-                if (points_2d.size() > leap_calib_n_points)
-                {
-                    leap_calibration_collecting = false;
                 }
             }
             else
@@ -1210,6 +1210,17 @@ int main(int argc, char *argv[])
                 // std::cout << "rvec_inverse: " << rvec << std::endl;
                 tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
                 cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics, distortion_coeffs, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
+                std::vector<cv::Point2f> reprojected;
+                cv::projectPoints(points_3d_cv, rvec, tvec, camera_intrinsics, distortion_coeffs, reprojected);
+                double avg_error = 0.0f;
+                for (int i = 0; i < points_2d_cv.size(); i++)
+                {
+                    cv::Point2f diff = points_2d_cv[i] - reprojected[i];
+                    double error = sqrt(diff.x * diff.x + diff.y * diff.y);
+                    avg_error += error;
+                }
+                avg_error /= points_2d_cv.size();
+                std::cout << "avg reprojection error: " << avg_error << std::endl;
                 cv::Mat rot_mat(3, 3, CV_64FC1);
                 cv::Rodrigues(rvec, rot_mat);
                 // std::cout << "rotmat: " << rot_mat << std::endl;
@@ -1246,6 +1257,7 @@ int main(int argc, char *argv[])
                 use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
                 ready_to_calibrate = false;
+                leap_calibration_collecting = true;
             }
             break;
         }
