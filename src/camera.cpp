@@ -469,6 +469,23 @@ void BaslerCamera::balance_white()
     }
 }
 
+double BaslerCamera::get_exposure_time()
+{
+    return camera.ExposureTime.GetValue();
+}
+
+void BaslerCamera::set_exposure_time(double exposure_time)
+{
+    try
+    {
+        camera.ExposureTime.SetValue(exposure_time);
+    }
+    catch (const GenericException &e)
+    {
+        std::cerr << "Baser API: An exception occurred: " << e.GetDescription() << std::endl;
+    }
+}
+
 void BaslerCamera::kill()
 {
     if (!is_open)

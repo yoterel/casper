@@ -128,7 +128,7 @@ uint32_t leap_width = 640;
 uint32_t leap_height = 240;
 unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
-float exposure = 1850.0f;
+float exposure = 1850.0f; // 1850.0f;
 int leap_calib_n_points = 500;
 // global state
 int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
@@ -223,6 +223,7 @@ FBO postprocess_fbo(proj_width, proj_height, 4, false);
 FBO c2p_fbo(proj_width, proj_height, 4, false);
 LeapConnect leap(leap_poll_mode);
 DynaFlashProjector projector(true, false);
+BaslerCamera camera;
 
 int main(int argc, char *argv[])
 {
@@ -464,7 +465,6 @@ int main(int argc, char *argv[])
     // blocking_queue<std::vector<uint8_t>> projector_queue;
     // blocking_queue<uint8_t *> projector_queue;
     moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
-    BaslerCamera camera;
     if (use_projector)
     {
         if (!projector.init())
@@ -970,7 +970,7 @@ int main(int argc, char *argv[])
                 textureShader.setBool("flipHor", true);
                 textureShader.setMat4("projection", glm::mat4(1.0f));
                 textureShader.setBool("isGray", true);
-                textureShader.setBool("binary", true);
+                textureShader.setBool("binary", false);
                 textureShader.setMat4("view", glm::mat4(1.0f));
                 textureShader.setMat4("model", glm::mat4(1.0f));
                 textureShader.setFloat("threshold", masking_threshold);
@@ -1925,12 +1925,16 @@ void openIMGUIFrame()
             if (ImGui::RadioButton("Off", &calib_mode, 0))
             {
                 leap.setImageMode(false);
+                exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 1))
             {
                 debug_mode = false;
                 leap.setImageMode(false);
+                exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Leap Calibration", &calib_mode, 2))
@@ -1938,12 +1942,16 @@ void openIMGUIFrame()
                 projector.kill();
                 use_projector = false;
                 leap.setImageMode(true);
+                // throttle down producer speed to allow smooth display
+                // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
+                exposure = 10000.0f;
+                camera.set_exposure_time(exposure);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 debug_mode = false;
             }
             switch (calib_mode)
             {
-            case 0:
+            case static_cast<int>(CalibrationMode::OFF):
             {
                 ImGui::Text("Cam2World (row major, OpenGL convention)");
                 if (ImGui::BeginTable("Cam2World", 4))
@@ -1974,7 +1982,7 @@ void openIMGUIFrame()
                 }
                 break;
             }
-            case 1:
+            case static_cast<int>(CalibrationMode::COAXIAL):
             {
                 if (ImGui::Button("Save Coaxial Calibration"))
                 {
@@ -1999,7 +2007,7 @@ void openIMGUIFrame()
                 }
                 break;
             }
-            case 2:
+            case static_cast<int>(CalibrationMode::LEAP):
             {
                 ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 10, 1000);
                 if (ImGui::Checkbox("Ready To Calibrate", &ready_to_calibrate))
@@ -2048,6 +2056,12 @@ void openIMGUIFrame()
             ImGui::Checkbox("Show Camera", &showCamera);
             ImGui::SameLine();
             ImGui::Checkbox("Show Projector", &showProjector);
+            if (ImGui::SliderFloat("Camera Exposure [us]", &exposure, 30.0f, 10000.0f))
+            {
+                // std::cout << "current exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
+                camera.set_exposure_time(exposure);
+                // std::cout << "new exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
+            }
             if (ImGui::Button("Cam Screen Shot"))
             {
                 hands_fbo.saveColorToFile("../../debug/screenshot_hands_fbo.png");

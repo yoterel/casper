@@ -31,6 +31,8 @@ public:
     void acquire();
     void kill();
     void balance_white();
+    double get_exposure_time();
+    void set_exposure_time(double exposure_time);
 #ifdef PYTHON_BINDINGS_BUILD
     void init_single(float exposure_time = 1850.0);
     nb::ndarray<nb::numpy, const uint8_t> capture_single();
