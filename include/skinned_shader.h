@@ -28,7 +28,8 @@ public:
     DirectionalLight(glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f),
                      float ambientIntensity = 0.0f,
                      float diffuseIntensity = 0.0f,
-                     glm::vec3 worldDir = glm::vec3(0.0f, 0.0f, 0.0f)) : BaseLight(), worldDirection(worldDir)
+                     glm::vec3 worldDir = glm::vec3(0.0f, 0.0f, 0.0f)) : BaseLight(color, ambientIntensity, diffuseIntensity),
+                                                                         worldDirection(worldDir)
     {
         localDirection = glm::vec3(0.0f, 0.0f, 0.0f);
     }

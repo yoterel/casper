@@ -55,9 +55,9 @@ struct Material
     vec3 SpecularColor;
 };
 uniform DirectionalLight gDirectionalLight;
-uniform int gNumPointLights;
+uniform int gNumPointLights = 0;
 uniform PointLight gPointLights[MAX_POINT_LIGHTS];
-uniform int gNumSpotLights;
+uniform int gNumSpotLights = 0;
 uniform SpotLight gSpotLights[MAX_SPOT_LIGHTS];
 uniform Material gMaterial;
 uniform sampler2D gSamplerSpecularExponent;

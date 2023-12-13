@@ -464,7 +464,7 @@ int main(int argc, char *argv[])
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
-    DirectionalLight dirLight(glm::vec3(1.0f, 1.0f, 1.0f), 1.0f, 1.0f, glm::vec3(0.0f, -1.0f, 0.0f));
+    DirectionalLight dirLight(glm::vec3(1.0f, 1.0f, 1.0f), 1.0f, 1.0f, glm::vec3(0.0f, -1.0f, -1.0f));
     /* more inits */
     double previousAppTime = t_app.getElapsedTimeInSec();
     double previousSecondAppTime = t_app.getElapsedTimeInSec();
@@ -771,7 +771,7 @@ int main(int argc, char *argv[])
                 skinnedShader.setInt("src", 0);
                 if (material_mode == static_cast<int>(MaterialMode::GGX))
                 {
-                    dirLight.calcLocalDirection(cam_view_transform);
+                    dirLight.calcLocalDirection(glm::mat4(1.0f));
                     skinnedShader.SetDirectionalLight(dirLight);
                     skinnedShader.setBool("useGGX", true);
                 }
