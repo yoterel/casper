@@ -773,6 +773,8 @@ int main(int argc, char *argv[])
                 {
                     dirLight.calcLocalDirection(glm::mat4(1.0f));
                     skinnedShader.SetDirectionalLight(dirLight);
+                    glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
+                    skinnedShader.SetCameraLocalPos(camWorldPos);
                     skinnedShader.setBool("useGGX", true);
                 }
                 hands_fbo.bind(true);

@@ -21,7 +21,7 @@ SkinningShader::SkinningShader(const std::string &vertexPath, const std::string 
     dirLightLoc.AmbientIntensity = GetUniformLocation("gDirectionalLight.Base.AmbientIntensity");
     dirLightLoc.DiffuseIntensity = GetUniformLocation("gDirectionalLight.Base.DiffuseIntensity");
     dirLightLoc.Direction = GetUniformLocation("gDirectionalLight.Direction");
-    // CameraLocalPosLoc = GetUniformLocation("gCameraLocalPos");
+    CameraLocalPosLoc = GetUniformLocation("gCameraLocalPos");
     // NumPointLightsLocation = GetUniformLocation("gNumPointLights");
     // NumSpotLightsLocation = GetUniformLocation("gNumSpotLights");
     displayBoneIndexLocation = GetUniformLocation("gDisplayBoneIndex");
