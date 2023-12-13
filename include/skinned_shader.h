@@ -12,22 +12,33 @@
 class BaseLight
 {
 public:
-    glm::vec3 Color = glm::vec3(1.0f, 1.0f, 1.0f);
-    float AmbientIntensity = 0.0f;
-    float DiffuseIntensity = 0.0f;
+    BaseLight(glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f),
+              float ambientIntensity = 0.0f,
+              float diffuseIntensity = 0.0f) : Color(color),
+                                               AmbientIntensity(ambientIntensity),
+                                               DiffuseIntensity(diffuseIntensity) {}
+    glm::vec3 Color;
+    float AmbientIntensity;
+    float DiffuseIntensity;
 };
 
 class DirectionalLight : public BaseLight
 {
 public:
-    glm::vec3 WorldDirection = glm::vec3(0.0f, 0.0f, 0.0f);
-
-    void CalcLocalDirection(const glm::mat4 &worldTransform);
-
-    const glm::vec3 &GetLocalDirection() const { return LocalDirection; }
+    DirectionalLight(glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f),
+                     float ambientIntensity = 0.0f,
+                     float diffuseIntensity = 0.0f,
+                     glm::vec3 worldDir = glm::vec3(0.0f, 0.0f, 0.0f)) : BaseLight(), worldDirection(worldDir)
+    {
+        localDirection = glm::vec3(0.0f, 0.0f, 0.0f);
+    }
+    void calcLocalDirection(const glm::mat4 &localToWorld);
+    const glm::vec3 &getWorldDirection() const { return worldDirection; }
+    const glm::vec3 &getLocalDirection() const { return localDirection; }
 
 private:
-    glm::vec3 LocalDirection = glm::vec3(0.0f, 0.0f, 0.0f);
+    glm::vec3 worldDirection;
+    glm::vec3 localDirection;
 };
 
 struct LightAttenuation
@@ -45,13 +56,13 @@ public:
 
     void CalcLocalPosition(const glm::mat4 &worldTransform)
     {
-        LocalPosition = glm::vec3(glm::inverse(worldTransform) * glm::vec4(WorldPosition, 1.0f));
+        localPosition = glm::vec3(glm::inverse(worldTransform) * glm::vec4(WorldPosition, 1.0f));
     };
 
-    const glm::vec3 &GetLocalPosition() const { return LocalPosition; }
+    const glm::vec3 &GetLocalPosition() const { return localPosition; }
 
 private:
-    glm::vec3 LocalPosition = glm::vec3(0.0f, 0.0f, 0.0f);
+    glm::vec3 localPosition = glm::vec3(0.0f, 0.0f, 0.0f);
 };
 
 class SpotLight : public PointLight
@@ -60,7 +71,7 @@ public:
     glm::vec3 WorldDirection = glm::vec3(0.0f, 0.0f, 0.0f);
     float Cutoff = 0.0f;
 
-    void CalcLocalDirectionAndPosition(const glm::mat4 &worldTransform);
+    void calcLocalDirectionAndPosition(const glm::mat4 &worldTransform);
 
     const glm::vec3 &GetLocalDirection() const { return LocalDirection; }
 

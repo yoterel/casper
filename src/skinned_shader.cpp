@@ -1,18 +1,26 @@
 #include "skinned_shader.h"
 
+void DirectionalLight::calcLocalDirection(const glm::mat4 &localToWorld)
+{
+    glm::mat3 localToWorldRotation(localToWorld);
+    glm::mat3 worldToLocalRotation = glm::transpose(localToWorldRotation);
+    localDirection = worldToLocalRotation * worldDirection;
+    localDirection = glm::normalize(localDirection);
+}
+
 SkinningShader::SkinningShader(const std::string &vertexPath, const std::string &fragmentPath, const std::string &geometryPath) : Shader(vertexPath, fragmentPath, geometryPath)
 {
     worldTransformLoc = GetUniformLocation("gTransform");
-    projectorTransformLoc = GetUniformLocation("gProjectorTransform");
+    // projectorTransformLoc = GetUniformLocation("gProjectorTransform");
     samplerLoc = GetUniformLocation("src");
     // samplerSpecularExponentLoc = GetUniformLocation("gSamplerSpecularExponent");
-    materialLoc.AmbientColor = GetUniformLocation("material.AmbientColor");
-    materialLoc.DiffuseColor = GetUniformLocation("material.DiffuseColor");
-    materialLoc.SpecularColor = GetUniformLocation("material.SpecularColor");
-    // dirLightLoc.Color = GetUniformLocation("gDirectionalLight.Base.Color");
-    // dirLightLoc.AmbientIntensity = GetUniformLocation("gDirectionalLight.Base.AmbientIntensity");
-    // dirLightLoc.Direction = GetUniformLocation("gDirectionalLight.Direction");
-    // dirLightLoc.DiffuseIntensity = GetUniformLocation("gDirectionalLight.Base.DiffuseIntensity");
+    materialLoc.AmbientColor = GetUniformLocation("gMaterial.AmbientColor");
+    materialLoc.DiffuseColor = GetUniformLocation("gMaterial.DiffuseColor");
+    materialLoc.SpecularColor = GetUniformLocation("gMaterial.SpecularColor");
+    dirLightLoc.Color = GetUniformLocation("gDirectionalLight.Base.Color");
+    dirLightLoc.AmbientIntensity = GetUniformLocation("gDirectionalLight.Base.AmbientIntensity");
+    dirLightLoc.DiffuseIntensity = GetUniformLocation("gDirectionalLight.Base.DiffuseIntensity");
+    dirLightLoc.Direction = GetUniformLocation("gDirectionalLight.Direction");
     // CameraLocalPosLoc = GetUniformLocation("gCameraLocalPos");
     // NumPointLightsLocation = GetUniformLocation("gNumPointLights");
     // NumSpotLightsLocation = GetUniformLocation("gNumSpotLights");
@@ -152,7 +160,7 @@ void SkinningShader::SetDirectionalLight(const DirectionalLight &Light)
 {
     glUniform3f(dirLightLoc.Color, Light.Color.x, Light.Color.y, Light.Color.z);
     glUniform1f(dirLightLoc.AmbientIntensity, Light.AmbientIntensity);
-    glm::vec3 LocalDirection = Light.GetLocalDirection();
+    glm::vec3 LocalDirection = Light.getLocalDirection();
     glUniform3f(dirLightLoc.Direction, LocalDirection.x, LocalDirection.y, LocalDirection.z);
     glUniform1f(dirLightLoc.DiffuseIntensity, Light.DiffuseIntensity);
 }

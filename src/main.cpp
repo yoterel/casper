@@ -214,7 +214,7 @@ int pnp_iters = 500;
 float pnp_rep_error = 2.0f;
 float pnp_confidence = 0.95f;
 bool showInliersOnly = true;
-bool showReprojections = false;
+bool showReprojections = true;
 std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
@@ -400,6 +400,18 @@ int main(int argc, char *argv[])
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     Text text("../../resource/arial.ttf");
+    std::vector<glm::vec3> near_frustrum = {{-1.0f, 1.0f, -1.0f},
+                                            {-1.0f, -1.0f, -1.0f},
+                                            {1.0f, -1.0f, -1.0f},
+                                            {1.0f, 1.0f, -1.0f}};
+    std::vector<glm::vec3> mid_frustrum = {{-1.0f, 1.0f, 0.7f},
+                                           {-1.0f, -1.0f, 0.7f},
+                                           {1.0f, -1.0f, 0.7f},
+                                           {1.0f, 1.0f, 0.7f}};
+    std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
+                                           {-1.0f, -1.0f, 1.0f},
+                                           {1.0f, -1.0f, 1.0f},
+                                           {1.0f, 1.0f, 1.0f}};
     std::array<glm::vec3, 28> frustumCornerVertices{
         {// near
          {-1.0f, 1.0f, -1.0f},
@@ -452,6 +464,7 @@ int main(int argc, char *argv[])
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
+    DirectionalLight dirLight(glm::vec3(1.0f, 1.0f, 1.0f), 1.0f, 1.0f, glm::vec3(0.0f, -1.0f, 0.0f));
     /* more inits */
     double previousAppTime = t_app.getElapsedTimeInSec();
     double previousSecondAppTime = t_app.getElapsedTimeInSec();
@@ -518,29 +531,6 @@ int main(int argc, char *argv[])
     }
     loadCoaxialCalibrationResults(cur_screen_verts);
     c2p_homography = PostProcess::findHomography(cur_screen_verts);
-    std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
-                                           {-1.0f, -1.0f, 1.0f},
-                                           {1.0f, -1.0f, 1.0f},
-                                           {1.0f, 1.0f, 1.0f}};
-    std::vector<glm::vec3> projFarVerts(4);
-    // unproject points
-    glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
-    glm::mat4 proj_projection_transform = gl_projector.getProjectionMatrix();
-    glm::mat4 cam_view_transform = gl_camera.getViewMatrix();
-    glm::mat4 cam_projection_transform = gl_camera.getProjectionMatrix();
-    glm::mat4 projUnprojectionMat = glm::inverse(proj_projection_transform * proj_view_transform);
-    glm::mat4 camUnprojectionMat = glm::inverse(cam_projection_transform * cam_view_transform);
-    for (int i = 0; i < far_frustrum.size(); ++i)
-    {
-        glm::vec4 unprojected = projUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
-        projFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
-    }
-    glm::vec3 normal = glm::triangleNormal(projFarVerts[0], projFarVerts[1], projFarVerts[2]);
-    for (int i = 0; i < far_frustrum.size(); ++i)
-    {
-        projFarVerts[i] += 0.1f * normal;
-    }
-    Quad projFarQuad(projFarVerts);
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
     if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !simulated_camera)
@@ -779,6 +769,12 @@ int main(int argc, char *argv[])
                 skinnedShader.setBool("bake", false);
                 skinnedShader.setBool("flipTexVertically", false);
                 skinnedShader.setInt("src", 0);
+                if (material_mode == static_cast<int>(MaterialMode::GGX))
+                {
+                    dirLight.calcLocalDirection(cam_view_transform);
+                    skinnedShader.SetDirectionalLight(dirLight);
+                    skinnedShader.setBool("useGGX", true);
+                }
                 hands_fbo.bind(true);
                 glEnable(GL_DEPTH_TEST);
                 switch (texture_mode)
@@ -1296,6 +1292,7 @@ int main(int argc, char *argv[])
                 use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
                 leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
+                showReprojections = true;
                 break;
             }
             case static_cast<int>(LeapCalibrationStateMachine::SHOW):
@@ -1338,45 +1335,6 @@ int main(int argc, char *argv[])
         if (debug_mode && calib_mode == static_cast<int>(CalibrationMode::OFF))
         {
             t_debug.start();
-            // setup some vertices
-            std::vector<glm::vec3> near_frustrum = {{-1.0f, 1.0f, -1.0f},
-                                                    {-1.0f, -1.0f, -1.0f},
-                                                    {1.0f, -1.0f, -1.0f},
-                                                    {1.0f, 1.0f, -1.0f}};
-            std::vector<glm::vec3> mid_frustrum = {{-1.0f, 1.0f, 0.7f},
-                                                   {-1.0f, -1.0f, 0.7f},
-                                                   {1.0f, -1.0f, 0.7f},
-                                                   {1.0f, 1.0f, 0.7f}};
-            std::vector<glm::vec3> far_frustrum = {{-1.0f, 1.0f, 1.0f},
-                                                   {-1.0f, -1.0f, 1.0f},
-                                                   {1.0f, -1.0f, 1.0f},
-                                                   {1.0f, 1.0f, 1.0f}};
-            std::vector<glm::vec3> projNearVerts(4);
-            std::vector<glm::vec3> projMidVerts(4);
-            std::vector<glm::vec3> projFarVerts(4);
-            std::vector<glm::vec3> camNearVerts(4);
-            std::vector<glm::vec3> camMidVerts(4);
-            // unproject points
-            glm::mat4 projUnprojectionMat = glm::inverse(proj_projection_transform * proj_view_transform);
-            glm::mat4 camUnprojectionMat = glm::inverse(cam_projection_transform * cam_view_transform);
-            for (int i = 0; i < mid_frustrum.size(); ++i)
-            {
-                glm::vec4 unprojected = projUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
-                projMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = projUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
-                projNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = projUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
-                projFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = camUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
-                camMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
-                unprojected = camUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
-                camNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
-            }
-            Quad projNearQuad(projNearVerts);
-            // Quad projMidQuad(projMidVerts);
-            Quad projFarQuad(projFarVerts);
-            Quad camNearQuad(camNearVerts);
-            // Quad camMidQuad(camMidVerts);
             // draws some mesh (lit by camera input)
             {
                 /* quad at vcam far plane, shined by vproj (perspective corrected) */
@@ -1411,25 +1369,25 @@ int main(int argc, char *argv[])
             }
             // draws global coordinate system gizmo at origin
             {
-                vcolorShader.use();
-                vcolorShader.setMat4("projection", flycam_projection_transform);
-                vcolorShader.setMat4("view", flycam_view_transform);
-                vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
-                glBindVertexArray(gizmoVAO);
-                glDrawArrays(GL_LINES, 0, 6);
+                // vcolorShader.use();
+                // vcolorShader.setMat4("projection", flycam_projection_transform);
+                // vcolorShader.setMat4("view", flycam_view_transform);
+                // vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
+                // glBindVertexArray(gizmoVAO);
+                // glDrawArrays(GL_LINES, 0, 6);
             }
             // draws cube at world origin
             {
                 /* regular rgb cube */
-                vcolorShader.use();
-                vcolorShader.setMat4("projection", flycam_projection_transform);
-                vcolorShader.setMat4("view", flycam_view_transform);
-                vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f)));
-                glEnable(GL_DEPTH_TEST);
-                glDisable(GL_CULL_FACE);
-                glBindVertexArray(cubeVAO);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
-                glEnable(GL_CULL_FACE);
+                // vcolorShader.use();
+                // vcolorShader.setMat4("projection", flycam_projection_transform);
+                // vcolorShader.setMat4("view", flycam_view_transform);
+                // vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f)));
+                // glEnable(GL_DEPTH_TEST);
+                // glDisable(GL_CULL_FACE);
+                // glBindVertexArray(cubeVAO);
+                // glDrawArrays(GL_TRIANGLES, 0, 36);
+                // glEnable(GL_CULL_FACE);
                 /* bake projective texture */
                 // if (baked)
                 // {
@@ -1484,34 +1442,34 @@ int main(int argc, char *argv[])
                 }
                 // draw bones local coordinates as gizmos
                 {
-                    vcolorShader.use();
-                    vcolorShader.setMat4("projection", flycam_projection_transform);
-                    vcolorShader.setMat4("view", flycam_view_transform);
-                    std::vector<glm::mat4> BoneToLocalTransforms;
-                    leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
-                    glBindVertexArray(gizmoVAO);
-                    // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-                    for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
-                    {
-                        // in bind pose
-                        vcolorShader.setMat4("model", rotx * BoneToLocalTransforms[i]);
-                        glDrawArrays(GL_LINES, 0, 6);
-                    }
-                    for (unsigned int i = 0; i < bones_to_world_right.size(); i++)
-                    {
-                        // in leap motion pose
-                        vcolorShader.setMat4("model", bones_to_world_right[i]);
-                        glDrawArrays(GL_LINES, 0, 6);
-                    }
+                    // vcolorShader.use();
+                    // vcolorShader.setMat4("projection", flycam_projection_transform);
+                    // vcolorShader.setMat4("view", flycam_view_transform);
+                    // std::vector<glm::mat4> BoneToLocalTransforms;
+                    // leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                    // glBindVertexArray(gizmoVAO);
+                    // // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+                    // for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
+                    // {
+                    //     // in bind pose
+                    //     vcolorShader.setMat4("model", rotx * BoneToLocalTransforms[i]);
+                    //     glDrawArrays(GL_LINES, 0, 6);
+                    // }
+                    // for (unsigned int i = 0; i < bones_to_world_right.size(); i++)
+                    // {
+                    //     // in leap motion pose
+                    //     vcolorShader.setMat4("model", bones_to_world_right[i]);
+                    //     glDrawArrays(GL_LINES, 0, 6);
+                    // }
                 }
                 // draw gizmo for palm orientation
                 {
-                    vcolorShader.use();
-                    vcolorShader.setMat4("projection", flycam_projection_transform);
-                    vcolorShader.setMat4("view", flycam_view_transform);
-                    vcolorShader.setMat4("model", bones_to_world_right[0]);
-                    glBindVertexArray(gizmoVAO);
-                    glDrawArrays(GL_LINES, 0, 6);
+                    // vcolorShader.use();
+                    // vcolorShader.setMat4("projection", flycam_projection_transform);
+                    // vcolorShader.setMat4("view", flycam_view_transform);
+                    // vcolorShader.setMat4("model", bones_to_world_right[0]);
+                    // glBindVertexArray(gizmoVAO);
+                    // glDrawArrays(GL_LINES, 0, 6);
                 }
                 // draw skinned mesh in 3D
                 {
@@ -1683,6 +1641,20 @@ int main(int argc, char *argv[])
             {
                 if (showCamera)
                 {
+
+                    std::vector<glm::vec3> camNearVerts(4);
+                    std::vector<glm::vec3> camMidVerts(4);
+                    // unproject points
+                    glm::mat4 camUnprojectionMat = glm::inverse(cam_projection_transform * cam_view_transform);
+                    for (int i = 0; i < mid_frustrum.size(); i++)
+                    {
+                        glm::vec4 unprojected = camUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                        camMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                        unprojected = camUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                        camNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                    }
+                    Quad camNearQuad(camNearVerts);
+                    // Quad camMidQuad(camMidVerts);
                     // directly render camera input or any other texture
                     textureShader.use();
                     textureShader.setBool("flipVer", false);
@@ -1704,6 +1676,23 @@ int main(int argc, char *argv[])
                 if (showProjector)
                 {
                     t_warp.start();
+                    std::vector<glm::vec3> projNearVerts(4);
+                    // std::vector<glm::vec3> projMidVerts(4);
+                    std::vector<glm::vec3> projFarVerts(4);
+                    glm::mat4 projUnprojectionMat = glm::inverse(proj_projection_transform * proj_view_transform);
+                    for (int i = 0; i < mid_frustrum.size(); i++)
+                    {
+                        // glm::vec4 unprojected = projUnprojectionMat * glm::vec4(mid_frustrum[i], 1.0f);
+                        // projMidVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                        glm::vec4 unprojected = projUnprojectionMat * glm::vec4(near_frustrum[i], 1.0f);
+                        projNearVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                        unprojected = projUnprojectionMat * glm::vec4(far_frustrum[i], 1.0f);
+                        projFarVerts[i] = glm::vec3(unprojected) / unprojected.w;
+                    }
+                    Quad projNearQuad(projNearVerts);
+                    // Quad projMidQuad(projMidVerts);
+                    Quad projFarQuad(projFarVerts);
+
                     textureShader.use();
                     textureShader.setBool("flipVer", false);
                     textureShader.setBool("flipHor", false);

@@ -60,7 +60,6 @@ uniform PointLight gPointLights[MAX_POINT_LIGHTS];
 uniform int gNumSpotLights;
 uniform SpotLight gSpotLights[MAX_SPOT_LIGHTS];
 uniform Material gMaterial;
-uniform sampler2D gSampler;
 uniform sampler2D gSamplerSpecularExponent;
 uniform vec3 gCameraLocalPos;
 uniform sampler2D src;
@@ -150,7 +149,7 @@ void main()
         for (int i = 0 ;i < gNumSpotLights ;i++) {
             TotalLight += CalcSpotLight(gSpotLights[i], Normal);
         }
-        FragColor = texture2D(gSampler, TexCoord0.xy) * TotalLight;
+        FragColor = texture2D(src, TexCoord0.xy) * TotalLight;
     }
     else
     {
