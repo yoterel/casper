@@ -15,6 +15,16 @@ glm::vec2 Helpers::ScreenToNDC(const glm::vec2 &pixel, int width, int height, bo
     return uv;
 }
 
+std::vector<glm::vec2> Helpers::ScreenToNDC(const std::vector<glm::vec2> &pixels, int width, int height, bool flip_y)
+{
+    std::vector<glm::vec2> uv;
+    for (int i = 0; i < pixels.size(); i++)
+    {
+        uv.push_back(ScreenToNDC(pixels[i], width, height, flip_y));
+    }
+    return uv;
+}
+
 glm::vec2 Helpers::NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool flip_y)
 {
     glm::vec2 pixel;
@@ -22,6 +32,16 @@ glm::vec2 Helpers::NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool
     pixel.x = ((width - 1.0f) * (NDC.x + 1.0f) * 0.5f);
     pixel.y = ((height - 1.0f) * (multiplier * NDC.y + 1.0f) * 0.5f);
     return pixel;
+}
+
+std::vector<glm::vec2> Helpers::NDCtoScreen(const std::vector<glm::vec2> &NDCs, int width, int height, bool flip_y)
+{
+    std::vector<glm::vec2> pixels;
+    for (int i = 0; i < NDCs.size(); i++)
+    {
+        pixels.push_back(NDCtoScreen(NDCs[i], width, height, flip_y));
+    }
+    return pixels;
 }
 
 void Helpers::UV2NDC(std::vector<glm::vec2> &uv)
@@ -82,6 +102,16 @@ std::vector<float> Helpers::flatten_glm(std::vector<glm::vec3> vec)
         flat_vec.push_back(vec[i].z);
     }
     return flat_vec;
+}
+
+std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point2f> vec)
+{
+    std::vector<glm::vec2> glm_vec;
+    for (int i = 0; i < vec.size(); i++)
+    {
+        glm_vec.push_back(glm::vec2(vec[i].x, vec[i].y));
+    }
+    return glm_vec;
 }
 
 void Helpers::setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO)
@@ -346,6 +376,24 @@ void Helpers::setupSkeletonBuffers(unsigned int &VAO, unsigned int &VBO)
     glEnableVertexAttribArray(1);
 }
 
+float Helpers::MSE(const std::vector<glm::vec2> &a, const std::vector<glm::vec2> &b)
+{
+    float avg_error = 0.0f;
+    if (a.size() != b.size())
+    {
+        std::cout << "ERROR: vectors must be of same size." << std::endl;
+        return avg_error;
+    }
+    for (int i = 0; i < a.size(); i++)
+    {
+        glm::vec2 diff = a[i] - b[i];
+        float error = sqrt(diff.x * diff.x + diff.y * diff.y);
+        // mse.push_back(error);
+        avg_error += error;
+    }
+    avg_error /= a.size();
+    return avg_error;
+}
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
 // {
 //     std::vector<glm::vec3> vertices;

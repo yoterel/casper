@@ -58,7 +58,9 @@ void initGLBuffers(unsigned int *pbo);
 bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 std::vector<double> &camera_distortion,
                                 glm::mat4 &w2c_auto,
-                                glm::mat4 &w2c_user);
+                                glm::mat4 &w2c_user,
+                                std::vector<glm::vec2> &points_2d,
+                                std::vector<glm::vec3> &points_3d);
 bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
@@ -94,6 +96,13 @@ enum class LeapCalibrationSettings
     AUTO = 0,
     USER = 1,
 };
+enum class LeapCalibrationStateMachine
+{
+    IDLE = 0,
+    COLLECT = 1,
+    CALIBRATE = 2,
+    SHOW = 3,
+};
 enum class CalibrationMode
 {
     OFF = 0,
@@ -111,8 +120,8 @@ bool use_projector = false;
 bool use_screen = true;
 bool leap_poll_mode = false;
 bool cam_color_mode = false;
-bool ready_to_calibrate = false;
-bool leap_calibration_collecting = true;
+bool ready_to_collect = false;
+int leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
 std::string testFile("../../resource/uv.png");
@@ -197,8 +206,15 @@ std::vector<std::string> animals{
     "a gorilla",
     "a panda"};
 std::vector<glm::vec3> points_3d;
-std::vector<glm::vec2> points_2d;
-std::vector<glm::vec3> screen_verts_color = {{1.0f, 0.0f, 0.0f}};
+std::vector<glm::vec2> points_2d, points_2d_inliners;
+std::vector<glm::vec2> points_2d_reprojected, points_2d_inliers_reprojected;
+int pnp_iters = 500;
+float pnp_rep_error = 2.0f;
+float pnp_confidence = 0.95f;
+bool showInliersOnly = true;
+bool showReprojections = false;
+std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
+std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                        {-1.0f, -1.0f},
                                        {1.0f, -1.0f},
@@ -478,7 +494,7 @@ int main(int argc, char *argv[])
     std::thread producer, consumer;
     // load calibration results if they exist
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    if (loadLeapCalibrationResults(proj_project, cam_project, camera_distortion, w2c_auto, w2c_user))
+    if (loadLeapCalibrationResults(proj_project, cam_project, camera_distortion, w2c_auto, w2c_user, points_2d, points_3d))
     {
         create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
     }
@@ -849,59 +865,66 @@ int main(int argc, char *argv[])
                         myprompt = sd_prompt;
                         break;
                     }
-                    std::vector<uint8_t> img2img_data = Diffuse::img2img(myprompt.c_str(),
-                                                                         outwidth, outheight,
-                                                                         buf, buf_mask, diffuse_seed,
-                                                                         1024, 1024, 1,
-                                                                         512, 512, false, false, sd_mask_mode);
-                    if (saveIntermed)
+                    try
                     {
-                        cv::Mat img2img_result = cv::Mat(outheight, outwidth, CV_8UC3, img2img_data.data()).clone();
-                        cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
-                        cv::imwrite("../../resource/sd_result.png", img2img_result);
+                        std::vector<uint8_t> img2img_data = Diffuse::img2img(myprompt.c_str(),
+                                                                             outwidth, outheight,
+                                                                             buf, buf_mask, diffuse_seed,
+                                                                             1024, 1024, 1,
+                                                                             512, 512, false, false, sd_mask_mode);
+                        if (saveIntermed)
+                        {
+                            cv::Mat img2img_result = cv::Mat(outheight, outwidth, CV_8UC3, img2img_data.data()).clone();
+                            cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
+                            cv::imwrite("../../resource/sd_result.png", img2img_result);
+                        }
+                        if (dynamicTexture != nullptr)
+                            delete dynamicTexture;
+                        dynamicTexture = new Texture(GL_TEXTURE_2D);
+                        dynamicTexture->init(outwidth, outheight, 3);
+                        dynamicTexture->load(img2img_data.data(), true, GL_RGB);
+                        bake_fbo.bind(true);
+                        /* hand */
+                        glDisable(GL_CULL_FACE);
+                        glEnable(GL_DEPTH_TEST);
+                        skinnedShader.use();
+                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                        skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                        skinnedShader.setBool("useProjector", true);
+                        skinnedShader.setBool("bake", true);
+                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                        skinnedShader.setBool("flipTexVertically", true);
+                        skinnedShader.setInt("src", 0);
+                        // dynamicTexture->bind();
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
+                        /* debug points */
+                        // vcolorShader.use();
+                        // vcolorShader.setMat4("view", glm::mat4(1.0f));
+                        // vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                        // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        // std::vector<glm::vec2> points;
+                        // rightHandModel.getUnrolledTexCoords(points);
+                        // Helpers::UV2NDC(points);
+                        // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
+                        // PointCloud cloud(points, screen_vert_color);
+                        // cloud.render();
+                        bake_fbo.unbind();
+                        glDisable(GL_DEPTH_TEST);
+                        glEnable(GL_CULL_FACE);
+                        // glDisable(GL_DEPTH_TEST);
+                        bake_fbo.saveColorToFile(bakeFile);
+                        // if (bakedTexture != nullptr)
+                        // {
+                        //     delete bakedTexture;
+                        //     bakedTexture = nullptr;
+                        // }
+                        // bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
+                        // bakedTexture->init();
                     }
-                    if (dynamicTexture != nullptr)
-                        delete dynamicTexture;
-                    dynamicTexture = new Texture(GL_TEXTURE_2D);
-                    dynamicTexture->init(outwidth, outheight, 3);
-                    dynamicTexture->load(img2img_data.data(), true, GL_RGB);
-                    bake_fbo.bind(true);
-                    /* hand */
-                    glDisable(GL_CULL_FACE);
-                    glEnable(GL_DEPTH_TEST);
-                    skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
-                    skinnedShader.setBool("useProjector", true);
-                    skinnedShader.setBool("bake", true);
-                    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                    skinnedShader.setBool("flipTexVertically", true);
-                    skinnedShader.setInt("src", 0);
-                    // dynamicTexture->bind();
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
-                    /* debug points */
-                    // vcolorShader.use();
-                    // vcolorShader.setMat4("view", glm::mat4(1.0f));
-                    // vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                    // vcolorShader.setMat4("model", glm::mat4(1.0f));
-                    // std::vector<glm::vec2> points;
-                    // rightHandModel.getUnrolledTexCoords(points);
-                    // Helpers::UV2NDC(points);
-                    // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
-                    // PointCloud cloud(points, screen_vert_color);
-                    // cloud.render();
-                    bake_fbo.unbind();
-                    glDisable(GL_DEPTH_TEST);
-                    glEnable(GL_CULL_FACE);
-                    // glDisable(GL_DEPTH_TEST);
-                    bake_fbo.saveColorToFile(bakeFile);
-                    // if (bakedTexture != nullptr)
-                    // {
-                    //     delete bakedTexture;
-                    //     bakedTexture = nullptr;
-                    // }
-                    // bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
-                    // bakedTexture->init();
+                    catch (const std::exception &e)
+                    {
+                        std::cerr << e.what() << '\n';
+                    }
                     bakeRequest = false;
                 }
             }
@@ -1081,7 +1104,7 @@ int main(int argc, char *argv[])
             textureShader.setBool("isGray", true);
             camTexture.bind();
             fullScreenQuad.render();
-            PointCloud cloud(cur_screen_verts, screen_verts_color);
+            PointCloud cloud(cur_screen_verts, screen_verts_color_red);
             vcolorShader.use();
             vcolorShader.setMat4("view", glm::mat4(1.0f));
             vcolorShader.setMat4("projection", glm::mat4(1.0f));
@@ -1091,9 +1114,14 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(CalibrationMode::LEAP):
         {
-            if (leap_calibration_collecting)
+            switch (leap_calibration_state)
             {
-                // render camera image as binary, and centroid as red dot
+            case static_cast<int>(LeapCalibrationStateMachine::IDLE):
+            {
+                break;
+            }
+            case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
+            {
                 cv::Mat thr;
                 cv::threshold(camImage, thr, 250, 255, cv::THRESH_BINARY);
                 glm::vec2 center, center_leap1, center_leap2;
@@ -1117,7 +1145,7 @@ int main(int argc, char *argv[])
                     vcolorShader.setMat4("model", glm::mat4(1.0f));
                     glm::vec2 center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
                     std::vector<glm::vec2> test = {center_NDC};
-                    PointCloud pointCloud(test, screen_verts_color);
+                    PointCloud pointCloud(test, screen_verts_color_red);
                     pointCloud.render();
                     cv::Mat leap1_thr, leap2_thr;
                     std::vector<uint8_t> buffer1, buffer2;
@@ -1140,13 +1168,14 @@ int main(int argc, char *argv[])
                             glm::vec2 center_NDC_leap2 = Helpers::ScreenToNDC(center_leap2, leap_width, leap_height, true);
                             glm::vec3 cur_3d_point = triangulate(leap, center_NDC_leap1, center_NDC_leap2);
                             glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
-                            if (ready_to_calibrate)
+                            if (ready_to_collect)
                             {
                                 points_3d.push_back(cur_3d_point);
                                 points_2d.push_back(cur_2d_point);
                                 if (points_2d.size() >= leap_calib_n_points)
                                 {
-                                    leap_calibration_collecting = false;
+                                    ready_to_collect = false;
+                                    // leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::IDLE);
                                 }
                             }
                             // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
@@ -1159,13 +1188,10 @@ int main(int argc, char *argv[])
                         std::cout << "Failed to get leap image" << std::endl;
                     }
                 }
+                break;
             }
-            else
+            case static_cast<int>(LeapCalibrationStateMachine::CALIBRATE):
             {
-                std::vector<float> flatten_image_points = Helpers::flatten_glm(points_2d);
-                std::vector<float> flatten_object_points = Helpers::flatten_glm(points_3d);
-                cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", flatten_image_points.data(), {flatten_image_points.size(), 2}, "w");
-                cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", flatten_object_points.data(), {flatten_object_points.size(), 3}, "w");
                 std::vector<cv::Point2f> points_2d_cv;
                 std::vector<cv::Point3f> points_3d_cv;
                 for (int i = 0; i < points_2d.size(); i++)
@@ -1209,18 +1235,28 @@ int main(int argc, char *argv[])
                 cv::Rodrigues(rotmat_inverse, rvec);
                 // std::cout << "rvec_inverse: " << rvec << std::endl;
                 tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
-                cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics, distortion_coeffs, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
-                std::vector<cv::Point2f> reprojected;
-                cv::projectPoints(points_3d_cv, rvec, tvec, camera_intrinsics, distortion_coeffs, reprojected);
-                double avg_error = 0.0f;
-                for (int i = 0; i < points_2d_cv.size(); i++)
+                // cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics, distortion_coeffs, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
+                cv::Mat inliers;
+                cv::solvePnPRansac(points_3d_cv, points_2d_cv, camera_intrinsics, distortion_coeffs, rvec, tvec, true,
+                                   pnp_iters, pnp_rep_error, pnp_confidence, inliers, cv::SOLVEPNP_ITERATIVE);
+                std::vector<cv::Point2f> points_2d_inliers_cv;
+                std::vector<cv::Point3f> points_3d_inliers_cv;
+                for (int inliers_index = 0; inliers_index < inliers.rows; ++inliers_index)
                 {
-                    cv::Point2f diff = points_2d_cv[i] - reprojected[i];
-                    double error = sqrt(diff.x * diff.x + diff.y * diff.y);
-                    avg_error += error;
+                    int n = inliers.at<int>(inliers_index);          // i-inlier
+                    points_2d_inliers_cv.push_back(points_2d_cv[n]); // add i-inlier to list
+                    points_3d_inliers_cv.push_back(points_3d_cv[n]); // add i-inlier to list
                 }
-                avg_error /= points_2d_cv.size();
-                std::cout << "avg reprojection error: " << avg_error << std::endl;
+                std::vector<cv::Point2f> reprojected_cv, reprojected_inliers_cv;
+                cv::projectPoints(points_3d_cv, rvec, tvec, camera_intrinsics, distortion_coeffs, reprojected_cv);
+                cv::projectPoints(points_3d_inliers_cv, rvec, tvec, camera_intrinsics, distortion_coeffs, reprojected_inliers_cv);
+                points_2d_reprojected = Helpers::opencv2glm(reprojected_cv);
+                points_2d_inliers_reprojected = Helpers::opencv2glm(reprojected_inliers_cv);
+                points_2d_inliners = Helpers::opencv2glm(points_2d_inliers_cv);
+                float mse = Helpers::MSE(points_2d, points_2d_reprojected);
+                float mse_inliers = Helpers::MSE(points_2d_inliners, points_2d_inliers_reprojected);
+                std::cout << "avg reprojection error: " << mse << std::endl;
+                std::cout << "avg reprojection error (inliers): " << mse_inliers << std::endl;
                 cv::Mat rot_mat(3, 3, CV_64FC1);
                 cv::Rodrigues(rvec, rot_mat);
                 // std::cout << "rotmat: " << rot_mat << std::endl;
@@ -1241,9 +1277,9 @@ int main(int argc, char *argv[])
                 w2c.at<double>(3, 1) = 0.0f;
                 w2c.at<double>(3, 2) = 0.0f;
                 w2c.at<double>(3, 3) = 1.0f;
-                std::cout << "w2c: " << w2c << std::endl;
+                std::cout << "w2c (row major, openCV): " << w2c << std::endl;
                 cv::Mat c2w = w2c.inv();
-                std::cout << "c2w: " << c2w << std::endl;
+                std::cout << "c2w (row major, openCV): " << c2w << std::endl;
                 std::vector<double> w2c_vec(w2c.begin<double>(), w2c.end<double>());
                 // convert row major, opencv matrix to column major open gl matrix
                 glm::mat4 flipYZ = glm::mat4(1.0f);
@@ -1256,8 +1292,37 @@ int main(int argc, char *argv[])
                 w2c_auto = glm::transpose(w2c_auto);
                 use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
-                ready_to_calibrate = false;
-                leap_calibration_collecting = true;
+                leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
+                break;
+            }
+            case static_cast<int>(LeapCalibrationStateMachine::SHOW):
+            {
+                vcolorShader.use();
+                vcolorShader.setMat4("view", glm::mat4(1.0f));
+                vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                // todo: move this logic to LeapCalibrationStateMachine::CALIBRATE
+                std::vector<glm::vec2> NDCs;
+                std::vector<glm::vec2> NDCs_reprojected;
+                if (showInliersOnly)
+                {
+                    NDCs = Helpers::ScreenToNDC(points_2d_inliners, cam_width, cam_height, true);
+                    NDCs_reprojected = Helpers::ScreenToNDC(points_2d_inliers_reprojected, cam_width, cam_height, true);
+                }
+                else
+                {
+                    NDCs = Helpers::ScreenToNDC(points_2d, cam_width, cam_height, true);
+                    NDCs_reprojected = Helpers::ScreenToNDC(points_2d_reprojected, cam_width, cam_height, true);
+                }
+                PointCloud pointCloud1(NDCs, screen_verts_color_red);
+                pointCloud1.render();
+                PointCloud pointCloud2(NDCs_reprojected, screen_verts_color_blue);
+                pointCloud2.render();
+            }
+            default:
+            {
+                break;
+            }
             }
             break;
         }
@@ -1904,6 +1969,7 @@ void openIMGUIFrame()
     ImGui::Begin("augmented hands", NULL, window_flags);
     if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("General"))
         {
             if (ImGui::Checkbox("Use Projector", &use_projector))
@@ -1931,6 +1997,7 @@ void openIMGUIFrame()
             ImGui::Checkbox("PBO", &use_pbo);
             ImGui::TreePop();
         }
+        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Calibration"))
         {
             ImGui::Text("Calibration Mode");
@@ -1965,25 +2032,7 @@ void openIMGUIFrame()
             {
             case static_cast<int>(CalibrationMode::OFF):
             {
-                ImGui::Text("Cam2World (row major, OpenGL convention)");
-                if (ImGui::BeginTable("Cam2World", 4))
-                {
-                    glm::mat4 c2w = glm::transpose(glm::inverse(gl_camera.getViewMatrix()));
-                    for (int row = 0; row < 4; row++)
-                    {
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%f", c2w[row][0]);
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%f", c2w[row][1]);
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%f", c2w[row][2]);
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%f", c2w[row][3]);
-                    }
-                    ImGui::EndTable();
-                }
-                if (ImGui::Button("Save Extrinsics"))
+                if (ImGui::Button("Save Current Extrinsics"))
                 {
                     glm::mat4 w2c = gl_camera.getViewMatrix();
                     const float *pSource = (const float *)glm::value_ptr(w2c);
@@ -2020,24 +2069,58 @@ void openIMGUIFrame()
             }
             case static_cast<int>(CalibrationMode::LEAP):
             {
-                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 10, 1000);
-                if (ImGui::Checkbox("Ready To Calibrate", &ready_to_calibrate))
+                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 100, 1000);
+                if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
                 {
-                    if (ready_to_calibrate)
+                    if (ready_to_collect)
                     {
-                        leap_calibration_collecting = true;
+                        points_2d.clear();
+                        points_3d.clear();
+                        points_2d_inliners.clear();
+                        points_2d_reprojected.clear();
+                        points_2d_inliers_reprojected.clear();
+                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
                     }
                 }
                 float calib_progress = points_2d.size() / (float)leap_calib_n_points;
                 char buf[32];
                 sprintf(buf, "%d/%d", (int)(calib_progress * leap_calib_n_points), leap_calib_n_points);
                 ImGui::ProgressBar(calib_progress, ImVec2(0.f, 0.f), buf);
-                if (ImGui::Button("Save Calibration Extrinsics"))
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+                ImGui::InputInt("Iters", &pnp_iters);
+                ImGui::SameLine();
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+                ImGui::InputFloat("Err.", &pnp_rep_error);
+                ImGui::SameLine();
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+                ImGui::InputFloat("Conf.", &pnp_confidence);
+                if (ImGui::Button("Calibrate"))
                 {
-                    glm::mat4 w2c = gl_camera.getViewMatrix();
-                    const float *pSource = (const float *)glm::value_ptr(w2c);
+                    if (points_2d.size() >= leap_calib_n_points)
+                    {
+                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::CALIBRATE);
+                    }
+                }
+                if (ImGui::Checkbox("Show Reprojections", &showReprojections))
+                {
+                    if (points_2d.size() >= leap_calib_n_points)
+                    {
+                        if (showReprojections)
+                            leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
+                        else
+                            leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+                    }
+                }
+                ImGui::Checkbox("Show only inliers", &showInliersOnly);
+                if (ImGui::Button("Save Calibration"))
+                {
+                    const float *pSource = (const float *)glm::value_ptr(w2c_auto);
                     std::vector<float> w2c_vec(pSource, pSource + 16);
                     cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
+                    std::vector<float> flatten_image_points = Helpers::flatten_glm(points_2d);
+                    std::vector<float> flatten_object_points = Helpers::flatten_glm(points_3d);
+                    cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", flatten_image_points.data(), {points_2d.size(), 2}, "w");
+                    cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", flatten_object_points.data(), {points_3d.size(), 3}, "w");
                 }
                 break;
             }
@@ -2045,12 +2128,12 @@ void openIMGUIFrame()
                 break;
             }
             ImGui::Text("Calibration Source");
-            if (ImGui::RadioButton("Auto", &use_leap_calib_results, 0))
+            if (ImGui::RadioButton("Calibration", &use_leap_calib_results, 0))
             {
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("User", &use_leap_calib_results, 1))
+            if (ImGui::RadioButton("Manual", &use_leap_calib_results, 1))
             {
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
             }
@@ -2060,8 +2143,27 @@ void openIMGUIFrame()
                 if (useCoaxialCalib)
                     c2p_homography = PostProcess::findHomography(cur_screen_verts);
             }
+            ImGui::Text("Cam2World (row major, OpenGL convention)");
+            if (ImGui::BeginTable("Cam2World", 4))
+            {
+                glm::mat4 c2w = glm::transpose(glm::inverse(gl_camera.getViewMatrix()));
+                for (int row = 0; row < 4; row++)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][0]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][1]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][2]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][3]);
+                }
+                ImGui::EndTable();
+            }
             ImGui::TreePop();
         }
+        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Camera Controls"))
         {
             ImGui::Checkbox("Show Camera", &showCamera);
@@ -2092,6 +2194,7 @@ void openIMGUIFrame()
             }
             ImGui::TreePop();
         }
+        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Material"))
         {
             ImGui::Text("Material Type");
@@ -2112,6 +2215,7 @@ void openIMGUIFrame()
             ImGui::InputText("Diffuse Texture File", &diffuseTextureFile, 20);
             ImGui::TreePop();
         }
+        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Diffusion"))
         {
             ImGui::InputInt("Diffuse Seed", &diffuse_seed);
@@ -2141,6 +2245,7 @@ void openIMGUIFrame()
             ImGui::RadioButton("Latent Nothing", &sd_mask_mode, 3);
             ImGui::TreePop();
         }
+        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Post Process"))
         {
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 0.1f);
@@ -2158,6 +2263,7 @@ void openIMGUIFrame()
 
             ImGui::TreePop();
         }
+        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Leap Control"))
         {
             if (ImGui::Checkbox("Leap Polling Mode", &leap_poll_mode))
@@ -2169,14 +2275,6 @@ void openIMGUIFrame()
             ImGui::TreePop();
         }
     }
-    // if (ImGui::Checkbox("Use Leap Calib. Results", &use_leap_calib_results))
-    // {
-    //     create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
-    // };
-
-    // ImGui::Checkbox("Projective Texture", &projectiveTexture);
-
-    // ImGui::Checkbox("Jump Flood", &jumpFlood);
     ImGui::End();
 }
 
@@ -2320,42 +2418,46 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
                                 glm::mat4 &cam_project,
                                 std::vector<double> &camera_distortion,
                                 glm::mat4 &w2c_auto,
-                                glm::mat4 &w2c_user)
+                                glm::mat4 &w2c_user,
+                                std::vector<glm::vec2> &points_2d,
+                                std::vector<glm::vec3> &points_3d)
 {
     // vp = virtual projector
     // vc = virtual camera
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
     flipYZ[2][2] = -1.0f;
+    cnpy::NpyArray points2d_npy, points3d_npy;
     cnpy::NpyArray w2c_user_npy, w2c_auto_npy;
     cnpy::npz_t projcam_npz;
     cnpy::npz_t cam_npz;
     // bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
     try
     {
-
         const fs::path user_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
         const fs::path auto_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
-        if (fs::exists(user_path))
-        {
-            // user_defined = true;
-            w2c_user_npy = cnpy::npy_load(user_path.string());
-        }
-        else
-        {
+        const fs::path points2d_path{"../../resource/calibrations/leap_calibration/2dpoints.npy"};
+        const fs::path points3d_path{"../../resource/calibrations/leap_calibration/3dpoints.npy"};
+        const fs::path cam_calib_path{"../../resource/calibrations/cam_calibration/cam_calibration.npz"};
+        const fs::path projcam_calib_path{"../../resource/calibrations/camproj_calibration/calibration.npz"};
+        if (!fs::exists(user_path))
             return false;
-        }
-        if (fs::exists(auto_path))
-        {
-            // user_defined = false;
-            w2c_auto_npy = cnpy::npy_load(auto_path.string());
-        }
-        else
-        {
+        if (!fs::exists(auto_path))
             return false;
-        }
-        cam_npz = cnpy::npz_load("../../resource/calibrations/cam_calibration/cam_calibration.npz");
-        projcam_npz = cnpy::npz_load("../../resource/calibrations/camproj_calibration/calibration.npz");
+        if (!fs::exists(points2d_path))
+            return false;
+        if (!fs::exists(points3d_path))
+            return false;
+        if (!fs::exists(cam_calib_path))
+            return false;
+        if (!fs::exists(projcam_calib_path))
+            return false;
+        w2c_user_npy = cnpy::npy_load(user_path.string());
+        w2c_auto_npy = cnpy::npy_load(auto_path.string());
+        points2d_npy = cnpy::npy_load(points2d_path.string());
+        points3d_npy = cnpy::npy_load(points3d_path.string());
+        cam_npz = cnpy::npz_load(cam_calib_path.string());
+        projcam_npz = cnpy::npz_load(projcam_calib_path.string());
     }
     catch (std::runtime_error &e)
     {
@@ -2369,7 +2471,16 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     // w2c_auto = glm::transpose(w2c_auto);
     w2c_user = glm::make_mat4(w2c_user_npy.data<float>());
     // w2c = glm::inverse(w2c);
-
+    std::vector<float> points_2d_unpacked = points2d_npy.as_vec<float>();
+    std::vector<float> points_3d_unpacked = points3d_npy.as_vec<float>();
+    for (int i = 0; i < points_2d_unpacked.size(); i += 2)
+    {
+        points_2d.push_back(glm::vec2(points_2d_unpacked[i], points_2d_unpacked[i + 1]));
+    }
+    for (int i = 0; i < points_3d_unpacked.size(); i += 3)
+    {
+        points_3d.push_back(glm::vec3(points_3d_unpacked[i], points_3d_unpacked[i + 1], points_3d_unpacked[i + 2]));
+    }
     float ffar = 1500.0f;
     float nnear = 1.0f;
     glm::mat3 camera_intrinsics = glm::make_mat3(cam_npz["cam_intrinsics"].data<double>());

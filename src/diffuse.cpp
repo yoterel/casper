@@ -194,21 +194,13 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
         j2["mask"] = encoded_mask_buffer.c_str();
     }
     // std::cout << j2 << std::endl;
-    try
-    {
-        http::Request request{"http://127.0.0.1:7860/sdapi/v1/img2img"};
-        const std::string body = j2.dump();
-        const auto response = request.send("POST", body, {{"Content-Type", "application/json"}});
-        json j = json::parse(response.body);
-        std::string decoded_string = base64_decode(std::string(j["images"][0]));
-        std::vector<uint8_t> data = decode_png(decoded_string, width_out, height_out, OpenCVDecode);
-        return data;
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Request failed, error: " << e.what() << '\n';
-        exit(1);
-    }
+    http::Request request{"http://127.0.0.1:7860/sdapi/v1/img2img"};
+    const std::string body = j2.dump();
+    const auto response = request.send("POST", body, {{"Content-Type", "application/json"}}, std::chrono::milliseconds(5000));
+    json j = json::parse(response.body);
+    std::string decoded_string = base64_decode(std::string(j["images"][0]));
+    std::vector<uint8_t> data = decode_png(decoded_string, width_out, height_out, OpenCVDecode);
+    return data;
 }
 
 std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
