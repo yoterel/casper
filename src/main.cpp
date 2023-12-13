@@ -1525,7 +1525,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setInt("src", 0);
-                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
                         break;
                     }
                     case static_cast<int>(TextureMode::FROM_FILE):
@@ -1938,13 +1938,13 @@ void process_input(GLFWwindow *window)
             gl_flycamera.processKeyboard(DOWN, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_KP_0) == GLFW_PRESS)
         {
-            gl_flycamera.setViewMatrix(gl_projector.getViewMatrix());
-            gl_flycamera.setProjectionMatrix(gl_projector.getProjectionMatrix());
+            gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
+            gl_flycamera.setProjectionMatrix(gl_camera.getProjectionMatrix());
         }
         if (glfwGetKey(window, GLFW_KEY_KP_1) == GLFW_PRESS)
         {
-            gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
-            gl_flycamera.setProjectionMatrix(gl_camera.getProjectionMatrix());
+            gl_flycamera.setViewMatrix(gl_projector.getViewMatrix());
+            gl_flycamera.setProjectionMatrix(gl_projector.getProjectionMatrix());
         }
     }
 }
@@ -2133,12 +2133,14 @@ void openIMGUIFrame()
             ImGui::Text("Calibration Source");
             if (ImGui::RadioButton("Calibration", &use_leap_calib_results, 0))
             {
-                create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+                GLCamera dummy_camera;
+                create_virtual_cameras(dummy_camera, gl_projector, gl_camera);
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Manual", &use_leap_calib_results, 1))
             {
-                create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+                GLCamera dummy_camera;
+                create_virtual_cameras(dummy_camera, gl_projector, gl_camera);
             }
             ImGui::SameLine();
             if (ImGui::Checkbox("Use Coaxial Calib", &useCoaxialCalib))

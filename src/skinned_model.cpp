@@ -535,7 +535,7 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
     }
 }
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                          const glm::mat4 &local_to_world, bool use_bones, Texture *customDiffuseTexture)
+                          const glm::mat4 &local_to_world, const bool use_bones, Texture *customDiffuseTexture)
 {
     shader.use();
     shader.SetMaterial(GetMaterial());
@@ -711,7 +711,7 @@ void SkinnedModel::GetBoneTransformRelativeToParent(std::vector<glm::mat4> &tran
     }
 }
 
-void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> bones_to_world, const glm::mat4 local_to_world, const bool use_bones)
+void SkinnedModel::GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> &bones_to_world, const glm::mat4 &local_to_world, const bool use_bones)
 {
     transforms.resize(m_BoneInfo.size());
     if (use_bones)

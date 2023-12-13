@@ -133,11 +133,11 @@ public:
     bool LoadMesh(const std::string &Filename);
     void Render(Shader &shader, unsigned int camTex, bool useFBO);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                const glm::mat4 &local_to_world, bool use_bones = false, Texture *customDiffuseTexture = nullptr);
+                const glm::mat4 &local_to_world, const bool use_bones = false, Texture *customDiffuseTexture = nullptr);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                 const glm::mat4 &local_to_world, unsigned int camTex, bool useFBO = true, bool use_bones = false);
     const Material &GetMaterial();
-    void GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> leap_bone_transforms, const glm::mat4 local_to_world, const bool use_bones = false);
+    void GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> &leap_bone_transforms, const glm::mat4 &local_to_world, const bool use_bones = false);
     void GetBoneTransformsHack(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> bones_to_world);
     glm::vec3 getCenterOfMass();
     std::string getBoneName(unsigned int index);

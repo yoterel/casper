@@ -131,9 +131,9 @@ glm::mat4 GLCamera::getProjectionMatrix() // world to local
     return projectionMatrix;
 }
 
-void GLCamera::setProjectionMatrix(glm::mat4 newwProjectionMatrix) // world to local
+void GLCamera::setProjectionMatrix(glm::mat4 newProjectionMatrix) // world to local
 {
-    projectionMatrix = newwProjectionMatrix;
+    projectionMatrix = newProjectionMatrix;
 }
 
 glm::mat4 GLCamera::getLocal2WorldMatrix()
