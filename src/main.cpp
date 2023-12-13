@@ -152,8 +152,10 @@ bool saveIntermed = false;
 Texture *dynamicTexture = nullptr;
 Texture *bakedTexture = nullptr;
 int magic_leap_time_delay = 40000; // us
-int diffuse_seed = 0;
 float magic_leap_scale_factor = 10.0f;
+float magic_wrist_offset = -65.0f;
+float magic_arm_forward_offset = -170.0f;
+int diffuse_seed = -1;
 float lastX = proj_width / 2.0f;
 float lastY = proj_height / 2.0f;
 bool firstMouse = true;
@@ -784,6 +786,7 @@ int main(int argc, char *argv[])
                 case static_cast<int>(TextureMode::ORIGINAL):
                     skinnedShader.setBool("useProjector", false);
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                    break;
                 case static_cast<int>(TextureMode::BAKED):
                     skinnedShader.setBool("useProjector", false);
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo.getTexture());
@@ -2272,6 +2275,8 @@ void openIMGUIFrame()
             }
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
+            ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
+            ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);
             ImGui::TreePop();
         }
     }
@@ -2548,8 +2553,6 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
     // magic numbers
-    float magic_wrist_offset = -65.0f;
-    float magic_arm_forward_offset = -120.0f;
     glm::mat4 magic_leap_basis_fix = roty * flip_z * flip_y;
     glm::mat4 chirality = glm::mat4(1.0f);
     // init
