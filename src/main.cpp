@@ -83,7 +83,7 @@ enum class MaterialMode
 {
     DIFFUSE = 0,
     GGX = 1,
-    GLASS = 2,
+    WIREFRAME = 2,
 };
 enum class PostProcessMode
 {
@@ -153,10 +153,14 @@ bool showCamera = true;
 bool showProjector = true;
 bool undistortCamera = false;
 bool saveIntermed = false;
+bool useFingerWidth = false;
 Texture *dynamicTexture = nullptr;
 Texture *bakedTexture = nullptr;
 int magic_leap_time_delay = 40000; // us
 float magic_leap_scale_factor = 10.0f;
+float leap_arm_local_scaler = 0.019f;
+float leap_palm_local_scaler = 0.011f;
+float leap_bone_local_scaler = 0.05f;
 float magic_wrist_offset = -65.0f;
 float magic_arm_forward_offset = -170.0f;
 int diffuse_seed = -1;
@@ -757,43 +761,77 @@ int main(int argc, char *argv[])
             t_skin.start();
             if (bones_to_world_right.size() > 0)
             {
-                /* render skinned mesh to fbo, in camera space*/
-                skinnedShader.use();
-                skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
-                skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
-                skinnedShader.setBool("bake", false);
-                skinnedShader.setBool("flipTexVertically", false);
-                skinnedShader.setInt("src", 0);
-                if (material_mode == static_cast<int>(MaterialMode::GGX))
+                hands_fbo.bind(true);
+                glEnable(GL_DEPTH_TEST);
+                switch (material_mode)
                 {
-                    dirLight.calcLocalDirection(glm::mat4(1.0f));
+                case static_cast<int>(MaterialMode::DIFFUSE):
+                {
+                    /* render skinned mesh to fbo, in camera space*/
+                    skinnedShader.use();
+                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                    skinnedShader.setBool("bake", false);
+                    skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setInt("src", 0);
+                    skinnedShader.setBool("useGGX", false);
+                    switch (texture_mode)
+                    {
+                    case static_cast<int>(TextureMode::ORIGINAL):
+                        skinnedShader.setBool("useProjector", false);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                        break;
+                    case static_cast<int>(TextureMode::BAKED):
+                        skinnedShader.setBool("useProjector", false);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo.getTexture());
+                        break;
+                    case static_cast<int>(TextureMode::PROJECTIVE):
+                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                        skinnedShader.setBool("useProjector", true);
+                        skinnedShader.setBool("flipTexVertically", true);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
+                        break;
+                    default:
+                        skinnedShader.setBool("useProjector", false);
+                        rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                        break;
+                    }
+                    break;
+                }
+                case static_cast<int>(MaterialMode::GGX):
+                {
+                    skinnedShader.use();
+                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
+                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                    skinnedShader.setBool("bake", false);
+                    skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setInt("src", 0);
+                    skinnedShader.setBool("useGGX", true);
+                    dirLight.calcLocalDirection(bones_to_world_right[0]);
                     skinnedShader.SetDirectionalLight(dirLight);
                     glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
                     skinnedShader.SetCameraLocalPos(camWorldPos);
-                    skinnedShader.setBool("useGGX", true);
+                    skinnedShader.setBool("useProjector", false);
+                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                    break;
                 }
-                hands_fbo.bind(true);
-                glEnable(GL_DEPTH_TEST);
-                switch (texture_mode)
+                case static_cast<int>(MaterialMode::WIREFRAME):
                 {
-                case static_cast<int>(TextureMode::ORIGINAL):
-                    skinnedShader.setBool("useProjector", false);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                    glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
+                    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
+                    n_skeleton_primitives = skeleton_vertices.size() / 2;
+                    vcolorShader.use();
+                    vcolorShader.setMat4("projection", cam_projection_transform);
+                    vcolorShader.setMat4("view", cam_view_transform);
+                    vcolorShader.setMat4("model", glm::mat4(1.0f)); // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    glBindVertexArray(skeletonVAO);
+                    glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
                     break;
-                case static_cast<int>(TextureMode::BAKED):
-                    skinnedShader.setBool("useProjector", false);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo.getTexture());
-                    break;
-                case static_cast<int>(TextureMode::PROJECTIVE):
-                    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                    skinnedShader.setBool("useProjector", true);
-                    skinnedShader.setBool("flipTexVertically", true);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
-                    break;
+                }
                 default:
-                    skinnedShader.setBool("useProjector", false);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                {
                     break;
+                }
                 }
                 hands_fbo.unbind();
                 glDisable(GL_DEPTH_TEST);
@@ -932,6 +970,7 @@ int main(int argc, char *argv[])
                 skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
                 skinnedShader.setBool("useProjector", false);
                 skinnedShader.setBool("bake", false);
+                skinnedShader.setBool("useGGX", false);
                 skinnedShader.setInt("src", 0);
                 hands_fbo.bind(bones_to_world_right.size() == 0);
                 glEnable(GL_DEPTH_TEST);
@@ -1536,6 +1575,7 @@ int main(int argc, char *argv[])
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
+                        skinnedShader.setBool("useGGX", false);
                         skinnedShader.setInt("src", 0);
                         rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
                         break;
@@ -1552,6 +1592,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", false);
+                        skinnedShader.setBool("useGGX", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
@@ -1564,6 +1605,7 @@ int main(int argc, char *argv[])
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
+                        skinnedShader.setBool("useGGX", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo.getTexture());
@@ -1609,6 +1651,7 @@ int main(int argc, char *argv[])
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
+                        skinnedShader.setBool("useGGX", false);
                         skinnedShader.setInt("src", 0);
                         leftHandModel.Render(skinnedShader, bones_to_world_right, rotx);
                         break;
@@ -1625,6 +1668,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", false);
+                        skinnedShader.setBool("useGGX", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         leftHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
@@ -1637,6 +1681,7 @@ int main(int argc, char *argv[])
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
+                        skinnedShader.setBool("useGGX", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         leftHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo.getTexture());
@@ -2400,7 +2445,15 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
         // for some reason using the "basis" from leap rotates and flips the coordinate system of the palm
         // also there is an arbitrary scale factor associated with the 3d mesh
         // so we need to fix those
-        palm_orientation = palm_orientation * chirality * magic_leap_basis_fix * scalar;
+        if (useFingerWidth)
+        {
+            glm::mat4 local_scaler = glm::scale(glm::mat4(1.0f), hand->palm.width * glm::vec3(leap_palm_local_scaler, leap_palm_local_scaler, leap_palm_local_scaler));
+            palm_orientation = palm_orientation * chirality * magic_leap_basis_fix * scalar * local_scaler;
+        }
+        else
+        {
+            palm_orientation = palm_orientation * chirality * magic_leap_basis_fix * scalar;
+        }
 
         bones_to_world.push_back(glm::translate(glm::mat4(1.0f), palm_pos) * palm_orientation);
         // arm
@@ -2420,7 +2473,15 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
         glm::vec3 xforward = glm::normalize(glm::vec3(arm_rot[2][0], arm_rot[2][1], arm_rot[2][2])); // 3rd column of rotation matrix is local x
         xforward *= magic_arm_forward_offset;
         arm_translate = glm::translate(arm_translate, xforward);
-        bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
+        if (useFingerWidth)
+        {
+            glm::mat4 local_scaler = glm::scale(glm::mat4(1.0f), hand->arm.width * glm::vec3(leap_arm_local_scaler, leap_arm_local_scaler, leap_arm_local_scaler));
+            bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar * local_scaler);
+        }
+        else
+        {
+            bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
+        }
         // fingers
         for (uint32_t f = 0; f < 5; f++)
         {
@@ -2439,7 +2500,15 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                                                       finger.bones[b].rotation.z));
                 glm::vec3 translate = glm::vec3(joint1.x, joint1.y, joint1.z);
                 glm::mat4 trans = glm::translate(glm::mat4(1.0f), translate);
-                bones_to_world.push_back(trans * rot * chirality * magic_leap_basis_fix * scalar);
+                if (useFingerWidth)
+                {
+                    glm::mat4 local_scaler = glm::scale(glm::mat4(1.0f), finger.bones[b].width * glm::vec3(leap_bone_local_scaler, leap_bone_local_scaler, leap_bone_local_scaler));
+                    bones_to_world.push_back(trans * rot * chirality * magic_leap_basis_fix * scalar * local_scaler);
+                }
+                else
+                {
+                    bones_to_world.push_back(trans * rot * chirality * magic_leap_basis_fix * scalar);
+                }
             }
         }
         if (hand->type == eLeapHandType_Right)
@@ -2796,7 +2865,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::RadioButton("GGX", &material_mode, 1);
             ImGui::SameLine();
-            ImGui::RadioButton("Transparent", &material_mode, 2);
+            ImGui::RadioButton("Wireframe", &material_mode, 2);
 
             ImGui::Text("Diffuse Texture Type");
             ImGui::RadioButton("Original", &texture_mode, 0);
@@ -2864,10 +2933,14 @@ void openIMGUIFrame()
             {
                 leap.setPollMode(leap_poll_mode);
             }
+            ImGui::Checkbox("Use Finger Width", &useFingerWidth);
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
             ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
             ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);
+            ImGui::SliderFloat("Leap Local Bone Scale", &leap_bone_local_scaler, 0.001f, 0.1f);
+            ImGui::SliderFloat("Leap Palm Scale", &leap_palm_local_scaler, 0.001f, 0.1f);
+            ImGui::SliderFloat("Leap Arm Scale", &leap_arm_local_scaler, 0.001f, 0.1f);
             ImGui::TreePop();
         }
     }
