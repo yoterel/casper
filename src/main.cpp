@@ -60,7 +60,9 @@ bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 glm::mat4 &w2c_user,
                                 std::vector<glm::vec2> &points_2d,
                                 std::vector<glm::vec3> &points_3d,
-                                cv::Mat &undistort_map1, cv::Mat &undistort_map2);
+                                cv::Mat &undistort_map1, cv::Mat &undistort_map2,
+                                cv::Mat &camera_intrinsics_cv,
+                                cv::Mat &camera_distortion_cv);
 bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
@@ -98,10 +100,10 @@ enum class LeapCalibrationSettings
 };
 enum class LeapCalibrationStateMachine
 {
-    IDLE = 0,
-    COLLECT = 1,
-    CALIBRATE = 2,
-    SHOW = 3,
+    COLLECT = 0,
+    CALIBRATE = 1,
+    SHOW = 2,
+    MARK = 3,
 };
 enum class CalibrationMode
 {
@@ -122,6 +124,7 @@ bool leap_poll_mode = false;
 bool cam_color_mode = false;
 bool ready_to_collect = false;
 int leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
 std::string testFile("../../resource/uv.png");
@@ -188,6 +191,7 @@ float downscale_factor = 2.0f;
 cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
 cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
 cv::Mat curFrame_gray, prevFrame_gray;
+cv::Mat camera_intrinsics_cv, camera_distortion_cv;
 // cv::Mat curCamImage;
 // std::vector<uint8_t> curCamBuf;
 cv::Mat curCamThresholded;
@@ -215,7 +219,9 @@ int pnp_iters = 500;
 float pnp_rep_error = 2.0f;
 float pnp_confidence = 0.95f;
 bool showInliersOnly = true;
-bool showReprojections = true;
+bool showReprojections = false;
+bool markWithMouse = false;
+bool calibrationSuccess = false;
 std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
@@ -226,10 +232,15 @@ std::vector<glm::vec2> cur_screen_verts = {{-1.0f, 1.0f},
                                            {-1.0f, -1.0f},
                                            {1.0f, -1.0f},
                                            {1.0f, 1.0f}};
+glm::vec2 cur_screen_vert = {0.0f, 0.0f};
+glm::vec2 marked_2d_pos1, marked_2d_pos2;
+std::vector<glm::vec3> triangulated_marked;
+std::vector<glm::vec2> marked_reprojected;
 // GLCamera gl_projector(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
 GLCamera gl_flycamera;
 GLCamera gl_projector;
 GLCamera gl_camera;
+cv::Mat tvec_calib, rvec_calib;
 glm::mat4 w2c_auto, w2c_user;
 glm::mat4 proj_project;
 glm::mat4 cam_project;
@@ -488,14 +499,7 @@ int main(int argc, char *argv[])
     displayTexture.init(cam_width, cam_height, n_cam_channels);
     camTexture.init(cam_width, cam_height, n_cam_channels);
     flowTexture.init(cam_width, cam_height, 2);
-    // uint32_t cam_height = 0;
-    // uint32_t cam_width = 0;
-    // blocking_queue<CGrabResultPtr> camera_queue;
     moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
-    // queue_spsc<cv::Mat> camera_queue_cv(50);
-    // blocking_queue<cv::Mat> camera_queue_cv;
-    // blocking_queue<std::vector<uint8_t>> projector_queue;
-    // blocking_queue<uint8_t *> projector_queue;
     moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
     if (use_projector)
     {
@@ -510,7 +514,11 @@ int main(int argc, char *argv[])
     std::thread producer, consumer;
     // load calibration results if they exist
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    if (loadLeapCalibrationResults(proj_project, cam_project, w2c_auto, w2c_user, points_2d, points_3d, undistort_map1, undistort_map2))
+    if (loadLeapCalibrationResults(proj_project, cam_project,
+                                   w2c_auto, w2c_user,
+                                   points_2d, points_3d,
+                                   undistort_map1, undistort_map2,
+                                   camera_intrinsics_cv, camera_distortion_cv))
     {
         create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
     }
@@ -666,6 +674,11 @@ int main(int argc, char *argv[])
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 break;
             }
+            case static_cast<int>(CalibrationMode::LEAP):
+            {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                break;
+            }
             default:
             {
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -711,30 +724,11 @@ int main(int argc, char *argv[])
                 camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
             }
         }
-        // }
-        // buffer = (uint8_t *)pylonImage.GetBuffer();
-        // curFrame = tmp.clone();
-
-        // uint8_t* output = (uint8_t*)malloc(cam_width * cam_height * sizeof(uint8_t));
-        // uint16_t* dist_output = (uint16_t*)malloc(cam_width * cam_height * sizeof(uint16_t));
-        // NPP_wrapper::distanceTransform(buffer, output, cam_width, cam_height);
-        // cv::Mat cv_image_input(cam_height, cam_width, CV_8UC4, buffer);
-        // cv::imwrite("input.png", cv_image_input);
-        // cv::Mat cv_image_output(cam_height, cam_width, CV_8UC4, output);
-        // cv::imwrite("output.png", cv_image_output);
-        // cv::Mat cv_image_output_distance(cam_height, cam_width, CV_16UC1, dist_output);
-        // cv_image_output_distance.convertTo(cv_image_output_distance, CV_8U);
-        // cv::imwrite("output_distance.png", cv_image_output_distance);
-        // double minVal;
-        // double maxVal;
-        // cv::Point minLoc;
-        // cv::Point maxLoc;
-        // cv::minMaxLoc( cv_image_output_distance, &minVal, &maxVal, &minLoc, &maxLoc );
         t_camera.stop();
 
         /* deal with leap input */
         t_leap.start();
-        if (calib_mode != static_cast<int>(CalibrationMode::LEAP))
+        if (calib_mode == static_cast<int>(CalibrationMode::OFF))
         {
             if (!leap_poll_mode)
             {
@@ -744,9 +738,6 @@ int main(int argc, char *argv[])
                 // get leap frame
             }
             LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
-            // bones_to_world_left.clear();
-            // bones_to_world_right.clear();
-            // skeleton_vertices.clear();
         }
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
@@ -758,12 +749,6 @@ int main(int argc, char *argv[])
         glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
         t_leap.stop();
         /* render warped cam image */
-        // projectorOnlyShader.use();
-        // projectorOnlyShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
-        // projectorOnlyShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-        // projectorOnlyShader.setBool("binary", true);
-        // projectorOnlyShader.setBool("src", 0);
-        // canvas.renderTexture(camTexture.getTexture(), projectorOnlyShader, projFarQuad);
         switch (calib_mode)
         {
         case static_cast<int>(CalibrationMode::OFF):
@@ -957,21 +942,6 @@ int main(int argc, char *argv[])
             t_skin.stop();
             /* post process fbo using camera input */
             t_pp.start();
-            // if (!debug_mode)
-            // {
-            // skinnedModel.m_fbo.saveColorToFile("test1.png");
-            // canvasShader.use();
-            // canvasShader.setBool("binary", false);
-            // canvasShader.setBool("flipVer", false);
-            // canvasShader.setInt("src", 0);
-            // canvas.renderTexture(skinnedModel.m_fbo.getTexture(), canvasShader);
-            // projectorOnlyShader.use();
-            // projectorOnlyShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
-            // projectorOnlyShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-            // projectorOnlyShader.setBool("binary", true);
-            // projectorOnlyShader.setBool("src", 0);
-            /* render hand with jfa */
-            // unsigned int warped_cam = canvas.renderToFBO(camTexture.getTexture(), projectorOnlyShader, projFarQuad);
             switch (postprocess_mode)
             {
             case static_cast<int>(PostProcessMode::NONE):
@@ -1127,10 +1097,6 @@ int main(int argc, char *argv[])
         {
             switch (leap_calibration_state)
             {
-            case static_cast<int>(LeapCalibrationStateMachine::IDLE):
-            {
-                break;
-            }
             case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
             {
                 cv::Mat thr;
@@ -1163,12 +1129,6 @@ int main(int argc, char *argv[])
                     uint32_t ignore1, ignore2;
                     if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
                     {
-                        // Texture leapTexture1 = Texture();
-                        // leapTexture1.init(leap_width, leap_height, 1);
-                        // leapTexture1.load(buffer1, true, cam_buffer_format);
-                        // Texture leapTexture2 = Texture();
-                        // leapTexture2.init(leap_width, leap_height, 1);
-                        // leapTexture2.load(buffer2, true, cam_buffer_format);
                         cv::Mat leap1(leap_height, leap_width, CV_8UC1, buffer1.data());
                         cv::Mat leap2(leap_height, leap_width, CV_8UC1, buffer2.data());
                         cv::threshold(leap1, leap1_thr, 250, 255, cv::THRESH_BINARY);
@@ -1210,19 +1170,6 @@ int main(int argc, char *argv[])
                     points_2d_cv.push_back(cv::Point2f(points_2d[i].x, points_2d[i].y));
                     points_3d_cv.push_back(cv::Point3f(points_3d[i].x, points_3d[i].y, points_3d[i].z));
                 }
-                cnpy::npz_t my_npz;
-                try
-                {
-                    my_npz = cnpy::npz_load("../../resource/calibrations/cam_calibration/cam_calibration.npz");
-                }
-                catch (std::runtime_error &e)
-                {
-                    std::cout << e.what() << std::endl;
-                    exit(1);
-                }
-                // glm::mat3 camera_intrinsics = glm::make_mat3(my_npz["cam_intrinsics"].data<double>());
-                cv::Mat camera_intrinsics(3, 3, CV_64F, my_npz["cam_intrinsics"].data<double>());
-                cv::Mat distortion_coeffs(5, 1, CV_64F, my_npz["cam_distortion"].data<double>());
                 // initial guess
                 cv::Mat transform = cv::Mat::zeros(4, 4, CV_64FC1);
                 transform.at<double>(0, 0) = -1.0f;
@@ -1242,13 +1189,12 @@ int main(int argc, char *argv[])
                 // std::cout << "transform_inverse: " << transform << std::endl;
                 cv::Mat rotmat_inverse = transform(cv::Range(0, 3), cv::Range(0, 3)).clone();
                 // std::cout << "rot_mat_inverse: " << transform << std::endl;
-                cv::Mat tvec, rvec;
-                cv::Rodrigues(rotmat_inverse, rvec);
+                cv::Rodrigues(rotmat_inverse, rvec_calib);
                 // std::cout << "rvec_inverse: " << rvec << std::endl;
-                tvec = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
-                // cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics, distortion_coeffs, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
+                tvec_calib = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
+                // cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics_cv, distortion_coeffs_cv, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
                 cv::Mat inliers;
-                cv::solvePnPRansac(points_3d_cv, points_2d_cv, camera_intrinsics, distortion_coeffs, rvec, tvec, true,
+                cv::solvePnPRansac(points_3d_cv, points_2d_cv, camera_intrinsics_cv, camera_distortion_cv, rvec_calib, tvec_calib, true,
                                    pnp_iters, pnp_rep_error, pnp_confidence, inliers, cv::SOLVEPNP_ITERATIVE);
                 std::vector<cv::Point2f> points_2d_inliers_cv;
                 std::vector<cv::Point3f> points_3d_inliers_cv;
@@ -1259,8 +1205,8 @@ int main(int argc, char *argv[])
                     points_3d_inliers_cv.push_back(points_3d_cv[n]); // add i-inlier to list
                 }
                 std::vector<cv::Point2f> reprojected_cv, reprojected_inliers_cv;
-                cv::projectPoints(points_3d_cv, rvec, tvec, camera_intrinsics, distortion_coeffs, reprojected_cv);
-                cv::projectPoints(points_3d_inliers_cv, rvec, tvec, camera_intrinsics, distortion_coeffs, reprojected_inliers_cv);
+                cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
+                cv::projectPoints(points_3d_inliers_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_inliers_cv);
                 points_2d_reprojected = Helpers::opencv2glm(reprojected_cv);
                 points_2d_inliers_reprojected = Helpers::opencv2glm(reprojected_inliers_cv);
                 points_2d_inliners = Helpers::opencv2glm(points_2d_inliers_cv);
@@ -1269,21 +1215,21 @@ int main(int argc, char *argv[])
                 std::cout << "avg reprojection error: " << mse << std::endl;
                 std::cout << "avg reprojection error (inliers): " << mse_inliers << std::endl;
                 cv::Mat rot_mat(3, 3, CV_64FC1);
-                cv::Rodrigues(rvec, rot_mat);
+                cv::Rodrigues(rvec_calib, rot_mat);
                 // std::cout << "rotmat: " << rot_mat << std::endl;
                 cv::Mat w2c(4, 4, CV_64FC1);
                 w2c.at<double>(0, 0) = rot_mat.at<double>(0, 0);
                 w2c.at<double>(0, 1) = rot_mat.at<double>(0, 1);
                 w2c.at<double>(0, 2) = rot_mat.at<double>(0, 2);
-                w2c.at<double>(0, 3) = tvec.at<double>(0, 0);
+                w2c.at<double>(0, 3) = tvec_calib.at<double>(0, 0);
                 w2c.at<double>(1, 0) = rot_mat.at<double>(1, 0);
                 w2c.at<double>(1, 1) = rot_mat.at<double>(1, 1);
                 w2c.at<double>(1, 2) = rot_mat.at<double>(1, 2);
-                w2c.at<double>(1, 3) = tvec.at<double>(1, 0);
+                w2c.at<double>(1, 3) = tvec_calib.at<double>(1, 0);
                 w2c.at<double>(2, 0) = rot_mat.at<double>(2, 0);
                 w2c.at<double>(2, 1) = rot_mat.at<double>(2, 1);
                 w2c.at<double>(2, 2) = rot_mat.at<double>(2, 2);
-                w2c.at<double>(2, 3) = tvec.at<double>(2, 0);
+                w2c.at<double>(2, 3) = tvec_calib.at<double>(2, 0);
                 w2c.at<double>(3, 0) = 0.0f;
                 w2c.at<double>(3, 1) = 0.0f;
                 w2c.at<double>(3, 2) = 0.0f;
@@ -1303,8 +1249,8 @@ int main(int argc, char *argv[])
                 w2c_auto = glm::transpose(w2c_auto);
                 use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
-                leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
-                showReprojections = true;
+                leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+                calibrationSuccess = true;
                 break;
             }
             case static_cast<int>(LeapCalibrationStateMachine::SHOW):
@@ -1330,6 +1276,102 @@ int main(int argc, char *argv[])
                 pointCloud1.render();
                 PointCloud pointCloud2(NDCs_reprojected, screen_verts_color_blue);
                 pointCloud2.render();
+                break;
+            }
+            case static_cast<int>(LeapCalibrationStateMachine::MARK):
+            {
+                switch (leap_calibration_mark_state)
+                {
+                case 0:
+                {
+                    displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
+                    textureShader.use();
+                    textureShader.setMat4("view", glm::mat4(1.0f));
+                    textureShader.setMat4("projection", glm::mat4(1.0f));
+                    textureShader.setMat4("model", glm::mat4(1.0f));
+                    textureShader.setBool("flipHor", false);
+                    textureShader.setBool("flipVer", true);
+                    textureShader.setBool("binary", false);
+                    textureShader.setBool("isGray", true);
+                    textureShader.setInt("src", 0);
+                    displayTexture.bind();
+                    fullScreenQuad.render();
+                    vcolorShader.use();
+                    vcolorShader.setMat4("view", glm::mat4(1.0f));
+                    vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                    vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    PointCloud pointCloud(marked_reprojected, screen_verts_color_red);
+                    pointCloud.render();
+                    break;
+                }
+                case 1:
+                {
+                    std::vector<uint8_t> buffer1, buffer2;
+                    uint32_t ignore1, ignore2;
+                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                    {
+                        Texture leapTexture = Texture();
+                        leapTexture.init(leap_width, leap_height, 1);
+                        leapTexture.load(buffer1, true, cam_buffer_format);
+                        // Texture leapTexture2 = Texture();
+                        // leapTexture2.init(leap_width, leap_height, 1);
+                        // leapTexture2.load(buffer2, true, cam_buffer_format);
+                        leapTexture.bind();
+                        textureShader.use();
+                        textureShader.setMat4("view", glm::mat4(1.0f));
+                        textureShader.setMat4("projection", glm::mat4(1.0f));
+                        textureShader.setMat4("model", glm::mat4(1.0f));
+                        textureShader.setBool("flipVer", true);
+                        textureShader.setInt("src", 0);
+                        textureShader.setBool("isGray", true);
+                        textureShader.setBool("binary", false);
+                        fullScreenQuad.render();
+                        vcolorShader.use();
+                        vcolorShader.setMat4("view", glm::mat4(1.0f));
+                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        std::vector<glm::vec2> test = {cur_screen_vert};
+                        PointCloud pointCloud(test, screen_verts_color_red);
+                        pointCloud.render(5.0f);
+                    }
+                    break;
+                }
+                case 2:
+                {
+                    std::vector<uint8_t> buffer1, buffer2;
+                    uint32_t ignore1, ignore2;
+                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                    {
+                        Texture leapTexture = Texture();
+                        leapTexture.init(leap_width, leap_height, 1);
+                        leapTexture.load(buffer2, true, cam_buffer_format);
+                        // Texture leapTexture2 = Texture();
+                        // leapTexture2.init(leap_width, leap_height, 1);
+                        // leapTexture2.load(buffer2, true, cam_buffer_format);
+                        leapTexture.bind();
+                        textureShader.use();
+                        textureShader.setMat4("view", glm::mat4(1.0f));
+                        textureShader.setMat4("projection", glm::mat4(1.0f));
+                        textureShader.setMat4("model", glm::mat4(1.0f));
+                        textureShader.setBool("flipVer", true);
+                        textureShader.setInt("src", 0);
+                        textureShader.setBool("isGray", true);
+                        textureShader.setBool("binary", false);
+                        fullScreenQuad.render();
+                        vcolorShader.use();
+                        vcolorShader.setMat4("view", glm::mat4(1.0f));
+                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        std::vector<glm::vec2> test = {cur_screen_vert};
+                        PointCloud pointCloud(test, screen_verts_color_red);
+                        pointCloud.render(5.0f);
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
+                break;
             }
             default:
             {
@@ -1921,6 +1963,26 @@ void process_input(GLFWwindow *window)
         {
             space_modifier = false;
             displayBoneIndex = (displayBoneIndex + 1) % n_bones;
+            if (calib_mode == static_cast<int>(CalibrationMode::LEAP) && leap_calibration_state == static_cast<int>(LeapCalibrationStateMachine::MARK))
+            {
+                if (leap_calibration_mark_state == 1)
+                {
+                    marked_2d_pos1 = cur_screen_vert;
+                }
+                if (leap_calibration_mark_state == 2)
+                {
+                    marked_2d_pos2 = cur_screen_vert;
+                    glm::vec3 pos_3d = triangulate(leap, marked_2d_pos1, marked_2d_pos2);
+                    triangulated_marked.push_back(pos_3d);
+                    std::vector<cv::Point3f> points_3d_cv{cv::Point3f(pos_3d.x, pos_3d.y, pos_3d.z)};
+                    std::vector<cv::Point2f> reprojected_cv;
+                    cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
+                    glm::vec2 reprojected = glm::vec2(reprojected_cv[0].x, reprojected_cv[0].y);
+                    reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
+                    marked_reprojected.push_back(reprojected);
+                }
+                leap_calibration_mark_state = (leap_calibration_mark_state + 1) % 3;
+            }
         }
     }
     if (!mod)
@@ -1958,340 +2020,18 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
-// IMGUI frame creator
-// ---------------------------------------------------------------------------------------------
-void openIMGUIFrame()
-{
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-    // ImGui::ShowDemoWindow(); // Show demo window
-    // return;
-    ImGuiWindowFlags window_flags = 0;
-    window_flags |= ImGuiWindowFlags_NoNav;
-    window_flags |= ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("augmented hands", NULL, window_flags);
-    if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("General"))
-        {
-            if (ImGui::Checkbox("Use Projector", &use_projector))
-            {
-                if (use_projector)
-                {
-                    if (!projector.init())
-                    {
-                        std::cerr << "Failed to initialize projector\n";
-                        use_projector = false;
-                    }
-                }
-                else
-                {
-                    projector.kill();
-                }
-            }
-            ImGui::Checkbox("Debug Mode", &debug_mode);
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Freecam Mode", &freecam_mode))
-            {
-                create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
-            }
-            ImGui::SameLine();
-            ImGui::Checkbox("PBO", &use_pbo);
-            ImGui::TreePop();
-        }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Calibration"))
-        {
-            ImGui::Text("Calibration Mode");
-            if (ImGui::RadioButton("Off", &calib_mode, 0))
-            {
-                leap.setImageMode(false);
-                exposure = 1850.0f; // max exposure allowing for max fps
-                camera.set_exposure_time(exposure);
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 1))
-            {
-                debug_mode = false;
-                leap.setImageMode(false);
-                exposure = 1850.0f; // max exposure allowing for max fps
-                camera.set_exposure_time(exposure);
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Leap Calibration", &calib_mode, 2))
-            {
-                projector.kill();
-                use_projector = false;
-                leap.setImageMode(true);
-                // throttle down producer speed to allow smooth display
-                // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
-                exposure = 10000.0f;
-                camera.set_exposure_time(exposure);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                debug_mode = false;
-            }
-            switch (calib_mode)
-            {
-            case static_cast<int>(CalibrationMode::OFF):
-            {
-                if (ImGui::Button("Save Current Extrinsics"))
-                {
-                    glm::mat4 w2c = gl_camera.getViewMatrix();
-                    const float *pSource = (const float *)glm::value_ptr(w2c);
-                    std::vector<float> w2c_vec(pSource, pSource + 16);
-                    cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c_user.npy", w2c_vec.data(), {4, 4}, "w");
-                    w2c_user = w2c;
-                }
-                break;
-            }
-            case static_cast<int>(CalibrationMode::COAXIAL):
-            {
-                if (ImGui::Button("Save Coaxial Calibration"))
-                {
-                    cnpy::npy_save("../../resource/calibrations/coaxial_calibration/coax_user.npy", cur_screen_verts.data(), {4, 2}, "w");
-                }
-                if (ImGui::BeginTable("Cam2Proj Vertices", 2))
-                {
-                    std::vector<glm::vec2> tmpVerts;
-                    if (useCoaxialCalib)
-                        tmpVerts = cur_screen_verts;
-                    else
-                        tmpVerts = screen_verts;
-                    for (int row = 0; row < tmpVerts.size(); row++)
-                    {
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        ImGui::Text("Vert %d", row);
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%f, %f", tmpVerts[row][0], tmpVerts[row][1]);
-                    }
-                    ImGui::EndTable();
-                }
-                break;
-            }
-            case static_cast<int>(CalibrationMode::LEAP):
-            {
-                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 100, 1000);
-                if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
-                {
-                    if (ready_to_collect)
-                    {
-                        points_2d.clear();
-                        points_3d.clear();
-                        points_2d_inliners.clear();
-                        points_2d_reprojected.clear();
-                        points_2d_inliers_reprojected.clear();
-                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
-                    }
-                }
-                float calib_progress = points_2d.size() / (float)leap_calib_n_points;
-                char buf[32];
-                sprintf(buf, "%d/%d", (int)(calib_progress * leap_calib_n_points), leap_calib_n_points);
-                ImGui::ProgressBar(calib_progress, ImVec2(0.f, 0.f), buf);
-                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
-                ImGui::InputInt("Iters", &pnp_iters);
-                ImGui::SameLine();
-                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
-                ImGui::InputFloat("Err.", &pnp_rep_error);
-                ImGui::SameLine();
-                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
-                ImGui::InputFloat("Conf.", &pnp_confidence);
-                if (ImGui::Button("Calibrate"))
-                {
-                    if (points_2d.size() >= leap_calib_n_points)
-                    {
-                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::CALIBRATE);
-                    }
-                }
-                if (ImGui::Checkbox("Show Reprojections", &showReprojections))
-                {
-                    if (points_2d.size() >= leap_calib_n_points)
-                    {
-                        if (showReprojections)
-                            leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
-                        else
-                            leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
-                    }
-                }
-                ImGui::Checkbox("Show only inliers", &showInliersOnly);
-                if (ImGui::Button("Save Calibration"))
-                {
-                    const float *pSource = (const float *)glm::value_ptr(w2c_auto);
-                    std::vector<float> w2c_vec(pSource, pSource + 16);
-                    cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
-                    std::vector<float> flatten_image_points = Helpers::flatten_glm(points_2d);
-                    std::vector<float> flatten_object_points = Helpers::flatten_glm(points_3d);
-                    cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", flatten_image_points.data(), {points_2d.size(), 2}, "w");
-                    cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", flatten_object_points.data(), {points_3d.size(), 3}, "w");
-                }
-                break;
-            }
-            default:
-                break;
-            }
-            ImGui::Text("Calibration Source");
-            if (ImGui::RadioButton("Calibration", &use_leap_calib_results, 0))
-            {
-                GLCamera dummy_camera;
-                create_virtual_cameras(dummy_camera, gl_projector, gl_camera);
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Manual", &use_leap_calib_results, 1))
-            {
-                GLCamera dummy_camera;
-                create_virtual_cameras(dummy_camera, gl_projector, gl_camera);
-            }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Use Coaxial Calib", &useCoaxialCalib))
-            {
-                if (useCoaxialCalib)
-                    c2p_homography = PostProcess::findHomography(cur_screen_verts);
-            }
-            ImGui::Text("Cam2World (row major, OpenGL convention)");
-            if (ImGui::BeginTable("Cam2World", 4))
-            {
-                glm::mat4 c2w = glm::transpose(glm::inverse(gl_camera.getViewMatrix()));
-                for (int row = 0; row < 4; row++)
-                {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%f", c2w[row][0]);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%f", c2w[row][1]);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%f", c2w[row][2]);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%f", c2w[row][3]);
-                }
-                ImGui::EndTable();
-            }
-            ImGui::TreePop();
-        }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Camera Controls"))
-        {
-            ImGui::Checkbox("Show Camera", &showCamera);
-            ImGui::SameLine();
-            ImGui::Checkbox("Show Projector", &showProjector);
-            if (ImGui::SliderFloat("Camera Exposure [us]", &exposure, 30.0f, 10000.0f))
-            {
-                // std::cout << "current exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
-                camera.set_exposure_time(exposure);
-                // std::cout << "new exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
-            }
-            if (ImGui::Button("Cam Screen Shot"))
-            {
-                hands_fbo.saveColorToFile("../../debug/screenshot_hands_fbo.png");
-                postprocess_fbo.saveColorToFile("../../debug/screenshot_pp_fbo.png");
-                c2p_fbo.saveColorToFile("../../debug/screenshot_c2p_fbo.png");
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cam2view"))
-            {
-                gl_camera.setViewMatrix(gl_flycamera.getViewMatrix());
-                gl_projector.setViewMatrix(gl_flycamera.getViewMatrix());
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("View2cam"))
-            {
-                gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
-            }
-            ImGui::Checkbox("Undistort Camera Input", &undistortCamera);
-            ImGui::TreePop();
-        }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Material"))
-        {
-            ImGui::Text("Material Type");
-            ImGui::RadioButton("Diffuse", &material_mode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("GGX", &material_mode, 1);
-            ImGui::SameLine();
-            ImGui::RadioButton("Transparent", &material_mode, 2);
-
-            ImGui::Text("Diffuse Texture Type");
-            ImGui::RadioButton("Original", &texture_mode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("From File", &texture_mode, 1);
-            ImGui::SameLine();
-            ImGui::RadioButton("Projective", &texture_mode, 2);
-            ImGui::SameLine();
-            ImGui::RadioButton("Baked", &texture_mode, 3);
-            ImGui::InputText("Diffuse Texture File", &diffuseTextureFile, 20);
-            ImGui::TreePop();
-        }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Diffusion"))
-        {
-            ImGui::InputInt("Diffuse Seed", &diffuse_seed);
-            if (ImGui::Button("Bake StableDiffusion Texture"))
-            {
-                bakeRequest = true;
-            }
-            ImGui::SameLine();
-            ImGui::Checkbox("Save Intermediate Outputs", &saveIntermed);
-            ImGui::InputText("Baked Texture File", &bakeFile);
-            ImGui::InputText("Prompt", &sd_prompt);
-            ImGui::Text("Stable Diffusion Mode");
-            ImGui::SameLine();
-            ImGui::RadioButton("Use prompt", &sd_mode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("Random Animal", &sd_mode, 1);
-            ImGui::SameLine();
-            ImGui::RadioButton("Gesture", &sd_mode, 2);
-            ImGui::Text("Mask Mode");
-            ImGui::SameLine();
-            ImGui::RadioButton("Fill", &sd_mask_mode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("Original", &sd_mask_mode, 1);
-            ImGui::SameLine();
-            ImGui::RadioButton("Latent Noise", &sd_mask_mode, 2);
-            ImGui::SameLine();
-            ImGui::RadioButton("Latent Nothing", &sd_mask_mode, 3);
-            ImGui::TreePop();
-        }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Post Process"))
-        {
-            ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 0.1f);
-            ImGui::Text("Post Processing Mode");
-            ImGui::SameLine();
-            ImGui::RadioButton("None", &postprocess_mode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
-            ImGui::SameLine();
-            ImGui::RadioButton("Mask", &postprocess_mode, 2);
-            ImGui::SameLine();
-            ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
-            ImGui::SameLine();
-            ImGui::RadioButton("OF", &postprocess_mode, 4);
-
-            ImGui::TreePop();
-        }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Leap Control"))
-        {
-            if (ImGui::Checkbox("Leap Polling Mode", &leap_poll_mode))
-            {
-                leap.setPollMode(leap_poll_mode);
-            }
-            ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
-            ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
-            ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
-            ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);
-            ImGui::TreePop();
-        }
-    }
-    ImGui::End();
-}
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     if (activateGUI)
         return;
-    if (calib_mode == static_cast<int>(CalibrationMode::COAXIAL))
+    switch (calib_mode)
+    {
+    case static_cast<int>(CalibrationMode::OFF):
+    {
+        break;
+    }
+    case static_cast<int>(CalibrationMode::COAXIAL):
     {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
@@ -2308,6 +2048,22 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         {
             dragging = false;
         }
+        break;
+    }
+    case static_cast<int>(CalibrationMode::LEAP):
+    {
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+        {
+            dragging = true;
+        }
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
+        {
+            dragging = false;
+        }
+        break;
+    }
+    default:
+        break;
     }
 }
 // glfw: whenever the mouse moves, this callback is called
@@ -2379,6 +2135,11 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
     }
     case static_cast<int>(CalibrationMode::LEAP):
     {
+        glm::vec2 mouse_pos_NDC = Helpers::ScreenToNDC(glm::vec2(xpos, ypos), proj_width, proj_height, true);
+        if (dragging)
+        {
+            cur_screen_vert = mouse_pos_NDC;
+        }
         break;
     }
     default:
@@ -2430,7 +2191,9 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
                                 std::vector<glm::vec2> &points_2d,
                                 std::vector<glm::vec3> &points_3d,
                                 cv::Mat &undistort_map1,
-                                cv::Mat &undistort_map2)
+                                cv::Mat &undistort_map2,
+                                cv::Mat &camera_intrinsics_cv,
+                                cv::Mat &camera_distortion_cv)
 {
     // vp = virtual projector
     // vc = virtual camera
@@ -2494,10 +2257,12 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     float ffar = 1500.0f;
     float nnear = 1.0f;
     std::vector<double> camera_intrinsics_raw = cam_npz["cam_intrinsics"].as_vec<double>();
-    glm::mat3 camera_intrinsics = glm::make_mat3(camera_intrinsics_raw.data());
     std::vector<double> camera_distortion_raw = cam_npz["cam_distortion"].as_vec<double>();
-    cv::Mat camera_intrinsics_cv = cv::Mat(3, 3, CV_64F, camera_intrinsics_raw.data());
-    cv::Mat camera_distortion_cv = cv::Mat(1, camera_distortion_raw.size(), CV_64F, camera_distortion_raw.data());
+    camera_intrinsics_cv = cv::Mat(3, 3, CV_64F, cam_npz["cam_intrinsics"].data<double>()).clone();
+    camera_distortion_cv = cv::Mat(5, 1, CV_64F, cam_npz["cam_distortion"].data<double>()).clone();
+    glm::mat3 camera_intrinsics = glm::make_mat3(camera_intrinsics_raw.data());
+    // cv::Mat camera_intrinsics_cv = cv::Mat(3, 3, CV_64F, camera_intrinsics_raw.data());
+    // cv::Mat camera_distortion_cv = cv::Mat(1, camera_distortion_raw.size(), CV_64F, camera_distortion_raw.data());
     std::cout << "camera_distortion: " << camera_distortion_cv << std::endl;
     std::cout << "camera_intrinsics: " << camera_intrinsics_cv << std::endl;
     cv::initUndistortRectifyMap(camera_intrinsics_cv, camera_distortion_cv, cv::Mat(), camera_intrinsics_cv, cv::Size(cam_width, cam_height), CV_32FC1, undistort_map1, undistort_map2);
@@ -2757,4 +2522,354 @@ glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2
     float y = (alty1 + alty2) / 2.0f;
     glm::vec3 point_3d = glm::vec3(x, -z, y);
     return point_3d;
+}
+
+// IMGUI frame creator
+// ---------------------------------------------------------------------------------------------
+void openIMGUIFrame()
+{
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    // ImGui::ShowDemoWindow(); // Show demo window
+    // return;
+    ImGuiWindowFlags window_flags = 0;
+    window_flags |= ImGuiWindowFlags_NoNav;
+    window_flags |= ImGuiWindowFlags_NoTitleBar;
+    ImGui::Begin("augmented hands", NULL, window_flags);
+    if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("General"))
+        {
+            if (ImGui::Checkbox("Use Projector", &use_projector))
+            {
+                if (use_projector)
+                {
+                    if (!projector.init())
+                    {
+                        std::cerr << "Failed to initialize projector\n";
+                        use_projector = false;
+                    }
+                }
+                else
+                {
+                    projector.kill();
+                }
+            }
+            ImGui::Checkbox("Debug Mode", &debug_mode);
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Freecam Mode", &freecam_mode))
+            {
+                create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+            }
+            ImGui::SameLine();
+            ImGui::Checkbox("PBO", &use_pbo);
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Calibration"))
+        {
+            ImGui::Text("Calibration Mode");
+            if (ImGui::RadioButton("Off", &calib_mode, 0))
+            {
+                leap.setImageMode(false);
+                exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(exposure);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 1))
+            {
+                debug_mode = false;
+                leap.setImageMode(false);
+                exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(exposure);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Leap Calibration", &calib_mode, 2))
+            {
+                projector.kill();
+                use_projector = false;
+                leap.setImageMode(true);
+                // throttle down producer speed to allow smooth display
+                // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
+                exposure = 10000.0f;
+                camera.set_exposure_time(exposure);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                debug_mode = false;
+            }
+            switch (calib_mode)
+            {
+            case static_cast<int>(CalibrationMode::OFF):
+            {
+                if (ImGui::Button("Save Current Extrinsics"))
+                {
+                    glm::mat4 w2c = gl_camera.getViewMatrix();
+                    const float *pSource = (const float *)glm::value_ptr(w2c);
+                    std::vector<float> w2c_vec(pSource, pSource + 16);
+                    cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c_user.npy", w2c_vec.data(), {4, 4}, "w");
+                    w2c_user = w2c;
+                }
+                break;
+            }
+            case static_cast<int>(CalibrationMode::COAXIAL):
+            {
+                if (ImGui::Button("Save Coaxial Calibration"))
+                {
+                    cnpy::npy_save("../../resource/calibrations/coaxial_calibration/coax_user.npy", cur_screen_verts.data(), {4, 2}, "w");
+                }
+                if (ImGui::BeginTable("Cam2Proj Vertices", 2))
+                {
+                    std::vector<glm::vec2> tmpVerts;
+                    if (useCoaxialCalib)
+                        tmpVerts = cur_screen_verts;
+                    else
+                        tmpVerts = screen_verts;
+                    for (int row = 0; row < tmpVerts.size(); row++)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Vert %d", row);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f, %f", tmpVerts[row][0], tmpVerts[row][1]);
+                    }
+                    ImGui::EndTable();
+                }
+                break;
+            }
+            case static_cast<int>(CalibrationMode::LEAP):
+            {
+                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 100, 1000);
+                if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
+                {
+                    if (ready_to_collect)
+                    {
+                        points_2d.clear();
+                        points_3d.clear();
+                        points_2d_inliners.clear();
+                        points_2d_reprojected.clear();
+                        points_2d_inliers_reprojected.clear();
+                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+                    }
+                }
+                float calib_progress = points_2d.size() / (float)leap_calib_n_points;
+                char buf[32];
+                sprintf(buf, "%d/%d points", (int)(calib_progress * leap_calib_n_points), leap_calib_n_points);
+                ImGui::ProgressBar(calib_progress, ImVec2(-1.0f, 0.0f), buf);
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+                ImGui::InputInt("Iters", &pnp_iters);
+                ImGui::SameLine();
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+                ImGui::InputFloat("Err.", &pnp_rep_error);
+                ImGui::SameLine();
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+                ImGui::InputFloat("Conf.", &pnp_confidence);
+                if (ImGui::Button("Calibrate"))
+                {
+                    if (points_2d.size() >= leap_calib_n_points)
+                    {
+                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::CALIBRATE);
+                    }
+                }
+                if (calibrationSuccess)
+                {
+                    if (ImGui::Checkbox("Show Reprojections", &showReprojections))
+                    {
+                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
+                        ImGui::Checkbox("Show only inliers", &showInliersOnly);
+                        markWithMouse = false;
+                    }
+                    if (ImGui::Checkbox("Mark with mouse", &markWithMouse))
+                    {
+                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::MARK);
+                        showReprojections = false;
+                    }
+                    if (markWithMouse)
+                    {
+                        // ImGui::ListBox("listbox", &item_current, items, IM_ARRAYSIZE(items), 4);
+                        if (ImGui::BeginTable("Triangulated", 2))
+                        {
+                            for (int row = 0; row < triangulated_marked.size(); row++)
+                            {
+                                ImGui::TableNextRow();
+                                ImGui::TableNextColumn();
+                                ImGui::Text("Vert %d", row);
+                                ImGui::TableNextColumn();
+                                ImGui::Text("%f, %f, %f", triangulated_marked[row][0], triangulated_marked[row][1], triangulated_marked[row][2]);
+                            }
+                            ImGui::EndTable();
+                        }
+                    }
+                    if (!showReprojections && !markWithMouse)
+                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+                    if (ImGui::Button("Save Calibration"))
+                    {
+                        const float *pSource = (const float *)glm::value_ptr(w2c_auto);
+                        std::vector<float> w2c_vec(pSource, pSource + 16);
+                        cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c.npy", w2c_vec.data(), {4, 4}, "w");
+                        std::vector<float> flatten_image_points = Helpers::flatten_glm(points_2d);
+                        std::vector<float> flatten_object_points = Helpers::flatten_glm(points_3d);
+                        cnpy::npy_save("../../resource/calibrations/leap_calibration/2dpoints.npy", flatten_image_points.data(), {points_2d.size(), 2}, "w");
+                        cnpy::npy_save("../../resource/calibrations/leap_calibration/3dpoints.npy", flatten_object_points.data(), {points_3d.size(), 3}, "w");
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+            }
+            ImGui::Text("Calibration Source");
+            if (ImGui::RadioButton("Calibration", &use_leap_calib_results, 0))
+            {
+                GLCamera dummy_camera;
+                create_virtual_cameras(dummy_camera, gl_projector, gl_camera);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Manual", &use_leap_calib_results, 1))
+            {
+                GLCamera dummy_camera;
+                create_virtual_cameras(dummy_camera, gl_projector, gl_camera);
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Use Coaxial Calib", &useCoaxialCalib))
+            {
+                if (useCoaxialCalib)
+                    c2p_homography = PostProcess::findHomography(cur_screen_verts);
+            }
+            ImGui::Text("Cam2World (row major, OpenGL convention)");
+            if (ImGui::BeginTable("Cam2World", 4))
+            {
+                glm::mat4 c2w = glm::transpose(glm::inverse(gl_camera.getViewMatrix()));
+                for (int row = 0; row < 4; row++)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][0]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][1]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][2]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][3]);
+                }
+                ImGui::EndTable();
+            }
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Camera Controls"))
+        {
+            ImGui::Checkbox("Show Camera", &showCamera);
+            ImGui::SameLine();
+            ImGui::Checkbox("Show Projector", &showProjector);
+            if (ImGui::SliderFloat("Camera Exposure [us]", &exposure, 30.0f, 10000.0f))
+            {
+                // std::cout << "current exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
+                camera.set_exposure_time(exposure);
+                // std::cout << "new exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
+            }
+            if (ImGui::Button("Cam Screen Shot"))
+            {
+                hands_fbo.saveColorToFile("../../debug/screenshot_hands_fbo.png");
+                postprocess_fbo.saveColorToFile("../../debug/screenshot_pp_fbo.png");
+                c2p_fbo.saveColorToFile("../../debug/screenshot_c2p_fbo.png");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cam2view"))
+            {
+                gl_camera.setViewMatrix(gl_flycamera.getViewMatrix());
+                gl_projector.setViewMatrix(gl_flycamera.getViewMatrix());
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("View2cam"))
+            {
+                gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
+            }
+            ImGui::Checkbox("Undistort Camera Input", &undistortCamera);
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Material"))
+        {
+            ImGui::Text("Material Type");
+            ImGui::RadioButton("Diffuse", &material_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("GGX", &material_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Transparent", &material_mode, 2);
+
+            ImGui::Text("Diffuse Texture Type");
+            ImGui::RadioButton("Original", &texture_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("From File", &texture_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Projective", &texture_mode, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("Baked", &texture_mode, 3);
+            ImGui::InputText("Diffuse Texture File", &diffuseTextureFile, 20);
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Diffusion"))
+        {
+            ImGui::InputInt("Diffuse Seed", &diffuse_seed);
+            if (ImGui::Button("Bake StableDiffusion Texture"))
+            {
+                bakeRequest = true;
+            }
+            ImGui::SameLine();
+            ImGui::Checkbox("Save Intermediate Outputs", &saveIntermed);
+            ImGui::InputText("Baked Texture File", &bakeFile);
+            ImGui::InputText("Prompt", &sd_prompt);
+            ImGui::Text("Stable Diffusion Mode");
+            ImGui::SameLine();
+            ImGui::RadioButton("Use prompt", &sd_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Random Animal", &sd_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Gesture", &sd_mode, 2);
+            ImGui::Text("Mask Mode");
+            ImGui::SameLine();
+            ImGui::RadioButton("Fill", &sd_mask_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Original", &sd_mask_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Latent Noise", &sd_mask_mode, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("Latent Nothing", &sd_mask_mode, 3);
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Post Process"))
+        {
+            ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 0.1f);
+            ImGui::Text("Post Processing Mode");
+            ImGui::SameLine();
+            ImGui::RadioButton("None", &postprocess_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Mask", &postprocess_mode, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
+            ImGui::SameLine();
+            ImGui::RadioButton("OF", &postprocess_mode, 4);
+
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Leap Control"))
+        {
+            if (ImGui::Checkbox("Leap Polling Mode", &leap_poll_mode))
+            {
+                leap.setPollMode(leap_poll_mode);
+            }
+            ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
+            ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
+            ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
+            ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);
+            ImGui::TreePop();
+        }
+    }
+    ImGui::End();
 }
