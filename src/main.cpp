@@ -105,6 +105,11 @@ enum class LeapCalibrationStateMachine
     SHOW = 2,
     MARK = 3,
 };
+enum class LeapCollectionSettings
+{
+    RAW = 0,
+    TIP = 1
+};
 enum class CalibrationMode
 {
     OFF = 0,
@@ -124,6 +129,7 @@ bool leap_poll_mode = false;
 bool cam_color_mode = false;
 bool ready_to_collect = false;
 int leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+int collection_procedure = static_cast<int>(LeapCollectionSettings::RAW);
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
@@ -732,17 +738,14 @@ int main(int argc, char *argv[])
 
         /* deal with leap input */
         t_leap.start();
-        if (calib_mode == static_cast<int>(CalibrationMode::OFF))
+        if (!leap_poll_mode)
         {
-            if (!leap_poll_mode)
-            {
-                // sync leap clock
-                std::modf(glfwGetTime(), &whole);
-                LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-                // get leap frame
-            }
-            LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
+            // sync leap clock
+            std::modf(glfwGetTime(), &whole);
+            LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+            // get leap frame
         }
+        LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
         /* camera transforms, todo: use only in debug mode */
         // get view & projection transforms
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
@@ -1138,66 +1141,72 @@ int main(int argc, char *argv[])
             {
             case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
             {
-                cv::Mat thr;
-                cv::threshold(camImage, thr, 250, 255, cv::THRESH_BINARY);
-                glm::vec2 center, center_leap1, center_leap2;
-                if (extract_centroid(thr, center))
+                if (collection_procedure == static_cast<int>(LeapCollectionSettings::RAW))
                 {
-                    displayTexture.load((uint8_t *)thr.data, true, cam_buffer_format);
-                    textureShader.use();
-                    textureShader.setMat4("view", glm::mat4(1.0f));
-                    textureShader.setMat4("projection", glm::mat4(1.0f));
-                    textureShader.setMat4("model", glm::mat4(1.0f));
-                    textureShader.setBool("flipHor", false);
-                    textureShader.setBool("flipVer", true);
-                    textureShader.setBool("binary", false);
-                    textureShader.setBool("isGray", true);
-                    textureShader.setInt("src", 0);
-                    displayTexture.bind();
-                    fullScreenQuad.render();
-                    vcolorShader.use();
-                    vcolorShader.setMat4("view", glm::mat4(1.0f));
-                    vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                    vcolorShader.setMat4("model", glm::mat4(1.0f));
-                    glm::vec2 center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
-                    std::vector<glm::vec2> test = {center_NDC};
-                    PointCloud pointCloud(test, screen_verts_color_red);
-                    pointCloud.render();
-                    cv::Mat leap1_thr, leap2_thr;
-                    std::vector<uint8_t> buffer1, buffer2;
-                    uint32_t ignore1, ignore2;
-                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                    cv::Mat thr;
+                    cv::threshold(camImage, thr, 250, 255, cv::THRESH_BINARY);
+                    glm::vec2 center, center_leap1, center_leap2;
+                    if (extract_centroid(thr, center))
                     {
-                        cv::Mat leap1(leap_height, leap_width, CV_8UC1, buffer1.data());
-                        cv::Mat leap2(leap_height, leap_width, CV_8UC1, buffer2.data());
-                        cv::threshold(leap1, leap1_thr, 250, 255, cv::THRESH_BINARY);
-                        cv::threshold(leap2, leap2_thr, 250, 255, cv::THRESH_BINARY);
-                        if (extract_centroid(leap1_thr, center_leap1) && extract_centroid(leap2_thr, center_leap2))
+                        displayTexture.load((uint8_t *)thr.data, true, cam_buffer_format);
+                        textureShader.use();
+                        textureShader.setMat4("view", glm::mat4(1.0f));
+                        textureShader.setMat4("projection", glm::mat4(1.0f));
+                        textureShader.setMat4("model", glm::mat4(1.0f));
+                        textureShader.setBool("flipHor", false);
+                        textureShader.setBool("flipVer", true);
+                        textureShader.setBool("binary", false);
+                        textureShader.setBool("isGray", true);
+                        textureShader.setInt("src", 0);
+                        displayTexture.bind();
+                        fullScreenQuad.render();
+                        vcolorShader.use();
+                        vcolorShader.setMat4("view", glm::mat4(1.0f));
+                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        glm::vec2 center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
+                        std::vector<glm::vec2> test = {center_NDC};
+                        PointCloud pointCloud(test, screen_verts_color_red);
+                        pointCloud.render();
+                        cv::Mat leap1_thr, leap2_thr;
+                        std::vector<uint8_t> buffer1, buffer2;
+                        uint32_t ignore1, ignore2;
+                        if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
                         {
-                            glm::vec2 center_NDC_leap1 = Helpers::ScreenToNDC(center_leap1, leap_width, leap_height, true);
-                            glm::vec2 center_NDC_leap2 = Helpers::ScreenToNDC(center_leap2, leap_width, leap_height, true);
-                            glm::vec3 cur_3d_point = triangulate(leap, center_NDC_leap1, center_NDC_leap2);
-                            glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
-                            if (ready_to_collect)
+                            cv::Mat leap1(leap_height, leap_width, CV_8UC1, buffer1.data());
+                            cv::Mat leap2(leap_height, leap_width, CV_8UC1, buffer2.data());
+                            cv::threshold(leap1, leap1_thr, 250, 255, cv::THRESH_BINARY);
+                            cv::threshold(leap2, leap2_thr, 250, 255, cv::THRESH_BINARY);
+                            if (extract_centroid(leap1_thr, center_leap1) && extract_centroid(leap2_thr, center_leap2))
                             {
-                                points_3d.push_back(cur_3d_point);
-                                points_2d.push_back(cur_2d_point);
-                                if (points_2d.size() >= leap_calib_n_points)
+                                glm::vec2 center_NDC_leap1 = Helpers::ScreenToNDC(center_leap1, leap_width, leap_height, true);
+                                glm::vec2 center_NDC_leap2 = Helpers::ScreenToNDC(center_leap2, leap_width, leap_height, true);
+                                glm::vec3 cur_3d_point = triangulate(leap, center_NDC_leap1, center_NDC_leap2);
+                                glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
+                                if (ready_to_collect)
                                 {
-                                    ready_to_collect = false;
-                                    // leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::IDLE);
+                                    points_3d.push_back(cur_3d_point);
+                                    points_2d.push_back(cur_2d_point);
+                                    if (points_2d.size() >= leap_calib_n_points)
+                                    {
+                                        ready_to_collect = false;
+                                        // leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::IDLE);
+                                    }
                                 }
+                                // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
+                                // std::cout << "leap2 2d:" << center_NDC_leap2.x << " " << center_NDC_leap2.y << std::endl;
+                                // std::cout << point_3d.x << " " << point_3d.y << " " << point_3d.z << std::endl;
                             }
-                            // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
-                            // std::cout << "leap2 2d:" << center_NDC_leap2.x << " " << center_NDC_leap2.y << std::endl;
-                            // std::cout << point_3d.x << " " << point_3d.y << " " << point_3d.z << std::endl;
+                        }
+                        else
+                        {
+                            std::cout << "Failed to get leap image" << std::endl;
                         }
                     }
-                    else
-                    {
-                        std::cout << "Failed to get leap image" << std::endl;
-                    }
                 }
+                else // static_cast<int>(LeapCollectionSettings::TIP)
+                {
+                                }
                 break;
             }
             case static_cast<int>(LeapCalibrationStateMachine::CALIBRATE):
@@ -2709,6 +2718,10 @@ void openIMGUIFrame()
             case static_cast<int>(CalibrationMode::LEAP):
             {
                 ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 100, 1000);
+                ImGui::Text("Collection Procedure");
+                ImGui::RadioButton("Raw Points", &collection_procedure, 0);
+                ImGui::SameLine();
+                ImGui::RadioButton("Finger Tip", &collection_procedure, 1);
                 if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
                 {
                     if (ready_to_collect)
