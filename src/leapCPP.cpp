@@ -1,6 +1,6 @@
-#include "leap.h"
+#include "leapCPP.h"
 
-LeapConnect::LeapConnect(bool pollMode, bool with_images)
+LeapCPP::LeapCPP(bool pollMode, bool with_images)
 {
     OpenConnection();
     while (!IsConnected)
@@ -26,17 +26,17 @@ LeapConnect::LeapConnect(bool pollMode, bool with_images)
     m_poll = pollMode;
 }
 
-LeapConnect::~LeapConnect()
+LeapCPP::~LeapCPP()
 {
     kill();
 }
 
-void LeapConnect::setPollMode(bool pollMode)
+void LeapCPP::setPollMode(bool pollMode)
 {
     m_poll = pollMode;
 }
 
-void LeapConnect::setImageMode(bool imageMode)
+void LeapCPP::setImageMode(bool imageMode)
 {
     if (imageMode)
         LeapSetPolicyFlags(connectionHandle, eLeapPolicyFlag_Images, 0);
@@ -45,20 +45,20 @@ void LeapConnect::setImageMode(bool imageMode)
 }
 
 /** Called by serviceMessageLoop() when a connection event is returned by LeapPollConnection(). */
-void LeapConnect::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event)
+void LeapCPP::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event)
 {
     IsConnected = true;
     std::cout << "Leap: Connected." << std::endl;
 }
 
 /** Called by serviceMessageLoop() when a connection lost event is returned by LeapPollConnection(). */
-void LeapConnect::handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event)
+void LeapCPP::handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event)
 {
     IsConnected = false;
     std::cout << "leap: Disconnected." << std::endl;
 }
 
-void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
+void LeapCPP::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
 {
     LEAP_DEVICE deviceHandle;
     // Open device using LEAP_DEVICE_REF from event struct.
@@ -95,12 +95,12 @@ void LeapConnect::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
     LeapCloseDevice(deviceHandle);
 }
 
-void LeapConnect::handlePolicyEvent(const LEAP_POLICY_EVENT *policy_event)
+void LeapCPP::handlePolicyEvent(const LEAP_POLICY_EVENT *policy_event)
 {
     std::cout << "Leap: Policy: " << policy_event->current_policy << std::endl;
 }
 
-void LeapConnect::handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config_change_event)
+void LeapCPP::handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config_change_event)
 {
     if (config_change_event->status)
     {
@@ -111,32 +111,32 @@ void LeapConnect::handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config
         std::cout << "Leap: Setting config request id: " << config_change_event->requestID << " failed." << std::endl;
     }
 }
-void LeapConnect::handleConfigResponseEvent(const LEAP_CONFIG_RESPONSE_EVENT *config_response_event)
+void LeapCPP::handleConfigResponseEvent(const LEAP_CONFIG_RESPONSE_EVENT *config_response_event)
 {
     std::cout << "Leap: The config for request id: " << config_response_event->requestID << " is: " << config_response_event->value.strValue << std::endl;
 }
 
-void LeapConnect::handleTrackingEvent(const LEAP_TRACKING_EVENT *tracking_event)
+void LeapCPP::handleTrackingEvent(const LEAP_TRACKING_EVENT *tracking_event)
 {
     if (m_poll)
         setFrame(tracking_event); // support polling tracking data from different thread
 }
 
-void LeapConnect::handleTrackingModeEvent(const LEAP_TRACKING_MODE_EVENT *tracking_mode_event)
+void LeapCPP::handleTrackingModeEvent(const LEAP_TRACKING_MODE_EVENT *tracking_mode_event)
 {
     std::cout << "Leap: Tracking mode is: " << tracking_mode_event->current_tracking_mode << std::endl;
 }
-void LeapConnect::handlePointMappingChangeEvent(const LEAP_POINT_MAPPING_CHANGE_EVENT *point_mapping_change_event)
+void LeapCPP::handlePointMappingChangeEvent(const LEAP_POINT_MAPPING_CHANGE_EVENT *point_mapping_change_event)
 {
     std::cout << "Leap: Point mapping change event received." << std::endl;
 }
 
-void LeapConnect::handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent)
+void LeapCPP::handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent)
 {
     setImage(imageEvent);
 }
 
-void LeapConnect::serviceMessageLoop()
+void LeapCPP::serviceMessageLoop()
 {
     eLeapRS result;
     LEAP_CONNECTION_MESSAGE msg;
@@ -214,7 +214,7 @@ void LeapConnect::serviceMessageLoop()
     }
     // std::cout << "leap service loop finished." << std::endl;
 }
-void LeapConnect::OpenConnection(void)
+void LeapCPP::OpenConnection(void)
 {
     if (_isRunning)
     {
@@ -227,14 +227,14 @@ void LeapConnect::OpenConnection(void)
         {
             _isRunning = true;
             // InitializeCriticalSection(&dataLock);
-            pollingThread = std::thread(&LeapConnect::serviceMessageLoop, this);
+            pollingThread = std::thread(&LeapCPP::serviceMessageLoop, this);
         }
     }
     // LEAP_DEVICE_INFO* info = leap.GetDeviceProperties();
     // std::cout << "leap connected with serial: " << info->serial << std::endl;
 }
 
-void LeapConnect::CloseConnection(void)
+void LeapCPP::CloseConnection(void)
 {
     if (!_isRunning)
     {
@@ -245,7 +245,7 @@ void LeapConnect::CloseConnection(void)
     pollingThread.join();
 }
 
-void LeapConnect::kill(void)
+void LeapCPP::kill(void)
 {
     if (!_isRunning)
     {
@@ -256,7 +256,7 @@ void LeapConnect::kill(void)
     std::cout << "Leap: Killed." << std::endl;
 }
 
-const char *LeapConnect::ResultString(eLeapRS r)
+const char *LeapCPP::ResultString(eLeapRS r)
 {
     switch (r)
     {
@@ -305,7 +305,7 @@ const char *LeapConnect::ResultString(eLeapRS r)
     }
 }
 
-void LeapConnect::setDevice(const LEAP_DEVICE_INFO *deviceProps)
+void LeapCPP::setDevice(const LEAP_DEVICE_INFO *deviceProps)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     if (lastDevice)
@@ -322,7 +322,7 @@ void LeapConnect::setDevice(const LEAP_DEVICE_INFO *deviceProps)
 }
 
 /** Returns a pointer to the cached device info. */
-LEAP_DEVICE_INFO *LeapConnect::GetDeviceProperties()
+LEAP_DEVICE_INFO *LeapCPP::GetDeviceProperties()
 {
     LEAP_DEVICE_INFO *currentDevice;
     std::lock_guard<std::mutex> guard(m_mutex);
@@ -330,7 +330,7 @@ LEAP_DEVICE_INFO *LeapConnect::GetDeviceProperties()
     return currentDevice;
 }
 
-void LeapConnect::deepCopyTrackingEvent(LEAP_TRACKING_EVENT *dst, const LEAP_TRACKING_EVENT *src)
+void LeapCPP::deepCopyTrackingEvent(LEAP_TRACKING_EVENT *dst, const LEAP_TRACKING_EVENT *src)
 {
     memcpy(&dst->info, &src->info, sizeof(LEAP_FRAME_HEADER));
     dst->tracking_frame_id = src->tracking_frame_id;
@@ -339,7 +339,7 @@ void LeapConnect::deepCopyTrackingEvent(LEAP_TRACKING_EVENT *dst, const LEAP_TRA
     memcpy(dst->pHands, src->pHands, src->nHands * sizeof(LEAP_HAND));
 }
 
-void LeapConnect::setImage(const LEAP_IMAGE_EVENT *imageEvent)
+void LeapCPP::setImage(const LEAP_IMAGE_EVENT *imageEvent)
 {
     // std::cout << "Leap: Received image set for frame " << (long long int)imageEvent->info.frame_id << "with size " << (long long int)imageEvent->image[0].properties.width * (long long int)imageEvent->image[0].properties.height * 2 << std::endl;
     const LEAP_IMAGE_PROPERTIES *properties = &imageEvent->image[0].properties;
@@ -374,7 +374,7 @@ void LeapConnect::setImage(const LEAP_IMAGE_EVENT *imageEvent)
     m_imageReady = true;
 }
 
-bool LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height)
+bool LeapCPP::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     if (m_imageReady)
@@ -395,7 +395,7 @@ bool LeapConnect::getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &i
     return true;
 }
 
-bool LeapConnect::getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height)
+bool LeapCPP::getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     size_t distortion_size = 64 * 64 * 2;
@@ -420,7 +420,7 @@ bool LeapConnect::getDistortion(std::vector<float> &dist1, std::vector<float> &d
  * Caches the newest frame by copying the tracking event struct returned by
  * LeapC.
  */
-void LeapConnect::setFrame(const LEAP_TRACKING_EVENT *frame)
+void LeapCPP::setFrame(const LEAP_TRACKING_EVENT *frame)
 {
     // LockMutex(&dataLock);
     // if (!lastFrame)
@@ -440,7 +440,7 @@ void LeapConnect::setFrame(const LEAP_TRACKING_EVENT *frame)
     }
 }
 
-LEAP_TRACKING_EVENT *LeapConnect::getFrame()
+LEAP_TRACKING_EVENT *LeapCPP::getFrame()
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     if (lastFrame == NULL)
@@ -459,7 +459,7 @@ LEAP_TRACKING_EVENT *LeapConnect::getFrame()
     // return currentFrame;
 }
 
-std::vector<float> LeapConnect::getIndexTip()
+std::vector<float> LeapCPP::getIndexTip()
 {
     // todo: deep copy frame instead of assigning pointers
     LEAP_TRACKING_EVENT *currentFrame;
@@ -482,7 +482,7 @@ std::vector<float> LeapConnect::getIndexTip()
     return tip;
 }
 
-// glm::vec3 LeapConnect::triangulate(const glm::vec2 &leap1,
+// glm::vec3 LeapCPP::triangulate(const glm::vec2 &leap1,
 //                                    const glm::vec2 &leap2,
 //                                    const int leap_width, const int leap_height)
 // {
@@ -508,7 +508,7 @@ std::vector<float> LeapConnect::getIndexTip()
 //     glm::vec3 point_3d = glm::vec3(x, -z, y);
 //     return point_3d;
 // }
-// std::vector<glm::vec3> LeapConnect::triangulate(const std::vector<glm::vec2> &leap1,
+// std::vector<glm::vec3> LeapCPP::triangulate(const std::vector<glm::vec2> &leap1,
 //                                                 const std::vector<glm::vec2> &leap2,
 //                                                 const int leap_width, const int leap_height)
 // {
@@ -579,7 +579,7 @@ std::vector<float> LeapConnect::getIndexTip()
 //     return points;
 // }
 
-// std::vector<float> LeapConnect::getFrame()
+// std::vector<float> LeapCPP::getFrame()
 // {
 //     LEAP_TRACKING_EVENT *currentFrame;
 

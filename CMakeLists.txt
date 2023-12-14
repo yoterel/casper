@@ -58,7 +58,7 @@ target_link_libraries(basler PRIVATE ${OpenCV_LIBS})
 
 ################ leap motion python bindings
 nanobind_add_module(leap 
-    src/leap.cpp
+    src/leapCPP.cpp
 )
 target_compile_definitions(leap PRIVATE PYTHON_BINDINGS_BUILD)
 target_include_directories(leap PRIVATE "${PROJECT_SOURCE_DIR}/include")
@@ -73,7 +73,7 @@ add_executable(ahand
     src/SerialPort.cpp
     src/text.cpp
     src/timer.cpp
-    src/leap.cpp
+    src/leapCPP.cpp
     src/texture.cpp
     src/diffuse.cpp
     src/base64.cpp
@@ -210,7 +210,7 @@ add_executable(leap_calib
     src/quad.cpp
     src/text.cpp
     src/fbo.cpp
-    src/leap.cpp
+    src/leapCPP.cpp
     src/cnpy.cpp
     src/point_cloud.cpp
     src/helpers.cpp

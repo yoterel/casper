@@ -18,7 +18,7 @@
 #include "skinned_shader.h"
 #include "skinned_model.h"
 #include "timer.h"
-#include "leap.h"
+#include "leapCPP.h"
 #include "text.h"
 #include "post_process.h"
 #include "point_cloud.h"
@@ -36,8 +36,8 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 void processInput(GLFWwindow *window);
 void initGLBuffers(unsigned int *pbo);
 bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
-glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
-std::vector<glm::vec3> triangulate(LeapConnect &leap, const std::vector<glm::vec2> &leap1, const std::vector<glm::vec2> &leap2);
+glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
+std::vector<glm::vec3> triangulate(LeapCPP &leap, const std::vector<glm::vec2> &leap1, const std::vector<glm::vec2> &leap2);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
 // global settings
@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
     // queue_spsc<cv::Mat> camera_queue_cv(50);
     // blocking_queue<cv::Mat> camera_queue_cv;
     BaslerCamera camera;
-    LeapConnect leap(true, true);
+    LeapCPP leap(true, true);
     std::vector<uint8_t> dummy_buffer1, dummybuffer2;
     while (!leap.getImage(dummy_buffer1, dummybuffer2, leap_width, leap_height))
     {
@@ -1020,7 +1020,7 @@ bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid)
     return true;
 }
 
-glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
+glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
 {
     // leap image plane is x right, and y up like opengl...
     glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1, leap_width, leap_height, false);
@@ -1044,7 +1044,7 @@ glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2
     glm::vec3 point_3d = glm::vec3(x, -z, y);
     return point_3d;
 }
-std::vector<glm::vec3> triangulate(LeapConnect &leap, const std::vector<glm::vec2> &leap1, const std::vector<glm::vec2> &leap2)
+std::vector<glm::vec3> triangulate(LeapCPP &leap, const std::vector<glm::vec2> &leap1, const std::vector<glm::vec2> &leap2)
 {
     // extract 3d points from leap1_verts and leap2_verts
     // first get rays from the leap camera corrected for distortion, in 2D camera space

@@ -31,11 +31,11 @@ enum class LEAP_STATUS
     LEAP_FAILED,
 };
 
-class LeapConnect
+class LeapCPP
 {
 public:
-    LeapConnect(bool pollMode = true, bool with_images = false);
-    ~LeapConnect();
+    LeapCPP(bool pollMode = true, bool with_images = false);
+    ~LeapCPP();
     void OpenConnection(void);
     void kill(void);
     LEAP_CONNECTION *getConnectionHandle(void) { return &connectionHandle; };
@@ -104,14 +104,14 @@ private:
 #ifdef PYTHON_BINDINGS_BUILD
 NB_MODULE(leap, m)
 {
-    nb::class_<LeapConnect>(m, "device")
+    nb::class_<LeapCPP>(m, "device")
         .def(nb::init<bool, bool>(), nb::arg("polling_mode") = true, nb::arg("with_images") = false, "a class controlling a leap motion (ultraleap) device")
-        .def("kill", &LeapConnect::kill, "frees the resources associated with the device")
-        .def("get_index_tip", &LeapConnect::getIndexTip, "get location of tip of index finger (xyz)");
-    // .def("get_joints", &LeapConnect::getFrame, "get a list of joint locations (xyz)")
-    // .def("get_time", &LeapConnect::LeapGetTime, "get device time in microseconds")
-    // .def("rebase", &LeapConnect::rebase, "get device time in microseconds")
-    // .def("get_images", &LeapConnect::get_images, "returns raw images from sensors");
+        .def("kill", &LeapCPP::kill, "frees the resources associated with the device")
+        .def("get_index_tip", &LeapCPP::getIndexTip, "get location of tip of index finger (xyz)");
+    // .def("get_joints", &LeapCPP::getFrame, "get a list of joint locations (xyz)")
+    // .def("get_time", &LeapCPP::LeapGetTime, "get device time in microseconds")
+    // .def("rebase", &LeapCPP::rebase, "get device time in microseconds")
+    // .def("get_images", &LeapCPP::get_images, "returns raw images from sensors");
 }
 #endif
 

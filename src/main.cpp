@@ -19,7 +19,7 @@
 #include "skinned_model.h"
 #include "timer.h"
 #include "point_cloud.h"
-#include "leap.h"
+#include "leapCPP.h"
 #include "text.h"
 #include "post_process.h"
 #include "utils.h"
@@ -43,14 +43,14 @@ namespace fs = std::filesystem;
 // forward declarations
 void openIMGUIFrame();
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
-glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
+glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
 bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void process_input(GLFWwindow *window);
-LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
+LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &skeleton_vertices, bool leap_poll_mode, int64_t &lastFrameID);
@@ -255,7 +255,7 @@ FBO hands_fbo(proj_width, proj_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(proj_width, proj_height, 4, false);
 FBO c2p_fbo(proj_width, proj_height, 4, false);
-LeapConnect leap(leap_poll_mode);
+LeapCPP leap(leap_poll_mode);
 DynaFlashProjector projector(true, false);
 BaslerCamera camera;
 
@@ -2356,7 +2356,7 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     return true;
 }
 
-LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
+LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &skeleton_vertices,
@@ -2568,7 +2568,7 @@ bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid)
     return true;
 }
 
-glm::vec3 triangulate(LeapConnect &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
+glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
 {
     // leap image plane is x right, and y up like opengl...
     glm::vec2 l1_vert = Helpers::NDCtoScreen(leap1, leap_width, leap_height, false);
