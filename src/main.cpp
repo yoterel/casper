@@ -56,11 +56,11 @@ LEAP_STATUS getLeapFrame(LeapConnect &leap, const int64_t &targetFrameTime,
                          std::vector<glm::vec3> &skeleton_vertices, bool leap_poll_mode, int64_t &lastFrameID);
 void initGLBuffers(unsigned int *pbo);
 bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
-                                std::vector<double> &camera_distortion,
                                 glm::mat4 &w2c_auto,
                                 glm::mat4 &w2c_user,
                                 std::vector<glm::vec2> &points_2d,
-                                std::vector<glm::vec3> &points_3d);
+                                std::vector<glm::vec3> &points_3d,
+                                cv::Mat &undistort_map1, cv::Mat &undistort_map2);
 bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
@@ -148,6 +148,7 @@ int sd_mask_mode = 2;
 bool useCoaxialCalib = true;
 bool showCamera = true;
 bool showProjector = true;
+bool undistortCamera = false;
 bool saveIntermed = false;
 Texture *dynamicTexture = nullptr;
 Texture *bakedTexture = nullptr;
@@ -481,7 +482,7 @@ int main(int argc, char *argv[])
     uint8_t *colorBuffer = new uint8_t[projected_image_size];
     CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
-    cv::Mat camImage, camImageOrig;
+    cv::Mat camImage, camImageOrig, undistort_map1, undistort_map2;
     Texture flowTexture = Texture();
     Texture displayTexture = Texture();
     displayTexture.init(cam_width, cam_height, n_cam_channels);
@@ -509,7 +510,7 @@ int main(int argc, char *argv[])
     std::thread producer, consumer;
     // load calibration results if they exist
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    if (loadLeapCalibrationResults(proj_project, cam_project, camera_distortion, w2c_auto, w2c_user, points_2d, points_3d))
+    if (loadLeapCalibrationResults(proj_project, cam_project, w2c_auto, w2c_user, points_2d, points_3d, undistort_map1, undistort_map2))
     {
         create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
     }
@@ -699,7 +700,16 @@ int main(int argc, char *argv[])
         }
         else
         {
-            camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+            if (undistortCamera)
+            {
+                camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                cv::remap(camImageOrig, camImage, undistort_map1, undistort_map2, cv::INTER_LINEAR);
+                camTexture.load(camImage.data, true, cam_buffer_format);
+            }
+            else
+            {
+                camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+            }
         }
         // }
         // buffer = (uint8_t *)pylonImage.GetBuffer();
@@ -2188,6 +2198,7 @@ void openIMGUIFrame()
             {
                 gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
             }
+            ImGui::Checkbox("Undistort Camera Input", &undistortCamera);
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
@@ -2414,11 +2425,12 @@ bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts)
 
 bool loadLeapCalibrationResults(glm::mat4 &proj_project,
                                 glm::mat4 &cam_project,
-                                std::vector<double> &camera_distortion,
                                 glm::mat4 &w2c_auto,
                                 glm::mat4 &w2c_user,
                                 std::vector<glm::vec2> &points_2d,
-                                std::vector<glm::vec3> &points_3d)
+                                std::vector<glm::vec3> &points_3d,
+                                cv::Mat &undistort_map1,
+                                cv::Mat &undistort_map2)
 {
     // vp = virtual projector
     // vc = virtual camera
@@ -2481,8 +2493,14 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     }
     float ffar = 1500.0f;
     float nnear = 1.0f;
-    glm::mat3 camera_intrinsics = glm::make_mat3(cam_npz["cam_intrinsics"].data<double>());
-    camera_distortion = cam_npz["cam_distortion"].as_vec<double>();
+    std::vector<double> camera_intrinsics_raw = cam_npz["cam_intrinsics"].as_vec<double>();
+    glm::mat3 camera_intrinsics = glm::make_mat3(camera_intrinsics_raw.data());
+    std::vector<double> camera_distortion_raw = cam_npz["cam_distortion"].as_vec<double>();
+    cv::Mat camera_intrinsics_cv = cv::Mat(3, 3, CV_64F, camera_intrinsics_raw.data());
+    cv::Mat camera_distortion_cv = cv::Mat(1, camera_distortion_raw.size(), CV_64F, camera_distortion_raw.data());
+    std::cout << "camera_distortion: " << camera_distortion_cv << std::endl;
+    std::cout << "camera_intrinsics: " << camera_intrinsics_cv << std::endl;
+    cv::initUndistortRectifyMap(camera_intrinsics_cv, camera_distortion_cv, cv::Mat(), camera_intrinsics_cv, cv::Size(cam_width, cam_height), CV_32FC1, undistort_map1, undistort_map2);
     float cfx = camera_intrinsics[0][0];
     float cfy = camera_intrinsics[1][1];
     float ccx = camera_intrinsics[0][2];
