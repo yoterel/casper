@@ -64,6 +64,16 @@ bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 cv::Mat &camera_intrinsics_cv,
                                 cv::Mat &camera_distortion_cv);
 bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
+void set_texture_shader(Shader &textureShader,
+                        bool flipVer,
+                        bool flipHor,
+                        bool isGray,
+                        bool binary = false,
+                        float threshold = 0.035f,
+                        int src = 0,
+                        glm::mat4 model = glm::mat4(1.0f),
+                        glm::mat4 projection = glm::mat4(1.0f),
+                        glm::mat4 view = glm::mat4(1.0f));
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
 
 enum class TextureMode
@@ -107,8 +117,16 @@ enum class LeapCalibrationStateMachine
 };
 enum class LeapCollectionSettings
 {
-    RAW = 0,
-    TIP = 1
+    MANUAL_RAW = 0,
+    MANUAL_FINGER = 1,
+    AUTO_RAW = 2,
+    AUTO_FINGER = 3,
+};
+enum class LeapMarkSettings
+{
+    POINT_BY_POINT = 0,
+    WHOLE_HAND = 1,
+    ONE_BONE = 2,
 };
 enum class CalibrationMode
 {
@@ -129,7 +147,10 @@ bool leap_poll_mode = false;
 bool cam_color_mode = false;
 bool ready_to_collect = false;
 int leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
-int leap_collection_procedure = static_cast<int>(LeapCollectionSettings::RAW);
+int leap_collection_setting = static_cast<int>(LeapCollectionSettings::MANUAL_RAW);
+int leap_mark_setting = static_cast<int>(LeapMarkSettings::WHOLE_HAND);
+bool leap_calib_use_ransac = false;
+int mark_bone_index = 0;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
@@ -230,7 +251,7 @@ float pnp_rep_error = 2.0f;
 float pnp_confidence = 0.95f;
 bool showInliersOnly = true;
 bool showReprojections = false;
-bool markWithMouse = false;
+bool showTestPoints = false;
 bool calibrationSuccess = false;
 std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
@@ -264,6 +285,7 @@ FBO c2p_fbo(proj_width, proj_height, 4, false);
 LeapCPP leap(leap_poll_mode);
 DynaFlashProjector projector(true, false);
 BaslerCamera camera;
+std::vector<glm::vec3> skeleton_vertices;
 
 int main(int argc, char *argv[])
 {
@@ -495,7 +517,6 @@ int main(int argc, char *argv[])
     long frameCount = 0;
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
-    std::vector<glm::vec3> skeleton_vertices;
     std::vector<glm::mat4> bones_to_world_left;
     std::vector<glm::mat4> bones_to_world_right;
     size_t n_skeleton_primitives = 0;
@@ -842,15 +863,7 @@ int main(int argc, char *argv[])
                 {
                     // download camera image to cpu
                     bake_fbo.bind(true);
-                    textureShader.use();
-                    textureShader.setMat4("view", glm::mat4(1.0f));
-                    textureShader.setMat4("projection", glm::mat4(1.0f));
-                    textureShader.setMat4("model", glm::mat4(1.0f));
-                    textureShader.setBool("isGray", true);
-                    textureShader.setBool("flipVer", false);
-                    textureShader.setBool("flipHor", true);
-                    textureShader.setInt("src", 0);
-                    textureShader.setBool("binary", false);
+                    set_texture_shader(textureShader, false, true, true, false);
                     camTexture.bind();
                     fullScreenQuad.render();
                     bake_fbo.unbind();
@@ -861,16 +874,7 @@ int main(int argc, char *argv[])
                     // cv::imwrite("../../resource/camera_image1.png", test);
                     // download camera image thresholded to cpu (eww)
                     bake_fbo.bind(true);
-                    textureShader.use();
-                    textureShader.setMat4("view", glm::mat4(1.0f));
-                    textureShader.setMat4("projection", glm::mat4(1.0f));
-                    textureShader.setMat4("model", glm::mat4(1.0f));
-                    textureShader.setBool("isGray", true);
-                    textureShader.setBool("flipVer", false);
-                    textureShader.setBool("flipHor", true);
-                    textureShader.setFloat("threshold", masking_threshold);
-                    textureShader.setInt("src", 0);
-                    textureShader.setBool("binary", true);
+                    set_texture_shader(textureShader, false, true, true, true, masking_threshold);
                     camTexture.bind();
                     fullScreenQuad.render();
                     bake_fbo.unbind();
@@ -993,14 +997,7 @@ int main(int argc, char *argv[])
                 // bind texture
                 hands_fbo.getTexture()->bind();
                 // render
-                textureShader.use();
-                textureShader.setInt("src", 0);
-                textureShader.setBool("flipVer", false);
-                textureShader.setBool("flipHor", false);
-                textureShader.setMat4("projection", glm::mat4(1.0f));
-                textureShader.setBool("isGray", false);
-                textureShader.setMat4("view", glm::mat4(1.0f));
-                textureShader.setMat4("model", glm::mat4(1.0f));
+                set_texture_shader(textureShader, false, false, false);
                 fullScreenQuad.render(false, false, true);
                 // unbind fbo
                 postprocess_fbo.unbind();
@@ -1010,16 +1007,7 @@ int main(int argc, char *argv[])
             {
                 postprocess_fbo.bind();
                 camTexture.bind();
-                textureShader.use();
-                textureShader.setInt("src", 0);
-                textureShader.setBool("flipVer", true);
-                textureShader.setBool("flipHor", true);
-                textureShader.setMat4("projection", glm::mat4(1.0f));
-                textureShader.setBool("isGray", true);
-                textureShader.setBool("binary", false);
-                textureShader.setMat4("view", glm::mat4(1.0f));
-                textureShader.setMat4("model", glm::mat4(1.0f));
-                textureShader.setFloat("threshold", masking_threshold);
+                set_texture_shader(textureShader, true, true, true, false, masking_threshold);
                 fullScreenQuad.render();
                 postprocess_fbo.unbind();
                 break;
@@ -1042,18 +1030,11 @@ int main(int argc, char *argv[])
                 break;
             }
             c2p_fbo.bind();
-            textureShader.use();
-            textureShader.setMat4("view", glm::mat4(1.0f));
+
             if (useCoaxialCalib)
-                textureShader.setMat4("projection", c2p_homography);
+                set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), c2p_homography);
             else
-                textureShader.setMat4("projection", glm::mat4(1.0f));
-            textureShader.setMat4("model", glm::mat4(1.0f));
-            textureShader.setBool("flipVer", false);
-            textureShader.setBool("flipHor", false);
-            textureShader.setBool("binary", false);
-            textureShader.setBool("isGray", false);
-            textureShader.setInt("src", 0);
+                set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f));
             postprocess_fbo.getTexture()->bind();
             fullScreenQuad.render();
             c2p_fbo.unbind();
@@ -1075,14 +1056,7 @@ int main(int argc, char *argv[])
             /* debug mode renders*/
             if (!debug_mode)
             {
-                textureShader.use();
-                textureShader.setBool("flipVer", false);
-                textureShader.setMat4("projection", glm::mat4(1.0f));
-                textureShader.setMat4("view", glm::mat4(1.0f));
-                textureShader.setMat4("model", glm::mat4(1.0f));
-                textureShader.setBool("binary", false);
-                textureShader.setBool("isGray", false);
-                textureShader.setInt("src", 0);
+                set_texture_shader(textureShader, false, false, false);
                 c2p_fbo.getTexture()->bind();
                 fullScreenQuad.render();
             }
@@ -1116,15 +1090,7 @@ int main(int argc, char *argv[])
             }
             glm::mat4 viewMatrix;
             GLMHelpers::CV2GLM(perspective, &viewMatrix);
-            textureShader.use();
-            textureShader.setMat4("view", viewMatrix);
-            textureShader.setMat4("projection", glm::mat4(1.0f));
-            textureShader.setMat4("model", glm::mat4(1.0f));
-            textureShader.setBool("flipVer", true);
-            textureShader.setBool("flipHor", true);
-            textureShader.setInt("src", 0);
-            // textureShader.setBool("justGreen", true);
-            textureShader.setBool("isGray", true);
+            set_texture_shader(textureShader, true, true, true, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f), viewMatrix);
             camTexture.bind();
             fullScreenQuad.render();
             PointCloud cloud(cur_screen_verts, screen_verts_color_red);
@@ -1141,7 +1107,9 @@ int main(int argc, char *argv[])
             {
             case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
             {
-                if (leap_collection_procedure == static_cast<int>(LeapCollectionSettings::RAW))
+                switch (leap_collection_setting)
+                {
+                case static_cast<int>(LeapCollectionSettings::AUTO_RAW):
                 {
                     cv::Mat thr;
                     cv::threshold(camImage, thr, 250, 255, cv::THRESH_BINARY);
@@ -1149,15 +1117,7 @@ int main(int argc, char *argv[])
                     if (extract_centroid(thr, center))
                     {
                         displayTexture.load((uint8_t *)thr.data, true, cam_buffer_format);
-                        textureShader.use();
-                        textureShader.setMat4("view", glm::mat4(1.0f));
-                        textureShader.setMat4("projection", glm::mat4(1.0f));
-                        textureShader.setMat4("model", glm::mat4(1.0f));
-                        textureShader.setBool("flipHor", false);
-                        textureShader.setBool("flipVer", true);
-                        textureShader.setBool("binary", false);
-                        textureShader.setBool("isGray", true);
-                        textureShader.setInt("src", 0);
+                        set_texture_shader(textureShader, true, false, true);
                         displayTexture.bind();
                         fullScreenQuad.render();
                         vcolorShader.use();
@@ -1203,9 +1163,25 @@ int main(int argc, char *argv[])
                             std::cout << "Failed to get leap image" << std::endl;
                         }
                     }
+                    break;
                 }
-                else // static_cast<int>(LeapCollectionSettings::TIP)
+                case static_cast<int>(LeapCollectionSettings::MANUAL_FINGER):
                 {
+                    displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
+                    set_texture_shader(textureShader, true, false, true);
+                    displayTexture.bind();
+                    fullScreenQuad.render();
+                    vcolorShader.use();
+                    vcolorShader.setMat4("view", glm::mat4(1.0f));
+                    vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                    vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    std::vector<glm::vec2> test = {cur_screen_vert};
+                    PointCloud pointCloud(test, screen_verts_color_red);
+                    pointCloud.render(5.0f);
+                    break;
+                }
+                default:
+                    break;
                 }
                 break;
             }
@@ -1240,17 +1216,25 @@ int main(int argc, char *argv[])
                 cv::Rodrigues(rotmat_inverse, rvec_calib);
                 // std::cout << "rvec_inverse: " << rvec << std::endl;
                 tvec_calib = transform(cv::Range(0, 3), cv::Range(3, 4)).clone();
-                // cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics_cv, distortion_coeffs_cv, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
-                cv::Mat inliers;
-                cv::solvePnPRansac(points_3d_cv, points_2d_cv, camera_intrinsics_cv, camera_distortion_cv, rvec_calib, tvec_calib, true,
-                                   pnp_iters, pnp_rep_error, pnp_confidence, inliers, cv::SOLVEPNP_ITERATIVE);
                 std::vector<cv::Point2f> points_2d_inliers_cv;
                 std::vector<cv::Point3f> points_3d_inliers_cv;
-                for (int inliers_index = 0; inliers_index < inliers.rows; ++inliers_index)
+                if (leap_calib_use_ransac)
                 {
-                    int n = inliers.at<int>(inliers_index);          // i-inlier
-                    points_2d_inliers_cv.push_back(points_2d_cv[n]); // add i-inlier to list
-                    points_3d_inliers_cv.push_back(points_3d_cv[n]); // add i-inlier to list
+                    cv::Mat inliers;
+                    cv::solvePnPRansac(points_3d_cv, points_2d_cv, camera_intrinsics_cv, camera_distortion_cv, rvec_calib, tvec_calib, true,
+                                       pnp_iters, pnp_rep_error, pnp_confidence, inliers, cv::SOLVEPNP_ITERATIVE);
+                    for (int inliers_index = 0; inliers_index < inliers.rows; ++inliers_index)
+                    {
+                        int n = inliers.at<int>(inliers_index);          // i-inlier
+                        points_2d_inliers_cv.push_back(points_2d_cv[n]); // add i-inlier to list
+                        points_3d_inliers_cv.push_back(points_3d_cv[n]); // add i-inlier to list
+                    }
+                }
+                else
+                {
+                    cv::solvePnP(points_3d_cv, points_2d_cv, camera_intrinsics_cv, camera_distortion_cv, rvec_calib, tvec_calib, true, cv::SOLVEPNP_ITERATIVE);
+                    points_2d_inliers_cv = points_2d_cv;
+                    points_3d_inliers_cv = points_3d_cv;
                 }
                 std::vector<cv::Point2f> reprojected_cv, reprojected_inliers_cv;
                 cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
@@ -1328,22 +1312,16 @@ int main(int argc, char *argv[])
             }
             case static_cast<int>(LeapCalibrationStateMachine::MARK):
             {
-                if (leap_collection_procedure == static_cast<int>(LeapCollectionSettings::RAW))
+                switch (leap_mark_setting)
+                {
+                case static_cast<int>(LeapMarkSettings::POINT_BY_POINT):
                 {
                     switch (leap_calibration_mark_state)
                     {
                     case 0:
                     {
                         displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                        textureShader.use();
-                        textureShader.setMat4("view", glm::mat4(1.0f));
-                        textureShader.setMat4("projection", glm::mat4(1.0f));
-                        textureShader.setMat4("model", glm::mat4(1.0f));
-                        textureShader.setBool("flipHor", false);
-                        textureShader.setBool("flipVer", true);
-                        textureShader.setBool("binary", false);
-                        textureShader.setBool("isGray", true);
-                        textureShader.setInt("src", 0);
+                        set_texture_shader(textureShader, true, false, true);
                         displayTexture.bind();
                         fullScreenQuad.render();
                         vcolorShader.use();
@@ -1367,14 +1345,7 @@ int main(int argc, char *argv[])
                             // leapTexture2.init(leap_width, leap_height, 1);
                             // leapTexture2.load(buffer2, true, cam_buffer_format);
                             leapTexture.bind();
-                            textureShader.use();
-                            textureShader.setMat4("view", glm::mat4(1.0f));
-                            textureShader.setMat4("projection", glm::mat4(1.0f));
-                            textureShader.setMat4("model", glm::mat4(1.0f));
-                            textureShader.setBool("flipVer", true);
-                            textureShader.setInt("src", 0);
-                            textureShader.setBool("isGray", true);
-                            textureShader.setBool("binary", false);
+                            set_texture_shader(textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
                             vcolorShader.setMat4("view", glm::mat4(1.0f));
@@ -1399,14 +1370,7 @@ int main(int argc, char *argv[])
                             // leapTexture2.init(leap_width, leap_height, 1);
                             // leapTexture2.load(buffer2, true, cam_buffer_format);
                             leapTexture.bind();
-                            textureShader.use();
-                            textureShader.setMat4("view", glm::mat4(1.0f));
-                            textureShader.setMat4("projection", glm::mat4(1.0f));
-                            textureShader.setMat4("model", glm::mat4(1.0f));
-                            textureShader.setBool("flipVer", true);
-                            textureShader.setInt("src", 0);
-                            textureShader.setBool("isGray", true);
-                            textureShader.setBool("binary", false);
+                            set_texture_shader(textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
                             vcolorShader.setMat4("view", glm::mat4(1.0f));
@@ -1421,19 +1385,10 @@ int main(int argc, char *argv[])
                     default:
                         break;
                     }
-                }
-                else // leap_collection_procedure == static_cast<int>(LeapCollectionSettings::TIP)
+                case static_cast<int>(LeapMarkSettings::WHOLE_HAND):
                 {
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                    textureShader.use();
-                    textureShader.setMat4("view", glm::mat4(1.0f));
-                    textureShader.setMat4("projection", glm::mat4(1.0f));
-                    textureShader.setMat4("model", glm::mat4(1.0f));
-                    textureShader.setBool("flipHor", false);
-                    textureShader.setBool("flipVer", true);
-                    textureShader.setBool("binary", false);
-                    textureShader.setBool("isGray", true);
-                    textureShader.setInt("src", 0);
+                    set_texture_shader(textureShader, true, false, true);
                     displayTexture.bind();
                     fullScreenQuad.render();
                     if (skeleton_vertices.size() > 0)
@@ -1447,7 +1402,7 @@ int main(int argc, char *argv[])
                         {
                             points_3d_cv.push_back(cv::Point3f(skeleton_vertices[i].x, skeleton_vertices[i].y, skeleton_vertices[i].z));
                         }
-                        // {cv::Point3f(skeleton_vertices[16 * 2].x, skeleton_vertices[16 * 2].y, skeleton_vertices[16 * 2].z)};
+                        // points_3d_cv.push_back(cv::Point3f(skeleton_vertices[mark_bone_index * 2].x, skeleton_vertices[mark_bone_index * 2].y, skeleton_vertices[mark_bone_index * 2].z));
                         std::vector<cv::Point2f> reprojected_cv;
                         cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
                         std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
@@ -1457,8 +1412,37 @@ int main(int argc, char *argv[])
                         PointCloud pointCloud(pc, screen_verts_color_red);
                         pointCloud.render();
                     }
+                    break;
                 }
-
+                case static_cast<int>(LeapMarkSettings::ONE_BONE):
+                {
+                    displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
+                    set_texture_shader(textureShader, true, false, true);
+                    displayTexture.bind();
+                    fullScreenQuad.render();
+                    if (skeleton_vertices.size() > 0)
+                    {
+                        vcolorShader.use();
+                        vcolorShader.setMat4("view", glm::mat4(1.0f));
+                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        std::vector<cv::Point3f> points_3d_cv;
+                        points_3d_cv.push_back(cv::Point3f(skeleton_vertices[mark_bone_index * 2].x, skeleton_vertices[mark_bone_index * 2].y, skeleton_vertices[mark_bone_index * 2].z));
+                        std::vector<cv::Point2f> reprojected_cv;
+                        cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
+                        std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
+                        // glm::vec2 reprojected = glm::vec2(reprojected_cv[0].x, reprojected_cv[0].y);
+                        reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
+                        std::vector<glm::vec2> pc = {reprojected};
+                        PointCloud pointCloud(pc, screen_verts_color_red);
+                        pointCloud.render();
+                    }
+                    break;
+                }
+                }
+                default:
+                    break;
+                }
                 break;
             }
             default:
@@ -1804,14 +1788,7 @@ int main(int argc, char *argv[])
                     Quad camNearQuad(camNearVerts);
                     // Quad camMidQuad(camMidVerts);
                     // directly render camera input or any other texture
-                    textureShader.use();
-                    textureShader.setBool("flipVer", false);
-                    textureShader.setBool("flipHor", false);
-                    textureShader.setMat4("projection", flycam_projection_transform);
-                    textureShader.setMat4("view", flycam_view_transform);
-                    textureShader.setMat4("model", glm::mat4(1.0f));
-                    textureShader.setBool("binary", false);
-                    textureShader.setInt("src", 0);
+                    set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                     // camTexture.bind();
                     // glBindTexture(GL_TEXTURE_2D, resTexture);
                     postprocess_fbo.getTexture()->bind();
@@ -1840,15 +1817,7 @@ int main(int argc, char *argv[])
                     Quad projNearQuad(projNearVerts);
                     // Quad projMidQuad(projMidVerts);
                     Quad projFarQuad(projFarVerts);
-
-                    textureShader.use();
-                    textureShader.setBool("flipVer", false);
-                    textureShader.setBool("flipHor", false);
-                    textureShader.setMat4("projection", flycam_projection_transform);
-                    textureShader.setMat4("view", flycam_view_transform);
-                    textureShader.setMat4("model", glm::mat4(1.0f)); // debugShader.setMat4("model", mm_to_cm);
-                    textureShader.setBool("binary", false);
-                    textureShader.setInt("src", 0);
+                    set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                     c2p_fbo.getTexture()->bind();
                     projNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, projNearQuad);
                     t_warp.stop();
@@ -2057,25 +2026,47 @@ void process_input(GLFWwindow *window)
         {
             space_modifier = false;
             displayBoneIndex = (displayBoneIndex + 1) % n_bones;
-            if (calib_mode == static_cast<int>(CalibrationMode::LEAP) && leap_calibration_state == static_cast<int>(LeapCalibrationStateMachine::MARK))
+            if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
             {
-                if (leap_calibration_mark_state == 1)
+                switch (leap_calibration_state)
                 {
-                    marked_2d_pos1 = cur_screen_vert;
-                }
-                if (leap_calibration_mark_state == 2)
+                case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
                 {
-                    marked_2d_pos2 = cur_screen_vert;
-                    glm::vec3 pos_3d = triangulate(leap, marked_2d_pos1, marked_2d_pos2);
-                    triangulated_marked.push_back(pos_3d);
-                    std::vector<cv::Point3f> points_3d_cv{cv::Point3f(pos_3d.x, pos_3d.y, pos_3d.z)};
-                    std::vector<cv::Point2f> reprojected_cv;
-                    cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
-                    glm::vec2 reprojected = glm::vec2(reprojected_cv[0].x, reprojected_cv[0].y);
-                    reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
-                    marked_reprojected.push_back(reprojected);
+                    if (ready_to_collect && skeleton_vertices.size() > 0)
+                    {
+                        points_3d.push_back(skeleton_vertices[17 * 2]);
+                        glm::vec2 cur_2d_point = Helpers::NDCtoScreen(cur_screen_vert, cam_width, cam_height, false);
+                        points_2d.push_back(cur_2d_point);
+                    }
+                    break;
                 }
-                leap_calibration_mark_state = (leap_calibration_mark_state + 1) % 3;
+                case static_cast<int>(LeapCalibrationStateMachine::MARK):
+                {
+                    if (leap_mark_setting == static_cast<int>(LeapMarkSettings::POINT_BY_POINT))
+                    {
+                        if (leap_calibration_mark_state == 1)
+                        {
+                            marked_2d_pos1 = cur_screen_vert;
+                        }
+                        if (leap_calibration_mark_state == 2)
+                        {
+                            marked_2d_pos2 = cur_screen_vert;
+                            glm::vec3 pos_3d = triangulate(leap, marked_2d_pos1, marked_2d_pos2);
+                            triangulated_marked.push_back(pos_3d);
+                            std::vector<cv::Point3f> points_3d_cv{cv::Point3f(pos_3d.x, pos_3d.y, pos_3d.z)};
+                            std::vector<cv::Point2f> reprojected_cv;
+                            cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
+                            glm::vec2 reprojected = glm::vec2(reprojected_cv[0].x, reprojected_cv[0].y);
+                            reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
+                            marked_reprojected.push_back(reprojected);
+                        }
+                        leap_calibration_mark_state = (leap_calibration_mark_state + 1) % 3;
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
             }
         }
     }
@@ -2617,6 +2608,21 @@ bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid)
     return true;
 }
 
+void set_texture_shader(Shader &textureShader, bool flipVer, bool flipHor, bool isGray, bool binary, float threshold,
+                        int src, glm::mat4 model, glm::mat4 projection, glm::mat4 view)
+{
+    textureShader.use();
+    textureShader.setMat4("view", view);
+    textureShader.setMat4("projection", projection);
+    textureShader.setMat4("model", model);
+    textureShader.setFloat("threshold", threshold);
+    textureShader.setBool("flipHor", flipHor);
+    textureShader.setBool("flipVer", flipVer);
+    textureShader.setBool("binary", binary);
+    textureShader.setBool("isGray", isGray);
+    textureShader.setInt("src", src);
+}
+
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
 {
     // leap image plane is x right, and y up like opengl...
@@ -2709,6 +2715,9 @@ void openIMGUIFrame()
                 projector.kill();
                 use_projector = false;
                 leap.setImageMode(true);
+                std::vector<uint8_t> buffer1, buffer2;
+                while (!leap.getImage(buffer1, buffer2, leap_width, leap_height))
+                    continue;
                 // throttle down producer speed to allow smooth display
                 // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
                 exposure = 10000.0f;
@@ -2757,11 +2766,16 @@ void openIMGUIFrame()
             }
             case static_cast<int>(CalibrationMode::LEAP):
             {
-                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 100, 1000);
+                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 10, 1000);
+                ImGui::Checkbox("Use RANSAC", &leap_calib_use_ransac);
                 ImGui::Text("Collection Procedure");
-                ImGui::RadioButton("Raw Points", &leap_collection_procedure, 0);
+                ImGui::RadioButton("Manual Raw", &leap_collection_setting, 0);
                 ImGui::SameLine();
-                ImGui::RadioButton("Finger Tip", &leap_collection_procedure, 1);
+                ImGui::RadioButton("Manual Finger", &leap_collection_setting, 1);
+                ImGui::SameLine();
+                ImGui::RadioButton("Auto Raw", &leap_collection_setting, 2);
+                ImGui::SameLine();
+                ImGui::RadioButton("Auto Finger", &leap_collection_setting, 3);
                 if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
                 {
                     if (ready_to_collect)
@@ -2795,34 +2809,43 @@ void openIMGUIFrame()
                 }
                 if (calibrationSuccess)
                 {
-                    if (ImGui::Checkbox("Show Reprojections", &showReprojections))
+                    if (ImGui::Checkbox("Show Calib Reprojections", &showReprojections))
                     {
                         leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
                         ImGui::Checkbox("Show only inliers", &showInliersOnly);
-                        markWithMouse = false;
+                        showTestPoints = false;
                     }
-                    if (ImGui::Checkbox("Mark with mouse", &markWithMouse))
+                    if (ImGui::Checkbox("Show Test Points", &showTestPoints))
                     {
                         leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::MARK);
                         showReprojections = false;
                     }
-                    if (markWithMouse)
+                    if (showTestPoints)
                     {
+                        ImGui::RadioButton("Points by Point", &leap_mark_setting, 0);
+                        ImGui::SameLine();
+                        ImGui::RadioButton("Whole Hand", &leap_mark_setting, 1);
+                        ImGui::SameLine();
+                        ImGui::RadioButton("Single Bone", &leap_mark_setting, 2);
+                        ImGui::SliderInt("Bone Index", &mark_bone_index, 0, 30);
                         // ImGui::ListBox("listbox", &item_current, items, IM_ARRAYSIZE(items), 4);
-                        if (ImGui::BeginTable("Triangulated", 2))
+                        if (leap_mark_setting == static_cast<int>(LeapMarkSettings::POINT_BY_POINT))
                         {
-                            for (int row = 0; row < triangulated_marked.size(); row++)
+                            if (ImGui::BeginTable("Triangulated", 2))
                             {
-                                ImGui::TableNextRow();
-                                ImGui::TableNextColumn();
-                                ImGui::Text("Vert %d", row);
-                                ImGui::TableNextColumn();
-                                ImGui::Text("%f, %f, %f", triangulated_marked[row][0], triangulated_marked[row][1], triangulated_marked[row][2]);
+                                for (int row = 0; row < triangulated_marked.size(); row++)
+                                {
+                                    ImGui::TableNextRow();
+                                    ImGui::TableNextColumn();
+                                    ImGui::Text("Vert %d", row);
+                                    ImGui::TableNextColumn();
+                                    ImGui::Text("%f, %f, %f", triangulated_marked[row][0], triangulated_marked[row][1], triangulated_marked[row][2]);
+                                }
+                                ImGui::EndTable();
                             }
-                            ImGui::EndTable();
                         }
                     }
-                    if (!showReprojections && !markWithMouse)
+                    if (!showReprojections && !showTestPoints)
                         leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
                     if (ImGui::Button("Save Calibration"))
                     {
