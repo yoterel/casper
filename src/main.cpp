@@ -129,7 +129,7 @@ bool leap_poll_mode = false;
 bool cam_color_mode = false;
 bool ready_to_collect = false;
 int leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
-int collection_procedure = static_cast<int>(LeapCollectionSettings::RAW);
+int leap_collection_procedure = static_cast<int>(LeapCollectionSettings::RAW);
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
@@ -1141,7 +1141,7 @@ int main(int argc, char *argv[])
             {
             case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
             {
-                if (collection_procedure == static_cast<int>(LeapCollectionSettings::RAW))
+                if (leap_collection_procedure == static_cast<int>(LeapCollectionSettings::RAW))
                 {
                     cv::Mat thr;
                     cv::threshold(camImage, thr, 250, 255, cv::THRESH_BINARY);
@@ -1206,7 +1206,7 @@ int main(int argc, char *argv[])
                 }
                 else // static_cast<int>(LeapCollectionSettings::TIP)
                 {
-                                }
+                }
                 break;
             }
             case static_cast<int>(LeapCalibrationStateMachine::CALIBRATE):
@@ -1328,9 +1328,101 @@ int main(int argc, char *argv[])
             }
             case static_cast<int>(LeapCalibrationStateMachine::MARK):
             {
-                switch (leap_calibration_mark_state)
+                if (leap_collection_procedure == static_cast<int>(LeapCollectionSettings::RAW))
                 {
-                case 0:
+                    switch (leap_calibration_mark_state)
+                    {
+                    case 0:
+                    {
+                        displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
+                        textureShader.use();
+                        textureShader.setMat4("view", glm::mat4(1.0f));
+                        textureShader.setMat4("projection", glm::mat4(1.0f));
+                        textureShader.setMat4("model", glm::mat4(1.0f));
+                        textureShader.setBool("flipHor", false);
+                        textureShader.setBool("flipVer", true);
+                        textureShader.setBool("binary", false);
+                        textureShader.setBool("isGray", true);
+                        textureShader.setInt("src", 0);
+                        displayTexture.bind();
+                        fullScreenQuad.render();
+                        vcolorShader.use();
+                        vcolorShader.setMat4("view", glm::mat4(1.0f));
+                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        PointCloud pointCloud(marked_reprojected, screen_verts_color_red);
+                        pointCloud.render();
+                        break;
+                    }
+                    case 1:
+                    {
+                        std::vector<uint8_t> buffer1, buffer2;
+                        uint32_t ignore1, ignore2;
+                        if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                        {
+                            Texture leapTexture = Texture();
+                            leapTexture.init(leap_width, leap_height, 1);
+                            leapTexture.load(buffer1, true, cam_buffer_format);
+                            // Texture leapTexture2 = Texture();
+                            // leapTexture2.init(leap_width, leap_height, 1);
+                            // leapTexture2.load(buffer2, true, cam_buffer_format);
+                            leapTexture.bind();
+                            textureShader.use();
+                            textureShader.setMat4("view", glm::mat4(1.0f));
+                            textureShader.setMat4("projection", glm::mat4(1.0f));
+                            textureShader.setMat4("model", glm::mat4(1.0f));
+                            textureShader.setBool("flipVer", true);
+                            textureShader.setInt("src", 0);
+                            textureShader.setBool("isGray", true);
+                            textureShader.setBool("binary", false);
+                            fullScreenQuad.render();
+                            vcolorShader.use();
+                            vcolorShader.setMat4("view", glm::mat4(1.0f));
+                            vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                            vcolorShader.setMat4("model", glm::mat4(1.0f));
+                            std::vector<glm::vec2> test = {cur_screen_vert};
+                            PointCloud pointCloud(test, screen_verts_color_red);
+                            pointCloud.render(5.0f);
+                        }
+                        break;
+                    }
+                    case 2:
+                    {
+                        std::vector<uint8_t> buffer1, buffer2;
+                        uint32_t ignore1, ignore2;
+                        if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                        {
+                            Texture leapTexture = Texture();
+                            leapTexture.init(leap_width, leap_height, 1);
+                            leapTexture.load(buffer2, true, cam_buffer_format);
+                            // Texture leapTexture2 = Texture();
+                            // leapTexture2.init(leap_width, leap_height, 1);
+                            // leapTexture2.load(buffer2, true, cam_buffer_format);
+                            leapTexture.bind();
+                            textureShader.use();
+                            textureShader.setMat4("view", glm::mat4(1.0f));
+                            textureShader.setMat4("projection", glm::mat4(1.0f));
+                            textureShader.setMat4("model", glm::mat4(1.0f));
+                            textureShader.setBool("flipVer", true);
+                            textureShader.setInt("src", 0);
+                            textureShader.setBool("isGray", true);
+                            textureShader.setBool("binary", false);
+                            fullScreenQuad.render();
+                            vcolorShader.use();
+                            vcolorShader.setMat4("view", glm::mat4(1.0f));
+                            vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                            vcolorShader.setMat4("model", glm::mat4(1.0f));
+                            std::vector<glm::vec2> test = {cur_screen_vert};
+                            PointCloud pointCloud(test, screen_verts_color_red);
+                            pointCloud.render(5.0f);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                    }
+                }
+                else // leap_collection_procedure == static_cast<int>(LeapCollectionSettings::TIP)
                 {
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
                     textureShader.use();
@@ -1344,81 +1436,29 @@ int main(int argc, char *argv[])
                     textureShader.setInt("src", 0);
                     displayTexture.bind();
                     fullScreenQuad.render();
-                    vcolorShader.use();
-                    vcolorShader.setMat4("view", glm::mat4(1.0f));
-                    vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                    vcolorShader.setMat4("model", glm::mat4(1.0f));
-                    PointCloud pointCloud(marked_reprojected, screen_verts_color_red);
-                    pointCloud.render();
-                    break;
-                }
-                case 1:
-                {
-                    std::vector<uint8_t> buffer1, buffer2;
-                    uint32_t ignore1, ignore2;
-                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                    if (skeleton_vertices.size() > 0)
                     {
-                        Texture leapTexture = Texture();
-                        leapTexture.init(leap_width, leap_height, 1);
-                        leapTexture.load(buffer1, true, cam_buffer_format);
-                        // Texture leapTexture2 = Texture();
-                        // leapTexture2.init(leap_width, leap_height, 1);
-                        // leapTexture2.load(buffer2, true, cam_buffer_format);
-                        leapTexture.bind();
-                        textureShader.use();
-                        textureShader.setMat4("view", glm::mat4(1.0f));
-                        textureShader.setMat4("projection", glm::mat4(1.0f));
-                        textureShader.setMat4("model", glm::mat4(1.0f));
-                        textureShader.setBool("flipVer", true);
-                        textureShader.setInt("src", 0);
-                        textureShader.setBool("isGray", true);
-                        textureShader.setBool("binary", false);
-                        fullScreenQuad.render();
                         vcolorShader.use();
                         vcolorShader.setMat4("view", glm::mat4(1.0f));
                         vcolorShader.setMat4("projection", glm::mat4(1.0f));
                         vcolorShader.setMat4("model", glm::mat4(1.0f));
-                        std::vector<glm::vec2> test = {cur_screen_vert};
-                        PointCloud pointCloud(test, screen_verts_color_red);
-                        pointCloud.render(5.0f);
+                        std::vector<cv::Point3f> points_3d_cv;
+                        for (int i = 0; i < skeleton_vertices.size(); i += 2)
+                        {
+                            points_3d_cv.push_back(cv::Point3f(skeleton_vertices[i].x, skeleton_vertices[i].y, skeleton_vertices[i].z));
+                        }
+                        // {cv::Point3f(skeleton_vertices[16 * 2].x, skeleton_vertices[16 * 2].y, skeleton_vertices[16 * 2].z)};
+                        std::vector<cv::Point2f> reprojected_cv;
+                        cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
+                        std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
+                        // glm::vec2 reprojected = glm::vec2(reprojected_cv[0].x, reprojected_cv[0].y);
+                        reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
+                        std::vector<glm::vec2> pc = {reprojected};
+                        PointCloud pointCloud(pc, screen_verts_color_red);
+                        pointCloud.render();
                     }
-                    break;
                 }
-                case 2:
-                {
-                    std::vector<uint8_t> buffer1, buffer2;
-                    uint32_t ignore1, ignore2;
-                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
-                    {
-                        Texture leapTexture = Texture();
-                        leapTexture.init(leap_width, leap_height, 1);
-                        leapTexture.load(buffer2, true, cam_buffer_format);
-                        // Texture leapTexture2 = Texture();
-                        // leapTexture2.init(leap_width, leap_height, 1);
-                        // leapTexture2.load(buffer2, true, cam_buffer_format);
-                        leapTexture.bind();
-                        textureShader.use();
-                        textureShader.setMat4("view", glm::mat4(1.0f));
-                        textureShader.setMat4("projection", glm::mat4(1.0f));
-                        textureShader.setMat4("model", glm::mat4(1.0f));
-                        textureShader.setBool("flipVer", true);
-                        textureShader.setInt("src", 0);
-                        textureShader.setBool("isGray", true);
-                        textureShader.setBool("binary", false);
-                        fullScreenQuad.render();
-                        vcolorShader.use();
-                        vcolorShader.setMat4("view", glm::mat4(1.0f));
-                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                        vcolorShader.setMat4("model", glm::mat4(1.0f));
-                        std::vector<glm::vec2> test = {cur_screen_vert};
-                        PointCloud pointCloud(test, screen_verts_color_red);
-                        pointCloud.render(5.0f);
-                    }
-                    break;
-                }
-                default:
-                    break;
-                }
+
                 break;
             }
             default:
@@ -2719,9 +2759,9 @@ void openIMGUIFrame()
             {
                 ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 100, 1000);
                 ImGui::Text("Collection Procedure");
-                ImGui::RadioButton("Raw Points", &collection_procedure, 0);
+                ImGui::RadioButton("Raw Points", &leap_collection_procedure, 0);
                 ImGui::SameLine();
-                ImGui::RadioButton("Finger Tip", &collection_procedure, 1);
+                ImGui::RadioButton("Finger Tip", &leap_collection_procedure, 1);
                 if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
                 {
                     if (ready_to_collect)
