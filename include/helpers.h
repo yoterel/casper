@@ -22,6 +22,7 @@ public:
     static std::vector<float> flatten_glm(std::vector<glm::vec2> vec);
     static std::vector<float> flatten_glm(std::vector<glm::vec3> vec);
     static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point2f> vec);
+    static std::vector<glm::vec3> opencv2glm(std::vector<cv::Point3f> vec);
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupFrustrumBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupCubeBuffers(unsigned int &VAO, unsigned int &VBO);

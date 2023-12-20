@@ -50,6 +50,7 @@ target_link_libraries(dynaflash PRIVATE ${OpenCV_LIBS})
 ################ basler camera python bindings
 nanobind_add_module(basler 
     src/camera.cpp
+    src/timer.cpp
 )
 target_compile_definitions(basler PRIVATE PYTHON_BINDINGS_BUILD)
 target_include_directories(basler PRIVATE "${PROJECT_SOURCE_DIR}/include")
@@ -155,95 +156,95 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgu
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
 ####################################### unity plugin
-add_library(AHUnityPlugin SHARED 
-    src/UnityPlugin.cpp
-    src/display.cpp
-)
-target_compile_definitions(AHUnityPlugin PRIVATE NATIVECPPLIBRARY_EXPORTS DLL_BUILD)
-target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
-target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
-target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
+# add_library(AHUnityPlugin SHARED 
+#     src/UnityPlugin.cpp
+#     src/display.cpp
+# )
+# target_compile_definitions(AHUnityPlugin PRIVATE NATIVECPPLIBRARY_EXPORTS DLL_BUILD)
+# target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# target_include_directories(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+# target_link_libraries(AHUnityPlugin PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+# target_link_libraries(AHUnityPlugin PRIVATE ${OpenCV_LIBS})
 
 ####################################### coaxial calibration
-add_executable(coaxial_calib 
-    src/coaxial_calibration.cpp
-    src/display
-    src/camera.cpp
-    src/timer.cpp
-    src/texture.cpp
-    src/quad.cpp
-    src/text.cpp
-    src/point_cloud.cpp
-    third-party/glad${GLAD_VER}/src/glad.c
-)
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# pylon
-target_link_libraries(coaxial_calib PRIVATE pylon::pylon)
-# opencv
-target_link_libraries(coaxial_calib PRIVATE ${OpenCV_LIBS})
-# dynaflash
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
-target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
-# GLFW
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
-target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
-# GLAD
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
-# glm
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
-# assimp
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
-target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
-# stb
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
-# freetype
-target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
-target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
+# add_executable(coaxial_calib 
+#     src/coaxial_calibration.cpp
+#     src/display
+#     src/camera.cpp
+#     src/timer.cpp
+#     src/texture.cpp
+#     src/quad.cpp
+#     src/text.cpp
+#     src/point_cloud.cpp
+#     third-party/glad${GLAD_VER}/src/glad.c
+# )
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# # pylon
+# target_link_libraries(coaxial_calib PRIVATE pylon::pylon)
+# # opencv
+# target_link_libraries(coaxial_calib PRIVATE ${OpenCV_LIBS})
+# # dynaflash
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+# target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+# # GLFW
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+# target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# # GLAD
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# # glm
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# # assimp
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
+# target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
+# # stb
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# # freetype
+# target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
+# target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
 ####################################### leap->proejctor calibration
-add_executable(leap_calib 
-    src/leap_calibration.cpp
-    src/display
-    src/camera.cpp
-    src/timer.cpp
-    src/texture.cpp
-    src/quad.cpp
-    src/text.cpp
-    src/fbo.cpp
-    src/leapCPP.cpp
-    src/cnpy.cpp
-    src/point_cloud.cpp
-    src/helpers.cpp
-    third-party/glad${GLAD_VER}/src/glad.c
-)
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# pylon
-target_link_libraries(leap_calib PRIVATE pylon::pylon)
-# opencv
-target_link_libraries(leap_calib PRIVATE ${OpenCV_LIBS})
-# dynaflash
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
-target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
-# GLFW
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
-target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
-# GLAD
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
-# glm
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
-# assimp
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
-target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
-# stb
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
-# freetype
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
-target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
-# leap
-target_link_libraries(leap_calib PRIVATE LeapSDK::LeapC)
-# zlib
-target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
-target_link_libraries(leap_calib PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
+# add_executable(leap_calib 
+#     src/leap_calibration.cpp
+#     src/display
+#     src/camera.cpp
+#     src/timer.cpp
+#     src/texture.cpp
+#     src/quad.cpp
+#     src/text.cpp
+#     src/fbo.cpp
+#     src/leapCPP.cpp
+#     src/cnpy.cpp
+#     src/point_cloud.cpp
+#     src/helpers.cpp
+#     third-party/glad${GLAD_VER}/src/glad.c
+# )
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# # pylon
+# target_link_libraries(leap_calib PRIVATE pylon::pylon)
+# # opencv
+# target_link_libraries(leap_calib PRIVATE ${OpenCV_LIBS})
+# # dynaflash
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+# target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+# # GLFW
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+# target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# # GLAD
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# # glm
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# # assimp
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
+# target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
+# # stb
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# # freetype
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
+# target_link_libraries(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
+# # leap
+# target_link_libraries(leap_calib PRIVATE LeapSDK::LeapC)
+# # zlib
+# target_include_directories(leap_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
+# target_link_libraries(leap_calib PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
 ######################################### cuda sample program
 # add_executable(cuda_example 
 #     # src/add.cu
@@ -276,20 +277,15 @@ target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-par
 target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 ######################################### diffuse example program
-add_executable(diffuse_example 
-    src/diffuse_example.cpp
-    src/diffuse.cpp
-    src/base64.cpp
-    src/timer.cpp
-)
-# target_include_directories(diffuse_example PRIVATE ${PYTHON_INCLUDE_DIRS})
-# target_link_libraries(diffuse_example PRIVATE )
-target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
-target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
-# target_link_libraries(diffuse_example PRIVATE ${PYTHON_LIBRARIES})
-# target_link_libraries(diffuse_example PRIVATE Python::Python)  # Python::NumPy
-# target_link_libraries(diffuse_example PRIVATE ${Python_LIBRARY_DIRS}/python310.lib)
+# add_executable(diffuse_example 
+#     src/diffuse_example.cpp
+#     src/diffuse.cpp
+#     src/base64.cpp
+#     src/timer.cpp
+# )
+# target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
+# target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 ######################################### opencv benchmark example program
 # add_executable(benchmark_example
 #     src/benchmark.cpp

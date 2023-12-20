@@ -114,6 +114,16 @@ std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point2f> vec)
     return glm_vec;
 }
 
+std::vector<glm::vec3> Helpers::opencv2glm(std::vector<cv::Point3f> vec)
+{
+    std::vector<glm::vec3> glm_vec;
+    for (int i = 0; i < vec.size(); i++)
+    {
+        glm_vec.push_back(glm::vec3(vec[i].x, vec[i].y, vec[i].z));
+    }
+    return glm_vec;
+}
+
 void Helpers::setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO)
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes

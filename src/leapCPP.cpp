@@ -31,6 +31,11 @@ LeapCPP::~LeapCPP()
     kill();
 }
 
+void LeapCPP::setTrackingMode(const _eLeapTrackingMode trackingMode)
+{
+    LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_ScreenTop);
+}
+
 void LeapCPP::setPollMode(bool pollMode)
 {
     m_poll = pollMode;

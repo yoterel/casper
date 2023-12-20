@@ -47,10 +47,11 @@ public:
     void setImage(const LEAP_IMAGE_EVENT *imageEvent);
     void setPollMode(bool pollMode);
     void setImageMode(bool imageMode);
+    void setTrackingMode(const _eLeapTrackingMode trackingMode);
     bool getImage(std::vector<uint8_t> &image1, std::vector<uint8_t> &image2, uint32_t &width, uint32_t &height);
     bool getDistortion(std::vector<float> &dist1, std::vector<float> &dist2, uint32_t &width, uint32_t &height);
-    // std::vector<float> getFrame();
     std::vector<float> getIndexTip();
+    uint64_t getImageFrameID() { return m_imageFrameID; };
     // glm::vec3 triangulate(const glm::vec2 &leap1,
     //                       const glm::vec2 &leap2,
     //                       const int leap_width, const int leap_height);

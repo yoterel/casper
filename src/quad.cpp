@@ -63,6 +63,111 @@ Quad::Quad(float depth)
     this->init(verts);
 }
 
+Quad::Quad(std::string location, float depth)
+{
+    std::vector<float> verts;
+    if (location == "top_half")
+    {
+        verts = {
+            -1.0f, 1.0f, depth, 0.0f, 1.0f, // top left
+            -1.0f, 0.0f, depth, 0.0f, 0.0f, // bottom left
+            1.0f, 0.0f, depth, 1.0f, 0.0f,  // bottom right
+
+            -1.0f, 1.0f, depth, 0.0f, 1.0f, // top left
+            1.0f, 0.0f, depth, 1.0f, 0.0f,  // bottom right
+            1.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else if (location == "bottom_half")
+    {
+        verts = {
+            -1.0f, 0.0f, depth, 0.0f, 1.0f,  // top left
+            -1.0f, -1.0f, depth, 0.0f, 0.0f, // bottom left
+            1.0f, -1.0f, depth, 1.0f, 0.0f,  // bottom right
+
+            -1.0f, 0.0f, depth, 0.0f, 1.0f, // top left
+            1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+            1.0f, 0.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else if (location == "left_half")
+    {
+        verts = {
+            -1.0f, 1.0f, depth, 0.0f, 1.0f,  // top left
+            -1.0f, -1.0f, depth, 0.0f, 0.0f, // bottom left
+            0.0f, -1.0f, depth, 1.0f, 0.0f,  // bottom right
+
+            -1.0f, 1.0f, depth, 0.0f, 1.0f, // top left
+            0.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+            0.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else if (location == "right_half")
+    {
+        verts = {
+            0.0f, 1.0f, depth, 0.0f, 1.0f,  // top left
+            0.0f, -1.0f, depth, 0.0f, 0.0f, // bottom left
+            1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+
+            0.0f, 1.0f, depth, 0.0f, 1.0f,  // top left
+            1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+            1.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else if (location == "top_left")
+    {
+        verts = {
+            -1.0f, 1.0f, depth, 0.0f, 1.0f, // top left
+            -1.0f, 0.0f, depth, 0.0f, 0.0f, // bottom left
+            0.0f, 0.0f, depth, 1.0f, 0.0f,  // bottom right
+
+            -1.0f, 1.0f, depth, 0.0f, 1.0f, // top left
+            0.0f, 0.0f, depth, 1.0f, 0.0f,  // bottom right
+            0.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else if (location == "top_right")
+    {
+        verts = {
+            0.0f, 1.0f, depth, 0.0f, 1.0f, // top left
+            0.0f, 0.0f, depth, 0.0f, 0.0f, // bottom left
+            1.0f, 0.0f, depth, 1.0f, 0.0f, // bottom right
+
+            0.0f, 1.0f, depth, 0.0f, 1.0f,  // top left
+            1.0f, 0.0f, depth, 1.0f, 0.0f,  // bottom right
+            1.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else if (location == "bottom_left")
+    {
+        verts = {
+            -1.0f, 0.0f, depth, 0.0f, 1.0f,  // top left
+            -1.0f, -1.0f, depth, 0.0f, 0.0f, // bottom left
+            0.0f, -1.0f, depth, 1.0f, 0.0f,  // bottom right
+
+            -1.0f, 0.0f, depth, 0.0f, 1.0f, // top left
+            0.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+            0.0f, 0.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else if (location == "bottom_right")
+    {
+        verts = {
+            0.0f, 0.0f, depth, 0.0f, 1.0f,  // top left
+            0.0f, -1.0f, depth, 0.0f, 0.0f, // bottom left
+            1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+
+            0.0f, 0.0f, depth, 0.0f, 1.0f,  // top left
+            1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+            1.0f, 0.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    else
+    {
+        verts = {
+            -1.0f, 1.0f, depth, 0.0f, 1.0f,  // top left
+            -1.0f, -1.0f, depth, 0.0f, 0.0f, // bottom left
+            1.0f, -1.0f, depth, 1.0f, 0.0f,  // bottom right
+
+            -1.0f, 1.0f, depth, 0.0f, 1.0f, // top left
+            1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
+            1.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
+    }
+    this->init(verts);
+}
+
 Quad::~Quad()
 {
     if (m_VBO != 0)

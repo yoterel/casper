@@ -2,11 +2,13 @@
 #define QUAD_H
 #include <vector>
 #include <glm/glm.hpp>
+#include <string>
 #define EPISILON 0.0001f
 class Quad
 {
 public:
     Quad(float depth);
+    Quad(std::string location, float depth);
     Quad(std::vector<glm::vec3> &vertices);
     Quad(std::vector<glm::vec2> &vertices);
     ~Quad();
