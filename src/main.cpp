@@ -132,8 +132,9 @@ enum class LeapMarkSettings
 enum class CalibrationMode
 {
     OFF = 0,
-    COAXIAL = 1,
-    LEAP = 2,
+    CAMERA = 1,
+    COAXIAL = 2,
+    LEAP = 3,
 };
 // global state
 bool debug_mode = false;
@@ -717,19 +718,14 @@ int main(int argc, char *argv[])
         {
             switch (calib_mode)
             {
-            case static_cast<int>(CalibrationMode::COAXIAL):
+            case static_cast<int>(CalibrationMode::OFF):
             {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                break;
-            }
-            case static_cast<int>(CalibrationMode::LEAP):
-            {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 break;
             }
             default:
             {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 break;
             }
             }
@@ -748,7 +744,7 @@ int main(int argc, char *argv[])
         // else
         // {
         // std::cout << "before: " << camera_queue.size_approx() << std::endl;
-        if (calib_mode != static_cast<int>(CalibrationMode::LEAP))
+        if (calib_mode != static_cast<int>(CalibrationMode::LEAP) && calib_mode != static_cast<int>(CalibrationMode::CAMERA))
         {
             bool sucess = camera.capture_single_image(ptrGrabResult);
             if (!sucess)
@@ -784,14 +780,10 @@ int main(int argc, char *argv[])
             // get leap frame
         }
         LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
-        /* camera transforms, todo: use only in debug mode */
+        /* camera transforms */
         // get view & projection transforms
-        glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
-        glm::mat4 proj_projection_transform = gl_projector.getProjectionMatrix();
         glm::mat4 cam_view_transform = gl_camera.getViewMatrix();
         glm::mat4 cam_projection_transform = gl_camera.getProjectionMatrix();
-        glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
-        glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
         t_leap.stop();
         /* render warped cam image */
         switch (calib_mode)
@@ -1073,6 +1065,39 @@ int main(int argc, char *argv[])
                 c2p_fbo.getTexture()->bind();
                 fullScreenQuad.render();
             }
+            break;
+        }
+        case static_cast<int>(CalibrationMode::CAMERA):
+        {
+            /*
+            std::vector<std::vector<cv::Point3f>> objpoints;
+            // Creating vector to store vectors of 2D points for each checkerboard image
+            std::vector<std::vector<cv::Point2f>> imgpoints;
+            std::vector<cv::Point2f> corner_pts;
+            camera.capture_single_image(ptrGrabResult);
+            camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+            cv::flip(camImageOrig, camImage, 1);
+            bool success = cv::findChessboardCorners(camImage, cv::Size(10, 7), corner_pts, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CV_CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
+            if (success)
+            {
+                cv::TermCriteria criteria(cv::CV_TERMCRIT_EPS | cv::CV_TERMCRIT_ITER, 30, 0.001);
+
+                // refining pixel coordinates for given 2d points.
+                cv::cornerSubPix(gray, corner_pts, cv::Size(11, 11), cv::Size(-1, -1), criteria);
+
+                // Displaying the detected corner points on the checker board
+                cv::drawChessboardCorners(frame, cv::Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, success);
+
+                objpoints.push_back(objp);
+                imgpoints.push_back(corner_pts);
+            }
+            cv::calibrateCamera(objpoints, imgpoints, cv::Size(gray.rows, gray.cols), cameraMatrix, distCoeffs, R, T);
+
+            std::cout << "cameraMatrix : " << cameraMatrix << std::endl;
+            std::cout << "distCoeffs : " << distCoeffs << std::endl;
+            std::cout << "Rotation vector : " << R << std::endl;
+            std::cout << "Translation vector : " << T << std::endl;
+            */
             break;
         }
         case static_cast<int>(CalibrationMode::COAXIAL):
@@ -1597,6 +1622,10 @@ int main(int argc, char *argv[])
         if (debug_mode && calib_mode == static_cast<int>(CalibrationMode::OFF))
         {
             t_debug.start();
+            glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
+            glm::mat4 proj_projection_transform = gl_projector.getProjectionMatrix();
+            glm::mat4 flycam_view_transform = gl_flycamera.getViewMatrix();
+            glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
             // draws some mesh (lit by camera input)
             {
                 /* quad at vcam far plane, shined by vproj (perspective corrected) */
@@ -2831,41 +2860,28 @@ void openIMGUIFrame()
             if (ImGui::RadioButton("Off", &calib_mode, 0))
             {
                 leap.setImageMode(false);
-                // camera.kill();
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
-                // camera.init_poll(cam_height, cam_width, exposure);
-                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                // camera.acquire();
-                // camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 1))
+            if (ImGui::RadioButton("Camera", &calib_mode, 1))
+            {
+                leap.setImageMode(false);
+                exposure = 10000.0f;
+                camera.set_exposure_time(exposure);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 2))
             {
                 debug_mode = false;
                 leap.setImageMode(false);
-                // cam_close_signal = true;
-                // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                // camera.kill();
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
-                // cam_close_signal = false;
-                // camera.init_poll(cam_height, cam_width, exposure);
-                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                // camera.acquire();
-                // camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Leap Calibration", &calib_mode, 2))
+            if (ImGui::RadioButton("Leap Calibration", &calib_mode, 3))
             {
                 projector.kill();
-                // cam_close_signal = true;
-                // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                // camera.kill();
-                // exposure = 10000.0f; // max exposure allowing for max fps
-                // camera.init_poll(cam_height, cam_width, exposure);
-                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                // camera.acquire();
                 use_projector = false;
                 leap.setImageMode(true);
                 std::vector<uint8_t> buffer1, buffer2;
@@ -2875,7 +2891,6 @@ void openIMGUIFrame()
                 // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
                 exposure = 10000.0f;
                 camera.set_exposure_time(exposure);
-                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 debug_mode = false;
             }
             switch (calib_mode)
@@ -2889,6 +2904,16 @@ void openIMGUIFrame()
                     std::vector<float> w2c_vec(pSource, pSource + 16);
                     cnpy::npy_save("../../resource/calibrations/leap_calibration/w2c_user.npy", w2c_vec.data(), {4, 4}, "w");
                     w2c_user = w2c;
+                }
+                break;
+            }
+            case static_cast<int>(CalibrationMode::CAMERA):
+            {
+                if (ImGui::Button("Calibrate Camera"))
+                {
+                }
+                if (ImGui::Button("Save Camera Params"))
+                {
                 }
                 break;
             }
