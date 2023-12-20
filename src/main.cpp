@@ -88,7 +88,9 @@ bool use_screen = true;
 bool leap_poll_mode = false;
 bool cam_color_mode = false;
 bool ready_to_collect = false;
-int leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+int calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
+int checkerboard_width = 10;
+int checkerboard_height = 7;
 int leap_collection_setting = static_cast<int>(LeapCollectionSettings::AUTO_RAW);
 int leap_mark_setting = static_cast<int>(LeapMarkSettings::STREAM);
 int leap_tracking_mode = eLeapTrackingMode_HMD;
@@ -112,7 +114,8 @@ uint32_t leap_height = 240;
 unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f; // 1850.0f;
-int leap_calib_n_points = 2000;
+int n_points_leap_calib = 2000;
+int n_points_cam_calib = 20;
 // global state
 int postprocess_mode = static_cast<int>(PostProcessMode::MASK);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
@@ -192,6 +195,7 @@ std::vector<std::string> animals{
 std::vector<glm::vec3> points_3d;
 std::vector<glm::vec2> points_2d, points_2d_inliners;
 std::vector<glm::vec2> points_2d_reprojected, points_2d_inliers_reprojected;
+std::vector<std::vector<cv::Point2f>> imgpoints;
 int pnp_iters = 500;
 float pnp_rep_error = 2.0f;
 float pnp_confidence = 0.95f;
@@ -1011,35 +1015,62 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(CalibrationMode::CAMERA):
         {
-            /*
-            std::vector<std::vector<cv::Point3f>> objpoints;
-            // Creating vector to store vectors of 2D points for each checkerboard image
-            std::vector<std::vector<cv::Point2f>> imgpoints;
-            std::vector<cv::Point2f> corner_pts;
-            camera.capture_single_image(ptrGrabResult);
-            camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-            cv::flip(camImageOrig, camImage, 1);
-            bool success = cv::findChessboardCorners(camImage, cv::Size(10, 7), corner_pts, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CV_CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
-            if (success)
+            switch (calibration_state)
             {
-                cv::TermCriteria criteria(cv::CV_TERMCRIT_EPS | cv::CV_TERMCRIT_ITER, 30, 0.001);
-
-                // refining pixel coordinates for given 2d points.
-                cv::cornerSubPix(gray, corner_pts, cv::Size(11, 11), cv::Size(-1, -1), criteria);
-
-                // Displaying the detected corner points on the checker board
-                cv::drawChessboardCorners(frame, cv::Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, success);
-
-                objpoints.push_back(objp);
-                imgpoints.push_back(corner_pts);
+            case static_cast<int>(CalibrationStateMachine::COLLECT):
+            {
+                std::vector<cv::Point2f> corner_pts;
+                camera.capture_single_image(ptrGrabResult);
+                camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                cv::flip(camImageOrig, camImage, 1);
+                bool success = cv::findChessboardCorners(camImage, cv::Size(checkerboard_width, checkerboard_height), corner_pts, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
+                if (success)
+                {
+                    cv::TermCriteria criteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 40, 0.001);
+                    cv::cornerSubPix(camImage, corner_pts, cv::Size(11, 11), cv::Size(-1, -1), criteria);
+                    cv::drawChessboardCorners(camImage, cv::Size(checkerboard_width, checkerboard_height), corner_pts, success);
+                    if (ready_to_collect)
+                        imgpoints.push_back(corner_pts);
+                }
+                displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
+                set_texture_shader(textureShader, true, false, true);
+                displayTexture.bind();
+                fullScreenQuad.render();
+                if (imgpoints.size() >= n_points_cam_calib)
+                    ready_to_collect = false;
+                break;
             }
-            cv::calibrateCamera(objpoints, imgpoints, cv::Size(gray.rows, gray.cols), cameraMatrix, distCoeffs, R, T);
+            case static_cast<int>(CalibrationStateMachine::CALIBRATE):
+            {
+                std::vector<std::vector<cv::Point3f>> objpoints;
+                std::vector<cv::Point3f> objp;
+                for (int i = 0; i < checkerboard_height; i++)
+                {
+                    for (int j{0}; j < checkerboard_width; j++)
+                        objp.push_back(cv::Point3f(j, i, 0));
+                }
+                for (int i = 0; i < imgpoints.size(); i++)
+                    objpoints.push_back(objp);
+                // cv::calcBoardCornerPositions(s.boardSize, s.squareSize, objectPoints[0], s.calibrationPattern);
+                // objectPoints.resize(imagePoints.size(), objectPoints[0]);
+                cv::Mat cameraMatrix, distCoeffs, R, T;
+                cv::calibrateCamera(objpoints, imgpoints, cv::Size(cam_height, cam_width), cameraMatrix, distCoeffs, R, T);
 
-            std::cout << "cameraMatrix : " << cameraMatrix << std::endl;
-            std::cout << "distCoeffs : " << distCoeffs << std::endl;
-            std::cout << "Rotation vector : " << R << std::endl;
-            std::cout << "Translation vector : " << T << std::endl;
-            */
+                std::cout << "cameraMatrix : " << cameraMatrix << std::endl;
+                std::cout << "distCoeffs : " << distCoeffs << std::endl;
+                std::cout << "Rotation vector : " << R << std::endl;
+                std::cout << "Translation vector : " << T << std::endl;
+                calibration_state = static_cast<int>(CalibrationStateMachine::SHOW);
+                break;
+            }
+            case static_cast<int>(CalibrationStateMachine::SHOW):
+            {
+                break;
+            }
+            default:
+                break;
+            }
+
             break;
         }
         case static_cast<int>(CalibrationMode::COAXIAL):
@@ -1084,9 +1115,9 @@ int main(int argc, char *argv[])
         case static_cast<int>(CalibrationMode::LEAP):
         {
 
-            switch (leap_calibration_state)
+            switch (calibration_state)
             {
-            case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
+            case static_cast<int>(CalibrationStateMachine::COLLECT):
             {
                 switch (leap_collection_setting)
                 {
@@ -1158,7 +1189,7 @@ int main(int argc, char *argv[])
                                     {
                                         points_3d.push_back(cur_3d_point);
                                         points_2d.push_back(cur_2d_point);
-                                        if (points_2d.size() >= leap_calib_n_points)
+                                        if (points_2d.size() >= n_points_leap_calib)
                                         {
                                             ready_to_collect = false;
                                         }
@@ -1210,7 +1241,7 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
-            case static_cast<int>(LeapCalibrationStateMachine::CALIBRATE):
+            case static_cast<int>(CalibrationStateMachine::CALIBRATE):
             {
                 std::vector<cv::Point2f> points_2d_cv;
                 std::vector<cv::Point3f> points_3d_cv;
@@ -1307,17 +1338,17 @@ int main(int argc, char *argv[])
                 w2c_auto = glm::transpose(w2c_auto);
                 use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
-                leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+                calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
                 calibrationSuccess = true;
                 break;
             }
-            case static_cast<int>(LeapCalibrationStateMachine::SHOW):
+            case static_cast<int>(CalibrationStateMachine::SHOW):
             {
                 vcolorShader.use();
                 vcolorShader.setMat4("view", glm::mat4(1.0f));
                 vcolorShader.setMat4("projection", glm::mat4(1.0f));
                 vcolorShader.setMat4("model", glm::mat4(1.0f));
-                // todo: move this logic to LeapCalibrationStateMachine::CALIBRATE
+                // todo: move this logic to CalibrationStateMachine::CALIBRATE
                 std::vector<glm::vec2> NDCs;
                 std::vector<glm::vec2> NDCs_reprojected;
                 if (showInliersOnly)
@@ -1336,7 +1367,7 @@ int main(int argc, char *argv[])
                 pointCloud2.render();
                 break;
             }
-            case static_cast<int>(LeapCalibrationStateMachine::MARK):
+            case static_cast<int>(CalibrationStateMachine::MARK):
             {
                 switch (leap_mark_setting)
                 {
@@ -1551,10 +1582,10 @@ int main(int argc, char *argv[])
                     break;
                 } // switch(leap_mark_setting)
                 break;
-            } // LeapCalibrationStateMachine::MARK
+            } // CalibrationStateMachine::MARK
             default:
                 break;
-            } // switch (leap_calibration_state)
+            } // switch (calibration_state)
             break;
         } // CalibrationMode::LEAP
         default:
@@ -2130,9 +2161,9 @@ void process_input(GLFWwindow *window)
             displayBoneIndex = (displayBoneIndex + 1) % n_bones;
             if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
             {
-                switch (leap_calibration_state)
+                switch (calibration_state)
                 {
-                case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
+                case static_cast<int>(CalibrationStateMachine::COLLECT):
                 {
                     if (ready_to_collect && skeleton_vertices.size() > 0)
                     {
@@ -2142,7 +2173,7 @@ void process_input(GLFWwindow *window)
                     }
                     break;
                 }
-                case static_cast<int>(LeapCalibrationStateMachine::MARK):
+                case static_cast<int>(CalibrationStateMachine::MARK):
                 {
                     if (leap_mark_setting == static_cast<int>(LeapMarkSettings::POINT_BY_POINT))
                     {
@@ -2852,8 +2883,24 @@ void openIMGUIFrame()
             }
             case static_cast<int>(CalibrationMode::CAMERA):
             {
+                if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
+                {
+                    if (ready_to_collect)
+                    {
+                        imgpoints.clear();
+                        calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
+                    }
+                }
+                float calib_progress = imgpoints.size() / (float)n_points_cam_calib;
+                char buf[32];
+                sprintf(buf, "%d/%d points", (int)(calib_progress * n_points_cam_calib), n_points_cam_calib);
+                ImGui::ProgressBar(calib_progress, ImVec2(-1.0f, 0.0f), buf);
                 if (ImGui::Button("Calibrate Camera"))
                 {
+                    if (imgpoints.size() >= n_points_cam_calib)
+                    {
+                        calibration_state = static_cast<int>(CalibrationStateMachine::CALIBRATE);
+                    }
                 }
                 if (ImGui::Button("Save Camera Params"))
                 {
@@ -2888,7 +2935,7 @@ void openIMGUIFrame()
             case static_cast<int>(CalibrationMode::LEAP):
             {
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
-                ImGui::SliderInt("# Points to Collect", &leap_calib_n_points, 10, 2000);
+                ImGui::SliderInt("# Points to Collect", &n_points_leap_calib, 10, 2000);
                 ImGui::Checkbox("Use RANSAC", &leap_calib_use_ransac);
                 ImGui::Text("Collection Procedure");
                 ImGui::RadioButton("Manual Raw", &leap_collection_setting, 0);
@@ -2916,12 +2963,12 @@ void openIMGUIFrame()
                         points_2d_inliners.clear();
                         points_2d_reprojected.clear();
                         points_2d_inliers_reprojected.clear();
-                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+                        calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
                     }
                 }
-                float calib_progress = points_2d.size() / (float)leap_calib_n_points;
+                float calib_progress = points_2d.size() / (float)n_points_leap_calib;
                 char buf[32];
-                sprintf(buf, "%d/%d points", (int)(calib_progress * leap_calib_n_points), leap_calib_n_points);
+                sprintf(buf, "%d/%d points", (int)(calib_progress * n_points_leap_calib), n_points_leap_calib);
                 ImGui::ProgressBar(calib_progress, ImVec2(-1.0f, 0.0f), buf);
                 ImGui::Text("cur. triangulated: %05.1f, %05.1f, %05.1f", triangulated.x, triangulated.y, triangulated.z);
                 if (skeleton_vertices.size() > 0)
@@ -2941,21 +2988,21 @@ void openIMGUIFrame()
                 ImGui::InputFloat("Conf.", &pnp_confidence);
                 if (ImGui::Button("Calibrate"))
                 {
-                    if (points_2d.size() >= leap_calib_n_points)
+                    if (points_2d.size() >= n_points_leap_calib)
                     {
-                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::CALIBRATE);
+                        calibration_state = static_cast<int>(CalibrationStateMachine::CALIBRATE);
                     }
                 }
                 if (calibrationSuccess)
                 {
                     if (ImGui::Checkbox("Show Calib Reprojections", &showReprojections))
                     {
-                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
+                        calibration_state = static_cast<int>(CalibrationStateMachine::SHOW);
                         showTestPoints = false;
                     }
                     if (ImGui::Checkbox("Show Test Points", &showTestPoints))
                     {
-                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::MARK);
+                        calibration_state = static_cast<int>(CalibrationStateMachine::MARK);
                         showReprojections = false;
                     }
                     if (showReprojections)
@@ -2964,11 +3011,13 @@ void openIMGUIFrame()
                     }
                     if (showTestPoints)
                     {
-                        ImGui::RadioButton("Point by Point", &leap_mark_setting, 0);
+                        ImGui::RadioButton("Stream", &leap_mark_setting, 0);
                         ImGui::SameLine();
-                        ImGui::RadioButton("Whole Hand", &leap_mark_setting, 1);
+                        ImGui::RadioButton("Point by Point", &leap_mark_setting, 1);
                         ImGui::SameLine();
-                        ImGui::RadioButton("Single Bone", &leap_mark_setting, 2);
+                        ImGui::RadioButton("Whole Hand", &leap_mark_setting, 2);
+                        ImGui::SameLine();
+                        ImGui::RadioButton("Single Bone", &leap_mark_setting, 3);
                         // ImGui::ListBox("listbox", &item_current, items, IM_ARRAYSIZE(items), 4);
                         if (leap_mark_setting == static_cast<int>(LeapMarkSettings::POINT_BY_POINT))
                         {
@@ -2987,7 +3036,7 @@ void openIMGUIFrame()
                         }
                     }
                     if (!showReprojections && !showTestPoints)
-                        leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
+                        calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
                     if (ImGui::Button("Save Calibration"))
                     {
                         const float *pSource = (const float *)glm::value_ptr(w2c_auto);

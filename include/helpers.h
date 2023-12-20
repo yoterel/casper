@@ -66,7 +66,7 @@ enum class LeapCalibrationSettings
     AUTO = 0,
     USER = 1,
 };
-enum class LeapCalibrationStateMachine
+enum class CalibrationStateMachine
 {
     COLLECT = 0,
     CALIBRATE = 1,
