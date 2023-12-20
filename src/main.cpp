@@ -172,7 +172,7 @@ uint32_t leap_height = 240;
 unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f; // 1850.0f;
-int leap_calib_n_points = 1000;
+int leap_calib_n_points = 2000;
 // global state
 int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
