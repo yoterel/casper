@@ -239,19 +239,12 @@ int main(int argc, char *argv[])
     }
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure))
-    {
-        /* real producer */
-        std::cout << "Using real camera to produce images" << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        // camera.balance_white();
-        camera.acquire();
-    }
-    else
-    {
-        std::cout << "camera init failed" << std::endl;
-        exit(1);
-    }
+    camera.init(camera_queue, close_signal, cam_height, cam_width, exposure);
+    /* real producer */
+    std::cout << "Using real camera to produce images" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    // camera.balance_white();
+    camera.acquire();
 
     /* main loop */
     while (!glfwWindowShouldClose(window))

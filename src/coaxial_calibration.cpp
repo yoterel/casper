@@ -193,7 +193,8 @@ int main(int argc, char *argv[])
     glm::mat4 w2vc;
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !producer_is_fake)
+    camera.init(camera_queue, close_signal, cam_height, cam_width, exposure);
+    if (!producer_is_fake)
     {
         /* real producer */
         std::cout << "Using real camera to produce images" << std::endl;

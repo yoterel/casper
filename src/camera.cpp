@@ -22,7 +22,7 @@ public:
 
     void OnOpened(CInstantCamera &camera)
     {
-        // std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnGrabStart(CInstantCamera &camera)
@@ -32,7 +32,7 @@ public:
 
     void OnGrabStarted(CInstantCamera &camera)
     {
-        // std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnGrabStop(CInstantCamera &camera)
@@ -42,7 +42,7 @@ public:
 
     void OnGrabStopped(CInstantCamera &camera)
     {
-        // std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnClose(CInstantCamera &camera)
@@ -52,7 +52,7 @@ public:
 
     void OnClosed(CInstantCamera &camera)
     {
-        // std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnDestroy(CInstantCamera &camera)
@@ -62,7 +62,7 @@ public:
 
     void OnDestroyed(CInstantCamera & /*camera*/)
     {
-        // std::cout << "OnDestroyed event" << std::endl;
+        std::cout << "OnDestroyed event" << std::endl;
     }
 
     void OnDetach(CInstantCamera &camera)
@@ -296,11 +296,18 @@ private:
 class MyImageEventHandler : public CImageEventHandler
 {
 public:
-    MyImageEventHandler(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal, uint32_t &height, uint32_t &width) : myqueue(camera_queue), close_signal(close_signal), height(height), width(width) {}
+    MyImageEventHandler(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue,
+                        bool &close_signal,
+                        Timer &enqueue_timer,
+                        uint32_t &height, uint32_t &width) : myqueue(camera_queue),
+                                                             close_signal(close_signal),
+                                                             mytimer(enqueue_timer),
+                                                             height(height), width(width) {}
     moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &myqueue;
     bool &close_signal;
     uint32_t &height;
     uint32_t &width;
+    Timer &mytimer;
     virtual void OnImagesSkipped(CInstantCamera &camera, size_t countOfSkippedImages)
     {
         // std::cout << "OnImagesSkipped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
@@ -372,28 +379,62 @@ public:
         {
             std::cout << "Baser API: error: " << std::hex << ptrGrabResult->GetErrorCode() << std::dec << " " << ptrGrabResult->GetErrorDescription() << std::endl;
         }
+        mytimer.stop();
+        mytimer.start();
     }
 };
 
-bool BaslerCamera::init(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal,
+double BaslerCamera::getAvgEnqueueTimeAndReset()
+{
+    double avgLap = enqueue_timer.averageLapInMilliSec();
+    enqueue_timer.reset();
+    return avgLap;
+}
+
+void BaslerCamera::init(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal,
                         uint32_t height, uint32_t width, float exposureTime, bool hardwareTrigger)
 {
-    PylonInitialize();
+    if (!is_pylon_init)
+    {
+        PylonInitialize();
+        is_pylon_init = true;
+    }
     try
     {
         camera.Attach(CTlFactory::GetInstance().CreateFirstDevice());
         camera.RegisterConfiguration(new HardwareTriggerConfiguration(exposureTime, hardwareTrigger), RegistrationMode_ReplaceAll, Cleanup_Delete);
         camera.RegisterConfiguration(new CConfigurationEventPrinter, RegistrationMode_Append, Cleanup_Delete);
-        camera.RegisterImageEventHandler(new MyImageEventHandler(camera_queue, close_signal, height, width), RegistrationMode_Append, Cleanup_Delete);
+        camera.RegisterImageEventHandler(new MyImageEventHandler(camera_queue, close_signal, enqueue_timer, height, width), RegistrationMode_Append, Cleanup_Delete);
         camera.Open();
         is_open = true;
         std::cout << "Basler API: camera initialized." << std::endl;
-        return true;
     }
     catch (const GenericException &e)
     {
         std::cerr << "Baser API: an exception occurred: " << e.GetDescription() << std::endl;
-        return false;
+    }
+}
+
+void BaslerCamera::init_poll(uint32_t height, uint32_t width, float exposureTime)
+{
+    if (!is_pylon_init)
+    {
+        PylonInitialize();
+        is_pylon_init = true;
+    }
+    try
+    {
+        camera.Attach(CTlFactory::GetInstance().CreateFirstDevice());
+        camera.RegisterConfiguration(new HardwareTriggerConfiguration(exposureTime, false), RegistrationMode_ReplaceAll, Cleanup_Delete);
+        camera.RegisterConfiguration(new CConfigurationEventPrinter, RegistrationMode_Append, Cleanup_Delete);
+        // camera.RegisterImageEventHandler(new MyImageEventHandler(camera_queue, close_signal, enqueue_timer, height, width), RegistrationMode_Append, Cleanup_Delete);
+        camera.Open();
+        is_open = true;
+        std::cout << "Basler API: camera initialized." << std::endl;
+    }
+    catch (const GenericException &e)
+    {
+        std::cerr << "Baser API: an exception occurred: " << e.GetDescription() << std::endl;
     }
 }
 
@@ -408,7 +449,7 @@ void BaslerCamera::acquire()
             // Start the grabbing using the grab loop thread, by setting the grabLoopType parameter
             // to GrabLoop_ProvidedByInstantCamera. The grab results are delivered to the image event handlers.
             // The GrabStrategy_OneByOne default grab strategy is used.
-            camera.StartGrabbing(GrabStrategy_LatestImageOnly, GrabLoop_ProvidedByInstantCamera); // GrabStrategy_LatestImageOnly
+            camera.StartGrabbing(GrabStrategy_LatestImageOnly, GrabLoop_ProvidedByUser); // GrabStrategy_LatestImageOnly
             // Wait for user input to trigger the camera or exit the program.
             // The grabbing is stopped, the device is closed and destroyed automatically when the camera object goes out of scope.
 
@@ -496,11 +537,13 @@ void BaslerCamera::kill()
     std::cout << "Baser API: basler camera killed." << std::endl;
 }
 
-#ifdef PYTHON_BINDINGS_BUILD
-
 void BaslerCamera::init_single(float exposure_time)
 {
     PylonInitialize();
+    if (!is_pylon_init)
+    {
+        is_pylon_init = true;
+    }
     try
     {
         camera.Attach(CTlFactory::GetInstance().CreateFirstDevice());
@@ -513,6 +556,37 @@ void BaslerCamera::init_single(float exposure_time)
         std::cerr << "Baser API: An exception occurred: " << e.GetDescription() << std::endl;
     }
 }
+
+bool BaslerCamera::capture_single_image(CGrabResultPtr &ptrGrabResult)
+{
+    try
+    {
+        bool sucess = camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+        if (ptrGrabResult->GrabSucceeded())
+            return sucess;
+    }
+    catch (const GenericException &e)
+    {
+        std::cerr << "Baser API: An exception occurred: " << e.GetDescription() << std::endl;
+    }
+    return false;
+}
+
+CGrabResultPtr BaslerCamera::capture_single_image_slow()
+{
+    CGrabResultPtr ptrGrabResult;
+    if (camera.GrabOne(5000, ptrGrabResult))
+    {
+        return ptrGrabResult;
+    }
+    else
+    {
+        std::cout << "Baser API: Error: " << std::hex << ptrGrabResult->GetErrorCode() << std::dec << " " << ptrGrabResult->GetErrorDescription() << std::endl;
+        return CGrabResultPtr();
+    }
+}
+
+#ifdef PYTHON_BINDINGS_BUILD
 
 nb::ndarray<nb::numpy, const uint8_t> BaslerCamera::capture_single()
 {

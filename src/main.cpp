@@ -124,9 +124,10 @@ enum class LeapCollectionSettings
 };
 enum class LeapMarkSettings
 {
-    POINT_BY_POINT = 0,
-    WHOLE_HAND = 1,
-    ONE_BONE = 2,
+    STREAM = 0,
+    POINT_BY_POINT = 1,
+    WHOLE_HAND = 2,
+    ONE_BONE = 3,
 };
 enum class CalibrationMode
 {
@@ -136,6 +137,7 @@ enum class CalibrationMode
 };
 // global state
 bool debug_mode = false;
+bool cmd_line_stats = true;
 bool bakeRequest = false;
 bool freecam_mode = false;
 bool use_cuda = false;
@@ -147,9 +149,11 @@ bool leap_poll_mode = false;
 bool cam_color_mode = false;
 bool ready_to_collect = false;
 int leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::COLLECT);
-int leap_collection_setting = static_cast<int>(LeapCollectionSettings::MANUAL_RAW);
-int leap_mark_setting = static_cast<int>(LeapMarkSettings::WHOLE_HAND);
+int leap_collection_setting = static_cast<int>(LeapCollectionSettings::AUTO_RAW);
+int leap_mark_setting = static_cast<int>(LeapMarkSettings::STREAM);
+int leap_tracking_mode = eLeapTrackingMode_HMD;
 bool leap_calib_use_ransac = false;
+uint64_t leap_cur_frame_id = 0;
 int mark_bone_index = 0;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
@@ -200,7 +204,11 @@ int closest_vert = 0;
 float min_dist = 100000.0f;
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
+bool threshold_flag = false;
+float leap_binary_threshold = 0.3f;
+bool leap_threshold_flag = false;
 glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 triangulated = glm::vec3(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
@@ -285,6 +293,9 @@ FBO c2p_fbo(proj_width, proj_height, 4, false);
 LeapCPP leap(leap_poll_mode);
 DynaFlashProjector projector(true, false);
 BaslerCamera camera;
+moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
+moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
+bool close_signal = false;
 std::vector<glm::vec3> skeleton_vertices;
 
 int main(int argc, char *argv[])
@@ -336,7 +347,7 @@ int main(int argc, char *argv[])
         std::cout << "Camera in color mode" << std::endl;
         cam_color_mode = true;
     }
-    Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_debug2;
+    Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp;
     t_app.start();
     /* init GLFW */
     glfwInit();
@@ -435,6 +446,9 @@ int main(int argc, char *argv[])
     n_bones = leftHandModel.NumBones();
     PostProcess postProcess(cam_width, cam_height, proj_width, proj_height);
     Quad fullScreenQuad(0.0f);
+    Quad topHalfQuad("top_half", 0.0f);
+    Quad bottomLeftQuad("bottom_left", 0.0f);
+    Quad bottomRightQuad("bottom_right", 0.0f);
     glm::vec3 coa = leftHandModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -520,7 +534,6 @@ int main(int argc, char *argv[])
     std::vector<glm::mat4> bones_to_world_left;
     std::vector<glm::mat4> bones_to_world_right;
     size_t n_skeleton_primitives = 0;
-    bool close_signal = false;
     uint8_t *colorBuffer = new uint8_t[projected_image_size];
     CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
@@ -530,8 +543,6 @@ int main(int argc, char *argv[])
     displayTexture.init(cam_width, cam_height, n_cam_channels);
     camTexture.init(cam_width, cam_height, n_cam_channels);
     flowTexture.init(cam_width, cam_height, 2);
-    moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
-    moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
     if (use_projector)
     {
         if (!projector.init())
@@ -573,7 +584,9 @@ int main(int argc, char *argv[])
     c2p_homography = PostProcess::findHomography(cur_screen_verts);
     /* actual thread loops */
     /* image producer (real camera = virtual projector) */
-    if (camera.init(camera_queue, close_signal, cam_height, cam_width, exposure) && !simulated_camera)
+    camera.init_poll(cam_height, cam_width, exposure);
+    // camera.init(camera_queue, close_signal, cam_height, cam_width, exposure);
+    if (!simulated_camera)
     {
         /* real producer */
         std::cout << "Using real camera to produce images" << std::endl;
@@ -604,14 +617,14 @@ int main(int argc, char *argv[])
         //     fake_cam_images.push_back(img4);
         //     file_counter++;
         // }
-        // producer = std::thread([&camera_queue_cv, &close_signal, fake_cam_images]() { //, &projector
-        //     // CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
+        // producer = std::thread([fake_cam_images]() { //, &projector
+        //     CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
         //     Timer t_block;
         //     int counter = 0;
         //     t_block.start();
         //     while (!close_signal)
         //     {
-        //         camera_queue_cv.push(fake_cam_images[counter]);
+        //         camera_queue.wait_enqueue(image);
         //         if (counter < fake_cam_images.size() - 1)
         //             counter++;
         //         else
@@ -626,7 +639,7 @@ int main(int argc, char *argv[])
         // });
     }
     // image consumer (real projector = virtual camera)
-    consumer = std::thread([&projector_queue, &close_signal]() { //, &projector
+    consumer = std::thread([]() { //, &projector
         uint8_t *image;
         // std::vector<uint8_t> image;
         // int stride = 3 * proj_width;
@@ -661,21 +674,25 @@ int main(int argc, char *argv[])
         {
             fps = frameCount;
             ms_per_frame = 1000.0f / frameCount;
-            std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
-            std::cout << "total app: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
-            std::cout << "misc: " << t_misc.averageLapInMilliSec() << std::endl;
-            std::cout << "cam: " << t_camera.averageLapInMilliSec() << std::endl;
-            std::cout << "leap: " << t_leap.averageLapInMilliSec() << std::endl;
-            std::cout << "skinning: " << t_skin.averageLapInMilliSec() << std::endl;
-            std::cout << "debug: " << t_debug.averageLapInMilliSec() << std::endl;
-            std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
-            std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
-            std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
-            std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
-            // std::cout << "project time: " << t4.averageLap() << std::endl;
-            std::cout << "cam q1 size: " << camera_queue.size_approx() << std::endl;
-            // std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
-            std::cout << "proj q size: " << projector_queue.size_approx() << std::endl;
+            if (cmd_line_stats)
+            {
+                std::cout << "avg ms: " << 1000.0f / frameCount << " FPS: " << frameCount << std::endl;
+                std::cout << "total app: " << t_app.getElapsedTimeInSec() << "s" << std::endl;
+                std::cout << "misc: " << t_misc.averageLapInMilliSec() << std::endl;
+                std::cout << "cam_enqueue: " << camera.getAvgEnqueueTimeAndReset() << std::endl;
+                std::cout << "cam_dequeue: " << t_camera.averageLapInMilliSec() << std::endl;
+                std::cout << "leap: " << t_leap.averageLapInMilliSec() << std::endl;
+                std::cout << "skinning: " << t_skin.averageLapInMilliSec() << std::endl;
+                std::cout << "debug: " << t_debug.averageLapInMilliSec() << std::endl;
+                std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
+                std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
+                std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
+                std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
+                // std::cout << "project time: " << t4.averageLap() << std::endl;
+                std::cout << "cam q1 size: " << camera_queue.size_approx() << std::endl;
+                // std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
+                std::cout << "proj q size: " << projector_queue.size_approx() << std::endl;
+            }
             frameCount = 0;
             previousSecondAppTime = currentAppTime;
             t_camera.reset();
@@ -731,19 +748,15 @@ int main(int argc, char *argv[])
         // else
         // {
         // std::cout << "before: " << camera_queue.size_approx() << std::endl;
-        camera_queue.wait_dequeue_latest(ptrGrabResult);
-        // camera_queue.wait_dequeue(ptrGrabResult);
-        // std::cout << "after: " << camera_queue.size_approx() << std::endl;
-        // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-        // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
-
-        if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
+        if (calib_mode != static_cast<int>(CalibrationMode::LEAP))
         {
-            camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-            cv::flip(camImageOrig, camImage, 1);
-        }
-        else
-        {
+            bool sucess = camera.capture_single_image(ptrGrabResult);
+            if (!sucess)
+            {
+                std::cout << "Failed to capture image" << std::endl;
+                exit(1);
+            }
+            // camera_queue.wait_dequeue(ptrGrabResult);
             if (undistortCamera)
             {
                 camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
@@ -755,6 +768,10 @@ int main(int argc, char *argv[])
                 camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
             }
         }
+        // camera_queue.wait_dequeue(ptrGrabResult);
+        // std::cout << "after: " << camera_queue.size_approx() << std::endl;
+        // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+        // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
         t_camera.stop();
 
         /* deal with leap input */
@@ -793,7 +810,6 @@ int main(int argc, char *argv[])
                 {
                     /* render skinned mesh to fbo, in camera space*/
                     skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                     skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
                     skinnedShader.setBool("bake", false);
                     skinnedShader.setBool("flipTexVertically", false);
@@ -825,7 +841,6 @@ int main(int argc, char *argv[])
                 case static_cast<int>(MaterialMode::GGX):
                 {
                     skinnedShader.use();
-                    skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                     skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
                     skinnedShader.setBool("bake", false);
                     skinnedShader.setBool("flipTexVertically", false);
@@ -929,7 +944,6 @@ int main(int argc, char *argv[])
                         glDisable(GL_CULL_FACE);
                         glEnable(GL_DEPTH_TEST);
                         skinnedShader.use();
-                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", true);
@@ -973,7 +987,6 @@ int main(int argc, char *argv[])
             {
                 /* render skinned mesh to fbo, in camera space*/
                 skinnedShader.use();
-                skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                 skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
                 skinnedShader.setBool("useProjector", false);
                 skinnedShader.setBool("bake", false);
@@ -1103,6 +1116,7 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(CalibrationMode::LEAP):
         {
+
             switch (leap_calibration_state)
             {
             case static_cast<int>(LeapCalibrationStateMachine::COLLECT):
@@ -1111,62 +1125,106 @@ int main(int argc, char *argv[])
                 {
                 case static_cast<int>(LeapCollectionSettings::AUTO_RAW):
                 {
-                    cv::Mat thr;
-                    cv::threshold(camImage, thr, 250, 255, cv::THRESH_BINARY);
-                    glm::vec2 center, center_leap1, center_leap2;
-                    if (extract_centroid(thr, center))
+                    std::vector<uint8_t> buffer1, buffer2;
+                    uint32_t ignore1, ignore2;
+                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
                     {
-                        displayTexture.load((uint8_t *)thr.data, true, cam_buffer_format);
-                        set_texture_shader(textureShader, true, false, true);
-                        displayTexture.bind();
-                        fullScreenQuad.render();
-                        vcolorShader.use();
-                        vcolorShader.setMat4("view", glm::mat4(1.0f));
-                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                        vcolorShader.setMat4("model", glm::mat4(1.0f));
-                        glm::vec2 center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
-                        std::vector<glm::vec2> test = {center_NDC};
-                        PointCloud pointCloud(test, screen_verts_color_red);
-                        pointCloud.render();
-                        cv::Mat leap1_thr, leap2_thr;
-                        std::vector<uint8_t> buffer1, buffer2;
-                        uint32_t ignore1, ignore2;
-                        if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                        uint64_t new_frame_id = leap.getImageFrameID();
+                        if (leap_cur_frame_id != new_frame_id)
                         {
+                            // capture cam image asap
+                            camera.capture_single_image(ptrGrabResult);
+                            camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                            cv::flip(camImageOrig, camImage, 1);
+                            cv::Mat thr;
+                            cv::threshold(camImage, thr, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
+                            glm::vec2 center, center_leap1, center_leap2;
+                            // render binary leap texture to bottom half of screen
+                            Texture leapTexture1 = Texture();
+                            Texture leapTexture2 = Texture();
+                            leapTexture1.init(leap_width, leap_height, 1);
+                            leapTexture2.init(leap_width, leap_height, 1);
+                            leapTexture1.load(buffer1, true, cam_buffer_format);
+                            leapTexture2.load(buffer2, true, cam_buffer_format);
+                            leapTexture1.bind();
+                            set_texture_shader(textureShader, true, false, true, leap_threshold_flag, leap_binary_threshold);
+                            bottomLeftQuad.render();
+                            leapTexture2.bind();
+                            bottomRightQuad.render();
+                            displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
+                            set_texture_shader(textureShader, true, false, true, threshold_flag, masking_threshold);
+                            displayTexture.bind();
+                            topHalfQuad.render();
+                            glm::vec2 center_NDC;
+                            bool found_centroid = false;
+                            if (extract_centroid(thr, center))
+                            {
+                                found_centroid = true;
+                                // render point on centroid in camera image
+                                vcolorShader.use();
+                                vcolorShader.setMat4("view", glm::mat4(1.0f));
+                                vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                                center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
+                                glm::vec2 vert = center_NDC;
+                                vert.y = (vert.y + 1.0f) / 2.0f; // for display, use top of screen
+                                std::vector<glm::vec2> pc1 = {vert};
+                                PointCloud pointCloud(pc1, screen_verts_color_red);
+                                pointCloud.render(5.0f);
+                            }
+                            cv::Mat leap1_thr, leap2_thr;
                             cv::Mat leap1(leap_height, leap_width, CV_8UC1, buffer1.data());
                             cv::Mat leap2(leap_height, leap_width, CV_8UC1, buffer2.data());
-                            cv::threshold(leap1, leap1_thr, 250, 255, cv::THRESH_BINARY);
-                            cv::threshold(leap2, leap2_thr, 250, 255, cv::THRESH_BINARY);
+                            cv::threshold(leap1, leap1_thr, static_cast<int>(leap_binary_threshold * 255), 255, cv::THRESH_BINARY);
+                            cv::threshold(leap2, leap2_thr, static_cast<int>(leap_binary_threshold * 255), 255, cv::THRESH_BINARY);
                             if (extract_centroid(leap1_thr, center_leap1) && extract_centroid(leap2_thr, center_leap2))
                             {
+                                // save the 2d and 3d points
                                 glm::vec2 center_NDC_leap1 = Helpers::ScreenToNDC(center_leap1, leap_width, leap_height, true);
                                 glm::vec2 center_NDC_leap2 = Helpers::ScreenToNDC(center_leap2, leap_width, leap_height, true);
                                 glm::vec3 cur_3d_point = triangulate(leap, center_NDC_leap1, center_NDC_leap2);
-                                glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
-                                if (ready_to_collect)
+                                triangulated = cur_3d_point;
+                                if (found_centroid)
                                 {
-                                    points_3d.push_back(cur_3d_point);
-                                    points_2d.push_back(cur_2d_point);
-                                    if (points_2d.size() >= leap_calib_n_points)
+                                    glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
+                                    if (ready_to_collect)
                                     {
-                                        ready_to_collect = false;
-                                        // leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::IDLE);
+                                        points_3d.push_back(cur_3d_point);
+                                        points_2d.push_back(cur_2d_point);
+                                        if (points_2d.size() >= leap_calib_n_points)
+                                        {
+                                            ready_to_collect = false;
+                                        }
                                     }
                                 }
+                                // render point on centroid in left leap image
+                                vcolorShader.use();
+                                vcolorShader.setMat4("view", glm::mat4(1.0f));
+                                vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                                glm::vec2 vert1 = center_NDC_leap1;
+                                glm::vec2 vert2 = center_NDC_leap2;
+                                vert1.y = (vert1.y - 1.0f) / 2.0f; // use bottom left of screen
+                                vert1.x = (vert1.x - 1.0f) / 2.0f; //
+                                vert2.y = (vert2.y - 1.0f) / 2.0f; // use bottom right of screen
+                                vert2.x = (vert2.x + 1.0f) / 2.0f; //
+                                std::vector<glm::vec2> pc2 = {vert1, vert2};
+                                PointCloud pointCloud2(pc2, screen_verts_color_red);
+                                pointCloud2.render(5.0f);
                                 // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
                                 // std::cout << "leap2 2d:" << center_NDC_leap2.x << " " << center_NDC_leap2.y << std::endl;
                                 // std::cout << point_3d.x << " " << point_3d.y << " " << point_3d.z << std::endl;
                             }
-                        }
-                        else
-                        {
-                            std::cout << "Failed to get leap image" << std::endl;
+                            leap_cur_frame_id = new_frame_id;
                         }
                     }
                     break;
                 }
                 case static_cast<int>(LeapCollectionSettings::MANUAL_FINGER):
                 {
+                    camera.capture_single_image(ptrGrabResult);
+                    camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                    cv::flip(camImageOrig, camImage, 1);
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
                     set_texture_shader(textureShader, true, false, true);
                     displayTexture.bind();
@@ -1200,8 +1258,8 @@ int main(int argc, char *argv[])
                 transform.at<double>(1, 2) = 1.0f;
                 transform.at<double>(2, 1) = 1.0f;
                 transform.at<double>(0, 3) = -50.0f;
-                transform.at<double>(1, 3) = 100.0f;
-                transform.at<double>(2, 3) = 300.0f;
+                transform.at<double>(1, 3) = -100.0f;
+                transform.at<double>(2, 3) = 500.0f;
                 transform.at<double>(3, 3) = 1.0f;
                 // std::cout << "transform: " << transform << std::endl;
                 // cv::Mat rotmat = transform(cv::Range(0, 3), cv::Range(0, 3)).clone();
@@ -1242,6 +1300,7 @@ int main(int argc, char *argv[])
                 points_2d_reprojected = Helpers::opencv2glm(reprojected_cv);
                 points_2d_inliers_reprojected = Helpers::opencv2glm(reprojected_inliers_cv);
                 points_2d_inliners = Helpers::opencv2glm(points_2d_inliers_cv);
+                std::vector<glm::vec3> points_3d_inliers = Helpers::opencv2glm(points_3d_inliers_cv);
                 float mse = Helpers::MSE(points_2d, points_2d_reprojected);
                 float mse_inliers = Helpers::MSE(points_2d_inliners, points_2d_inliers_reprojected);
                 std::cout << "avg reprojection error: " << mse << std::endl;
@@ -1314,8 +1373,82 @@ int main(int argc, char *argv[])
             {
                 switch (leap_mark_setting)
                 {
+                case static_cast<int>(LeapMarkSettings::STREAM):
+                {
+                    std::vector<uint8_t> buffer1, buffer2;
+                    uint32_t ignore1, ignore2;
+                    if (leap.getImage(buffer1, buffer2, ignore1, ignore2))
+                    {
+                        uint64_t new_frame_id = leap.getImageFrameID();
+                        if (leap_cur_frame_id != new_frame_id)
+                        {
+                            // capture cam image asap
+                            camera.capture_single_image(ptrGrabResult);
+                            displayTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+                            glm::vec2 center, center_leap1, center_leap2;
+                            // render binary leap texture to bottom half of screen
+                            Texture leapTexture1 = Texture();
+                            Texture leapTexture2 = Texture();
+                            leapTexture1.init(leap_width, leap_height, 1);
+                            leapTexture2.init(leap_width, leap_height, 1);
+                            leapTexture1.load(buffer1, true, cam_buffer_format);
+                            leapTexture2.load(buffer2, true, cam_buffer_format);
+                            leapTexture1.bind();
+                            set_texture_shader(textureShader, true, false, true, leap_threshold_flag, leap_binary_threshold);
+                            bottomLeftQuad.render();
+                            leapTexture2.bind();
+                            bottomRightQuad.render();
+                            set_texture_shader(textureShader, true, true, true);
+                            displayTexture.bind();
+                            topHalfQuad.render();
+                            cv::Mat leap1_thr, leap2_thr;
+                            cv::Mat leap1(leap_height, leap_width, CV_8UC1, buffer1.data());
+                            cv::Mat leap2(leap_height, leap_width, CV_8UC1, buffer2.data());
+                            cv::threshold(leap1, leap1_thr, static_cast<int>(leap_binary_threshold * 255), 255, cv::THRESH_BINARY);
+                            cv::threshold(leap2, leap2_thr, static_cast<int>(leap_binary_threshold * 255), 255, cv::THRESH_BINARY);
+                            if (extract_centroid(leap1_thr, center_leap1) && extract_centroid(leap2_thr, center_leap2))
+                            {
+                                // save the 2d and 3d points
+                                glm::vec2 center_NDC_leap1 = Helpers::ScreenToNDC(center_leap1, leap_width, leap_height, true);
+                                glm::vec2 center_NDC_leap2 = Helpers::ScreenToNDC(center_leap2, leap_width, leap_height, true);
+                                glm::vec3 cur_3d_point = triangulate(leap, center_NDC_leap1, center_NDC_leap2);
+                                triangulated = cur_3d_point;
+                                /////
+                                std::vector<cv::Point3f> points_3d_cv{cv::Point3f(cur_3d_point.x, cur_3d_point.y, cur_3d_point.z)};
+                                std::vector<cv::Point2f> reprojected_cv;
+                                cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
+                                std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
+                                reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
+                                ////
+                                vcolorShader.use();
+                                vcolorShader.setMat4("view", glm::mat4(1.0f));
+                                vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                                glm::vec2 vert1 = center_NDC_leap1;
+                                glm::vec2 vert2 = center_NDC_leap2;
+                                glm::vec2 vert3 = reprojected[0];
+                                vert1.y = (vert1.y - 1.0f) / 2.0f; // use bottom left of screen
+                                vert1.x = (vert1.x - 1.0f) / 2.0f; //
+                                vert2.y = (vert2.y - 1.0f) / 2.0f; // use bottom right of screen
+                                vert2.x = (vert2.x + 1.0f) / 2.0f; //
+                                vert3.y = (vert3.y + 1.0f) / 2.0f; // for display, use top of screen
+                                std::vector<glm::vec2> pc2 = {vert1, vert2, vert3};
+                                PointCloud pointCloud2(pc2, screen_verts_color_red);
+                                pointCloud2.render(5.0f);
+                                // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
+                                // std::cout << "leap2 2d:" << center_NDC_leap2.x << " " << center_NDC_leap2.y << std::endl;
+                                // std::cout << point_3d.x << " " << point_3d.y << " " << point_3d.z << std::endl;
+                            }
+                            leap_cur_frame_id = new_frame_id;
+                        }
+                    }
+                    break;
+                }
                 case static_cast<int>(LeapMarkSettings::POINT_BY_POINT):
                 {
+                    camera.capture_single_image(ptrGrabResult);
+                    camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                    cv::flip(camImageOrig, camImage, 1);
                     switch (leap_calibration_mark_state)
                     {
                     case 0:
@@ -1384,9 +1517,14 @@ int main(int argc, char *argv[])
                     }
                     default:
                         break;
-                    }
+                    } // switch(leap_calibration_mark_state)
+                    break;
+                } // LeapMarkSettings::POINT_BY_POINT
                 case static_cast<int>(LeapMarkSettings::WHOLE_HAND):
                 {
+                    camera.capture_single_image(ptrGrabResult);
+                    camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                    cv::flip(camImageOrig, camImage, 1);
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
                     set_texture_shader(textureShader, true, false, true);
                     displayTexture.bind();
@@ -1413,9 +1551,12 @@ int main(int argc, char *argv[])
                         pointCloud.render();
                     }
                     break;
-                }
+                } // LeapMarkSettings::WHOLE_HAND
                 case static_cast<int>(LeapMarkSettings::ONE_BONE):
                 {
+                    camera.capture_single_image(ptrGrabResult);
+                    camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                    cv::flip(camImageOrig, camImage, 1);
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
                     set_texture_shader(textureShader, true, false, true);
                     displayTexture.bind();
@@ -1438,25 +1579,20 @@ int main(int argc, char *argv[])
                         pointCloud.render();
                     }
                     break;
-                }
-                }
+                } // LeapMarkSettings::ONE_BONE
                 default:
                     break;
-                }
+                } // switch(leap_mark_setting)
                 break;
-            }
+            } // LeapCalibrationStateMachine::MARK
             default:
-            {
                 break;
-            }
-            }
+            } // switch (leap_calibration_state)
             break;
-        }
+        } // CalibrationMode::LEAP
         default:
-        {
             break;
-        }
-        }
+        } // switch(calib_mode)
 
         if (debug_mode && calib_mode == static_cast<int>(CalibrationMode::OFF))
         {
@@ -1604,7 +1740,6 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::ORIGINAL):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
@@ -1620,7 +1755,6 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::PROJECTIVE):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                         skinnedShader.setBool("useProjector", true);
@@ -1634,7 +1768,6 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::BAKED):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
@@ -1680,11 +1813,11 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::ORIGINAL):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
+                        skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         leftHandModel.Render(skinnedShader, bones_to_world_right, rotx);
                         break;
@@ -1696,7 +1829,6 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::PROJECTIVE):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                         skinnedShader.setBool("useProjector", true);
@@ -1710,7 +1842,6 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::BAKED):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetDisplayBoneIndex(displayBoneIndex);
                         skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
@@ -2683,6 +2814,8 @@ void openIMGUIFrame()
             }
             ImGui::Checkbox("Debug Mode", &debug_mode);
             ImGui::SameLine();
+            ImGui::Checkbox("Command Line Stats", &cmd_line_stats);
+            ImGui::SameLine();
             if (ImGui::Checkbox("Freecam Mode", &freecam_mode))
             {
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
@@ -2698,21 +2831,41 @@ void openIMGUIFrame()
             if (ImGui::RadioButton("Off", &calib_mode, 0))
             {
                 leap.setImageMode(false);
+                // camera.kill();
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
+                // camera.init_poll(cam_height, cam_width, exposure);
+                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                // camera.acquire();
+                // camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 1))
             {
                 debug_mode = false;
                 leap.setImageMode(false);
+                // cam_close_signal = true;
+                // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                // camera.kill();
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
+                // cam_close_signal = false;
+                // camera.init_poll(cam_height, cam_width, exposure);
+                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                // camera.acquire();
+                // camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Leap Calibration", &calib_mode, 2))
             {
                 projector.kill();
+                // cam_close_signal = true;
+                // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                // camera.kill();
+                // exposure = 10000.0f; // max exposure allowing for max fps
+                // camera.init_poll(cam_height, cam_width, exposure);
+                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                // camera.acquire();
                 use_projector = false;
                 leap.setImageMode(true);
                 std::vector<uint8_t> buffer1, buffer2;
@@ -2722,7 +2875,7 @@ void openIMGUIFrame()
                 // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
                 exposure = 10000.0f;
                 camera.set_exposure_time(exposure);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 debug_mode = false;
             }
             switch (calib_mode)
@@ -2766,7 +2919,8 @@ void openIMGUIFrame()
             }
             case static_cast<int>(CalibrationMode::LEAP):
             {
-                ImGui::SliderInt("Calibration Points to Collect", &leap_calib_n_points, 10, 1000);
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
+                ImGui::SliderInt("# Points to Collect", &leap_calib_n_points, 10, 2000);
                 ImGui::Checkbox("Use RANSAC", &leap_calib_use_ransac);
                 ImGui::Text("Collection Procedure");
                 ImGui::RadioButton("Manual Raw", &leap_collection_setting, 0);
@@ -2776,6 +2930,15 @@ void openIMGUIFrame()
                 ImGui::RadioButton("Auto Raw", &leap_collection_setting, 2);
                 ImGui::SameLine();
                 ImGui::RadioButton("Auto Finger", &leap_collection_setting, 3);
+                ImGui::SliderFloat("Binary Threshold", &leap_binary_threshold, 0.0f, 1.0f);
+                if (ImGui::IsItemActive())
+                {
+                    leap_threshold_flag = true;
+                }
+                else
+                {
+                    leap_threshold_flag = false;
+                }
                 if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
                 {
                     if (ready_to_collect)
@@ -2792,6 +2955,7 @@ void openIMGUIFrame()
                 char buf[32];
                 sprintf(buf, "%d/%d points", (int)(calib_progress * leap_calib_n_points), leap_calib_n_points);
                 ImGui::ProgressBar(calib_progress, ImVec2(-1.0f, 0.0f), buf);
+                ImGui::Text("cur. triangulated: %f, %f, %f", triangulated.x, triangulated.y, triangulated.z);
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
                 ImGui::InputInt("Iters", &pnp_iters);
                 ImGui::SameLine();
@@ -2812,7 +2976,6 @@ void openIMGUIFrame()
                     if (ImGui::Checkbox("Show Calib Reprojections", &showReprojections))
                     {
                         leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::SHOW);
-                        ImGui::Checkbox("Show only inliers", &showInliersOnly);
                         showTestPoints = false;
                     }
                     if (ImGui::Checkbox("Show Test Points", &showTestPoints))
@@ -2820,9 +2983,13 @@ void openIMGUIFrame()
                         leap_calibration_state = static_cast<int>(LeapCalibrationStateMachine::MARK);
                         showReprojections = false;
                     }
+                    if (showReprojections)
+                    {
+                        ImGui::Checkbox("Show only inliers", &showInliersOnly);
+                    }
                     if (showTestPoints)
                     {
-                        ImGui::RadioButton("Points by Point", &leap_mark_setting, 0);
+                        ImGui::RadioButton("Point by Point", &leap_mark_setting, 0);
                         ImGui::SameLine();
                         ImGui::RadioButton("Whole Hand", &leap_mark_setting, 1);
                         ImGui::SameLine();
@@ -2907,7 +3074,7 @@ void openIMGUIFrame()
             ImGui::Checkbox("Show Camera", &showCamera);
             ImGui::SameLine();
             ImGui::Checkbox("Show Projector", &showProjector);
-            if (ImGui::SliderFloat("Camera Exposure [us]", &exposure, 30.0f, 10000.0f))
+            if (ImGui::SliderFloat("Camera Exposure [us]", &exposure, 300.0f, 10000.0f))
             {
                 // std::cout << "current exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
                 camera.set_exposure_time(exposure);
@@ -2931,6 +3098,42 @@ void openIMGUIFrame()
                 gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
             }
             ImGui::Checkbox("Undistort Camera Input", &undistortCamera);
+            ImGui::Text("Cam2World (row major, OpenGL convention)");
+            if (ImGui::BeginTable("Cam2World", 4))
+            {
+                glm::mat4 c2w = glm::transpose(glm::inverse(gl_camera.getViewMatrix()));
+                for (int row = 0; row < 4; row++)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][0]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][1]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][2]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", c2w[row][3]);
+                }
+                ImGui::EndTable();
+            }
+            ImGui::Text("Camera Projection Matrix (column major, OpenGL convention)");
+            if (ImGui::BeginTable("CamProj", 4))
+            {
+                glm::mat4 proj = gl_camera.getProjectionMatrix();
+                for (int row = 0; row < 4; row++)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", proj[row][0]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", proj[row][1]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", proj[row][2]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%f", proj[row][3]);
+                }
+                ImGui::EndTable();
+            }
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
@@ -2987,7 +3190,15 @@ void openIMGUIFrame()
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Post Process"))
         {
-            ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 0.1f);
+            ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
+            if (ImGui::IsItemActive())
+            {
+                threshold_flag = true;
+            }
+            else
+            {
+                threshold_flag = false;
+            }
             ImGui::Text("Post Processing Mode");
             ImGui::SameLine();
             ImGui::RadioButton("None", &postprocess_mode, 0);
@@ -3009,6 +3220,22 @@ void openIMGUIFrame()
             {
                 leap.setPollMode(leap_poll_mode);
             }
+            if (ImGui::RadioButton("Desktop", &leap_tracking_mode, 0))
+            {
+                leap.setTrackingMode(eLeapTrackingMode_Desktop);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("HMD", &leap_tracking_mode, 1))
+            {
+                leap.setTrackingMode(eLeapTrackingMode_ScreenTop);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Screentop", &leap_tracking_mode, 2))
+            {
+                leap.setTrackingMode(eLeapTrackingMode_HMD);
+            }
+            ImGui::SameLine();
+
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);

@@ -5,7 +5,7 @@
 #include <pylon/PylonIncludes.h>
 #include <pylon/BaslerUniversalInstantCamera.h>
 // #include <pylon/PylonGUI.h>
-#include "queue.h"
+#include "timer.h"
 #include "readerwritercircularbuffer.h"
 #include "opencv2/opencv.hpp"
 #ifdef PYTHON_BINDINGS_BUILD
@@ -25,21 +25,27 @@ public:
     {
         kill();
     }; /* PylonTerminate(); */
-    bool init(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal,
+    void init(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal,
               uint32_t height, uint32_t width,
               float exposureTime = 1850.0f, bool hardwareTrigger = false);
+    void init_poll(uint32_t height, uint32_t width, float exposureTime = 1850.0f);
     void acquire();
     void kill();
     void balance_white();
     double get_exposure_time();
     void set_exposure_time(double exposure_time);
-#ifdef PYTHON_BINDINGS_BUILD
     void init_single(float exposure_time = 1850.0);
+    double getAvgEnqueueTimeAndReset();
+    bool capture_single_image(CGrabResultPtr &ptrGrabResult);
+    CGrabResultPtr capture_single_image_slow();
+#ifdef PYTHON_BINDINGS_BUILD
     nb::ndarray<nb::numpy, const uint8_t> capture_single();
 #endif
 private:
     CBaslerUniversalInstantCamera camera;
     bool is_open = false;
+    bool is_pylon_init = false;
+    Timer enqueue_timer;
 };
 
 #ifdef PYTHON_BINDINGS_BUILD
