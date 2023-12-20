@@ -94,7 +94,7 @@ int leap_mark_setting = static_cast<int>(LeapMarkSettings::STREAM);
 int leap_tracking_mode = eLeapTrackingMode_HMD;
 bool leap_calib_use_ransac = false;
 uint64_t leap_cur_frame_id = 0;
-int mark_bone_index = 0;
+int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
@@ -230,7 +230,7 @@ FBO hands_fbo(src_width, src_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(src_width, src_height, 4, false);
 FBO c2p_fbo(src_width, src_height, 4, false);
-LeapCPP leap(leap_poll_mode);
+LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
 DynaFlashProjector projector(true, false);
 BaslerCamera camera;
 moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
@@ -324,6 +324,7 @@ int main(int argc, char *argv[])
     glViewport(0, 0, proj_width, proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glPointSize(10.0f);
+    glLineWidth(5.0f);
     glEnable(GL_CULL_FACE);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_BLEND);
@@ -2564,6 +2565,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
     //  std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
     //  std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
     glm::vec3 red = glm::vec3(1.0f, 0.0f, 0.0f);
+    glm::vec3 green = glm::vec3(0.0f, 1.0f, 0.0f);
     for (uint32_t h = 0; h < frame->nHands; h++)
     {
         LEAP_HAND *hand = &frame->pHands[h];
@@ -2601,9 +2603,9 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
         LEAP_VECTOR arm_j2 = hand->arm.next_joint;
         skeleton_vertices.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
-        skeleton_vertices.push_back(red);
+        skeleton_vertices.push_back(green);
         skeleton_vertices.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
-        skeleton_vertices.push_back(red);
+        skeleton_vertices.push_back(green);
         glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
                                                   hand->arm.rotation.x,
                                                   hand->arm.rotation.y,
@@ -2632,9 +2634,9 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                 LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
                 LEAP_VECTOR joint2 = finger.bones[b].next_joint;
                 skeleton_vertices.push_back(glm::vec3(joint1.x, joint1.y, joint1.z));
-                skeleton_vertices.push_back(red);
+                skeleton_vertices.push_back(green);
                 skeleton_vertices.push_back(glm::vec3(joint2.x, joint2.y, joint2.z));
-                skeleton_vertices.push_back(red);
+                skeleton_vertices.push_back(green);
                 glm::mat4 rot = glm::toMat4(glm::quat(finger.bones[b].rotation.w,
                                                       finger.bones[b].rotation.x,
                                                       finger.bones[b].rotation.y,
@@ -2921,7 +2923,14 @@ void openIMGUIFrame()
                 char buf[32];
                 sprintf(buf, "%d/%d points", (int)(calib_progress * leap_calib_n_points), leap_calib_n_points);
                 ImGui::ProgressBar(calib_progress, ImVec2(-1.0f, 0.0f), buf);
-                ImGui::Text("cur. triangulated: %f, %f, %f", triangulated.x, triangulated.y, triangulated.z);
+                ImGui::Text("cur. triangulated: %05.1f, %05.1f, %05.1f", triangulated.x, triangulated.y, triangulated.z);
+                if (skeleton_vertices.size() > 0)
+                {
+                    ImGui::Text("cur. skeleton: %05.1f, %05.1f, %05.1f", skeleton_vertices[mark_bone_index * 2].x, skeleton_vertices[mark_bone_index * 2].y, skeleton_vertices[mark_bone_index * 2].z);
+                    float distance = glm::l2Norm(skeleton_vertices[mark_bone_index * 2] - triangulated);
+                    ImGui::Text("diff: %05.2f", distance);
+                }
+                ImGui::SliderInt("Selected Bone Index", &mark_bone_index, 0, 30);
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
                 ImGui::InputInt("Iters", &pnp_iters);
                 ImGui::SameLine();
@@ -2960,7 +2969,6 @@ void openIMGUIFrame()
                         ImGui::RadioButton("Whole Hand", &leap_mark_setting, 1);
                         ImGui::SameLine();
                         ImGui::RadioButton("Single Bone", &leap_mark_setting, 2);
-                        ImGui::SliderInt("Bone Index", &mark_bone_index, 0, 30);
                         // ImGui::ListBox("listbox", &item_current, items, IM_ARRAYSIZE(items), 4);
                         if (leap_mark_setting == static_cast<int>(LeapMarkSettings::POINT_BY_POINT))
                         {

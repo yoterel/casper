@@ -34,7 +34,7 @@ enum class LEAP_STATUS
 class LeapCPP
 {
 public:
-    LeapCPP(bool pollMode = true, bool with_images = false);
+    LeapCPP(const bool pollMode = true, const bool with_images = false, const _eLeapTrackingMode trackingMode = eLeapTrackingMode_HMD);
     ~LeapCPP();
     void OpenConnection(void);
     void kill(void);

@@ -1,6 +1,6 @@
 #include "leapCPP.h"
 
-LeapCPP::LeapCPP(bool pollMode, bool with_images)
+LeapCPP::LeapCPP(const bool pollMode, const bool with_images, const _eLeapTrackingMode trackingMode)
 {
     OpenConnection();
     while (!IsConnected)
@@ -20,7 +20,7 @@ LeapCPP::LeapCPP(bool pollMode, bool with_images)
     //                    eLeapPolicyFlag_Images & eLeapPolicyFlag_MapPoints, 0);
     // LeapSetPolicyFlags(connectionHandle,
     //                    eLeapPolicyFlag_BackgroundFrames & eLeapPolicyFlag_Images, 0);
-    LeapSetTrackingMode(connectionHandle, eLeapTrackingMode_ScreenTop); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
+    LeapSetTrackingMode(connectionHandle, trackingMode); // eLeapTrackingMode_Desktop, eLeapTrackingMode_HMD, eLeapTrackingMode_ScreenTop
     // LeapRequestConfigValue();
     // LeapSaveConfigValue();
     m_poll = pollMode;
