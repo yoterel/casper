@@ -115,7 +115,9 @@ unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
 unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f; // 1850.0f;
 int n_points_leap_calib = 2000;
-int n_points_cam_calib = 20;
+int n_points_cam_calib = 30;
+std::vector<double> calib_cam_matrix;
+std::vector<double> calib_cam_distortion;
 // global state
 int postprocess_mode = static_cast<int>(PostProcessMode::MASK);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
@@ -1055,11 +1057,14 @@ int main(int argc, char *argv[])
                 // objectPoints.resize(imagePoints.size(), objectPoints[0]);
                 cv::Mat cameraMatrix, distCoeffs, R, T;
                 cv::calibrateCamera(objpoints, imgpoints, cv::Size(cam_height, cam_width), cameraMatrix, distCoeffs, R, T);
-
                 std::cout << "cameraMatrix : " << cameraMatrix << std::endl;
                 std::cout << "distCoeffs : " << distCoeffs << std::endl;
-                std::cout << "Rotation vector : " << R << std::endl;
-                std::cout << "Translation vector : " << T << std::endl;
+                std::vector<double> camMat(cameraMatrix.begin<double>(), cameraMatrix.end<double>());
+                std::vector<double> camDist(distCoeffs.begin<double>(), distCoeffs.end<double>());
+                calib_cam_matrix = camMat;
+                calib_cam_distortion = camDist;
+                // std::cout << "Rotation vector : " << R << std::endl;
+                // std::cout << "Translation vector : " << T << std::endl;
                 calibration_state = static_cast<int>(CalibrationStateMachine::SHOW);
                 break;
             }
@@ -2476,6 +2481,8 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     float nnear = 1.0f;
     std::vector<double> camera_intrinsics_raw = cam_npz["cam_intrinsics"].as_vec<double>();
     std::vector<double> camera_distortion_raw = cam_npz["cam_distortion"].as_vec<double>();
+    calib_cam_matrix = camera_intrinsics_raw;
+    calib_cam_distortion = camera_distortion_raw;
     camera_intrinsics_cv = cv::Mat(3, 3, CV_64F, cam_npz["cam_intrinsics"].data<double>()).clone();
     camera_distortion_cv = cv::Mat(5, 1, CV_64F, cam_npz["cam_distortion"].data<double>()).clone();
     glm::mat3 camera_intrinsics = glm::make_mat3(camera_intrinsics_raw.data());
@@ -2902,8 +2909,27 @@ void openIMGUIFrame()
                         calibration_state = static_cast<int>(CalibrationStateMachine::CALIBRATE);
                     }
                 }
+                ImGui::Text("Camera Intrinsics");
+                if (ImGui::BeginTable("Camera Matrix", 3))
+                {
+                    for (int row = 0; row < 3; row++)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f", calib_cam_matrix[row * 3]);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f", calib_cam_matrix[row * 3 + 1]);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%f", calib_cam_matrix[row * 3 + 2]);
+                    }
+                    ImGui::EndTable();
+                }
+                ImGui::Text("Camera Distortion");
+                ImGui::Text("%f, %f, %f, %f, %f", calib_cam_distortion[0], calib_cam_distortion[1], calib_cam_distortion[2], calib_cam_distortion[3], calib_cam_distortion[4]);
                 if (ImGui::Button("Save Camera Params"))
                 {
+                    cnpy::npz_save("../../resource/calibrations/cam_calibration/cam_calibration.npz", "cam_intrinsics", calib_cam_matrix, "a");
+                    cnpy::npz_save("../../resource/calibrations/cam_calibration/cam_calibration.npz", "cam_distortion", calib_cam_distortion, "a");
                 }
                 break;
             }
