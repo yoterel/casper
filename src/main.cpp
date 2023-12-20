@@ -74,70 +74,9 @@ void set_texture_shader(Shader &textureShader,
                         glm::mat4 model = glm::mat4(1.0f),
                         glm::mat4 projection = glm::mat4(1.0f),
                         glm::mat4 view = glm::mat4(1.0f));
-// void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO);
-
-enum class TextureMode
-{
-    ORIGINAL = 0,
-    FROM_FILE = 1,
-    PROJECTIVE = 2,
-    BAKED = 3,
-};
-enum class SDMode
-{
-    PROMPT = 0,
-    ANIMAL = 1,
-    GESTURE = 2,
-};
-enum class MaterialMode
-{
-    DIFFUSE = 0,
-    GGX = 1,
-    WIREFRAME = 2,
-};
-enum class PostProcessMode
-{
-    NONE = 0,
-    CAM_FEED = 1,
-    MASK = 2,
-    JUMP_FLOOD = 3,
-    OF = 4,
-};
-enum class LeapCalibrationSettings
-{
-    AUTO = 0,
-    USER = 1,
-};
-enum class LeapCalibrationStateMachine
-{
-    COLLECT = 0,
-    CALIBRATE = 1,
-    SHOW = 2,
-    MARK = 3,
-};
-enum class LeapCollectionSettings
-{
-    MANUAL_RAW = 0,
-    MANUAL_FINGER = 1,
-    AUTO_RAW = 2,
-    AUTO_FINGER = 3,
-};
-enum class LeapMarkSettings
-{
-    STREAM = 0,
-    POINT_BY_POINT = 1,
-    WHOLE_HAND = 2,
-    ONE_BONE = 3,
-};
-enum class CalibrationMode
-{
-    OFF = 0,
-    CAMERA = 1,
-    COAXIAL = 2,
-    LEAP = 3,
-};
 // global state
 bool debug_mode = false;
+bool cam_space = true;
 bool cmd_line_stats = true;
 bool bakeRequest = false;
 bool freecam_mode = false;
@@ -157,7 +96,7 @@ bool leap_calib_use_ransac = false;
 uint64_t leap_cur_frame_id = 0;
 int mark_bone_index = 0;
 int leap_calibration_mark_state = 0;
-int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::USER);
+int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
 std::string testFile("../../resource/uv.png");
 std::string bakeFile("../../resource/baked.png");
@@ -175,12 +114,12 @@ unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
 float exposure = 1850.0f; // 1850.0f;
 int leap_calib_n_points = 2000;
 // global state
-int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+int postprocess_mode = static_cast<int>(PostProcessMode::MASK);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
 int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 int sd_mask_mode = 2;
-bool useCoaxialCalib = true;
+bool use_coaxial_calib = false;
 bool showCamera = true;
 bool showProjector = true;
 bool undistortCamera = false;
@@ -220,8 +159,6 @@ bool ctrl_modifier = false;
 bool activateGUI = false;
 bool tab_pressed = false;
 unsigned int n_bones = 0;
-float screen_z = -10.0f;
-bool hand_in_frame = false;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
@@ -286,11 +223,13 @@ glm::mat4 proj_project;
 glm::mat4 cam_project;
 std::vector<double> camera_distortion;
 glm::mat4 c2p_homography;
+int src_width = cam_space ? cam_width : proj_width;
+int src_height = cam_space ? cam_height : proj_height;
 // GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
-FBO hands_fbo(proj_width, proj_height, 4, false);
+FBO hands_fbo(src_width, src_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
-FBO postprocess_fbo(proj_width, proj_height, 4, false);
-FBO c2p_fbo(proj_width, proj_height, 4, false);
+FBO postprocess_fbo(src_width, src_height, 4, false);
+FBO c2p_fbo(src_width, src_height, 4, false);
 LeapCPP leap(leap_poll_mode);
 DynaFlashProjector projector(true, false);
 BaslerCamera camera;
@@ -445,7 +384,7 @@ int main(int argc, char *argv[])
     bakedTexture->init();
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
-    PostProcess postProcess(cam_width, cam_height, proj_width, proj_height);
+    PostProcess postProcess(src_width, src_height, cam_width, cam_height);
     Quad fullScreenQuad(0.0f);
     Quad topHalfQuad("top_half", 0.0f);
     Quad bottomLeftQuad("bottom_left", 0.0f);
@@ -1036,7 +975,7 @@ int main(int argc, char *argv[])
             }
             c2p_fbo.bind();
 
-            if (useCoaxialCalib)
+            if (use_coaxial_calib)
                 set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), c2p_homography);
             else
                 set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f));
@@ -1061,6 +1000,8 @@ int main(int argc, char *argv[])
             /* debug mode renders*/
             if (!debug_mode)
             {
+                glViewport(0, 0, proj_width, proj_height); // set viewport
+                glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
                 set_texture_shader(textureShader, false, false, false);
                 c2p_fbo.getTexture()->bind();
                 fullScreenQuad.render();
@@ -2926,7 +2867,7 @@ void openIMGUIFrame()
                 if (ImGui::BeginTable("Cam2Proj Vertices", 2))
                 {
                     std::vector<glm::vec2> tmpVerts;
-                    if (useCoaxialCalib)
+                    if (use_coaxial_calib)
                         tmpVerts = cur_screen_verts;
                     else
                         tmpVerts = screen_verts;
@@ -3068,9 +3009,9 @@ void openIMGUIFrame()
                 create_virtual_cameras(dummy_camera, gl_projector, gl_camera);
             }
             ImGui::SameLine();
-            if (ImGui::Checkbox("Use Coaxial Calib", &useCoaxialCalib))
+            if (ImGui::Checkbox("Use Coaxial Calib", &use_coaxial_calib))
             {
-                if (useCoaxialCalib)
+                if (use_coaxial_calib)
                     c2p_homography = PostProcess::findHomography(cur_screen_verts);
             }
             ImGui::Text("Cam2World (row major, OpenGL convention)");

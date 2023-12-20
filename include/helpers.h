@@ -34,4 +34,65 @@ private:
     Helpers();
 };
 
+enum class TextureMode
+{
+    ORIGINAL = 0,
+    FROM_FILE = 1,
+    PROJECTIVE = 2,
+    BAKED = 3,
+};
+enum class SDMode
+{
+    PROMPT = 0,
+    ANIMAL = 1,
+    GESTURE = 2,
+};
+enum class MaterialMode
+{
+    DIFFUSE = 0,
+    GGX = 1,
+    WIREFRAME = 2,
+};
+enum class PostProcessMode
+{
+    NONE = 0,
+    CAM_FEED = 1,
+    MASK = 2,
+    JUMP_FLOOD = 3,
+    OF = 4,
+};
+enum class LeapCalibrationSettings
+{
+    AUTO = 0,
+    USER = 1,
+};
+enum class LeapCalibrationStateMachine
+{
+    COLLECT = 0,
+    CALIBRATE = 1,
+    SHOW = 2,
+    MARK = 3,
+};
+enum class LeapCollectionSettings
+{
+    MANUAL_RAW = 0,
+    MANUAL_FINGER = 1,
+    AUTO_RAW = 2,
+    AUTO_FINGER = 3,
+};
+enum class LeapMarkSettings
+{
+    STREAM = 0,
+    POINT_BY_POINT = 1,
+    WHOLE_HAND = 2,
+    ONE_BONE = 3,
+};
+enum class CalibrationMode
+{
+    OFF = 0,
+    CAMERA = 1,
+    COAXIAL = 2,
+    LEAP = 3,
+};
+
 #endif HELPERS_H
