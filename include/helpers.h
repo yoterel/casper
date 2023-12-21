@@ -64,7 +64,7 @@ enum class PostProcessMode
 enum class LeapCalibrationSettings
 {
     AUTO = 0,
-    USER = 1,
+    MANUAL = 1,
 };
 enum class CalibrationStateMachine
 {

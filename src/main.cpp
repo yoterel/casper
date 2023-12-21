@@ -76,7 +76,7 @@ void set_texture_shader(Shader &textureShader,
                         glm::mat4 view = glm::mat4(1.0f));
 // global state
 bool debug_mode = false;
-bool cam_space = true;
+bool cam_space = false;
 bool cmd_line_stats = true;
 bool bakeRequest = false;
 bool freecam_mode = false;
@@ -98,7 +98,7 @@ bool leap_calib_use_ransac = false;
 uint64_t leap_cur_frame_id = 0;
 int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
-int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::AUTO);
+int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
 int calib_mode = static_cast<int>(CalibrationMode::OFF);
 std::string testFile("../../resource/uv.png");
 std::string bakeFile("../../resource/baked.png");
@@ -466,6 +466,17 @@ int main(int argc, char *argv[])
     SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     Shader bakeSimple("../../src/shaders/bake_proj_simple.vs", "../../src/shaders/bake_proj_simple.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
+    // render the baked texture into fbo
+    bake_fbo.bind(true);
+    bakedTexture->bind();
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    set_texture_shader(textureShader, false, false, false);
+    fullScreenQuad.render();
+    bake_fbo.unbind();
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    // settings for text shader
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
@@ -485,11 +496,11 @@ int main(int argc, char *argv[])
     CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
     cv::Mat camImage, camImageOrig, undistort_map1, undistort_map2;
-    Texture flowTexture = Texture();
+    // Texture flowTexture = Texture();
     Texture displayTexture = Texture();
     displayTexture.init(cam_width, cam_height, n_cam_channels);
     camTexture.init(cam_width, cam_height, n_cam_channels);
-    flowTexture.init(cam_width, cam_height, 2);
+    // flowTexture.init(cam_width, cam_height, 2);
     if (use_projector)
     {
         if (!projector.init())
