@@ -725,7 +725,7 @@ int main(int argc, char *argv[])
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
             // get leap frame
         }
-        LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
+        LEAP_STATUS leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
         /* camera transforms */
         // get view & projection transforms
         glm::mat4 cam_view_transform = gl_camera.getViewMatrix();
@@ -1214,12 +1214,77 @@ int main(int argc, char *argv[])
                                 std::vector<glm::vec2> pc2 = {vert1, vert2};
                                 PointCloud pointCloud2(pc2, screen_verts_color_red);
                                 pointCloud2.render(5.0f);
-                                // std::cout << "leap1 2d:" << center_NDC_leap1.x << " " << center_NDC_leap1.y << std::endl;
-                                // std::cout << "leap2 2d:" << center_NDC_leap2.x << " " << center_NDC_leap2.y << std::endl;
-                                // std::cout << point_3d.x << " " << point_3d.y << " " << point_3d.z << std::endl;
                             }
                             leap_cur_frame_id = new_frame_id;
                         }
+                    }
+                    break;
+                }
+                case static_cast<int>(LeapCollectionSettings::AUTO_FINGER):
+                {
+                    if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
+                    {
+                        // capture cam image asap
+                        camera.capture_single_image(ptrGrabResult);
+                        camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                        cv::flip(camImageOrig, camImage, 1);
+                        cv::Mat thr;
+                        cv::threshold(camImage, thr, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
+                        // render binary leap texture to bottom half of screen
+                        displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
+                        set_texture_shader(textureShader, true, false, true, threshold_flag, masking_threshold);
+                        displayTexture.bind();
+                        fullScreenQuad.render();
+                        glm::vec2 center_NDC;
+                        glm::vec2 center;
+                        bool found_centroid = false;
+                        if (extract_centroid(thr, center))
+                        {
+                            found_centroid = true;
+                            // render point on centroid in camera image
+                            vcolorShader.use();
+                            vcolorShader.setMat4("view", glm::mat4(1.0f));
+                            vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                            vcolorShader.setMat4("model", glm::mat4(1.0f));
+                            center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
+                            glm::vec2 vert = center_NDC;
+                            // vert.y = (vert.y + 1.0f) / 2.0f; // for display, use top of screen
+                            std::vector<glm::vec2> pc1 = {vert};
+                            PointCloud pointCloud(pc1, screen_verts_color_red);
+                            pointCloud.render(5.0f);
+                        }
+                        if (skeleton_vertices.size() > 0)
+                        {
+                            glm::vec3 cur_3d_point = skeleton_vertices[17 * 2]; // index tip
+                            triangulated = cur_3d_point;
+                            if (found_centroid)
+                            {
+                                glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
+                                if (ready_to_collect)
+                                {
+                                    points_3d.push_back(cur_3d_point);
+                                    points_2d.push_back(cur_2d_point);
+                                    if (points_2d.size() >= n_points_leap_calib)
+                                    {
+                                        ready_to_collect = false;
+                                    }
+                                }
+                            }
+                        }
+                        // render 3d point on leap image ... todo
+                        // vcolorShader.use();
+                        // vcolorShader.setMat4("view", glm::mat4(1.0f));
+                        // vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                        // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        // glm::vec2 vert1 = ?;
+                        // glm::vec2 vert2 = ?;
+                        // vert1.y = (vert1.y - 1.0f) / 2.0f; // use bottom left of screen
+                        // vert1.x = (vert1.x - 1.0f) / 2.0f; //
+                        // vert2.y = (vert2.y - 1.0f) / 2.0f; // use bottom right of screen
+                        // vert2.x = (vert2.x + 1.0f) / 2.0f; //
+                        // std::vector<glm::vec2> pc2 = {vert1, vert2};
+                        // PointCloud pointCloud2(pc2, screen_verts_color_red);
+                        // pointCloud2.render(5.0f);
                     }
                     break;
                 }
@@ -1241,6 +1306,7 @@ int main(int argc, char *argv[])
                     pointCloud.render(5.0f);
                     break;
                 }
+
                 default:
                     break;
                 }
@@ -1261,8 +1327,8 @@ int main(int argc, char *argv[])
                 transform.at<double>(1, 2) = 1.0f;
                 transform.at<double>(2, 1) = 1.0f;
                 transform.at<double>(0, 3) = -50.0f;
-                transform.at<double>(1, 3) = -100.0f;
-                transform.at<double>(2, 3) = 500.0f;
+                transform.at<double>(1, 3) = -200.0f;
+                transform.at<double>(2, 3) = 550.0f;
                 transform.at<double>(3, 3) = 1.0f;
                 // std::cout << "transform: " << transform << std::endl;
                 // cv::Mat rotmat = transform(cv::Range(0, 3), cv::Range(0, 3)).clone();
@@ -2841,6 +2907,7 @@ void openIMGUIFrame()
             if (ImGui::RadioButton("Off", &calib_mode, 0))
             {
                 leap.setImageMode(false);
+                leap.setPollMode(false);
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
@@ -2865,6 +2932,7 @@ void openIMGUIFrame()
                 projector.kill();
                 use_projector = false;
                 leap.setImageMode(true);
+                leap.setPollMode(true);
                 std::vector<uint8_t> buffer1, buffer2;
                 while (!leap.getImage(buffer1, buffer2, leap_width, leap_height))
                     continue;
