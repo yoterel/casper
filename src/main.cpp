@@ -133,6 +133,7 @@ bool useFingerWidth = false;
 Texture *dynamicTexture = nullptr;
 Texture *bakedTexture = nullptr;
 int magic_leap_time_delay = 40000; // us
+float leap_global_scaler = 1.0f;
 float magic_leap_scale_factor = 10.0f;
 float leap_arm_local_scaler = 0.019f;
 float leap_palm_local_scaler = 0.011f;
@@ -229,13 +230,13 @@ glm::mat4 proj_project;
 glm::mat4 cam_project;
 std::vector<double> camera_distortion;
 glm::mat4 c2p_homography;
-int src_width = cam_space ? cam_width : proj_width;
-int src_height = cam_space ? cam_height : proj_height;
+int dst_width = cam_space ? cam_width : proj_width;
+int dst_height = cam_space ? cam_height : proj_height;
 // GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
-FBO hands_fbo(src_width, src_height, 4, false);
+FBO hands_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
-FBO postprocess_fbo(src_width, src_height, 4, false);
-FBO c2p_fbo(src_width, src_height, 4, false);
+FBO postprocess_fbo(dst_width, dst_height, 4, false);
+FBO c2p_fbo(dst_width, dst_height, 4, false);
 LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
 DynaFlashProjector projector(true, false);
 BaslerCamera camera;
@@ -391,7 +392,7 @@ int main(int argc, char *argv[])
     bakedTexture->init();
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
-    PostProcess postProcess(src_width, src_height, cam_width, cam_height);
+    PostProcess postProcess(cam_width, cam_height, dst_width, dst_height);
     Quad fullScreenQuad(0.0f);
     Quad topHalfQuad("top_half", 0.0f);
     Quad bottomLeftQuad("bottom_left", 0.0f);
@@ -491,6 +492,8 @@ int main(int argc, char *argv[])
     uint64_t targetFrameSize = 0;
     std::vector<glm::mat4> bones_to_world_left;
     std::vector<glm::mat4> bones_to_world_right;
+    glm::mat4 global_scale_right = glm::mat4(1.0f);
+    glm::mat4 global_scale_left = glm::mat4(1.0f);
     size_t n_skeleton_primitives = 0;
     uint8_t *colorBuffer = new uint8_t[projected_image_size];
     CGrabResultPtr ptrGrabResult;
@@ -718,6 +721,7 @@ int main(int argc, char *argv[])
             }
             else
             {
+                camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                 camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
             }
         }
@@ -737,6 +741,20 @@ int main(int argc, char *argv[])
             // get leap frame
         }
         LEAP_STATUS leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
+        if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
+        {
+            glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
+            if (bones_to_world_right.size() > 0)
+            {
+                glm::mat4 right_translate = glm::translate(glm::mat4(1.0f), glm::vec3(bones_to_world_right[0][3][0], bones_to_world_right[0][3][1], bones_to_world_right[0][3][2]));
+                global_scale_right = right_translate * global_scale_transform * glm::inverse(right_translate);
+            }
+            if (bones_to_world_left.size() > 0)
+            {
+                glm::mat4 left_translate = glm::translate(glm::mat4(1.0f), glm::vec3(bones_to_world_left[0][3][0], bones_to_world_left[0][3][1], bones_to_world_left[0][3][2]));
+                global_scale_left = left_translate * global_scale_transform * glm::inverse(left_translate);
+            }
+        }
         /* camera transforms */
         // get view & projection transforms
         glm::mat4 cam_view_transform = gl_camera.getViewMatrix();
@@ -759,7 +777,7 @@ int main(int argc, char *argv[])
                 {
                     /* render skinned mesh to fbo, in camera space*/
                     skinnedShader.use();
-                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
                     skinnedShader.setBool("bake", false);
                     skinnedShader.setBool("flipTexVertically", false);
                     skinnedShader.setInt("src", 0);
@@ -790,7 +808,7 @@ int main(int argc, char *argv[])
                 case static_cast<int>(MaterialMode::GGX):
                 {
                     skinnedShader.use();
-                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
                     skinnedShader.setBool("bake", false);
                     skinnedShader.setBool("flipTexVertically", false);
                     skinnedShader.setInt("src", 0);
@@ -811,7 +829,7 @@ int main(int argc, char *argv[])
                     vcolorShader.use();
                     vcolorShader.setMat4("projection", cam_projection_transform);
                     vcolorShader.setMat4("view", cam_view_transform);
-                    vcolorShader.setMat4("model", glm::mat4(1.0f)); // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    vcolorShader.setMat4("model", global_scale_right); // vcolorShader.setMat4("model", glm::mat4(1.0f));
                     glBindVertexArray(skeletonVAO);
                     glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
                     break;
@@ -893,10 +911,10 @@ int main(int argc, char *argv[])
                         glDisable(GL_CULL_FACE);
                         glEnable(GL_DEPTH_TEST);
                         skinnedShader.use();
-                        skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                        skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", true);
-                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
                         skinnedShader.setBool("flipTexVertically", true);
                         skinnedShader.setInt("src", 0);
                         // dynamicTexture->bind();
@@ -936,7 +954,7 @@ int main(int argc, char *argv[])
             {
                 /* render skinned mesh to fbo, in camera space*/
                 skinnedShader.use();
-                skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform);
+                skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
                 skinnedShader.setBool("useProjector", false);
                 skinnedShader.setBool("bake", false);
                 skinnedShader.setBool("useGGX", false);
@@ -967,9 +985,11 @@ int main(int argc, char *argv[])
             }
             case static_cast<int>(PostProcessMode::CAM_FEED):
             {
+                cv::Mat fingerImage = postProcess.findFingers(camImageOrig, masking_threshold);
+                displayTexture.load((uint8_t *)fingerImage.data, true, cam_buffer_format);
                 postprocess_fbo.bind();
-                camTexture.bind();
-                set_texture_shader(textureShader, true, true, true, false, masking_threshold);
+                displayTexture.bind();
+                set_texture_shader(textureShader, true, false, true);
                 fullScreenQuad.render();
                 postprocess_fbo.unbind();
                 break;
@@ -1824,7 +1844,7 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::ORIGINAL):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_right);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
@@ -1839,8 +1859,8 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::PROJECTIVE):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_right);
+                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
@@ -1852,7 +1872,7 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::BAKED):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_right);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
@@ -1897,7 +1917,7 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::ORIGINAL):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
@@ -1913,8 +1933,8 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::PROJECTIVE):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
-                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
+                        skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
@@ -1926,7 +1946,7 @@ int main(int argc, char *argv[])
                     case static_cast<int>(TextureMode::BAKED):
                     {
                         skinnedShader.use();
-                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform);
+                        skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
@@ -1988,7 +2008,6 @@ int main(int argc, char *argv[])
             {
                 if (showCamera)
                 {
-
                     std::vector<glm::vec3> camNearVerts(4);
                     std::vector<glm::vec3> camMidVerts(4);
                     // unproject points
@@ -3366,6 +3385,7 @@ void openIMGUIFrame()
 
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
+            ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
             ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
             ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);

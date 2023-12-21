@@ -19,6 +19,14 @@ public:
     void optical_flow(Shader &shader, Texture renderedSceneTexture, Texture camTexture);
     void bake(Shader &uvShader, unsigned int textureToBake, unsigned int TextureUV, const std::string &filepath);
     void saveColorToFile(std::string filepath, unsigned int fbo_id);
+    cv::Mat findFingers(cv::Mat gray, float threshold);
+    double findPointsDistance(cv::Point a, cv::Point b);
+    double findPointsDistanceOnX(cv::Point a, cv::Point b);
+    std::vector<cv::Point> findClosestOnX(std::vector<cv::Point> points, cv::Point pivot);
+    std::vector<cv::Point> compactOnNeighborhoodMedian(std::vector<cv::Point> points, double max_neighbor_distance);
+    bool isFinger(cv::Point a, cv::Point b, cv::Point c, double limit_angle_inf, double limit_angle_sup, cv::Point palm_center, double min_distance_from_palm);
+    double findAngle(cv::Point a, cv::Point b, cv::Point c);
+    void drawVectorPoints(cv::Mat image, std::vector<cv::Point> points, cv::Scalar color, bool with_numbers);
 
 private:
     void initGLBuffers();
