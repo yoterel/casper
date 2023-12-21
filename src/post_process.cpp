@@ -53,19 +53,16 @@ glm::mat4 PostProcess::findHomography(std::vector<glm::vec2> screen_verts)
     return projection;
 }
 
-cv::Mat PostProcess::findFingers(cv::Mat gray, float threshold)
+cv::Mat PostProcess::findFingers(cv::Mat gray, float threshold,
+                                 std::vector<cv::Point> &fingers,
+                                 std::vector<cv::Point> &valleys)
 {
+    // see: https://github.com/PierfrancescoSoffritti/handy
 #define LIMIT_ANGLE_SUP 60
 #define LIMIT_ANGLE_INF 5
 #define BOUNDING_RECT_FINGER_SIZE_SCALING 0.3
 #define BOUNDING_RECT_NEIGHBOR_DISTANCE_SCALING 0.05
-    cv::Scalar color_blue = cv::Scalar(255, 0, 0);
-    cv::Scalar color_green = cv::Scalar(0, 255, 0);
-    cv::Scalar color_red = cv::Scalar(0, 0, 255);
-    cv::Scalar color_black = cv::Scalar(0, 0, 0);
     cv::Scalar color_white = cv::Scalar(255, 255, 255);
-    cv::Scalar color_yellow = cv::Scalar(0, 255, 255);
-    cv::Scalar color_purple = cv::Scalar(255, 0, 255);
     cv::Mat contours_image = cv::Mat::zeros(gray.size(), CV_8UC1);
     cv::Mat flipped;
     cv::flip(gray, flipped, 1);
@@ -182,6 +179,8 @@ cv::Mat PostProcess::findFingers(cv::Mat gray, float threshold)
     // cv::circle(flipped, center_bounding_rect, 5, color_white, 2, 8);
     // drawVectorPoints(flipped, filtered_finger_points, color_white, false);
     // cv::putText(frame, to_string(filtered_finger_points.size()), center_bounding_rect, FONT_HERSHEY_PLAIN, 3, color_purple);
+    fingers = filtered_finger_points;
+    valleys = filtered_far_points;
     return flipped;
 }
 

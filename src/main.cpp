@@ -985,12 +985,26 @@ int main(int argc, char *argv[])
             }
             case static_cast<int>(PostProcessMode::CAM_FEED):
             {
-                cv::Mat fingerImage = postProcess.findFingers(camImageOrig, masking_threshold);
+                std::vector<cv::Point> fingers_cv;
+                std::vector<cv::Point> valleys_cv;
+                cv::Mat fingerImage = postProcess.findFingers(camImageOrig, masking_threshold, fingers_cv, valleys_cv);
                 displayTexture.load((uint8_t *)fingerImage.data, true, cam_buffer_format);
                 postprocess_fbo.bind();
                 displayTexture.bind();
                 set_texture_shader(textureShader, true, false, true);
                 fullScreenQuad.render();
+                std::vector<glm::vec2> fingers = Helpers::opencv2glm(fingers_cv);
+                std::vector<glm::vec2> valleys = Helpers::opencv2glm(valleys_cv);
+                std::vector<glm::vec2> fingers_NDC = Helpers::ScreenToNDC(fingers, cam_width, cam_height, true);
+                std::vector<glm::vec2> valleys_NDC = Helpers::ScreenToNDC(valleys, cam_width, cam_height, true);
+                PointCloud cloud1(fingers_NDC, screen_verts_color_red);
+                PointCloud cloud2(valleys_NDC, screen_verts_color_blue);
+                vcolorShader.use();
+                vcolorShader.setMat4("view", glm::mat4(1.0f));
+                vcolorShader.setMat4("projection", glm::mat4(1.0f));
+                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                cloud1.render();
+                cloud2.render();
                 postprocess_fbo.unbind();
                 break;
             }
