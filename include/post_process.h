@@ -19,6 +19,7 @@ public:
     void optical_flow(Shader &shader, Texture renderedSceneTexture, Texture camTexture);
     void bake(Shader &uvShader, unsigned int textureToBake, unsigned int TextureUV, const std::string &filepath);
     void saveColorToFile(std::string filepath, unsigned int fbo_id);
+    cv::Mat icp(cv::Mat render, cv::Mat gray, float threshold, glm::mat4 &transform);
     cv::Mat findFingers(cv::Mat gray, float threshold,
                         std::vector<cv::Point> &fingers,
                         std::vector<cv::Point> &valleys);

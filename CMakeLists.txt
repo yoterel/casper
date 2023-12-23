@@ -6,6 +6,9 @@ set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")
 set(OPENCV_COMPILER "vc15")
+file(GLOB LIBICP_SOURCES
+     "third-party/libicp/*.cpp"
+)
 # set(OpenCV_DIR "C:/OpenCV_Build/install_debug")
 # set(OPENCV_COMPILER "vc16")
 set(CUDA_EXAMPLES "C:/src/cuda-samples")
@@ -97,6 +100,7 @@ add_executable(ahand
     third-party/imgui/backends/imgui_impl_opengl3.cpp
     third-party/imgui/misc/cpp/imgui_stdlib.cpp
     third-party/glad${GLAD_VER}/src/glad.c
+    ${LIBICP_SOURCES}
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
 # target_compile_definitions(ahand PRIVATE CV_IGNORE_DEBUG_BUILD_GUARD)
@@ -155,6 +159,20 @@ target_link_libraries(ahand PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zli
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
+# libicp
+target_include_directories(ahand PRIVATE "C:/src/boost_1_84_0")
+target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
+####################################### registration example
+add_executable(registration_example 
+    src/registration_example.cpp
+    src/timer.cpp
+    ${LIBICP_SOURCES}
+)
+target_include_directories(registration_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_include_directories(registration_example PRIVATE "C:/src/boost_1_84_0")
+target_include_directories(registration_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
+target_link_libraries(registration_example PRIVATE ${OpenCV_LIBS})
+
 ####################################### unity plugin
 # add_library(AHUnityPlugin SHARED 
 #     src/UnityPlugin.cpp

@@ -104,6 +104,17 @@ std::vector<float> Helpers::flatten_glm(std::vector<glm::vec3> vec)
     return flat_vec;
 }
 
+std::vector<double> Helpers::flatten_cv(std::vector<cv::Point> vec)
+{
+    std::vector<double> flat_vec;
+    for (int i = 0; i < vec.size(); i++)
+    {
+        flat_vec.push_back(static_cast<double>(vec[i].x));
+        flat_vec.push_back(static_cast<double>(vec[i].y));
+    }
+    return flat_vec;
+}
+
 std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point2f> vec)
 {
     std::vector<glm::vec2> glm_vec;

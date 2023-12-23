@@ -116,6 +116,9 @@ void FBO::saveColorToFile(std::string filepath, bool flip_vertically)
     this->unbind();
 }
 
+// Return the rendered texture as a vector of floats
+// n_channels is the number of channels in output.
+// width and height are determined by framebuffer size.
 std::vector<uchar> FBO::getBuffer(int n_channels)
 {
     int texFormat;
