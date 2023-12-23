@@ -163,16 +163,33 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgu
 target_include_directories(ahand PRIVATE "C:/src/boost_1_84_0")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
 ####################################### registration example
-add_executable(registration_example 
-    src/registration_example.cpp
+# add_executable(registration_example 
+#     src/registration_example.cpp
+#     src/timer.cpp
+#     ${LIBICP_SOURCES}
+# )
+# target_include_directories(registration_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# target_include_directories(registration_example PRIVATE "C:/src/boost_1_84_0")
+# target_include_directories(registration_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
+# target_link_libraries(registration_example PRIVATE ${OpenCV_LIBS})
+####################################### deformation example
+add_executable(deformation_example
+    src/deformation_example.cpp
     src/timer.cpp
-    ${LIBICP_SOURCES}
+    third-party/glad${GLAD_VER}/src/glad.c
 )
-target_include_directories(registration_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_include_directories(registration_example PRIVATE "C:/src/boost_1_84_0")
-target_include_directories(registration_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
-target_link_libraries(registration_example PRIVATE ${OpenCV_LIBS})
-
+target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# GLFW
+target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+target_link_libraries(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# GLAD
+target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# opencv
+target_link_libraries(deformation_example PRIVATE ${OpenCV_LIBS})
+# stb
+target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# glm
+target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
 ####################################### unity plugin
 # add_library(AHUnityPlugin SHARED 
 #     src/UnityPlugin.cpp
