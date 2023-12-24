@@ -145,6 +145,20 @@ std::vector<glm::vec3> Helpers::opencv2glm(std::vector<cv::Point3f> vec)
     return glm_vec;
 }
 
+std::vector<glm::vec2> Helpers::project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection)
+{
+    // project 3d points to NDC space
+    std::vector<glm::vec2> projected_points;
+    for (int i = 0; i < points.size(); i++)
+    {
+        glm::vec4 point = glm::vec4(points[i], 1.0f);
+        point = projection * view * model * point;
+        point /= point.w;
+        projected_points.push_back(glm::vec2(point.x, point.y));
+    }
+    return projected_points;
+}
+
 void Helpers::setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO)
 {
     // set up vertex data (and buffer(s)) and configure vertex attributes

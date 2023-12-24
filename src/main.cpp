@@ -212,6 +212,7 @@ bool showReprojections = false;
 bool showTestPoints = false;
 bool calibrationSuccess = false;
 std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
+std::vector<glm::vec3> screen_verts_color_green = {{0.0f, 1.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                        {-1.0f, -1.0f},
@@ -836,9 +837,7 @@ int main(int argc, char *argv[])
                     glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
                     n_skeleton_primitives = skeleton_vertices.size() / 2;
                     vcolorShader.use();
-                    vcolorShader.setMat4("projection", cam_projection_transform);
-                    vcolorShader.setMat4("view", cam_view_transform);
-                    vcolorShader.setMat4("model", global_scale_right); // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    vcolorShader.setMat4("MVP", cam_projection_transform * cam_view_transform * global_scale_right);
                     glBindVertexArray(skeletonVAO);
                     glDrawArrays(GL_LINES, 0, static_cast<int>(n_skeleton_primitives));
                     break;
@@ -939,9 +938,7 @@ int main(int argc, char *argv[])
                     rightHandModel.Render(skinnedShader, bones_to_world_right_bake, rotx, false, dynamicTexture);
                     /* debug points */
                     // vcolorShader.use();
-                    // vcolorShader.setMat4("view", glm::mat4(1.0f));
-                    // vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                    // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                     // std::vector<glm::vec2> points;
                     // rightHandModel.getUnrolledTexCoords(points);
                     // Helpers::UV2NDC(points);
@@ -994,6 +991,14 @@ int main(int argc, char *argv[])
                 // render
                 set_texture_shader(textureShader, false, false, false);
                 fullScreenQuad.render(false, false, true);
+                // if (skeleton_vertices.size() > 0)
+                // {
+                //     vcolorShader.use();
+                //     vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                //     std::vector<glm::vec2> skele_verts = Helpers::project_points(skeleton_vertices, glm::mat4(1.0f), cam_view_transform, cam_projection_transform);
+                //     PointCloud cloud3(skele_verts, screen_verts_color_green);
+                //     cloud3.render();
+                // }
                 // unbind fbo
                 postprocess_fbo.unbind();
                 break;
@@ -1034,9 +1039,7 @@ int main(int argc, char *argv[])
                 PointCloud cloud1(fingers_NDC, screen_verts_color_red);
                 PointCloud cloud2(valleys_NDC, screen_verts_color_blue);
                 vcolorShader.use();
-                vcolorShader.setMat4("view", glm::mat4(1.0f));
-                vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                 cloud1.render();
                 cloud2.render();
                 postprocess_fbo.unbind();
@@ -1209,9 +1212,7 @@ int main(int argc, char *argv[])
             fullScreenQuad.render();
             PointCloud cloud(cur_screen_verts, screen_verts_color_red);
             vcolorShader.use();
-            vcolorShader.setMat4("view", glm::mat4(1.0f));
-            vcolorShader.setMat4("projection", glm::mat4(1.0f));
-            vcolorShader.setMat4("model", glm::mat4(1.0f));
+            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
             cloud.render();
             break;
         }
@@ -1263,9 +1264,7 @@ int main(int argc, char *argv[])
                                 found_centroid = true;
                                 // render point on centroid in camera image
                                 vcolorShader.use();
-                                vcolorShader.setMat4("view", glm::mat4(1.0f));
-                                vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                                 center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
                                 glm::vec2 vert = center_NDC;
                                 vert.y = (vert.y + 1.0f) / 2.0f; // for display, use top of screen
@@ -1300,9 +1299,7 @@ int main(int argc, char *argv[])
                                 }
                                 // render point on centroid in left leap image
                                 vcolorShader.use();
-                                vcolorShader.setMat4("view", glm::mat4(1.0f));
-                                vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                                 glm::vec2 vert1 = center_NDC_leap1;
                                 glm::vec2 vert2 = center_NDC_leap2;
                                 vert1.y = (vert1.y - 1.0f) / 2.0f; // use bottom left of screen
@@ -1341,9 +1338,7 @@ int main(int argc, char *argv[])
                             found_centroid = true;
                             // render point on centroid in camera image
                             vcolorShader.use();
-                            vcolorShader.setMat4("view", glm::mat4(1.0f));
-                            vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                            vcolorShader.setMat4("model", glm::mat4(1.0f));
+                            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                             center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
                             glm::vec2 vert = center_NDC;
                             // vert.y = (vert.y + 1.0f) / 2.0f; // for display, use top of screen
@@ -1371,9 +1366,7 @@ int main(int argc, char *argv[])
                         }
                         // render 3d point on leap image ... todo
                         // vcolorShader.use();
-                        // vcolorShader.setMat4("view", glm::mat4(1.0f));
-                        // vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                        // vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                         // glm::vec2 vert1 = ?;
                         // glm::vec2 vert2 = ?;
                         // vert1.y = (vert1.y - 1.0f) / 2.0f; // use bottom left of screen
@@ -1396,9 +1389,7 @@ int main(int argc, char *argv[])
                     displayTexture.bind();
                     fullScreenQuad.render();
                     vcolorShader.use();
-                    vcolorShader.setMat4("view", glm::mat4(1.0f));
-                    vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                    vcolorShader.setMat4("model", glm::mat4(1.0f));
+                    vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                     std::vector<glm::vec2> test = {cur_screen_vert};
                     PointCloud pointCloud(test, screen_verts_color_red);
                     pointCloud.render(5.0f);
@@ -1514,9 +1505,7 @@ int main(int argc, char *argv[])
             case static_cast<int>(CalibrationStateMachine::SHOW):
             {
                 vcolorShader.use();
-                vcolorShader.setMat4("view", glm::mat4(1.0f));
-                vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                 // todo: move this logic to CalibrationStateMachine::CALIBRATE
                 std::vector<glm::vec2> NDCs;
                 std::vector<glm::vec2> NDCs_reprojected;
@@ -1588,9 +1577,7 @@ int main(int argc, char *argv[])
                                 reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
                                 ////
                                 vcolorShader.use();
-                                vcolorShader.setMat4("view", glm::mat4(1.0f));
-                                vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                                vcolorShader.setMat4("model", glm::mat4(1.0f));
+                                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                                 glm::vec2 vert1 = center_NDC_leap1;
                                 glm::vec2 vert2 = center_NDC_leap2;
                                 glm::vec2 vert3 = reprojected[0];
@@ -1625,9 +1612,7 @@ int main(int argc, char *argv[])
                         displayTexture.bind();
                         fullScreenQuad.render();
                         vcolorShader.use();
-                        vcolorShader.setMat4("view", glm::mat4(1.0f));
-                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                         PointCloud pointCloud(marked_reprojected, screen_verts_color_red);
                         pointCloud.render();
                         break;
@@ -1648,9 +1633,7 @@ int main(int argc, char *argv[])
                             set_texture_shader(textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
-                            vcolorShader.setMat4("view", glm::mat4(1.0f));
-                            vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                            vcolorShader.setMat4("model", glm::mat4(1.0f));
+                            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                             std::vector<glm::vec2> test = {cur_screen_vert};
                             PointCloud pointCloud(test, screen_verts_color_red);
                             pointCloud.render(5.0f);
@@ -1673,9 +1656,7 @@ int main(int argc, char *argv[])
                             set_texture_shader(textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
-                            vcolorShader.setMat4("view", glm::mat4(1.0f));
-                            vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                            vcolorShader.setMat4("model", glm::mat4(1.0f));
+                            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                             std::vector<glm::vec2> test = {cur_screen_vert};
                             PointCloud pointCloud(test, screen_verts_color_red);
                             pointCloud.render(5.0f);
@@ -1699,9 +1680,7 @@ int main(int argc, char *argv[])
                     if (skeleton_vertices.size() > 0)
                     {
                         vcolorShader.use();
-                        vcolorShader.setMat4("view", glm::mat4(1.0f));
-                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                         std::vector<cv::Point3f> points_3d_cv;
                         for (int i = 0; i < skeleton_vertices.size(); i += 2)
                         {
@@ -1731,9 +1710,7 @@ int main(int argc, char *argv[])
                     if (skeleton_vertices.size() > 0)
                     {
                         vcolorShader.use();
-                        vcolorShader.setMat4("view", glm::mat4(1.0f));
-                        vcolorShader.setMat4("projection", glm::mat4(1.0f));
-                        vcolorShader.setMat4("model", glm::mat4(1.0f));
+                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                         std::vector<cv::Point3f> points_3d_cv;
                         points_3d_cv.push_back(cv::Point3f(skeleton_vertices[mark_bone_index * 2].x, skeleton_vertices[mark_bone_index * 2].y, skeleton_vertices[mark_bone_index * 2].z));
                         std::vector<cv::Point2f> reprojected_cv;
@@ -1958,8 +1935,6 @@ int main(int argc, char *argv[])
                 // draw bones local coordinates as gizmos
                 {
                     vcolorShader.use();
-                    vcolorShader.setMat4("projection", flycam_projection_transform);
-                    vcolorShader.setMat4("view", flycam_view_transform);
                     std::vector<glm::mat4> BoneToLocalTransforms;
                     leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
                     glBindVertexArray(gizmoVAO);
@@ -1967,13 +1942,13 @@ int main(int argc, char *argv[])
                     for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
                     {
                         // in bind pose
-                        vcolorShader.setMat4("model", rotx * BoneToLocalTransforms[i]);
+                        vcolorShader.setMat4("MVP", flycam_projection_transform * flycam_view_transform * rotx * BoneToLocalTransforms[i]);
                         glDrawArrays(GL_LINES, 0, 6);
                     }
                     for (unsigned int i = 0; i < bones_to_world_left.size(); i++)
                     {
                         // in leap motion pose
-                        vcolorShader.setMat4("model", bones_to_world_left[i]);
+                        vcolorShader.setMat4("MVP", flycam_projection_transform * flycam_view_transform * bones_to_world_left[i]);
                         glDrawArrays(GL_LINES, 0, 6);
                     }
                 }

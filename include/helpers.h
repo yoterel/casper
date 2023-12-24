@@ -25,6 +25,7 @@ public:
     static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point2f> vec);
     static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point> vec);
     static std::vector<glm::vec3> opencv2glm(std::vector<cv::Point3f> vec);
+    static std::vector<glm::vec2> project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupFrustrumBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupCubeBuffers(unsigned int &VAO, unsigned int &VBO);
