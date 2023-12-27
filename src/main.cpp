@@ -231,6 +231,7 @@ GLCamera gl_flycamera;
 GLCamera gl_projector;
 GLCamera gl_camera;
 cv::Mat tvec_calib, rvec_calib;
+cv::Mat camImage, camImageOrig, undistort_map1, undistort_map2;
 glm::mat4 w2c_auto, w2c_user;
 glm::mat4 proj_project;
 glm::mat4 cam_project;
@@ -240,6 +241,7 @@ int dst_width = cam_space ? cam_width : proj_width;
 int dst_height = cam_space ? cam_height : proj_height;
 // GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
 FBO icp_fbo(cam_width, cam_height, 4, false);
+FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
@@ -381,6 +383,8 @@ int main(int argc, char *argv[])
     bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
+    icp_fbo.init();
+    icp2_fbo.init();
     c2p_fbo.init();
     SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights.fbx",
                                "../../resource/uv.png", // uv.png
@@ -508,7 +512,6 @@ int main(int argc, char *argv[])
     uint8_t *colorBuffer = new uint8_t[projected_image_size];
     CGrabResultPtr ptrGrabResult;
     Texture camTexture = Texture();
-    cv::Mat camImage, camImageOrig, undistort_map1, undistort_map2;
     // Texture flowTexture = Texture();
     Texture displayTexture = Texture();
     displayTexture.init(cam_width, cam_height, n_cam_channels);
@@ -1061,7 +1064,8 @@ int main(int argc, char *argv[])
                 // cv::split(render_image, bgra); // split source
                 glm::mat4 transform = glm::mat4(1.0f);
                 cv::Mat debug = postProcess.icp(render_image, camImageOrig, masking_threshold, transform);
-                postprocess_fbo.bind();
+                // postprocess_fbo.bind();
+                icp2_fbo.bind();
                 hands_fbo.getTexture()->bind();
                 if (icp_apply_transform)
                 {
@@ -1074,8 +1078,11 @@ int main(int argc, char *argv[])
                     // icp_fbo.getTexture()->bind();
                     set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f));
                 }
-                fullScreenQuad.render();
-                postprocess_fbo.unbind();
+                fullScreenQuad.render(false, false, true);
+                icp2_fbo.unbind();
+                postProcess.mask(maskShader, icp2_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                // fullScreenQuad.render();
+                // postprocess_fbo.unbind();
                 break;
             }
             default:
@@ -3269,11 +3276,18 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
                 // std::cout << "new exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
             }
-            if (ImGui::Button("Cam Screen Shot"))
+            if (ImGui::Button("Screen Shot"))
             {
-                hands_fbo.saveColorToFile("../../debug/screenshot_hands_fbo.png");
-                postprocess_fbo.saveColorToFile("../../debug/screenshot_pp_fbo.png");
-                c2p_fbo.saveColorToFile("../../debug/screenshot_c2p_fbo.png");
+                std::string name = std::tmpnam(nullptr);
+                fs::path filename(name);
+                std::string savepath(std::string("../../debug/ss/"));
+                // std::cout << "unique file name: " << filename.filename().string() << std::endl;
+                fs::path raw_image(savepath + filename.filename().string() + std::string("_raw_cam.png"));
+                fs::path render(savepath + filename.filename().string() + std::string("_render.png"));
+                // cv::imwrite("../../debug/raw_cam_image.png", camImageOrig);
+                hands_fbo.saveColorToFile(render.string());
+                postprocess_fbo.saveColorToFile(raw_image.string());
+                // c2p_fbo.saveColorToFile("../../debug/c2p_fbo.png");
             }
             ImGui::SameLine();
             if (ImGui::Button("Cam2view"))

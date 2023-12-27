@@ -5,6 +5,8 @@
 #include "helpers.h"
 #include "icpPointToPlane.h"
 #include "icpPointToPoint.h"
+#include "timer.h"
+
 PostProcess::PostProcess(unsigned int srcWidth, unsigned int srcHeight,
                          unsigned int dstWidth, unsigned int dstHeight) : m_srcWidth(srcWidth),
                                                                           m_srcHeight(srcHeight),
@@ -57,6 +59,8 @@ glm::mat4 PostProcess::findHomography(std::vector<glm::vec2> screen_verts)
 
 cv::Mat PostProcess::icp(cv::Mat render_binary, cv::Mat cam_gray, float threshold, glm::mat4 &transform)
 {
+    Timer t1;
+    t1.start();
     cv::Scalar color_white = cv::Scalar(255, 255, 255);
     cv::Mat flipped;
     cv::flip(cam_gray, flipped, 1);
@@ -103,15 +107,29 @@ cv::Mat PostProcess::icp(cv::Mat render_binary, cv::Mat cam_gray, float threshol
     }
     if (biggest_contour_index < 0)
         return flipped;
-    cv::drawContours(flipped, contours, biggest_contour_index, color_white, 2, 8, hierarchy);
-    cv::drawContours(flipped, contours_render, biggest_contour_render_index, color_white, 2, 8, hierarchy_render);
     std::vector<double> pts1, pts2;
-    pts1 = Helpers::flatten_cv(contours[biggest_contour_index]);
-    pts2 = Helpers::flatten_cv(contours_render[biggest_contour_render_index]);
+    /* approximate polyline */
+    double perimeter = cv::arcLength(contours[biggest_contour_index], true);
+    double perimeter_render = cv::arcLength(contours_render[biggest_contour_render_index], true);
+    double eps = 0.001;
+    std::vector<cv::Point> approx, approx_render;
+    cv::approxPolyDP(contours[biggest_contour_index], approx, eps * perimeter, true);
+    cv::approxPolyDP(contours_render[biggest_contour_render_index], approx_render, eps * perimeter, true);
+    pts1 = Helpers::flatten_cv(approx);
+    pts2 = Helpers::flatten_cv(approx_render);
+    /* raw polyline */
+    // pts1 = Helpers::flatten_cv(contours[biggest_contour_index]);
+    // pts2 = Helpers::flatten_cv(contours_render[biggest_contour_render_index]);
+    t1.stop();
+    std::cout << "Time elapsed prep: " << t1.getElapsedTimeInMilliSec() << " ms" << std::endl;
+    std::cout << "pc1, pc2 sizes: " << pts1.size() << ", " << pts2.size() << std::endl;
+    t1.start();
     Matrix R = Matrix::eye(2);
     Matrix t(2, 1);
     IcpPointToPlane icp(&pts1[0], pts1.size() / 2, 2);
     double residual = icp.fit(&pts2[0], pts2.size() / 2, R, t, -1);
+    t1.stop();
+    std::cout << "Time elapsed icp: " << t1.getElapsedTimeInMilliSec() << " ms" << std::endl;
     // cv::Mat affine = cv::getAffineTransform(pts1, pts2);
     // cv::Mat warp_dst = cv::Mat::zeros(render_binary.rows, render_binary.cols, render_binary.type());
     // cv::warpAffine(flipped, warp_dst, affine, flipped.size());
@@ -132,6 +150,8 @@ cv::Mat PostProcess::icp(cv::Mat render_binary, cv::Mat cam_gray, float threshol
     transform[3][1] = datat[1] / render_binary.rows;
     delete[] dataR;
     delete[] datat;
+    // cv::drawContours(flipped, contours, biggest_contour_index, color_white, 2, 8, hierarchy);
+    // cv::drawContours(flipped, contours_render, biggest_contour_render_index, color_white, 2, 8, hierarchy_render);
     return flipped;
 }
 

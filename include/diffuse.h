@@ -19,8 +19,8 @@ public:
                                         bool OpenCVDecode = false);
     static std::vector<uint8_t> img2img(const std::string prompt,
                                         int &width_out, int &height_out,
-                                        std::vector<uint8_t> img,
-                                        std::vector<uint8_t> mask,
+                                        const std::vector<uint8_t> &img,
+                                        const std::vector<uint8_t> &mask,
                                         int seed = -1,
                                         int width_in = 512, int height_in = 512, int channels_in = 3,
                                         int width_request = 512, int height_request = 512,
