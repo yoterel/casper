@@ -246,6 +246,7 @@ FBO hands_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
+FBO postprocess2_fbo(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
 LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
 DynaFlashProjector projector(true, false);
@@ -383,6 +384,7 @@ int main(int argc, char *argv[])
     bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
+    postprocess2_fbo.init();
     icp_fbo.init();
     icp2_fbo.init();
     c2p_fbo.init();
@@ -1083,6 +1085,16 @@ int main(int argc, char *argv[])
                 postProcess.mask(maskShader, icp2_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 // fullScreenQuad.render();
                 // postprocess_fbo.unbind();
+                break;
+            }
+            case static_cast<int>(PostProcessMode::OVERLAY):
+            {
+                set_texture_shader(textureShader, true, true, true, threshold_flag, masking_threshold);
+                camTexture.bind();
+                postprocess2_fbo.bind();
+                fullScreenQuad.render();
+                postprocess2_fbo.unbind();
+                postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 break;
             }
             default:
@@ -3284,9 +3296,20 @@ void openIMGUIFrame()
                 // std::cout << "unique file name: " << filename.filename().string() << std::endl;
                 fs::path raw_image(savepath + filename.filename().string() + std::string("_raw_cam.png"));
                 fs::path render(savepath + filename.filename().string() + std::string("_render.png"));
+                fs::path keypoints(savepath + filename.filename().string() + std::string("_keypoints.npy"));
                 // cv::imwrite("../../debug/raw_cam_image.png", camImageOrig);
                 hands_fbo.saveColorToFile(render.string());
-                postprocess_fbo.saveColorToFile(raw_image.string());
+                postprocess2_fbo.saveColorToFile(raw_image.string());
+                if (skeleton_vertices.size() > 0)
+                {
+                    std::vector<glm::vec3> to_project;
+                    for (int i = 0; i < skeleton_vertices.size(); i += 2)  // filter out color, todo: why is color saved inside skeleton_vertices?..
+                    {
+                        to_project.push_back(skeleton_vertices[i]);
+                    }
+                    std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                    cnpy::npy_save(keypoints.string().c_str(), &projected[0].x, {projected.size(), 2}, "w");
+                }
                 // c2p_fbo.saveColorToFile("../../debug/c2p_fbo.png");
             }
             ImGui::SameLine();
@@ -3403,18 +3426,17 @@ void openIMGUIFrame()
                 threshold_flag = false;
             }
             ImGui::Text("Post Processing Mode");
-            ImGui::SameLine();
             ImGui::RadioButton("None", &postprocess_mode, 0);
             ImGui::SameLine();
             ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
             ImGui::SameLine();
             ImGui::RadioButton("Mask", &postprocess_mode, 2);
-            ImGui::SameLine();
             ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
             ImGui::SameLine();
             ImGui::RadioButton("Finger Track", &postprocess_mode, 4);
             ImGui::SameLine();
             ImGui::RadioButton("ICP", &postprocess_mode, 5);
+            ImGui::RadioButton("OVERLAY", &postprocess_mode, 6);
             if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
             {
                 ImGui::Checkbox("ICP on?", &icp_apply_transform);
