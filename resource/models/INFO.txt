@@ -1,0 +1,6 @@
+# palm detection & hand landmark taken from:
+https://github.com/google/mediapipe/blob/master/docs/solutions/models.md
+# install tf2onnx
+pip install tf2onnx
+# convert tflite to onnx
+python -m tf2onnx.convert --tflite model.tflite --output model.onnx
