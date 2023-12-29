@@ -18,16 +18,14 @@ unsigned int texture;
 // Grid
 Grid NormalGrid;
 Grid DeformedGrid;
-
-// 表示关键点的数量，即网格的密度
 #define X_POINT_COUNT 41
 #define Y_POINT_COUNT 41
 #define X_SPACING 0.05
 #define Y_SPACING 0.05
-int obj = 2; // 选择哪一个变形算法
+int obj = 2; // system state
 bool objChanged = true;
 
-// 控制点集 以及 控制点集的变型
+// control points are hard coded
 std::vector<cv::Point2f> ControlPointsP = {cv::Point2f(-1, -1), cv::Point2f(-1, 1), cv::Point2f(1, 1), cv::Point2f(1, -1), cv::Point2f(0.51, 0.0), cv::Point2f(-0.51, -0.0)};
 std::vector<cv::Point2f> ControlPointsQ = {cv::Point2f(-1, -1), cv::Point2f(-1, 1), cv::Point2f(1, 1), cv::Point2f(1, -1), cv::Point2f(0.6, 0.0), cv::Point2f(-0.6, -0.0)};
 // std::vector<cv::Point2f> ControlPointsP = { cv::Point2f(0.51, 0.0),cv::Point2f(-0.51, -0.0) };
@@ -36,7 +34,7 @@ std::vector<cv::Point2f> ControlPointsQ = {cv::Point2f(-1, -1), cv::Point2f(-1, 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
 
-// settings
+// GL window settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 800;
 
@@ -45,9 +43,9 @@ void LoadTexture()
   // load and create a texture
   // -------------------------
   glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture); // all upcoming GL_TEXTURE_2D operations now have effect on this texture object
+  glBindTexture(GL_TEXTURE_2D, texture);
   // set the texture wrapping parameters
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   // set texture filtering parameters
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -93,10 +91,10 @@ void GridProcess()
   double a = 2.0;
   // Precompute
   Mat w = MLSprecomputeWeights(p, v, a);
-  Mat fv;            // 关键点的坐标
-  Mat A;             // for Affine Deformation 仿射形变
-  vector<_typeA> tA; // for Similarity Deformation 相似变形
-  typeRigid mlsd;    // for Rigid Deformation 刚性变形
+  Mat fv;            // coordinates of keypoints
+  Mat A;             // for affine Deformation
+  vector<_typeA> tA; // for similarity Deformation
+  typeRigid mlsd;    // for rigid Deformation
   Timer t1;
   printf("%d \n", obj);
   t1.start();

@@ -1,14 +1,6 @@
-/*  Based on the papaer
- *
- *	"Image Deformation Using Moving Least Square "
- *  by Scheafer, McPhail, Warren
- *
- *  Implementation refencing the work of Gabriele Lombardi wriiten in MATLAB
- *  This header file includes functions to do affine deformation
- */
+// see "Image Deformation Using Moving Least Square "
 
 #include <vector>
-// #include <opencv/highgui.h>
 #include <opencv2/opencv.hpp>
 
 using namespace cv;
@@ -24,12 +16,11 @@ typedef struct _typeA
 
 typedef struct _typeRigid
 {
-	vector<_typeA> A;	//
-	Mat normof_v_Pstar; //
+	vector<_typeA> A;
+	Mat normof_v_Pstar;
 } typeRigid;
 
 /*Function to Compute the Weights*/
-/* ����Ȩ�� W_i */
 inline Mat MLSprecomputeWeights(Mat p, Mat v, double a)
 {
 	Mat w = Mat::zeros(p.cols, v.cols, CV_32F);
@@ -54,7 +45,6 @@ inline Mat MLSprecomputeWeights(Mat p, Mat v, double a)
 }
 
 /*Function to Precompute Weighted Centroids*/
-/* ����õ�P_* */
 inline Mat MLSprecomputeWCentroids(Mat p, Mat w)
 {
 	Mat Pstar;
@@ -72,7 +62,6 @@ inline Mat MLSprecomputeWCentroids(Mat p, Mat w)
 }
 
 /*Function to Precompute Affine Deformation*/
-/* ����õ�A_j */
 inline Mat MLSprecomputeAffine(Mat p, Mat v, Mat w)
 {
 	// Precompute Weighted Centroids
@@ -144,7 +133,6 @@ inline Mat MLSprecomputeAffine(Mat p, Mat v, Mat w)
 }
 
 // precompute Asimilar
-/* ����õ�A_i */
 inline vector<_typeA> MLSprecomputeA(Mat Pstar, vector<Mat> Phat, Mat v, Mat w)
 {
 	vector<_typeA> A;
@@ -197,7 +185,7 @@ inline vector<_typeA> MLSprecomputeA(Mat Pstar, vector<Mat> Phat, Mat v, Mat w)
 	return A;
 }
 
-/* ����õ� \frac{1}{\mu_s}A_i */
+/* \frac{1}{\mu_s}A_i */
 inline vector<_typeA> MLSprecomputeSimilar(Mat p, Mat v, Mat w)
 {
 	Mat Pstar = MLSprecomputeWCentroids(p, w);
@@ -254,7 +242,7 @@ inline _typeRigid MLSprecomputeRigid(Mat p, Mat v, Mat w)
 	return data;
 }
 
-/* ����õ�f_r(v) */
+/* f_r(v) */
 inline Mat MLSPointsTransformRigid(Mat w, _typeRigid mlsd, Mat q)
 {
 	Mat Qstar = MLSprecomputeWCentroids(q, w);
@@ -302,7 +290,7 @@ inline Mat MLSPointsTransformRigid(Mat w, _typeRigid mlsd, Mat q)
 	return fv;
 }
 
-/* ����õ� f_s(v)*/
+/* f_s(v)*/
 inline Mat MLSPointsTransformSimilar(Mat w, vector<_typeA> A, Mat q)
 {
 	Mat Qstar = MLSprecomputeWCentroids(q, w);
@@ -337,7 +325,7 @@ inline Mat MLSPointsTransformSimilar(Mat w, vector<_typeA> A, Mat q)
 	return fv;
 }
 
-/* ����õ� f_a(v)  */
+/* f_a(v)  */
 inline Mat MLSPointsTransformAffine(Mat w, Mat A, Mat q)
 {
 	// compute weighted centroids for q
