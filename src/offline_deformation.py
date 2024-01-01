@@ -7,6 +7,10 @@ from deformations import (
     mls_similarity_deformation,
     mls_rigid_deformation,
 )
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+import time
 
 
 def to_binary():
@@ -127,11 +131,6 @@ def draw_landmarks_on_image(rgb_image, detection_result):
 
 
 def predict():
-    import mediapipe as mp
-    from mediapipe.tasks import python
-    from mediapipe.tasks.python import vision
-    import time
-
     root_folder = Path("C:/src/augmented_hands/debug/ss")
     output_folder = Path("C:/src/augmented_hands/debug/registration")
     keypoints_files = [x for x in root_folder.glob("*keypoints.npy")]

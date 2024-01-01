@@ -26,8 +26,11 @@
                     // the following is a terrible hack to get python embedding with conda env to work
                     // use set PYTHONPATH="C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages"
                     // for this to work in terminal
-                    "name": "PYTHONPATH",
-                    "value": "C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages",//"${env:PYTHONPATH}:${command:cmake.getLaunchTargetDirectory}"
+                    // "name": "PYTHONPATH",
+                    // "value": "C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages",//"${env:PYTHONPATH}:${command:cmake.getLaunchTargetDirectory}"
+                    // set PYTHONHOME=C:/Users/sens/AppData/Local/Programs/Python/Python311
+                    "name": "PYTHONHOME",
+                    "value": "C:/Users/sens/AppData/Local/Programs/Python/Python311"
 
                 },
             ],
@@ -82,7 +85,15 @@
             "name": "Python: calibrate",
             "type": "python",
             "request": "launch",
-            "program": "build/Release/calibration.py", //"${file}",
+            "program": "build/Release/calibration.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: cur file",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true
         }

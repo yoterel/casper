@@ -5,7 +5,7 @@
 #include <glad/glad.h>
 // #include <opencv/highgui.h>
 #include <opencv2/opencv.hpp>
-#include "shader_s.h"
+#include "shader.h"
 
 class Grid
 {
@@ -79,9 +79,9 @@ inline void Grid::ComputePointCoordinate(int pointIndex,
 inline cv::Mat Grid::Render(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const
 {
 	// change the size of the grid
-	cv::Mat a = cv::Mat::zeros(2, xPointCount * yPointCount, CV_32F);
-	double width = xSpacing * (xPointCount - 1);
-	double height = ySpacing * (yPointCount - 1);
+	cv::Mat a = cv::Mat::zeros(2, xPointCount * yPointCount, CV_32F); // 2 x 1600 x float
+	double width = xSpacing * (xPointCount - 1); // 2.0
+	double height = ySpacing * (yPointCount - 1);  // 2.0
 	double minX = -width / 2;
 	double minY = -height / 2;
 
@@ -111,7 +111,7 @@ inline void Grid::InitGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpac
 	Grid_vertices.clear();
 	Grid_indices.clear();
 
-	GLuint nrQuads = (xPointCount - 1) * (yPointCount - 1);
+	GLuint nrQuads = (xPointCount - 1) * (yPointCount - 1); // 1600
 	for (GLuint i = 0; i < nrQuads; i++)
 	{
 		GLuint k = i + i / (xPointCount - 1);

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
-set(Python_EXECUTABLE "C:/Users/sens/.conda/envs/sandbox/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
+set(Python_EXECUTABLE "C:/Users/sens/AppData/Local/Programs/Python/Python311/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
 # set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
 set(ONNXRUNTIME_ROOTDIR "C:/src/onnxruntime-win-x64-gpu-1.16.3")
@@ -20,7 +20,7 @@ cmake_policy(SET CMP0074 NEW)    # respect <PACKAGE>_ROOT variables in "find_pac
 include(CMakePrintHelpers)
 project(augmented_hands VERSION 0.1 LANGUAGES C CXX CUDA)
 #project(augmented_hands LANGUAGES CUDA CXX)
-find_package(Python 3.9 COMPONENTS Interpreter Development REQUIRED)
+find_package(Python 3.9 COMPONENTS Interpreter Development NumPy REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
 find_package(OpenCV 4.6.0 EXACT REQUIRED)
 find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
@@ -177,6 +177,12 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libi
 add_executable(deformation_example
     src/deformation_example.cpp
     src/timer.cpp
+    src/cnpy.cpp
+    src/point_cloud.cpp
+    src/helpers.cpp
+    src/fbo.cpp
+    src/quad.cpp
+    src/texture.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
@@ -192,7 +198,11 @@ target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/th
 # glm
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
 #python
-target_link_libraries(deformation_example PRIVATE Python::Python)
+target_link_libraries(deformation_example PRIVATE Python::Python Python::NumPy)
+# zlib
+target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
+target_link_libraries(deformation_example PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
+
 # target_include_directories(deformation_example PRIVATE "${Python_INCLUDE_DIRS}")
 ####################################### ONYX example
 # add_executable(onyx_example
@@ -399,11 +409,18 @@ add_custom_command(TARGET ahand
                 ${FREETYPE_DLLS}
                 $<TARGET_FILE_DIR:ahand>)
 
-file(GLOB PYTHON_DLL "${Python_RUNTIME_LIBRARY_DIRS}/python39.dll")
+file(GLOB PYTHON_DLL "${Python_RUNTIME_LIBRARY_DIRS}/python*.dll")
 add_custom_command(TARGET ahand
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${PYTHON_DLL}
+                $<TARGET_FILE_DIR:ahand>)
+
+file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/predict.py")
+add_custom_command(TARGET ahand
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${PYTHON_EMBEDDING}
                 $<TARGET_FILE_DIR:ahand>)
 # file(GLOB ZLIB_DLLS "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.3-bin/bin/*.dll") 
 # add_custom_command(TARGET ahand

@@ -145,6 +145,16 @@ std::vector<glm::vec3> Helpers::opencv2glm(std::vector<cv::Point3f> vec)
     return glm_vec;
 }
 
+std::vector<cv::Point2f> Helpers::glm2opencv(std::vector<glm::vec2> glm_vec)
+{
+    std::vector<cv::Point2f> cv_vec;
+    for (int i = 0; i < glm_vec.size(); i++)
+    {
+        cv_vec.push_back(cv::Point2f(glm_vec[i].x, glm_vec[i].y));
+    }
+    return cv_vec;
+}
+
 std::vector<glm::vec2> Helpers::project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection)
 {
     // project 3d points to NDC space

@@ -22,6 +22,7 @@ public:
     static std::vector<float> flatten_glm(std::vector<glm::vec2> vec);
     static std::vector<float> flatten_glm(std::vector<glm::vec3> vec);
     static std::vector<double> flatten_cv(std::vector<cv::Point> vec);
+    static std::vector<cv::Point2f> glm2opencv(std::vector<glm::vec2> glm_vec);
     static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point2f> vec);
     static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point> vec);
     static std::vector<glm::vec3> opencv2glm(std::vector<cv::Point3f> vec);
