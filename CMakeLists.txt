@@ -398,6 +398,13 @@ add_custom_command(TARGET ahand
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${FREETYPE_DLLS}
                 $<TARGET_FILE_DIR:ahand>)
+
+file(GLOB PYTHON_DLL "${Python_RUNTIME_LIBRARY_DIRS}/python39.dll")
+add_custom_command(TARGET ahand
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${PYTHON_DLL}
+                $<TARGET_FILE_DIR:ahand>)
 # file(GLOB ZLIB_DLLS "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.3-bin/bin/*.dll") 
 # add_custom_command(TARGET ahand
 #                     POST_BUILD
