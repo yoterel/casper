@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
 set(Python_EXECUTABLE "C:/Users/sens/.conda/envs/sandbox/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
-set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
+# set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
+set(ONNXRUNTIME_ROOTDIR "C:/src/onnxruntime-win-x64-gpu-1.16.3")
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")
 set(OPENCV_COMPILER "vc15")
 file(GLOB LIBICP_SOURCES
@@ -190,6 +191,22 @@ target_link_libraries(deformation_example PRIVATE ${OpenCV_LIBS})
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 # glm
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+#python
+target_link_libraries(deformation_example PRIVATE Python::Python)
+# target_include_directories(deformation_example PRIVATE "${Python_INCLUDE_DIRS}")
+####################################### ONYX example
+# add_executable(onyx_example
+#     src/onyx_example.cpp
+#     src/timer.cpp
+# )
+# target_include_directories(onyx_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# # onyx
+# target_link_libraries(onyx_example PRIVATE "${ONNXRUNTIME_ROOTDIR}/lib/onnxruntime.lib")
+# target_include_directories(onyx_example PRIVATE "${ONNXRUNTIME_ROOTDIR}/include")
+# target_include_directories(onyx_example PRIVATE "${ONNXRUNTIME_ROOTDIR}/include/onnxruntime/core/session")
+# target_compile_definitions(onyx_example PRIVATE USE_CUDA)
+# # opencv
+# target_link_libraries(onyx_example PRIVATE ${OpenCV_LIBS})
 ####################################### unity plugin
 # add_library(AHUnityPlugin SHARED 
 #     src/UnityPlugin.cpp
