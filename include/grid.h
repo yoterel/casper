@@ -44,10 +44,12 @@ public:
 	void constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing);
 
 	// Deformed Grid
-	void constructDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdouble xSpacing, GLdouble ySpacing, cv::Mat &fv);
+	void constructDeformedGrid(const GLuint xPointCount, const GLuint yPointCount, const GLfloat xSpacing, const GLfloat ySpacing, cv::Mat &fv);
 
-	// Renders the actual Grid as squares
-	// void RenderGrid(Shader *shader) const;
+	// Renders the actual Grid
+	void render();
+	void renderGridLines();
+	void renderGridPoints();
 };
 
 inline GLfloat *Grid::ComputePointCoordinates(GLuint pointIndex,
@@ -135,6 +137,8 @@ void Grid::updateGLBuffers()
 {
 	glBindBuffer(GL_ARRAY_BUFFER, Grid_VBO);
 	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, Grid_indices.size() * sizeof(glm::ivec3), &Grid_indices[0], GL_STATIC_DRAW);
 }
 
 inline void Grid::constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing)
@@ -198,7 +202,7 @@ inline void Grid::constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat 
 	// printf("vertices length:%d indices length:%d\n", static_cast<int>(Grid_vertices.size()), static_cast<int>(Grid_indices.size()));
 }
 
-inline void Grid::constructDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdouble xSpacing, GLdouble ySpacing, cv::Mat &fv)
+inline void Grid::constructDeformedGrid(const GLuint xPointCount, const GLuint yPointCount, const GLfloat xSpacing, const GLfloat ySpacing, cv::Mat &fv)
 {
 	double width = (xPointCount - 1) * xSpacing;
 	double height = (yPointCount - 1) * ySpacing;
@@ -278,11 +282,22 @@ inline void Grid::constructDeformedGrid(GLuint xPointCount, GLuint yPointCount, 
 	// printf("vertices length:%d indices length:%d\n", static_cast<int>(Grid_vertices.size()), static_cast<int>(Grid_indices.size()));
 }
 
-// inline void Grid::RenderGrid(Shader *shader) const
-// {
-// 	// render container
-// 	shader->use();
-// 	glBindVertexArray(Grid_VAO);
-// 	glDrawElements(GL_LINES, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
-// }
+inline void Grid::render()
+{
+	glBindVertexArray(Grid_VAO);
+	glDrawElements(GL_TRIANGLES, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+}
+
+inline void Grid::renderGridLines()
+{
+	glBindVertexArray(Grid_VAO);
+	glDrawElements(GL_LINES, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+}
+
+inline void Grid::renderGridPoints()
+{
+	glBindVertexArray(Grid_VAO);
+	glDrawElements(GL_POINTS, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+}
+
 #endif GRID_H

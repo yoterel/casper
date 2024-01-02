@@ -350,7 +350,6 @@ int main(int argc, char *argv[])
         // exit(1);
     }
     Py_INCREF(myModule);
-    std::cout << "mp imported module" << std::endl;
     predict_single = PyObject_GetAttrString(myModule, (char *)"predict_single");
     if (!predict_single)
     {
@@ -540,6 +539,7 @@ int main(int argc, char *argv[])
     Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
     Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
     Shader gridShader("../../src/shaders/grid_texture.vs", "../../src/shaders/grid_texture.fs");
+    Shader gridColorShader("../../src/shaders/grid_color.vs", "../../src/shaders/grid_color.fs");
     Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
     Shader coordShader("../../src/shaders/coords.vs", "../../src/shaders/coords.fs");
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
@@ -1212,11 +1212,11 @@ int main(int argc, char *argv[])
                                     ControlPointsP.push_back(keypoints[33]);
                                     ControlPointsP.push_back(keypoints[41]);
 
-                                    // ControlPointsP.push_back(keypoints[7]);
-                                    // ControlPointsP.push_back(keypoints[15]);
-                                    // ControlPointsP.push_back(keypoints[23]);
-                                    // ControlPointsP.push_back(keypoints[31]);
-                                    // ControlPointsP.push_back(keypoints[39]);
+                                    ControlPointsP.push_back(keypoints[7]);
+                                    ControlPointsP.push_back(keypoints[15]);
+                                    ControlPointsP.push_back(keypoints[23]);
+                                    ControlPointsP.push_back(keypoints[31]);
+                                    ControlPointsP.push_back(keypoints[39]);
                                     //
                                     ControlPointsQ.push_back(keypoints[1]);
                                     ControlPointsQ.push_back(keypoints[2]);
@@ -1234,11 +1234,11 @@ int main(int argc, char *argv[])
                                     ControlPointsQ.push_back(destination[12]);
                                     ControlPointsQ.push_back(destination[16]);
                                     ControlPointsQ.push_back(destination[20]);
-                                    // ControlPointsQ.push_back(destination[3]);
-                                    // ControlPointsQ.push_back(destination[7]);
-                                    // ControlPointsQ.push_back(destination[11]);
-                                    // ControlPointsQ.push_back(destination[15]);
-                                    // ControlPointsQ.push_back(destination[19]);
+                                    ControlPointsQ.push_back(destination[3]);
+                                    ControlPointsQ.push_back(destination[7]);
+                                    ControlPointsQ.push_back(destination[11]);
+                                    ControlPointsQ.push_back(destination[15]);
+                                    ControlPointsQ.push_back(destination[19]);
                                     // deform grid using prediction
                                     // todo: refactor control points to avoid this part
                                     cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
@@ -1256,9 +1256,9 @@ int main(int argc, char *argv[])
                                         q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
                                     }
                                     double alpha = 2.0;
-                                    // Precompute
+                                    // weights
                                     cv::Mat w = MLSprecomputeWeights(p, MLS_M, alpha);
-                                    // find Affine
+                                    // affine
                                     cv::Mat A = MLSprecomputeAffine(p, MLS_M, w);
                                     fv = MLSPointsTransformAffine(w, A, q);
                                     mls_succeed = true;
@@ -1297,6 +1297,7 @@ int main(int argc, char *argv[])
                 }
                 // render as post process
                 postprocess_fbo.bind(); // mls_fbo
+                glDisable(GL_CULL_FACE);
                 // PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
                 // PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
                 // vcolorShader.use();
@@ -1306,8 +1307,10 @@ int main(int argc, char *argv[])
                 hands_fbo.getTexture()->bind();
                 gridShader.use();
                 gridShader.setBool("flipVer", false);
-                glBindVertexArray(deformationGrid.Grid_VAO);
-                glDrawElements(GL_TRIANGLES, deformationGrid.Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+                deformationGrid.render();
+                glEnable(GL_CULL_FACE);
+                // gridColorShader.use();
+                // deformationGrid.renderGridLines();
                 postprocess_fbo.unbind(); // mls_fbo
                 // mls_fbo.saveColorToFile("test.png");
                 // postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
