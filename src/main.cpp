@@ -7,13 +7,10 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/normal.hpp>
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
 #include "readerwritercircularbuffer.h"
 #include "camera.h"
 #include "gl_camera.h"
 #include "display.h"
-#include "SerialPort.h"
 #include "shader.h"
 #include "skinned_shader.h"
 #include "skinned_model.h"
@@ -34,14 +31,30 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "diffuse.h"
+#ifdef _DEBUG
+#undef _DEBUG
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/ndarrayobject.h>
+#define _DEBUG
+#else
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/ndarrayobject.h>
+#endif
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"
 #include "stb_image_write.h"
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include "grid.h"
+#include "moving_least_squares.h"
 namespace fs = std::filesystem;
 
 // forward declarations
 void openIMGUIFrame();
+std::vector<glm::vec2> mp_predict(cv::Mat image, int timestamp);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
 bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
@@ -81,6 +94,8 @@ bool cmd_line_stats = true;
 bool bakeRequest = false;
 bool sd_succeed = false;
 bool sd_running = false;
+bool mls_succeed = false;
+bool mls_running = false;
 bool freecam_mode = false;
 bool use_cuda = false;
 bool simulated_camera = false;
@@ -243,6 +258,7 @@ int dst_height = cam_space ? cam_height : proj_height;
 FBO icp_fbo(cam_width, cam_height, 4, false);
 FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
+FBO mls_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
@@ -255,6 +271,22 @@ moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
 moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
 bool close_signal = false;
 std::vector<glm::vec3> skeleton_vertices;
+
+PyObject *myModule;
+PyObject *predict_single;
+PyObject *init_detector;
+PyObject *single_detector;
+int grid_x_point_count = 41;
+int grid_y_point_count = 41;
+float grid_x_spacing = 0.05;
+float grid_y_spacing = 0.05;
+Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
+cv::Mat fv;
+std::vector<cv::Point2f> ControlPointsP;
+std::vector<cv::Point2f> ControlPointsQ;
+std::vector<glm::vec2> ControlPointsP_glm;
+std::vector<glm::vec2> ControlPointsQ_glm;
+cv::Mat MLS_M;
 
 int main(int argc, char *argv[])
 {
@@ -307,6 +339,35 @@ int main(int argc, char *argv[])
     }
     Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp;
     t_app.start();
+    /* py init */
+    Py_Initialize();
+    import_array();
+    myModule = PyImport_ImportModule("predict");
+    if (!myModule)
+    {
+        std::cout << "Import module failed!";
+        PyErr_Print();
+        // exit(1);
+    }
+    Py_INCREF(myModule);
+    std::cout << "mp imported module" << std::endl;
+    predict_single = PyObject_GetAttrString(myModule, (char *)"predict_single");
+    if (!predict_single)
+    {
+        std::cout << "Import function failed!";
+        PyErr_Print();
+        // exit(1);
+    }
+    Py_INCREF(predict_single);
+    init_detector = PyObject_GetAttrString(myModule, (char *)"init_detector");
+    if (!init_detector)
+    {
+        std::cout << "Import function failed!";
+        PyErr_Print();
+        // exit(1);
+    }
+    Py_INCREF(init_detector);
+    single_detector = PyObject_CallFunction(init_detector, NULL);
     /* init GLFW */
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -337,7 +398,8 @@ int main(int argc, char *argv[])
     std::cout << "  GL Renderer  : " << glGetString(GL_RENDERER) << std::endl;
     std::cout << "  GLSL Version : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << std::endl;
-
+    deformationGrid.initGLBuffers();
+    MLS_M = deformationGrid.AssembleM(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
     glfwSwapInterval(0);                       // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -387,6 +449,7 @@ int main(int argc, char *argv[])
     postprocess2_fbo.init();
     icp_fbo.init();
     icp2_fbo.init();
+    mls_fbo.init();
     c2p_fbo.init();
     SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights.fbx",
                                "../../resource/uv.png", // uv.png
@@ -476,6 +539,7 @@ int main(int argc, char *argv[])
     Shader projectorShader("../../src/shaders/projector_shader.vs", "../../src/shaders/projector_shader.fs");
     Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
     Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
+    Shader gridShader("../../src/shaders/grid_texture.vs", "../../src/shaders/grid_texture.fs");
     Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
     Shader coordShader("../../src/shaders/coords.vs", "../../src/shaders/coords.fs");
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
@@ -503,6 +567,7 @@ int main(int argc, char *argv[])
     double currentAppTime = t_app.getElapsedTimeInSec();
     double whole = 0.0;
     long frameCount = 0;
+    long totalFrameCount = 0;
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     std::vector<glm::mat4> bones_to_world_left;
@@ -529,7 +594,7 @@ int main(int argc, char *argv[])
     }
     LEAP_CLOCK_REBASER clockSynchronizer;
     LeapCreateClockRebaser(&clockSynchronizer);
-    std::thread producer, consumer, run_sd;
+    std::thread producer, consumer, run_sd, run_mls;
     // load calibration results if they exist
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
     if (loadLeapCalibrationResults(proj_project, cam_project,
@@ -737,6 +802,9 @@ int main(int argc, char *argv[])
             else
             {
                 camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+                // std::vector<glm::vec2> pred_glm = mp_predict(camImageOrig, totalFrameCount);
+                // if (pred_glm.size() != 0)
+                //     std::cout << pred_glm.size() << std::endl;
                 camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
             }
         }
@@ -1095,6 +1163,154 @@ int main(int argc, char *argv[])
                 fullScreenQuad.render();
                 postprocess2_fbo.unbind();
                 postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                break;
+            }
+            case static_cast<int>(PostProcessMode::MLS):
+            {
+                if (!mls_running && !mls_succeed)
+                {
+                    if (skeleton_vertices.size() > 0)
+                    {
+                        std::vector<glm::vec3> to_project;
+                        for (int i = 0; i < skeleton_vertices.size(); i += 2) // filter out color, todo: why is color saved inside skeleton_vertices?..
+                        {
+                            to_project.push_back(skeleton_vertices[i]);
+                        }
+                        if (run_mls.joinable())
+                            run_mls.join();
+                        // std::cout << "mls thread will launch !" << std::endl;
+                        mls_running = true;
+                        camImage = camImageOrig.clone();
+                        run_mls = std::thread([to_project]() { // send raw cam for MP prediction asap
+                            // std::cout << "mls thread launched !" << std::endl;
+                            try
+                            {
+
+                                std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                                std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(projected);
+                                std::vector<glm::vec2> pred_glm = mp_predict(camImage, 0);
+                                if (pred_glm.size() == 21)
+                                {
+                                    // std::cout << "MP prediction succeeded" << std::endl;
+                                    std::vector<cv::Point2f> destination = Helpers::glm2opencv(pred_glm);
+                                    ControlPointsP.clear();
+                                    ControlPointsQ.clear();
+                                    ControlPointsP.push_back(keypoints[1]);
+                                    ControlPointsP.push_back(keypoints[2]);
+                                    ControlPointsP.push_back(keypoints[5]);
+                                    ControlPointsP.push_back(keypoints[10]);
+                                    ControlPointsP.push_back(keypoints[11]);
+                                    ControlPointsP.push_back(keypoints[18]);
+                                    ControlPointsP.push_back(keypoints[19]);
+                                    ControlPointsP.push_back(keypoints[26]);
+                                    ControlPointsP.push_back(keypoints[27]);
+                                    ControlPointsP.push_back(keypoints[34]);
+                                    ControlPointsP.push_back(keypoints[35]);
+                                    ControlPointsP.push_back(keypoints[9]);
+                                    ControlPointsP.push_back(keypoints[17]);
+                                    ControlPointsP.push_back(keypoints[25]);
+                                    ControlPointsP.push_back(keypoints[33]);
+                                    ControlPointsP.push_back(keypoints[41]);
+
+                                    // ControlPointsP.push_back(keypoints[7]);
+                                    // ControlPointsP.push_back(keypoints[15]);
+                                    // ControlPointsP.push_back(keypoints[23]);
+                                    // ControlPointsP.push_back(keypoints[31]);
+                                    // ControlPointsP.push_back(keypoints[39]);
+                                    //
+                                    ControlPointsQ.push_back(keypoints[1]);
+                                    ControlPointsQ.push_back(keypoints[2]);
+                                    ControlPointsQ.push_back(keypoints[5]);
+                                    ControlPointsQ.push_back(keypoints[10]);
+                                    ControlPointsQ.push_back(keypoints[11]);
+                                    ControlPointsQ.push_back(keypoints[18]);
+                                    ControlPointsQ.push_back(keypoints[19]);
+                                    ControlPointsQ.push_back(keypoints[26]);
+                                    ControlPointsQ.push_back(keypoints[27]);
+                                    ControlPointsQ.push_back(keypoints[34]);
+                                    ControlPointsQ.push_back(keypoints[35]);
+                                    ControlPointsQ.push_back(destination[4]);
+                                    ControlPointsQ.push_back(destination[8]);
+                                    ControlPointsQ.push_back(destination[12]);
+                                    ControlPointsQ.push_back(destination[16]);
+                                    ControlPointsQ.push_back(destination[20]);
+                                    // ControlPointsQ.push_back(destination[3]);
+                                    // ControlPointsQ.push_back(destination[7]);
+                                    // ControlPointsQ.push_back(destination[11]);
+                                    // ControlPointsQ.push_back(destination[15]);
+                                    // ControlPointsQ.push_back(destination[19]);
+                                    // deform grid using prediction
+                                    // todo: refactor control points to avoid this part
+                                    cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
+                                    cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
+                                    // initializing p points for fish eye image
+                                    for (int i = 0; i < ControlPointsP.size(); i++)
+                                    {
+                                        p.at<float>(0, i) = (ControlPointsP.at(i)).x;
+                                        p.at<float>(1, i) = (ControlPointsP.at(i)).y;
+                                    }
+                                    // initializing q points for fish eye image
+                                    for (int i = 0; i < ControlPointsQ.size(); i++)
+                                    {
+                                        q.at<float>(0, i) = (ControlPointsQ.at(i)).x;
+                                        q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
+                                    }
+                                    double alpha = 2.0;
+                                    // Precompute
+                                    cv::Mat w = MLSprecomputeWeights(p, MLS_M, alpha);
+                                    // find Affine
+                                    cv::Mat A = MLSprecomputeAffine(p, MLS_M, w);
+                                    fv = MLSPointsTransformAffine(w, A, q);
+                                    mls_succeed = true;
+                                }
+                                else
+                                {
+                                    std::cout << "MP prediction failed" << std::endl;
+                                }
+                            }
+                            catch (const std::exception &e)
+                            {
+                                std::cerr << e.what() << '\n';
+                            }
+                            // std::cout << "mls thread dying !" << std::endl;
+                            mls_running = false;
+                        });
+                    }
+                }
+                if (mls_succeed)
+                {
+                    // use new grid to deform rendered image
+                    // todo split function into two parts for real time
+                    // std::cout << "constructing grid !" << std::endl;
+                    deformationGrid.constructDeformedGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing, fv);
+                    // deformationGrid.constructGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
+                    // std::cout << "updating gl buffers !" << std::endl;
+                    deformationGrid.updateGLBuffers();
+                    mls_succeed = false;
+                    // mls_running = true;
+                    // std::cout << "killing mls thread !" << std::endl;
+                    ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
+                    ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
+                    if (run_mls.joinable())
+                        run_mls.join();
+                    // std::cout << "mls thread killed !" << std::endl;
+                }
+                // render as post process
+                postprocess_fbo.bind(); // mls_fbo
+                // PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
+                // PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
+                // vcolorShader.use();
+                // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                // cloud_src.render();
+                // cloud_dst.render();
+                hands_fbo.getTexture()->bind();
+                gridShader.use();
+                gridShader.setBool("flipVer", false);
+                glBindVertexArray(deformationGrid.Grid_VAO);
+                glDrawElements(GL_TRIANGLES, deformationGrid.Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+                postprocess_fbo.unbind(); // mls_fbo
+                // mls_fbo.saveColorToFile("test.png");
+                // postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 break;
             }
             default:
@@ -2193,6 +2409,7 @@ int main(int argc, char *argv[])
         }
         glfwSwapBuffers(window);
         t_swap.stop();
+        totalFrameCount++;
     }
     // cleanup
     close_signal = true;
@@ -2206,9 +2423,12 @@ int main(int argc, char *argv[])
     {
         producer.join();
     }
+    if (run_mls.joinable())
+        run_mls.join();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+    Py_Finalize();
     /* setup trigger */
     // char* portName = "\\\\.\\COM4";
     // #define DATA_LENGTH 255
@@ -2946,6 +3166,61 @@ glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &le
     return point_3d;
 }
 
+std::vector<glm::vec2> mp_predict(cv::Mat origImage, int timestamp)
+{
+    cv::Mat image;
+    cv::flip(origImage, image, 1);
+    cv::cvtColor(image, image, cv::COLOR_GRAY2RGB);
+    // cv::Mat image = cv::imread("../../resource/hand.png", cv::IMREAD_GRAYSCALE);
+    // std::cout << "mp received timestamp: " << timestamp << std::endl;
+    // cv::Mat image;
+    // cv::Mat image = cv::imread("C:/src/augmented_hands/debug/ss/sg0o.0_raw_cam.png");
+    // cv::resize(image1, image, cv::Size(512, 512));
+    npy_intp dimensions[3] = {image.rows, image.cols, image.channels()};
+    // std::cout << "mp imported function" << std::endl;
+    // warmup
+    // PyObject* warmobj = PyArray_SimpleNewFromData(image.dims + 1, (npy_intp*)&dimensions, NPY_UINT8, image.data);
+    // PyObject* res = PyObject_CallFunction(predict_single, "(O, i)", warmobj, 0);
+    PyObject *image_object = PyArray_SimpleNewFromData(image.dims + 1, (npy_intp *)&dimensions, NPY_UINT8, image.data);
+    // std::cout << "mp converted data" << std::endl;
+    // PyObject_CallFunction(myprint, "O", image_object);
+    // PyObject* myResult = PyObject_CallFunction(iden, "O", image_object);
+    PyObject *myResult = PyObject_CallFunction(predict_single, "(O, O)", image_object, single_detector);
+    // std::cout << "mp called function" << std::endl;
+    if (!myResult)
+    {
+        std::cout << "Call failed!" << std::endl;
+        PyErr_Print();
+        return std::vector<glm::vec2>();
+        // exit(1);
+    }
+    // PyObject* myResult = PyObject_CallFunction(myprofile, "O", image_object);
+    PyArrayObject *myNumpyArray = reinterpret_cast<PyArrayObject *>(myResult);
+    glm::vec2 *data = (glm::vec2 *)PyArray_DATA(myNumpyArray);
+    std::vector<glm::vec2> data_vec(data, data + PyArray_SIZE(myNumpyArray) / 2);
+    // for (int j = 0; j < data_vec.size(); j+=2)
+    // {
+    //   std::cout << data_vec[j] << data_vec[j+1] << std::endl;
+    // }
+    // npy_intp* arrDims = PyArray_SHAPE( myNumpyArray );
+    // int nDims = PyArray_NDIM( myNumpyArray ); // number of dimensions
+    // std:: cout << nDims << std::endl;
+    // for (int i = 0; i < nDims; i++)
+    // {
+    //   std::cout << arrDims[i] << std::endl;
+    // }
+
+    // cv::Mat python_result = cv::Mat(image.rows, image.cols, CV_8UC3, PyArray_DATA(myNumpyArray));
+    // cv::imshow("result", python_result);
+    // cv::waitKey(0);
+    // double* array_pointer = reinterpret_cast<double*>( PyArray_DATA( your_numpy_array ) );
+    // Py_XDECREF(myModule);
+    // Py_XDECREF(myObject);
+    // Py_XDECREF(myFunction);
+    // Py_XDECREF(myResult);
+    return data_vec;
+}
+
 // IMGUI frame creator
 // ---------------------------------------------------------------------------------------------
 void openIMGUIFrame()
@@ -3303,7 +3578,7 @@ void openIMGUIFrame()
                 if (skeleton_vertices.size() > 0)
                 {
                     std::vector<glm::vec3> to_project;
-                    for (int i = 0; i < skeleton_vertices.size(); i += 2)  // filter out color, todo: why is color saved inside skeleton_vertices?..
+                    for (int i = 0; i < skeleton_vertices.size(); i += 2) // filter out color, todo: why is color saved inside skeleton_vertices?..
                     {
                         to_project.push_back(skeleton_vertices[i]);
                     }
@@ -3437,6 +3712,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::RadioButton("ICP", &postprocess_mode, 5);
             ImGui::RadioButton("OVERLAY", &postprocess_mode, 6);
+            ImGui::RadioButton("MLS", &postprocess_mode, 7);
             if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
             {
                 ImGui::Checkbox("ICP on?", &icp_apply_transform);

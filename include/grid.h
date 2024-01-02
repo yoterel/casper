@@ -8,11 +8,14 @@
 class Grid
 {
 public:
-	Grid()
+	Grid(const GLuint xPointCount, const GLuint yPointCount, const GLfloat xSpacing, const GLfloat ySpacing) : Grid_VBO(0),
+																											   Grid_VAO(0),
+																											   Grid_EBO(0)
 	{
-		Grid_VAO = 0;
-		Grid_VBO = 0;
-		Grid_EBO = 0;
+		// Grid_VAO = 0;
+		// Grid_VBO = 0;
+		// Grid_EBO = 0;
+		constructGrid(xPointCount, yPointCount, xSpacing, ySpacing);
 	}
 
 	~Grid()
@@ -33,11 +36,15 @@ public:
 	// render all grid points for calculation
 	cv::Mat AssembleM(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const;
 
-	// Normal Grid Init
-	void InitGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing);
+	void initGLBuffers();
 
-	// Deformed Grid Init
-	void InitDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdouble xSpacing, GLdouble ySpacing, cv::Mat &fv);
+	void updateGLBuffers();
+
+	// Normal Grid
+	void constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing);
+
+	// Deformed Grid
+	void constructDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdouble xSpacing, GLdouble ySpacing, cv::Mat &fv);
 
 	// Renders the actual Grid as squares
 	// void RenderGrid(Shader *shader) const;
@@ -78,8 +85,8 @@ inline cv::Mat Grid::AssembleM(int xPointCount, int yPointCount, double xSpacing
 {
 	// change the size of the grid
 	cv::Mat a = cv::Mat::zeros(2, xPointCount * yPointCount, CV_32F); // 2 x 1600 x float
-	double width = xSpacing * (xPointCount - 1); // 2.0
-	double height = ySpacing * (yPointCount - 1);  // 2.0
+	double width = xSpacing * (xPointCount - 1);					  // 2.0
+	double height = ySpacing * (yPointCount - 1);					  // 2.0
 	double minX = -width / 2;
 	double minY = -height / 2;
 
@@ -99,7 +106,38 @@ inline cv::Mat Grid::AssembleM(int xPointCount, int yPointCount, double xSpacing
 	return a;
 }
 
-inline void Grid::InitGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing)
+void Grid::initGLBuffers()
+{
+	glGenVertexArrays(1, &Grid_VAO);
+	glGenBuffers(1, &Grid_VBO);
+	glGenBuffers(1, &Grid_EBO);
+
+	glBindVertexArray(Grid_VAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, Grid_VBO);
+	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, Grid_indices.size() * sizeof(glm::ivec3), &Grid_indices[0], GL_STATIC_DRAW);
+
+	// position attribute
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), static_cast<void *>(nullptr));
+	glEnableVertexAttribArray(0);
+	// color attribute
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), reinterpret_cast<void *>(1 * sizeof(glm::vec3)));
+	glEnableVertexAttribArray(1);
+	// texture coord attribute
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), reinterpret_cast<void *>(2 * sizeof(glm::vec3)));
+	glEnableVertexAttribArray(2);
+}
+
+void Grid::updateGLBuffers()
+{
+	glBindBuffer(GL_ARRAY_BUFFER, Grid_VBO);
+	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_STATIC_DRAW);
+}
+
+inline void Grid::constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing)
 {
 	float width = (xPointCount - 1) * xSpacing;
 	float height = (yPointCount - 1) * ySpacing;
@@ -158,31 +196,9 @@ inline void Grid::InitGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpac
 	}
 
 	// printf("vertices length:%d indices length:%d\n", static_cast<int>(Grid_vertices.size()), static_cast<int>(Grid_indices.size()));
-
-	glGenVertexArrays(1, &Grid_VAO);
-	glGenBuffers(1, &Grid_VBO);
-	glGenBuffers(1, &Grid_EBO);
-
-	glBindVertexArray(Grid_VAO);
-
-	glBindBuffer(GL_ARRAY_BUFFER, Grid_VBO);
-	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, Grid_indices.size() * sizeof(glm::ivec3), &Grid_indices[0], GL_STATIC_DRAW);
-
-	// position attribute
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), static_cast<void *>(nullptr));
-	glEnableVertexAttribArray(0);
-	// color attribute
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), reinterpret_cast<void *>(1 * sizeof(glm::vec3)));
-	glEnableVertexAttribArray(1);
-	// texture coord attribute
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), reinterpret_cast<void *>(2 * sizeof(glm::vec3)));
-	glEnableVertexAttribArray(2);
 }
 
-inline void Grid::InitDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdouble xSpacing, GLdouble ySpacing, cv::Mat &fv)
+inline void Grid::constructDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdouble xSpacing, GLdouble ySpacing, cv::Mat &fv)
 {
 	double width = (xPointCount - 1) * xSpacing;
 	double height = (yPointCount - 1) * ySpacing;
@@ -202,14 +218,13 @@ inline void Grid::InitDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdou
 		int d = k + xPointCount;
 		double aPt[3], bPt[3], cPt[3], dPt[3];
 		float aPtIm[3], bPtIm[3], cPtIm[3], dPtIm[3];
-		// �� abcd ��idx������׼����������
+
 		ComputePointCoordinate(a, xPointCount, yPointCount, xSpacing, ySpacing, aPtIm);
 		ComputePointCoordinate(b, xPointCount, yPointCount, xSpacing, ySpacing, bPtIm);
 		ComputePointCoordinate(c, xPointCount, yPointCount, xSpacing, ySpacing, cPtIm);
 		ComputePointCoordinate(d, xPointCount, yPointCount, xSpacing, ySpacing, dPtIm);
 
 		// get the deformed points
-		// �ɱ任����fv�õ� abcd �ڱ任֮��Ŀռ�λ��
 		aPt[0] = fv.at<float>(0, a);
 		aPt[1] = fv.at<float>(1, a);
 		aPt[2] = 0;
@@ -261,28 +276,6 @@ inline void Grid::InitDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdou
 	}
 
 	// printf("vertices length:%d indices length:%d\n", static_cast<int>(Grid_vertices.size()), static_cast<int>(Grid_indices.size()));
-
-	glGenVertexArrays(1, &Grid_VAO);
-	glGenBuffers(1, &Grid_VBO);
-	glGenBuffers(1, &Grid_EBO);
-
-	glBindVertexArray(Grid_VAO);
-
-	glBindBuffer(GL_ARRAY_BUFFER, Grid_VBO);
-	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, Grid_indices.size() * sizeof(glm::ivec3), &Grid_indices[0], GL_STATIC_DRAW);
-
-	// position attribute
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), static_cast<void *>(nullptr));
-	glEnableVertexAttribArray(0);
-	// color attribute
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), reinterpret_cast<void *>(1 * sizeof(glm::vec3)));
-	glEnableVertexAttribArray(1);
-	// texture coord attributes
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(glm::vec3), reinterpret_cast<void *>(2 * sizeof(glm::vec3)));
-	glEnableVertexAttribArray(2);
 }
 
 // inline void Grid::RenderGrid(Shader *shader) const

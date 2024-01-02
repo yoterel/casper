@@ -15,7 +15,7 @@ options = vision.HandLandmarkerOptions(
 detector = vision.HandLandmarker.create_from_options(options)
 
 
-def init_detector(video=True):
+def init_detector(video=False):
     my_base_options = python.BaseOptions(
         model_asset_path="../../resource/hand_landmarker.task"
     )
@@ -110,7 +110,7 @@ def predict_video_aprox(image_orig, i, my_detector):
     return mp_np
 
 
-def predict_single(image_orig, my_detector=None):
+def predict_single(image_orig, my_detector=None, verbose=False):
     # print(image_orig.shape)
     # if len(image_orig.shape) == 2:
     #     # duplicate the image to make it 3 channel
@@ -121,9 +121,13 @@ def predict_single(image_orig, my_detector=None):
     # elif image_orig.shape[-1] == 4:
     #     image = image_orig[:, :, :3].copy()
     # else:
+    if verbose:
+        print("copying image")
     image = image_orig.copy()
     # image = image_orig
     if my_detector is None:
+        if verbose:
+            print("initializing detector")
         single_base_options = python.BaseOptions(
             model_asset_path="../../resource/hand_landmarker.task"
         )
@@ -131,13 +135,29 @@ def predict_single(image_orig, my_detector=None):
             base_options=single_base_options, num_hands=1
         )
         my_detector = vision.HandLandmarker.create_from_options(single_options)
+    if verbose:
+        print("setting image format")
     if image.shape[-1] == 1 or len(image.shape) == 2:
         image_format = mp.ImageFormat.GRAY8
+        if verbose:
+            print("GRAY8")
+    elif image.shape[-1] == 4:
+        image_format = mp.ImageFormat.SRGBA
+        if verbose:
+            print("SRGBA")
     else:
-        image_format = mp.ImageFormat.SRGB  # A?
+        image_format = mp.ImageFormat.SRGB
+        if verbose:
+            print("SRGB")
     mp_image = mp.Image(image_format=image_format, data=image)
+    if verbose:
+        print("detection")
     detection_result = my_detector.detect(mp_image)
+    if verbose:
+        print("detection done")
     if len(detection_result.hand_landmarks) > 0:
+        if verbose:
+            print("detection sucess, converting to numpy")
         mp_np = np.array(
             [
                 [landmark.x, landmark.y]
@@ -147,6 +167,8 @@ def predict_single(image_orig, my_detector=None):
         mp_np = (mp_np * 2) - 1  # 0:1 to -1:1
         mp_np[:, 1] = -mp_np[:, 1]  # flip y
     else:
+        if verbose:
+            print("detection failed")
         mp_np = np.zeros(1)
     # print(mp_np.dtype)
     # print(mp_np.shape)
@@ -190,6 +212,8 @@ if __name__ == "__main__":
         "image_1channel_dummy": image_1channel_dummy,
         "image_3channel_resized": image_3channel_resized,
     }
+    short_iters = 20
+    long_iters = 100
     for key, image in images.items():
         print(image.shape)
         # image = image[:, :, 0:1]
@@ -198,30 +222,55 @@ if __name__ == "__main__":
         my_detector = init_detector(False)
         test = predict_single(image, my_detector)  # warmup
         times = []
-        for i in range(0, 20):
+        failures = 0
+        for i in range(0, short_iters):
             start = time.time()
             test = predict_single(image, my_detector)
             times.append(time.time() - start)
+            if test.shape[0] == 1:
+                failures += 1
             # print(times[-1])
         single_avg_with_detector = np.array(times).mean()
+        single_avg_with_detector_failures = failures
+
         times = []
-        for i in range(0, 20):
+        failures = 0
+        for i in range(0, short_iters):
             start = time.time()
             test = predict_single(image)
             times.append(time.time() - start)
+            if test.shape[0] == 1:
+                failures += 1
             # print(times[-1])
         single_avg_no_detector = np.array(times).mean()
+        single_avg_no_detector_failures = failures
+
         times = []
+        failures = 0
         my_video_detector = init_detector(True)
         test = predict_video_aprox(image, 0, my_video_detector)  # warmup
-        for i in range(1, 100):
+        for i in range(1, long_iters):
             start = time.time()
             test = predict_video_aprox(image, i, my_video_detector)
             times.append(time.time() - start)
+            if test.shape[0] == 1:
+                failures += 1
             # print(times[-1])
         video_avg = np.array(times).mean()
+        video_avg_failures = failures
+
         print("{}:".format(key))
-        print("single with detector: {}".format(single_avg_with_detector))
-        print("single without detector: {}".format(single_avg_no_detector))
-        print("video: {}".format(video_avg))
+        print(
+            "single with detector: {} ({}/{} fails)".format(
+                single_avg_with_detector, single_avg_with_detector_failures, short_iters
+            )
+        )
+        print(
+            "single without detector: {} ({}/{} fails)".format(
+                single_avg_no_detector, single_avg_no_detector_failures, short_iters
+            )
+        )
+        print(
+            "video: {} ({}/{} fails)".format(video_avg, video_avg_failures, long_iters)
+        )
         print("")
