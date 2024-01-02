@@ -185,6 +185,7 @@ bool ctrl_modifier = false;
 bool activateGUI = false;
 bool tab_pressed = false;
 unsigned int n_bones = 0;
+int totalFrameCount = 0;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
@@ -274,6 +275,7 @@ std::vector<glm::vec3> skeleton_vertices;
 
 PyObject *myModule;
 PyObject *predict_single;
+PyObject *predict_video;
 PyObject *init_detector;
 PyObject *single_detector;
 int grid_x_point_count = 41;
@@ -337,7 +339,7 @@ int main(int argc, char *argv[])
         std::cout << "Camera in color mode" << std::endl;
         cam_color_mode = true;
     }
-    Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp;
+    Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls;
     t_app.start();
     /* py init */
     Py_Initialize();
@@ -358,6 +360,14 @@ int main(int argc, char *argv[])
         // exit(1);
     }
     Py_INCREF(predict_single);
+    predict_video = PyObject_GetAttrString(myModule, (char *)"predict_video");
+    if (!predict_video)
+    {
+        std::cout << "Import function failed!";
+        PyErr_Print();
+        // exit(1);
+    }
+    Py_INCREF(predict_video);
     init_detector = PyObject_GetAttrString(myModule, (char *)"init_detector");
     if (!init_detector)
     {
@@ -567,7 +577,6 @@ int main(int argc, char *argv[])
     double currentAppTime = t_app.getElapsedTimeInSec();
     double whole = 0.0;
     long frameCount = 0;
-    long totalFrameCount = 0;
     int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     std::vector<glm::mat4> bones_to_world_left;
@@ -726,6 +735,7 @@ int main(int argc, char *argv[])
                 std::cout << "skinning: " << t_skin.averageLapInMilliSec() << std::endl;
                 std::cout << "debug: " << t_debug.averageLapInMilliSec() << std::endl;
                 std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
+                std::cout << "mp+mls: " << t_mls.averageLapInMilliSec() << std::endl;
                 std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
                 std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
                 std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
@@ -744,6 +754,7 @@ int main(int argc, char *argv[])
             t_warp.reset();
             t_misc.reset();
             t_pp.reset();
+            t_mls.reset();
             t_debug.reset();
         }
         /* deal with user input */
@@ -907,8 +918,15 @@ int main(int argc, char *argv[])
                 case static_cast<int>(MaterialMode::WIREFRAME):
                 {
                     glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-                    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skeleton_vertices.size(), skeleton_vertices.data(), GL_STATIC_DRAW);
-                    n_skeleton_primitives = skeleton_vertices.size() / 2;
+                    std::vector<glm::vec3> skele_for_upload;
+                    glm::vec3 green = glm::vec3(0.0f, 1.0f, 0.0f);
+                    for (int i = 0; i < skeleton_vertices.size(); i++)
+                    {
+                        skele_for_upload.push_back(skeleton_vertices[i]);
+                        skele_for_upload.push_back(green);
+                    }
+                    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skele_for_upload.size(), skele_for_upload.data(), GL_STATIC_DRAW);
+                    n_skeleton_primitives = skele_for_upload.size() / 2;
                     vcolorShader.use();
                     vcolorShader.setMat4("MVP", cam_projection_transform * cam_view_transform * global_scale_right);
                     glBindVertexArray(skeletonVAO);
@@ -1171,11 +1189,8 @@ int main(int argc, char *argv[])
                 {
                     if (skeleton_vertices.size() > 0)
                     {
-                        std::vector<glm::vec3> to_project;
-                        for (int i = 0; i < skeleton_vertices.size(); i += 2) // filter out color, todo: why is color saved inside skeleton_vertices?..
-                        {
-                            to_project.push_back(skeleton_vertices[i]);
-                        }
+                        t_mls.start();
+                        std::vector<glm::vec3> to_project = skeleton_vertices;
                         if (run_mls.joinable())
                             run_mls.join();
                         // std::cout << "mls thread will launch !" << std::endl;
@@ -1185,10 +1200,9 @@ int main(int argc, char *argv[])
                             // std::cout << "mls thread launched !" << std::endl;
                             try
                             {
-
                                 std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
                                 std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(projected);
-                                std::vector<glm::vec2> pred_glm = mp_predict(camImage, 0);
+                                std::vector<glm::vec2> pred_glm = mp_predict(camImage, totalFrameCount);
                                 if (pred_glm.size() == 21)
                                 {
                                     // std::cout << "MP prediction succeeded" << std::endl;
@@ -1293,11 +1307,12 @@ int main(int argc, char *argv[])
                     ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
                     if (run_mls.joinable())
                         run_mls.join();
+                    t_mls.stop();
                     // std::cout << "mls thread killed !" << std::endl;
                 }
                 // render as post process
-                postprocess_fbo.bind(); // mls_fbo
-                glDisable(GL_CULL_FACE);
+                mls_fbo.bind();          // mls_fbo
+                glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
                 // PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
                 // PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
                 // vcolorShader.use();
@@ -1311,9 +1326,9 @@ int main(int argc, char *argv[])
                 glEnable(GL_CULL_FACE);
                 // gridColorShader.use();
                 // deformationGrid.renderGridLines();
-                postprocess_fbo.unbind(); // mls_fbo
+                mls_fbo.unbind(); // mls_fbo
                 // mls_fbo.saveColorToFile("test.png");
-                // postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 break;
             }
             default:
@@ -1586,7 +1601,7 @@ int main(int argc, char *argv[])
                         }
                         if (skeleton_vertices.size() > 0)
                         {
-                            glm::vec3 cur_3d_point = skeleton_vertices[17 * 2]; // index tip
+                            glm::vec3 cur_3d_point = skeleton_vertices[17]; // index tip
                             triangulated = cur_3d_point;
                             if (found_centroid)
                             {
@@ -1920,11 +1935,11 @@ int main(int argc, char *argv[])
                         vcolorShader.use();
                         vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                         std::vector<cv::Point3f> points_3d_cv;
-                        for (int i = 0; i < skeleton_vertices.size(); i += 2)
+                        for (int i = 0; i < skeleton_vertices.size(); i++)
                         {
                             points_3d_cv.push_back(cv::Point3f(skeleton_vertices[i].x, skeleton_vertices[i].y, skeleton_vertices[i].z));
                         }
-                        // points_3d_cv.push_back(cv::Point3f(skeleton_vertices[mark_bone_index * 2].x, skeleton_vertices[mark_bone_index * 2].y, skeleton_vertices[mark_bone_index * 2].z));
+                        // points_3d_cv.push_back(cv::Point3f(skeleton_vertices[mark_bone_index].x, skeleton_vertices[mark_bone_index].y, skeleton_vertices[mark_bone_index].z));
                         std::vector<cv::Point2f> reprojected_cv;
                         cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
                         std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
@@ -1950,7 +1965,7 @@ int main(int argc, char *argv[])
                         vcolorShader.use();
                         vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                         std::vector<cv::Point3f> points_3d_cv;
-                        points_3d_cv.push_back(cv::Point3f(skeleton_vertices[mark_bone_index * 2].x, skeleton_vertices[mark_bone_index * 2].y, skeleton_vertices[mark_bone_index * 2].z));
+                        points_3d_cv.push_back(cv::Point3f(skeleton_vertices[mark_bone_index].x, skeleton_vertices[mark_bone_index].y, skeleton_vertices[mark_bone_index].z));
                         std::vector<cv::Point2f> reprojected_cv;
                         cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
                         std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
@@ -2411,8 +2426,8 @@ int main(int argc, char *argv[])
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
         glfwSwapBuffers(window);
-        t_swap.stop();
         totalFrameCount++;
+        t_swap.stop();
     }
     // cleanup
     close_signal = true;
@@ -2552,7 +2567,7 @@ void process_input(GLFWwindow *window)
                 {
                     if (ready_to_collect && skeleton_vertices.size() > 0)
                     {
-                        points_3d.push_back(skeleton_vertices[17 * 2]);
+                        points_3d.push_back(skeleton_vertices[17]);
                         glm::vec2 cur_2d_point = Helpers::NDCtoScreen(cur_screen_vert, cam_width, cam_height, false);
                         points_2d.push_back(cur_2d_point);
                     }
@@ -2982,8 +2997,6 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
     //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
     //  std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
     //  std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
-    glm::vec3 red = glm::vec3(1.0f, 0.0f, 0.0f);
-    glm::vec3 green = glm::vec3(0.0f, 1.0f, 0.0f);
     for (uint32_t h = 0; h < frame->nHands; h++)
     {
         LEAP_HAND *hand = &frame->pHands[h];
@@ -3021,9 +3034,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         LEAP_VECTOR arm_j1 = hand->arm.prev_joint;
         LEAP_VECTOR arm_j2 = hand->arm.next_joint;
         skeleton_vertices.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
-        skeleton_vertices.push_back(green);
         skeleton_vertices.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
-        skeleton_vertices.push_back(green);
         glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
                                                   hand->arm.rotation.x,
                                                   hand->arm.rotation.y,
@@ -3052,9 +3063,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                 LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
                 LEAP_VECTOR joint2 = finger.bones[b].next_joint;
                 skeleton_vertices.push_back(glm::vec3(joint1.x, joint1.y, joint1.z));
-                skeleton_vertices.push_back(green);
                 skeleton_vertices.push_back(glm::vec3(joint2.x, joint2.y, joint2.z));
-                skeleton_vertices.push_back(green);
                 glm::mat4 rot = glm::toMat4(glm::quat(finger.bones[b].rotation.w,
                                                       finger.bones[b].rotation.x,
                                                       finger.bones[b].rotation.y,
@@ -3188,7 +3197,7 @@ std::vector<glm::vec2> mp_predict(cv::Mat origImage, int timestamp)
     // std::cout << "mp converted data" << std::endl;
     // PyObject_CallFunction(myprint, "O", image_object);
     // PyObject* myResult = PyObject_CallFunction(iden, "O", image_object);
-    PyObject *myResult = PyObject_CallFunction(predict_single, "(O, O)", image_object, single_detector);
+    PyObject *myResult = PyObject_CallFunction(predict_video, "(O,i)", image_object, timestamp);
     // std::cout << "mp called function" << std::endl;
     if (!myResult)
     {
@@ -3436,8 +3445,8 @@ void openIMGUIFrame()
                 ImGui::Text("cur. triangulated: %05.1f, %05.1f, %05.1f", triangulated.x, triangulated.y, triangulated.z);
                 if (skeleton_vertices.size() > 0)
                 {
-                    ImGui::Text("cur. skeleton: %05.1f, %05.1f, %05.1f", skeleton_vertices[mark_bone_index * 2].x, skeleton_vertices[mark_bone_index * 2].y, skeleton_vertices[mark_bone_index * 2].z);
-                    float distance = glm::l2Norm(skeleton_vertices[mark_bone_index * 2] - triangulated);
+                    ImGui::Text("cur. skeleton: %05.1f, %05.1f, %05.1f", skeleton_vertices[mark_bone_index].x, skeleton_vertices[mark_bone_index].y, skeleton_vertices[mark_bone_index].z);
+                    float distance = glm::l2Norm(skeleton_vertices[mark_bone_index] - triangulated);
                     ImGui::Text("diff: %05.2f", distance);
                 }
                 ImGui::SliderInt("Selected Bone Index", &mark_bone_index, 0, 30);
@@ -3580,12 +3589,7 @@ void openIMGUIFrame()
                 postprocess2_fbo.saveColorToFile(raw_image.string());
                 if (skeleton_vertices.size() > 0)
                 {
-                    std::vector<glm::vec3> to_project;
-                    for (int i = 0; i < skeleton_vertices.size(); i += 2) // filter out color, todo: why is color saved inside skeleton_vertices?..
-                    {
-                        to_project.push_back(skeleton_vertices[i]);
-                    }
-                    std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                    std::vector<glm::vec2> projected = Helpers::project_points(skeleton_vertices, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
                     cnpy::npy_save(keypoints.string().c_str(), &projected[0].x, {projected.size(), 2}, "w");
                 }
                 // c2p_fbo.saveColorToFile("../../debug/c2p_fbo.png");
