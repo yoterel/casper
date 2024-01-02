@@ -93,9 +93,9 @@ void GridProcess()
   NormalGrid.InitGrid(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING);
 
   // InitDeformedGrid
-  Mat v = DeformedGrid.Render(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING);
-  Mat p = Mat::zeros(2, ControlPointsP.size(), CV_32F);
-  Mat q = Mat::zeros(2, ControlPointsQ.size(), CV_32F);
+  cv::Mat v = DeformedGrid.AssembleM(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING);
+  cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
+  cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
   // initializing p points for fish eye image
   for (int i = 0; i < ControlPointsP.size(); i++)
   {
@@ -111,10 +111,10 @@ void GridProcess()
 
   double a = 2.0;
   // Precompute
-  Mat w = MLSprecomputeWeights(p, v, a);
-  Mat fv;            // coordinates of keypoints
-  Mat A;             // for affine Deformation
-  vector<_typeA> tA; // for similarity Deformation
+  cv::Mat w = MLSprecomputeWeights(p, v, a);
+  cv::Mat fv;            // coordinates of keypoints
+  cv::Mat A;             // for affine Deformation
+  std::vector<_typeA> tA; // for similarity Deformation
   typeRigid mlsd;    // for rigid Deformation
   Timer t1;
   printf("%d \n", obj);
@@ -175,7 +175,7 @@ std::vector<glm::vec2> mp_predict(int timestamp)
     PyObject* image_object = PyArray_SimpleNewFromData(image.dims + 1, (npy_intp*)&dimensions, NPY_UINT8, image.data);
     // PyObject_CallFunction(myprint, "O", image_object);
     // PyObject* myResult = PyObject_CallFunction(iden, "O", image_object);
-    PyObject* myResult = PyObject_CallFunction(predict_single, "(O, i)", image_object, timestamp);
+    PyObject* myResult = PyObject_CallFunction(predict_single, "O", image_object);
     // PyObject* myResult = PyObject_CallFunction(myprofile, "O", image_object);
     PyArrayObject* myNumpyArray = reinterpret_cast<PyArrayObject*>( myResult );
     glm::vec2* data = (glm::vec2*)PyArray_DATA(myNumpyArray);
@@ -202,6 +202,7 @@ std::vector<glm::vec2> mp_predict(int timestamp)
       // Py_XDECREF(myResult);
     return data_vec;
 }
+
 void pytest()
 {
     Timer tpython;
@@ -333,11 +334,12 @@ int main(int argc, char *argv[])
   ControlPointsP.push_back(keypoints[25]);
   ControlPointsP.push_back(keypoints[33]);
   ControlPointsP.push_back(keypoints[41]);
-  ControlPointsP.push_back(keypoints[7]);
-  ControlPointsP.push_back(keypoints[15]);
-  ControlPointsP.push_back(keypoints[23]);
-  ControlPointsP.push_back(keypoints[31]);
-  ControlPointsP.push_back(keypoints[39]);
+
+  // ControlPointsP.push_back(keypoints[7]);
+  // ControlPointsP.push_back(keypoints[15]);
+  // ControlPointsP.push_back(keypoints[23]);
+  // ControlPointsP.push_back(keypoints[31]);
+  // ControlPointsP.push_back(keypoints[39]);
   //
   ControlPointsQ.push_back(keypoints[1]);
   ControlPointsQ.push_back(keypoints[2]);
@@ -354,12 +356,12 @@ int main(int argc, char *argv[])
   ControlPointsQ.push_back(destination[8]);
   ControlPointsQ.push_back(destination[12]);
   ControlPointsQ.push_back(destination[16]);
-  ControlPointsQ.push_back(destination[20]);  
-  ControlPointsQ.push_back(destination[3]);
-  ControlPointsQ.push_back(destination[7]);
-  ControlPointsQ.push_back(destination[11]);
-  ControlPointsQ.push_back(destination[15]);
-  ControlPointsQ.push_back(destination[19]);
+  ControlPointsQ.push_back(destination[20]); 
+  // ControlPointsQ.push_back(destination[3]);
+  // ControlPointsQ.push_back(destination[7]);
+  // ControlPointsQ.push_back(destination[11]);
+  // ControlPointsQ.push_back(destination[15]);
+  // ControlPointsQ.push_back(destination[19]);
   std::vector<glm::vec2> ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
   std::vector<glm::vec2> ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
   glfwInit();

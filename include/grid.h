@@ -1,11 +1,9 @@
-#pragma once
+#ifndef GRID_H
+#define GRID_H
 #include <glm/glm.hpp>
-// #include "../3party/glm/include/glm/vec3.hpp"
 #include <vector>
-#include <glad/glad.h>
-// #include <opencv/highgui.h>
 #include <opencv2/opencv.hpp>
-#include "shader.h"
+// #include <glad/glad.h>
 
 class Grid
 {
@@ -33,7 +31,7 @@ public:
 	static void ComputePointCoordinate(int pointIndex, int xPointCount, int yPointCount, float xSpacing, float ySpacing, float pt[3]);
 
 	// render all grid points for calculation
-	cv::Mat Render(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const;
+	cv::Mat AssembleM(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const;
 
 	// Normal Grid Init
 	void InitGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing);
@@ -41,8 +39,8 @@ public:
 	// Deformed Grid Init
 	void InitDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdouble xSpacing, GLdouble ySpacing, cv::Mat &fv);
 
-	// RenderGrid
-	void RenderGrid(Shader *shader) const;
+	// Renders the actual Grid as squares
+	// void RenderGrid(Shader *shader) const;
 };
 
 inline GLfloat *Grid::ComputePointCoordinates(GLuint pointIndex,
@@ -75,8 +73,8 @@ inline void Grid::ComputePointCoordinate(int pointIndex,
 	pt[2] = tmp[2];
 }
 
-// render all grid points for calculation
-inline cv::Mat Grid::Render(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const
+// assemble grid points for fruther calculation
+inline cv::Mat Grid::AssembleM(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const
 {
 	// change the size of the grid
 	cv::Mat a = cv::Mat::zeros(2, xPointCount * yPointCount, CV_32F); // 2 x 1600 x float
@@ -287,10 +285,11 @@ inline void Grid::InitDeformedGrid(GLuint xPointCount, GLuint yPointCount, GLdou
 	glEnableVertexAttribArray(2);
 }
 
-inline void Grid::RenderGrid(Shader *shader) const
-{
-	// render container
-	shader->use();
-	glBindVertexArray(Grid_VAO);
-	glDrawElements(GL_LINES, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
-}
+// inline void Grid::RenderGrid(Shader *shader) const
+// {
+// 	// render container
+// 	shader->use();
+// 	glBindVertexArray(Grid_VAO);
+// 	glDrawElements(GL_LINES, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+// }
+#endif GRID_H

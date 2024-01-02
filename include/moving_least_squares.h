@@ -1,33 +1,31 @@
 // see "Image Deformation Using Moving Least Square "
-
+#ifndef MLS_H
+#define MLS_H
 #include <vector>
 #include <opencv2/opencv.hpp>
 
-using namespace cv;
-using namespace std;
-
 typedef struct _typeA
 {
-	Mat a;
-	Mat b;
-	Mat c;
-	Mat d;
+	cv::Mat a;
+	cv::Mat b;
+	cv::Mat c;
+	cv::Mat d;
 } typeA;
 
 typedef struct _typeRigid
 {
-	vector<_typeA> A;
-	Mat normof_v_Pstar;
+	std::vector<_typeA> A;
+	cv::Mat normof_v_Pstar;
 } typeRigid;
 
 /*Function to Compute the Weights*/
-inline Mat MLSprecomputeWeights(Mat p, Mat v, double a)
+inline cv::Mat MLSprecomputeWeights(cv::Mat p, cv::Mat v, double a)
 {
-	Mat w = Mat::zeros(p.cols, v.cols, CV_32F);
-	Mat p_resize;
-	Mat norms = Mat::zeros(2, v.cols, CV_32F);
-	Mat norms_a;
-	Mat p_v;
+	cv::Mat w = cv::Mat::zeros(p.cols, v.cols, CV_32F);
+	cv::Mat p_resize;
+	cv::Mat norms = cv::Mat::zeros(2, v.cols, CV_32F);
+	cv::Mat norms_a;
+	cv::Mat p_v;
 
 	// Iterate through the control points
 	for (int i = 0; i < p.cols; i++)
@@ -45,12 +43,12 @@ inline Mat MLSprecomputeWeights(Mat p, Mat v, double a)
 }
 
 /*Function to Precompute Weighted Centroids*/
-inline Mat MLSprecomputeWCentroids(Mat p, Mat w)
+inline cv::Mat MLSprecomputeWCentroids(cv::Mat p, cv::Mat w)
 {
-	Mat Pstar;
-	Mat mult;
-	Mat resize;
-	Mat sum = Mat::zeros(1, w.cols, CV_32F);
+	cv::Mat Pstar;
+	cv::Mat mult;
+	cv::Mat resize;
+	cv::Mat sum = cv::Mat::zeros(1, w.cols, CV_32F);
 	mult = p * w;
 
 	for (int i = 0; i < w.rows; i++)
@@ -62,23 +60,23 @@ inline Mat MLSprecomputeWCentroids(Mat p, Mat w)
 }
 
 /*Function to Precompute Affine Deformation*/
-inline Mat MLSprecomputeAffine(Mat p, Mat v, Mat w)
+inline cv::Mat MLSprecomputeAffine(cv::Mat p, cv::Mat v, cv::Mat w)
 {
 	// Precompute Weighted Centroids
-	Mat Pstar = MLSprecomputeWCentroids(p, w);
-	Mat M1;
-	Mat a = Mat::zeros(1, Pstar.cols, CV_32F);
-	Mat b = Mat::zeros(1, Pstar.cols, CV_32F);
-	Mat d = Mat::zeros(1, Pstar.cols, CV_32F);
-	Mat row1, row2, power_b;
-	Mat det;
+	cv::Mat Pstar = MLSprecomputeWCentroids(p, w);
+	cv::Mat M1;
+	cv::Mat a = cv::Mat::zeros(1, Pstar.cols, CV_32F);
+	cv::Mat b = cv::Mat::zeros(1, Pstar.cols, CV_32F);
+	cv::Mat d = cv::Mat::zeros(1, Pstar.cols, CV_32F);
+	cv::Mat row1, row2, power_b;
+	cv::Mat det;
 	// Precompute the first matrix
 	M1 = v - Pstar;
-	vector<Mat> Phat;
+	std::vector<cv::Mat> Phat;
 	// Iterate through control points
 	for (int i = 0; i < p.cols; i++)
 	{
-		Mat t = repeat(p.col(i), 1, Pstar.cols) - Pstar;
+		cv::Mat t = repeat(p.col(i), 1, Pstar.cols) - Pstar;
 
 		pow(t.row(0), 2, row1);
 		pow(t.row(1), 2, row2);
@@ -94,73 +92,73 @@ inline Mat MLSprecomputeAffine(Mat p, Mat v, Mat w)
 	// compute determinant
 	det = a.mul(d) - power_b;
 	// compute the inverse
-	Mat Ia = d / det;
-	Mat Ib = -1 * b / det;
-	Mat Id = a / det;
+	cv::Mat Ia = d / det;
+	cv::Mat Ib = -1 * b / det;
+	cv::Mat Id = a / det;
 
-	Mat Iab, Ibd;
+	cv::Mat Iab, Ibd;
 	vconcat(Ia, Ib, Iab);
 	vconcat(Ib, Id, Ibd);
 
-	Mat m = M1.mul(Iab);
-	Mat sum1 = Mat::zeros(1, m.cols, CV_32F);
+	cv::Mat m = M1.mul(Iab);
+	cv::Mat sum1 = cv::Mat::zeros(1, m.cols, CV_32F);
 	for (int i = 0; i < m.rows; i++)
 		sum1 += m.row(i);
 
-	Mat n = M1.mul(Ibd);
-	Mat sum2 = Mat::zeros(1, n.cols, CV_32F);
+	cv::Mat n = M1.mul(Ibd);
+	cv::Mat sum2 = cv::Mat::zeros(1, n.cols, CV_32F);
 	for (int i = 0; i < n.rows; i++)
 		sum2 += n.row(i);
 
 	// compute the first product element
-	Mat F1;
+	cv::Mat F1;
 	vconcat(sum1, sum2, F1);
 
-	Mat A = Mat::zeros(p.cols, Pstar.cols, CV_32F);
-	Mat F1_mul;
+	cv::Mat A = cv::Mat::zeros(p.cols, Pstar.cols, CV_32F);
+	cv::Mat F1_mul;
 
 	for (int j = 0; j < p.cols; j++)
 	{
 		F1_mul = F1.mul(Phat.at(j));
-		Mat temp = Mat::zeros(1, F1_mul.cols, CV_32F);
+		cv::Mat temp = cv::Mat::zeros(1, F1_mul.cols, CV_32F);
 		for (int i = 0; i < F1_mul.rows; i++)
 			temp += F1_mul.row(i);
 		A.row(j) = temp.mul(w.row(j));
 	}
-	Mat data = A;
+	cv::Mat data = A;
 
 	return data;
 }
 
 // precompute Asimilar
-inline vector<_typeA> MLSprecomputeA(Mat Pstar, vector<Mat> Phat, Mat v, Mat w)
+inline std::vector<_typeA> MLSprecomputeA(cv::Mat Pstar, std::vector<cv::Mat> Phat, cv::Mat v, cv::Mat w)
 {
-	vector<_typeA> A;
+	std::vector<_typeA> A;
 
 	// fixed part
-	Mat R1 = v - Pstar;
-	Mat R2;
+	cv::Mat R1 = v - Pstar;
+	cv::Mat R2;
 	vconcat(R1.row(1), -R1.row(0), R2);
 
 	for (int i = 0; i < Phat.size(); i++)
 	{
 		// precompute
 		typeA temp;
-		Mat L1 = Phat.at(i);
-		Mat L2;
+		cv::Mat L1 = Phat.at(i);
+		cv::Mat L2;
 		vconcat(L1.row(1), (L1.row(0)).mul(-1), L2);
 
-		Mat L1R1 = L1.mul(R1);
-		Mat sumL1R1 = Mat::zeros(1, L1R1.cols, CV_32F);
+		cv::Mat L1R1 = L1.mul(R1);
+		cv::Mat sumL1R1 = cv::Mat::zeros(1, L1R1.cols, CV_32F);
 
-		Mat L1R2 = L1.mul(R2);
-		Mat sumL1R2 = Mat::zeros(1, L1R2.cols, CV_32F);
+		cv::Mat L1R2 = L1.mul(R2);
+		cv::Mat sumL1R2 = cv::Mat::zeros(1, L1R2.cols, CV_32F);
 
-		Mat L2R1 = L2.mul(R1);
-		Mat sumL2R1 = Mat::zeros(1, L2R1.cols, CV_32F);
+		cv::Mat L2R1 = L2.mul(R1);
+		cv::Mat sumL2R1 = cv::Mat::zeros(1, L2R1.cols, CV_32F);
 
-		Mat L2R2 = L2.mul(R2);
-		Mat sumL2R2 = Mat::zeros(1, L2R2.cols, CV_32F);
+		cv::Mat L2R2 = L2.mul(R2);
+		cv::Mat sumL2R2 = cv::Mat::zeros(1, L2R2.cols, CV_32F);
 
 		for (int j = 0; j < L1R1.rows; j++)
 			sumL1R1 += L1R1.row(j);
@@ -186,17 +184,17 @@ inline vector<_typeA> MLSprecomputeA(Mat Pstar, vector<Mat> Phat, Mat v, Mat w)
 }
 
 /* \frac{1}{\mu_s}A_i */
-inline vector<_typeA> MLSprecomputeSimilar(Mat p, Mat v, Mat w)
+inline std::vector<_typeA> MLSprecomputeSimilar(cv::Mat p, cv::Mat v, cv::Mat w)
 {
-	Mat Pstar = MLSprecomputeWCentroids(p, w);
-	vector<Mat> Phat;
-	Mat mu = Mat::zeros(1, Pstar.cols, CV_32F);
-	Mat t1;
-	Mat product;
+	cv::Mat Pstar = MLSprecomputeWCentroids(p, w);
+	std::vector<cv::Mat> Phat;
+	cv::Mat mu = cv::Mat::zeros(1, Pstar.cols, CV_32F);
+	cv::Mat t1;
+	cv::Mat product;
 	for (int i = 0; i < p.cols; i++)
 	{
-		Mat t = repeat(p.col(i), 1, Pstar.cols) - Pstar;
-		Mat sum = Mat::zeros(1, t.cols, CV_32F);
+		cv::Mat t = repeat(p.col(i), 1, Pstar.cols) - Pstar;
+		cv::Mat sum = cv::Mat::zeros(1, t.cols, CV_32F);
 		pow(t, 2, t1);
 		for (int j = 0; j < t1.rows; j++)
 			sum += t1.row(j);
@@ -205,7 +203,7 @@ inline vector<_typeA> MLSprecomputeSimilar(Mat p, Mat v, Mat w)
 		Phat.push_back(t);
 	}
 
-	vector<_typeA> A = MLSprecomputeA(Pstar, Phat, v, w);
+	std::vector<_typeA> A = MLSprecomputeA(Pstar, Phat, v, w);
 
 	for (int i = 0; i < A.size(); i++)
 	{
@@ -218,22 +216,22 @@ inline vector<_typeA> MLSprecomputeSimilar(Mat p, Mat v, Mat w)
 }
 
 /* f_r(v)-> */
-inline _typeRigid MLSprecomputeRigid(Mat p, Mat v, Mat w)
+inline _typeRigid MLSprecomputeRigid(cv::Mat p, cv::Mat v, cv::Mat w)
 {
 	typeRigid data;
-	Mat Pstar = MLSprecomputeWCentroids(p, w);
-	vector<Mat> Phat;
+	cv::Mat Pstar = MLSprecomputeWCentroids(p, w);
+	std::vector<cv::Mat> Phat;
 	for (int i = 0; i < p.cols; i++)
 	{
-		Mat t = repeat(p.col(i), 1, Pstar.cols) - Pstar;
+		cv::Mat t = repeat(p.col(i), 1, Pstar.cols) - Pstar;
 		Phat.push_back(t);
 	}
 
-	vector<_typeA> A = MLSprecomputeA(Pstar, Phat, v, w); // �õ�A
-	Mat v_Pstar = v - Pstar;
-	Mat vpower;
+	std::vector<_typeA> A = MLSprecomputeA(Pstar, Phat, v, w); // �õ�A
+	cv::Mat v_Pstar = v - Pstar;
+	cv::Mat vpower;
 	pow(v_Pstar, 2, vpower);
-	Mat sum = Mat::zeros(1, vpower.cols, CV_32F);
+	cv::Mat sum = cv::Mat::zeros(1, vpower.cols, CV_32F);
 	for (int i = 0; i < vpower.rows; i++)
 		sum += vpower.row(i);
 
@@ -243,31 +241,31 @@ inline _typeRigid MLSprecomputeRigid(Mat p, Mat v, Mat w)
 }
 
 /* f_r(v) */
-inline Mat MLSPointsTransformRigid(Mat w, _typeRigid mlsd, Mat q)
+inline cv::Mat MLSPointsTransformRigid(cv::Mat w, _typeRigid mlsd, cv::Mat q)
 {
-	Mat Qstar = MLSprecomputeWCentroids(q, w);
-	Mat Qhat;
-	Mat fv2 = Mat::zeros(Qstar.rows, Qstar.cols, CV_32F);
-	Mat prod1, prod2;
-	Mat con1, con2;
-	Mat update;
-	Mat repmat;
-	Mat npower;
-	Mat normof_fv2;
-	Mat fv = Mat::zeros(Qstar.rows, Qstar.cols, CV_32F);
+	cv::Mat Qstar = MLSprecomputeWCentroids(q, w);
+	cv::Mat Qhat;
+	cv::Mat fv2 = cv::Mat::zeros(Qstar.rows, Qstar.cols, CV_32F);
+	cv::Mat prod1, prod2;
+	cv::Mat con1, con2;
+	cv::Mat update;
+	cv::Mat repmat;
+	cv::Mat npower;
+	cv::Mat normof_fv2;
+	cv::Mat fv = cv::Mat::zeros(Qstar.rows, Qstar.cols, CV_32F);
 	for (int i = 0; i < q.cols; i++)
 	{
 		Qhat = repeat(q.col(i), 1, Qstar.cols) - Qstar;
 
 		vconcat((mlsd.A.at(i)).a, (mlsd.A.at(i)).c, con1);
 		prod1 = Qhat.mul(con1);
-		Mat sum1 = Mat::zeros(1, prod1.cols, CV_32F);
+		cv::Mat sum1 = cv::Mat::zeros(1, prod1.cols, CV_32F);
 		for (int j = 0; j < prod1.rows; j++)
 			sum1 += prod1.row(j);
 
 		vconcat((mlsd.A.at(i)).b, (mlsd.A.at(i)).d, con2);
 		prod2 = Qhat.mul(con2);
-		Mat sum2 = Mat::zeros(1, prod2.cols, CV_32F);
+		cv::Mat sum2 = cv::Mat::zeros(1, prod2.cols, CV_32F);
 		for (int j = 0; j < prod2.rows; j++)
 			sum2 += prod2.row(j);
 
@@ -276,13 +274,13 @@ inline Mat MLSPointsTransformRigid(Mat w, _typeRigid mlsd, Mat q)
 	}
 	npower = fv2.mul(fv2);
 
-	Mat sumfv2 = Mat::zeros(1, npower.cols, CV_32F);
+	cv::Mat sumfv2 = cv::Mat::zeros(1, npower.cols, CV_32F);
 	for (int i = 0; i < npower.rows; i++)
 		sumfv2 += npower.row(i);
 
 	sqrt(sumfv2, normof_fv2);
 
-	Mat norm_fact = (mlsd.normof_v_Pstar).mul(1 / normof_fv2);
+	cv::Mat norm_fact = (mlsd.normof_v_Pstar).mul(1 / normof_fv2);
 
 	repmat = repeat(norm_fact, fv2.rows, 1);
 	fv = fv2.mul(repmat) + Qstar;
@@ -291,31 +289,31 @@ inline Mat MLSPointsTransformRigid(Mat w, _typeRigid mlsd, Mat q)
 }
 
 /* f_s(v)*/
-inline Mat MLSPointsTransformSimilar(Mat w, vector<_typeA> A, Mat q)
+inline cv::Mat MLSPointsTransformSimilar(cv::Mat w, std::vector<_typeA> A, cv::Mat q)
 {
-	Mat Qstar = MLSprecomputeWCentroids(q, w);
+	cv::Mat Qstar = MLSprecomputeWCentroids(q, w);
 
-	Mat fv = Qstar.clone();
-	Mat Qhat;
-	Mat resize;
+	cv::Mat fv = Qstar.clone();
+	cv::Mat Qhat;
+	cv::Mat resize;
 
-	Mat prod1, prod2;
-	Mat con1, con2;
+	cv::Mat prod1, prod2;
+	cv::Mat con1, con2;
 
-	Mat update;
+	cv::Mat update;
 
 	for (int i = 0; i < q.cols; i++)
 	{
 		Qhat = repeat(q.col(i), 1, Qstar.cols) - Qstar;
 		vconcat((A.at(i)).a, (A.at(i)).c, con1);
 		prod1 = Qhat.mul(con1);
-		Mat sum1 = Mat::zeros(1, prod1.cols, CV_32F);
+		cv::Mat sum1 = cv::Mat::zeros(1, prod1.cols, CV_32F);
 		for (int j = 0; j < prod1.rows; j++)
 			sum1 += prod1.row(j);
 
 		vconcat((A.at(i)).b, (A.at(i)).d, con2);
 		prod2 = Qhat.mul(con2);
-		Mat sum2 = Mat::zeros(1, prod2.cols, CV_32F);
+		cv::Mat sum2 = cv::Mat::zeros(1, prod2.cols, CV_32F);
 		for (int j = 0; j < prod2.rows; j++)
 			sum2 += prod2.row(j);
 
@@ -326,14 +324,14 @@ inline Mat MLSPointsTransformSimilar(Mat w, vector<_typeA> A, Mat q)
 }
 
 /* f_a(v)  */
-inline Mat MLSPointsTransformAffine(Mat w, Mat A, Mat q)
+inline cv::Mat MLSPointsTransformAffine(cv::Mat w, cv::Mat A, cv::Mat q)
 {
 	// compute weighted centroids for q
-	Mat Qstar = MLSprecomputeWCentroids(q, w);
+	cv::Mat Qstar = MLSprecomputeWCentroids(q, w);
 
-	Mat fv = Qstar.clone();
-	Mat Qhat;
-	Mat resize;
+	cv::Mat fv = Qstar.clone();
+	cv::Mat Qhat;
+	cv::Mat resize;
 	// add the affine parts
 	for (int j = 0; j < q.cols; j++)
 	{
@@ -345,3 +343,4 @@ inline Mat MLSPointsTransformAffine(Mat w, Mat A, Mat q)
 	}
 	return fv;
 }
+#endif MLS_H

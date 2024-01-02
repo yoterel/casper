@@ -163,6 +163,8 @@ target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgu
 # libicp
 target_include_directories(ahand PRIVATE "C:/src/boost_1_84_0")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
+# python
+target_link_libraries(ahand PRIVATE Python::Python Python::NumPy)
 ####################################### registration example
 # add_executable(registration_example 
 #     src/registration_example.cpp
@@ -197,7 +199,7 @@ target_link_libraries(deformation_example PRIVATE ${OpenCV_LIBS})
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 # glm
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
-#python
+# python
 target_link_libraries(deformation_example PRIVATE Python::Python Python::NumPy)
 # zlib
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")

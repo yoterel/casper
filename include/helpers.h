@@ -66,6 +66,7 @@ enum class PostProcessMode
     CONTOUR = 4,
     ICP = 5,
     OVERLAY = 6,
+    MLS = 7,
 };
 enum class LeapCalibrationSettings
 {
