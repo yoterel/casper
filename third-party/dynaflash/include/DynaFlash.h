@@ -1,12 +1,12 @@
 /********************************************************************************
- * ƒtƒ@ƒCƒ‹–¼@FDynaFlash.h
- * ƒtƒ@ƒCƒ‹à–¾FDynaFlashƒNƒ‰ƒX‚ÌŒöŠJ—p’è‹`
+ * ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½@ï¿½FDynaFlash.h
+ * ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½FDynaFlashï¿½Nï¿½ï¿½ï¿½Xï¿½ÌŒï¿½ï¿½Jï¿½pï¿½ï¿½`
  *
- * ƒCƒ“ƒXƒ^ƒ“ƒX‚Ì¶¬‚É‚ÍuCreateCommunicationConfigvŠÖ”‚ğg—p‚µA
- * ƒCƒ“ƒXƒ^ƒ“ƒX‚Ì”jŠü‚É‚ÍuReleaseCommunicationConfigvŠÖ”‚ğg—p‚µ‚Ü‚·B
+ * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½Ìï¿½ï¿½ï¿½ï¿½É‚ÍuCreateCommunicationConfigï¿½vï¿½Öï¿½ï¿½ï¿½ï¿½gï¿½pï¿½ï¿½ï¿½A
+ * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½Ì”jï¿½ï¿½ï¿½É‚ÍuReleaseCommunicationConfigï¿½vï¿½Öï¿½ï¿½ï¿½ï¿½gï¿½pï¿½ï¿½ï¿½Ü‚ï¿½ï¿½B
  *
  *--------------------------------------------------------------------------------
- * 2016/12/07 TED “n£ V‹Kì¬
+ * 2016/12/07 TED ï¿½nï¿½ï¿½ ï¿½Vï¿½Kï¿½ì¬
  ********************************************************************************/
 
 #ifndef _DYNAFLASH_H_
@@ -19,7 +19,7 @@
 #endif
 
 /********************************************************************************
-* ŠÖ”–ß‚è’l’è‹`
+* ï¿½Öï¿½ï¿½ß‚ï¿½lï¿½ï¿½`
 ********************************************************************************/
 
 #define STATUS_SUCCESSFUL		 		(0x0000)
@@ -42,16 +42,16 @@
 #define	STATUS_FRAME_RATE_OVERFLOW		(0x8004)
 
 /********************************************************************************
-* Šeí’è‹`
+* ï¿½eï¿½ï¿½ï¿½`
 ********************************************************************************/
 
 
-#define MAXIMUM_NUMBER_OF_DYNAFLASH	(4)				/* DynaFlashÅ‘åÚ‘±” */
+#define MAXIMUM_NUMBER_OF_DYNAFLASH	(4)				/* DynaFlashï¿½Å‘ï¿½Ú‘ï¿½ï¿½ï¿½ */
                                                     
-#define FRAME_BUF_SIZE_8BIT		(1024 * 768)		/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
-#define FRAME_BUF_SIZE_BINARY	(1024 * 768 / 8)	/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
-#define FRAME_BUF_SIZE_24BIT	(1024 * 768 * 3)	/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
-#define FRAME_BUF_SIZE_32BIT	(1024 * 768 * 4)	/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
+#define FRAME_BUF_SIZE_8BIT		(1024 * 768)		/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
+#define FRAME_BUF_SIZE_BINARY	(1024 * 768 / 8)	/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
+#define FRAME_BUF_SIZE_24BIT	(1024 * 768 * 3)	/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
+#define FRAME_BUF_SIZE_32BIT	(1024 * 768 * 4)	/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
                                                     
                                                     
 #define FRAME_MODE_BINARY		 ( 0x00 )			/* Binary Mode  (1 bit) */
@@ -60,35 +60,35 @@
 #define FRAME_MODE_RGBW			 ( 0x03 )			/* RGBW   Mode  (32 bit)*/
                                                     
                                                     
-  /* “Š‰eƒ‚[ƒhİ’è’è‹` */                        
-#define MIRROR					(0x00000001)		/* “Š‰e‰æ‘œ‚Ì¶‰E”½“] */
-#define FLIP					(0x00000002)		/* “Š‰e‰æ‘œ‚Ìã‰º”½“] */
-#define COMP					(0x00000004)		/* ƒsƒNƒZƒ‹ƒf[ƒ^‚Ìbit”½“] */
-#define ONESHOT					(0x00000008)		/* ƒƒ“ƒVƒ‡ƒbƒg“Š‰eƒ‚[ƒh */
-#define BINARY					(0x00000010)		/* ƒoƒCƒiƒŠƒ‚[ƒh */
-#define EXT_TRIGGER				(0x00000020)		/* ŠO•”ƒgƒŠƒK[ƒ‚[ƒh */
-#define TRIGGER_SKIP			(0x00000040)		/* ƒgƒŠƒK[ƒXƒLƒbƒvƒ‚[ƒh */
+  /* ï¿½ï¿½ï¿½eï¿½ï¿½ï¿½[ï¿½hï¿½İ’ï¿½ï¿½` */                        
+#define MIRROR					(0x00000001)		/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Ìï¿½ï¿½Eï¿½ï¿½ï¿½] */
+#define FLIP					(0x00000002)		/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Ìã‰ºï¿½ï¿½ï¿½] */
+#define COMP					(0x00000004)		/* ï¿½sï¿½Nï¿½Zï¿½ï¿½ï¿½fï¿½[ï¿½^ï¿½ï¿½bitï¿½ï¿½ï¿½] */
+#define ONESHOT					(0x00000008)		/* ï¿½ï¿½ï¿½ï¿½ï¿½Vï¿½ï¿½ï¿½bï¿½gï¿½ï¿½ï¿½eï¿½ï¿½ï¿½[ï¿½h */
+#define BINARY					(0x00000010)		/* ï¿½oï¿½Cï¿½iï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½h */
+#define EXT_TRIGGER				(0x00000020)		/* ï¿½Oï¿½ï¿½ï¿½gï¿½ï¿½ï¿½Kï¿½[ï¿½ï¿½ï¿½[ï¿½h */
+#define TRIGGER_SKIP			(0x00000040)		/* ï¿½gï¿½ï¿½ï¿½Kï¿½[ï¿½Xï¿½Lï¿½bï¿½vï¿½ï¿½ï¿½[ï¿½h */
 #define BLOCKNUM_14				(0x00000080)		/* DMD Block Number 14 / 16 */
 
-/* Æ“xİ’è’è‹` */
+/* ï¿½Æ“xï¿½İ’ï¿½ï¿½` */
 typedef enum {
-	LOW_MODE = 0,									/* ’áÆ“x */
-	HIGH_MODE										/* ‚Æ“x */
+	LOW_MODE = 0,									/* ï¿½ï¿½Æ“x */
+	HIGH_MODE										/* ï¿½ï¿½ï¿½Æ“x */
 } ILLUMINANCE_MODE;
 
 /********************************************************************************
- * \‘¢‘Ì’è‹`
+ * ï¿½\ï¿½ï¿½ï¿½Ì’ï¿½`
  ********************************************************************************/
 
- /* ƒVƒXƒeƒ€ƒpƒ‰ƒ[ƒ^æ“¾—p\‘¢‘Ì */
+ /* ï¿½Vï¿½Xï¿½eï¿½ï¿½ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½æ“¾ï¿½pï¿½\ï¿½ï¿½ï¿½ï¿½ */
 typedef struct _tagDynaFlashStatus
 {
-	unsigned long	Error;							/* DynaFlas‚ÌƒGƒ‰[î•ñ */
-	unsigned long	InputFrames;					/* DynaFlash‚Ö“]‘—‚µ‚½ƒtƒŒ[ƒ€” */
-	unsigned long	OutputFrames;					/* “Š‰eÏ‚İ‚ÌƒtƒŒ[ƒ€” */
+	unsigned long	Error;							/* DynaFlasï¿½ÌƒGï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ */
+	unsigned long	InputFrames;					/* DynaFlashï¿½Ö“]ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½tï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ï¿½ */
+	unsigned long	OutputFrames;					/* ï¿½ï¿½ï¿½eï¿½Ï‚İ‚Ìƒtï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ï¿½ */
 } DYNAFLASH_STATUS, *PDYNAFLASH_STATUS;
 
-/* “Š‰e—pƒpƒ‰ƒ[ƒ^\‘¢‘Ì */
+/* ï¿½ï¿½ï¿½eï¿½pï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½\ï¿½ï¿½ï¿½ï¿½ */
 
 typedef struct _tagDynaFlashParam
 {
@@ -98,24 +98,24 @@ typedef struct _tagDynaFlashParam
 	double	dBProportion;		/* 0.00 - 100 Proportion*/
 	double	dWProportion;		/* 0.00 - 100 Proportion*/
 
-	ULONG	nBinaryMode;		/* 0: Binary 1: 8bit   2: RGB 3: RGBW*/
-	ULONG	nBitDepth;			/* 8: [7:0], 7: [7:1], 6: [7:2], 5: [7:3], 4: [7:4], 3: [7:5], 2: [7:6], 1: [7:7] */
-	ULONG	nMirrorMode;		/* 0: enable 1: disable */
-	ULONG	nFlipMode;			/* 0: enable 1: disable */
-	ULONG	nCompData;			/* 0: enable 1: disable */
-	ULONG	nBlockNum;			/* 0: Block 16 1: Block 14 */
-	ULONG	nTriggerSelect;		/* 0: Internal 1: External */
-	ULONG	nTriggerSkip;		/* 0: disable 1: enable */
+	unsigned long	nBinaryMode;		/* 0: Binary 1: 8bit   2: RGB 3: RGBW*/
+	unsigned long	nBitDepth;			/* 8: [7:0], 7: [7:1], 6: [7:2], 5: [7:3], 4: [7:4], 3: [7:5], 2: [7:6], 1: [7:7] */
+	unsigned long	nMirrorMode;		/* 0: enable 1: disable */
+	unsigned long	nFlipMode;			/* 0: enable 1: disable */
+	unsigned long	nCompData;			/* 0: enable 1: disable */
+	unsigned long	nBlockNum;			/* 0: Block 16 1: Block 14 */
+	unsigned long	nTriggerSelect;		/* 0: Internal 1: External */
+	unsigned long	nTriggerSkip;		/* 0: disable 1: enable */
 
-	ULONG	nTimingSel;			/* 0: auto calculate 1: csv file */
-	ULONG	nTimingMode;		/* 0: Normal Mode    1: Timing Mode */
+	unsigned long	nTimingSel;			/* 0: auto calculate 1: csv file */
+	unsigned long	nTimingMode;		/* 0: Normal Mode    1: Timing Mode */
 
-	ULONG	nSWCount[4][20];	/*RGBW LED ON/OFF Timing,read from csv file*/
-	ULONG	nGRSTOffset[4][8];	/*RGBW Global Reset Timing,read from csv file*/
+	unsigned long	nSWCount[4][20];	/*RGBW LED ON/OFF Timing,read from csv file*/
+	unsigned long	nGRSTOffset[4][8];	/*RGBW Global Reset Timing,read from csv file*/
 } DYNAFLASH_PARAM, *PDYNAFLASH_PARAM;
 
 /********************************************************************************
- * DynaFlashƒNƒ‰ƒX‚Ì’è‹`
+ * DynaFlashï¿½Nï¿½ï¿½ï¿½Xï¿½Ì’ï¿½`
  ********************************************************************************/
 class CDynaFlash
 {
@@ -160,21 +160,21 @@ public:
 	virtual int GetLedEnable(unsigned long *pLedEn) = 0;
 	virtual int SetLedEnable(unsigned long nLedEn) = 0;
 
-	/* ˆÈ‰º»•i”Å‚Å‚Í–¢ŒöŠJ‚ÌŠÖ” */
+	/* ï¿½È‰ï¿½ï¿½ï¿½ï¿½iï¿½Å‚Å‚Í–ï¿½ï¿½ï¿½ï¿½Jï¿½ÌŠÖï¿½ */
 	virtual int WriteRegister(unsigned int nBar, unsigned int nOffset, unsigned long nData) = 0;
 	virtual int ReadRegister(unsigned int nBar, unsigned int nOffset, unsigned long *pData) = 0;
 
 	virtual int WriteDACRegister(unsigned long nIndex, unsigned long nData) = 0;
 	virtual int ReadDACRegister(unsigned long nIndex, unsigned long *pData) = 0;
 	/********************************************************************************
- * ƒtƒ@ƒCƒ‹–¼@FDynaFlash.h
- * ƒtƒ@ƒCƒ‹à–¾FDynaFlashƒNƒ‰ƒX‚ÌŒöŠJ—p’è‹`
+ * ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½@ï¿½FDynaFlash.h
+ * ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½FDynaFlashï¿½Nï¿½ï¿½ï¿½Xï¿½ÌŒï¿½ï¿½Jï¿½pï¿½ï¿½`
  *
- * ƒCƒ“ƒXƒ^ƒ“ƒX‚Ì¶¬‚É‚ÍuCreateCommunicationConfigvŠÖ”‚ğg—p‚µA
- * ƒCƒ“ƒXƒ^ƒ“ƒX‚Ì”jŠü‚É‚ÍuReleaseCommunicationConfigvŠÖ”‚ğg—p‚µ‚Ü‚·B
+ * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½Ìï¿½ï¿½ï¿½ï¿½É‚ÍuCreateCommunicationConfigï¿½vï¿½Öï¿½ï¿½ï¿½ï¿½gï¿½pï¿½ï¿½ï¿½A
+ * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½Ì”jï¿½ï¿½ï¿½É‚ÍuReleaseCommunicationConfigï¿½vï¿½Öï¿½ï¿½ï¿½ï¿½gï¿½pï¿½ï¿½ï¿½Ü‚ï¿½ï¿½B
  *
  *--------------------------------------------------------------------------------
- * 2016/12/07 TED “n£ V‹Kì¬
+ * 2016/12/07 TED ï¿½nï¿½ï¿½ ï¿½Vï¿½Kï¿½ì¬
  ********************************************************************************/
 
 #ifndef _DYNAFLASH_H_
@@ -187,7 +187,7 @@ public:
 #endif
 
  /********************************************************************************
-  * ŠÖ”–ß‚è’l’è‹`
+  * ï¿½Öï¿½ï¿½ß‚ï¿½lï¿½ï¿½`
   ********************************************************************************/
 
 #define STATUS_SUCCESSFUL		 		(0x0000)
@@ -210,15 +210,15 @@ public:
 #define	STATUS_FRAME_RATE_OVERFLOW		(0x8004)
 
   /********************************************************************************
-   * Šeí’è‹`
+   * ï¿½eï¿½ï¿½ï¿½`
    ********************************************************************************/
 
-#define MAXIMUM_NUMBER_OF_DYNAFLASH	(4)				/* DynaFlashÅ‘åÚ‘±” */
+#define MAXIMUM_NUMBER_OF_DYNAFLASH	(4)				/* DynaFlashï¿½Å‘ï¿½Ú‘ï¿½ï¿½ï¿½ */
 
-#define FRAME_BUF_SIZE_8BIT		(1024 * 768)		/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
-#define FRAME_BUF_SIZE_BINARY	(1024 * 768 / 8)	/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
-#define FRAME_BUF_SIZE_24BIT	(1024 * 768 * 3)	/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
-#define FRAME_BUF_SIZE_32BIT	(1024 * 768 * 4)	/* “Š‰e‰æ‘œƒTƒCƒY(Byte) */
+#define FRAME_BUF_SIZE_8BIT		(1024 * 768)		/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
+#define FRAME_BUF_SIZE_BINARY	(1024 * 768 / 8)	/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
+#define FRAME_BUF_SIZE_24BIT	(1024 * 768 * 3)	/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
+#define FRAME_BUF_SIZE_32BIT	(1024 * 768 * 4)	/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Tï¿½Cï¿½Y(Byte) */
 
 
 #define FRAME_MODE_BINARY		 ( 0x00 )			/* Binary Mode  (1 bit) */
@@ -227,42 +227,42 @@ public:
 #define FRAME_MODE_RGBW			 ( 0x03 )			/* RGBW   Mode  (32 bit)*/
 
 
-   /* “Š‰eƒ‚[ƒhİ’è’è‹` */
-#define MIRROR					(0x00000001)		/* “Š‰e‰æ‘œ‚Ì¶‰E”½“] */
-#define FLIP					(0x00000002)		/* “Š‰e‰æ‘œ‚Ìã‰º”½“] */
-#define COMP					(0x00000004)		/* ƒsƒNƒZƒ‹ƒf[ƒ^‚Ìbit”½“] */
-#define ONESHOT					(0x00000008)		/* ƒƒ“ƒVƒ‡ƒbƒg“Š‰eƒ‚[ƒh */
-#define BINARY					(0x00000010)		/* ƒoƒCƒiƒŠƒ‚[ƒh */
-#define EXT_TRIGGER				(0x00000020)		/* ŠO•”ƒgƒŠƒK[ƒ‚[ƒh */
-#define TRIGGER_SKIP			(0x00000040)		/* ƒgƒŠƒK[ƒXƒLƒbƒvƒ‚[ƒh */
+   /* ï¿½ï¿½ï¿½eï¿½ï¿½ï¿½[ï¿½hï¿½İ’ï¿½ï¿½` */
+#define MIRROR					(0x00000001)		/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Ìï¿½ï¿½Eï¿½ï¿½ï¿½] */
+#define FLIP					(0x00000002)		/* ï¿½ï¿½ï¿½eï¿½æ‘œï¿½Ìã‰ºï¿½ï¿½ï¿½] */
+#define COMP					(0x00000004)		/* ï¿½sï¿½Nï¿½Zï¿½ï¿½ï¿½fï¿½[ï¿½^ï¿½ï¿½bitï¿½ï¿½ï¿½] */
+#define ONESHOT					(0x00000008)		/* ï¿½ï¿½ï¿½ï¿½ï¿½Vï¿½ï¿½ï¿½bï¿½gï¿½ï¿½ï¿½eï¿½ï¿½ï¿½[ï¿½h */
+#define BINARY					(0x00000010)		/* ï¿½oï¿½Cï¿½iï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½h */
+#define EXT_TRIGGER				(0x00000020)		/* ï¿½Oï¿½ï¿½ï¿½gï¿½ï¿½ï¿½Kï¿½[ï¿½ï¿½ï¿½[ï¿½h */
+#define TRIGGER_SKIP			(0x00000040)		/* ï¿½gï¿½ï¿½ï¿½Kï¿½[ï¿½Xï¿½Lï¿½bï¿½vï¿½ï¿½ï¿½[ï¿½h */
 #define BLOCKNUM_14				(0x00000080)		/* DMD Block Number 14 / 16 */
 
-/* Æ“xİ’è’è‹` */
+/* ï¿½Æ“xï¿½İ’ï¿½ï¿½` */
 	typedef enum {
-		LOW_MODE = 0,									/* ’áÆ“x */
-		HIGH_MODE										/* ‚Æ“x */
+		LOW_MODE = 0,									/* ï¿½ï¿½Æ“x */
+		HIGH_MODE										/* ï¿½ï¿½ï¿½Æ“x */
 	} ILLUMINANCE_MODE;
 
 	/********************************************************************************
-	 * \‘¢‘Ì’è‹`
+	 * ï¿½\ï¿½ï¿½ï¿½Ì’ï¿½`
 	 ********************************************************************************/
 
-	 /* ƒVƒXƒeƒ€ƒpƒ‰ƒ[ƒ^æ“¾—p\‘¢‘Ì */
+	 /* ï¿½Vï¿½Xï¿½eï¿½ï¿½ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½æ“¾ï¿½pï¿½\ï¿½ï¿½ï¿½ï¿½ */
 	typedef struct _tagDynaFlashStatus
 	{
-		unsigned long	Error;							/* DynaFlas‚ÌƒGƒ‰[î•ñ */
-		unsigned long	InputFrames;					/* DynaFlash‚Ö“]‘—‚µ‚½ƒtƒŒ[ƒ€” */
-		unsigned long	OutputFrames;					/* “Š‰eÏ‚İ‚ÌƒtƒŒ[ƒ€” */
+		unsigned long	Error;							/* DynaFlasï¿½ÌƒGï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ */
+		unsigned long	InputFrames;					/* DynaFlashï¿½Ö“]ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½tï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ï¿½ */
+		unsigned long	OutputFrames;					/* ï¿½ï¿½ï¿½eï¿½Ï‚İ‚Ìƒtï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ï¿½ */
 	} DYNAFLASH_STATUS, *PDYNAFLASH_STATUS;
 
-	/* “Š‰e—pƒpƒ‰ƒ[ƒ^\‘¢‘Ì */
+	/* ï¿½ï¿½ï¿½eï¿½pï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½\ï¿½ï¿½ï¿½ï¿½ */
 	typedef struct _tagDynaFlashParam
 	{
 		double	dFrameRate;			/* Binary Mode: 0 - 22000; GrayMode: 1 - 2840 RGB Mode : fps 0.03 fps - 946 fps; */
-		double	dRProportion;		/* 0.00 - 100 Proportion ƒ‚ƒmƒNƒ–³Œø*/
-		double	dGProportion;		/* 0.00 - 100 Proportion ƒ‚ƒmƒNƒ–³Œø*/
-		double	dBProportion;		/* 0.00 - 100 Proportion ƒ‚ƒmƒNƒ–³Œø*/
-		double	dWProportion;		/* 0.00 - 100 Proportion ƒ‚ƒmƒNƒ–³Œø*/
+		double	dRProportion;		/* 0.00 - 100 Proportion ï¿½ï¿½ï¿½mï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+		double	dGProportion;		/* 0.00 - 100 Proportion ï¿½ï¿½ï¿½mï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+		double	dBProportion;		/* 0.00 - 100 Proportion ï¿½ï¿½ï¿½mï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+		double	dWProportion;		/* 0.00 - 100 Proportion ï¿½ï¿½ï¿½mï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
 
 		ULONG	nBinaryMode;		/* 0: Binary 1: 8bit   2: RGB 3: RGBW*/
 		ULONG	nBitDepth;			/* 8: [7:0], 7: [7:1], 6: [7:2], 5: [7:3], 4: [7:4], 3: [7:5], 2: [7:6], 1: [7:7] */
@@ -272,16 +272,16 @@ public:
 		ULONG	nTriggerSelect;		/* 0: Internal 1: External */
 		ULONG	nTriggerSkip;		/* 0: disable 1: enable */
 
-		ULONG	nBlockNum;			/* 0: Block 16 1: Block 14  ƒ‚ƒmƒNƒ–³Œø*/
-		LONG	nTimingSel;			/* 0: auto calculate 1: csv file  ƒ‚ƒmƒNƒ–³Œø*/
-		ULONG	nTimingMode;		/* 0: Normal Mode    1: Timing Mode  ƒ‚ƒmƒNƒ–³Œø*/
+		ULONG	nBlockNum;			/* 0: Block 16 1: Block 14  ï¿½ï¿½ï¿½mï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+		LONG	nTimingSel;			/* 0: auto calculate 1: csv file  ï¿½ï¿½ï¿½mï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+		ULONG	nTimingMode;		/* 0: Normal Mode    1: Timing Mode  ï¿½ï¿½ï¿½mï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
 
 		ULONG	nSWCount[4][20];	/*RGBW LED ON/OFF Timing,read from csv file*/
 		ULONG	nGRSTOffset[4][8];	/*RGBW Global Reset Timing,read from csv file*/
 	} DYNAFLASH_PARAM, *PDYNAFLASH_PARAM;
 
 	/********************************************************************************
-	 * DynaFlashƒNƒ‰ƒX‚Ì’è‹`
+	 * DynaFlashï¿½Nï¿½ï¿½ï¿½Xï¿½Ì’ï¿½`
 	 ********************************************************************************/
 	class CDynaFlash
 	{
@@ -326,7 +326,7 @@ public:
 		virtual int GetLedEnable(unsigned long *pLedEn) = 0;
 		virtual int SetLedEnable(unsigned long nLedEn) = 0;
 
-		/* ˆÈ‰º»•i”Å‚Å‚Í–¢ŒöŠJ‚ÌŠÖ” */
+		/* ï¿½È‰ï¿½ï¿½ï¿½ï¿½iï¿½Å‚Å‚Í–ï¿½ï¿½ï¿½ï¿½Jï¿½ÌŠÖï¿½ */
 		virtual int WriteRegister(unsigned int nBar, unsigned int nOffset, unsigned long nData) = 0;
 		virtual int ReadRegister(unsigned int nBar, unsigned int nOffset, unsigned long *pData) = 0;
 
@@ -337,12 +337,12 @@ public:
 	};
 
 	/********************************************************************************
-	 * ƒCƒ“ƒXƒ^ƒ“ƒX¶¬ŠÖ”
+	 * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½ï¿½ï¿½ï¿½ï¿½Öï¿½
 	 ********************************************************************************/
 	DYNAFLASH_API CDynaFlash * _stdcall CreateDynaFlash(void);
 
 	/********************************************************************************
-	 * ƒCƒ“ƒXƒ^ƒ“ƒX”jŠüŠÖ”
+	 * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½jï¿½ï¿½ï¿½Öï¿½
 	 ********************************************************************************/
 	DYNAFLASH_API bool _stdcall ReleaseDynaFlash(CDynaFlash **pDynaFlash);
 
@@ -353,12 +353,12 @@ public:
 };
 
 /********************************************************************************
- * ƒCƒ“ƒXƒ^ƒ“ƒX¶¬ŠÖ”
+ * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½ï¿½ï¿½ï¿½ï¿½Öï¿½
  ********************************************************************************/
 DYNAFLASH_API CDynaFlash * _stdcall CreateDynaFlash(void);
 
 /********************************************************************************
- * ƒCƒ“ƒXƒ^ƒ“ƒX”jŠüŠÖ”
+ * ï¿½Cï¿½ï¿½ï¿½Xï¿½^ï¿½ï¿½ï¿½Xï¿½jï¿½ï¿½ï¿½Öï¿½
  ********************************************************************************/
 DYNAFLASH_API bool _stdcall ReleaseDynaFlash(CDynaFlash **pDynaFlash);
 

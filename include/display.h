@@ -1,7 +1,8 @@
-#pragma once
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#ifndef DYNAFLASH_H
+#define DYNAFLASH_H
+// #define NOMINMAX
+// #define WIN32_LEAN_AND_MEAN
+// #include <windows.h>
 #include "stdafx.h"
 // #include <stdio.h>
 #include <iostream>
@@ -91,3 +92,4 @@ NB_MODULE(dynaflash, m)
         .def("project", &DynaFlashProjector::project, nb::arg("data"), nb::arg("bgr") = true, "projects an arbitrary numpy array of type uint8, with shape (height, width, 3), bgr");
 }
 #endif
+#endif DYNAFLASH_H

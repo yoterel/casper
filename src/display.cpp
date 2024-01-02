@@ -4,11 +4,11 @@
 
 bool DynaFlashProjector::init()
 {
-	if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE))
-	{
-		std::cout << "SetProcessWorkingSetSize Failed!\n";
-		return false;
-	}
+	// if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE))
+	// {
+	// 	std::cout << "SetProcessWorkingSetSize Failed!\n";
+	// 	return false;
+	// }
 	pDynaFlash = CreateDynaFlash();
 	if (pDynaFlash == NULL)
 	{
