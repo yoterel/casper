@@ -1217,48 +1217,63 @@ int main(int argc, char *argv[])
                                     std::vector<cv::Point2f> destination = Helpers::glm2opencv(pred_glm);
                                     ControlPointsP.clear();
                                     ControlPointsQ.clear();
+                                    /* wrist */
                                     ControlPointsP.push_back(keypoints[1]);
-                                    ControlPointsP.push_back(keypoints[2]);
+                                    /* finger root */
+                                    // ControlPointsP.push_back(keypoints[2]);
                                     ControlPointsP.push_back(keypoints[5]);
-                                    ControlPointsP.push_back(keypoints[10]);
+                                    // ControlPointsP.push_back(keypoints[10]);
                                     ControlPointsP.push_back(keypoints[11]);
-                                    ControlPointsP.push_back(keypoints[18]);
+                                    // ControlPointsP.push_back(keypoints[18]);
                                     ControlPointsP.push_back(keypoints[19]);
-                                    ControlPointsP.push_back(keypoints[26]);
+                                    // ControlPointsP.push_back(keypoints[26]);
                                     ControlPointsP.push_back(keypoints[27]);
-                                    ControlPointsP.push_back(keypoints[34]);
+                                    // ControlPointsP.push_back(keypoints[34]);
                                     ControlPointsP.push_back(keypoints[35]);
-                                    //
+                                    /* tips */
                                     ControlPointsP.push_back(keypoints[9]);
                                     ControlPointsP.push_back(keypoints[17]);
                                     ControlPointsP.push_back(keypoints[25]);
                                     ControlPointsP.push_back(keypoints[33]);
                                     ControlPointsP.push_back(keypoints[41]);
-
+                                    /* 1 before tips */
                                     ControlPointsP.push_back(keypoints[7]);
                                     ControlPointsP.push_back(keypoints[15]);
                                     ControlPointsP.push_back(keypoints[23]);
                                     ControlPointsP.push_back(keypoints[31]);
                                     ControlPointsP.push_back(keypoints[39]);
                                     //
-                                    ControlPointsQ.push_back(keypoints[1]);
-                                    ControlPointsQ.push_back(keypoints[2]);
-                                    ControlPointsQ.push_back(keypoints[5]);
-                                    ControlPointsQ.push_back(keypoints[10]);
-                                    ControlPointsQ.push_back(keypoints[11]);
-                                    ControlPointsQ.push_back(keypoints[18]);
-                                    ControlPointsQ.push_back(keypoints[19]);
-                                    ControlPointsQ.push_back(keypoints[26]);
-                                    ControlPointsQ.push_back(keypoints[27]);
-                                    ControlPointsQ.push_back(keypoints[34]);
-                                    ControlPointsQ.push_back(keypoints[35]);
-                                    //
+                                    // ControlPointsQ.push_back(keypoints[1]);
+                                    // ControlPointsQ.push_back(keypoints[2]);
+                                    // ControlPointsQ.push_back(keypoints[5]);
+                                    // ControlPointsQ.push_back(keypoints[10]);
+                                    // ControlPointsQ.push_back(keypoints[11]);
+                                    // ControlPointsQ.push_back(keypoints[18]);
+                                    // ControlPointsQ.push_back(keypoints[19]);
+                                    // ControlPointsQ.push_back(keypoints[26]);
+                                    // ControlPointsQ.push_back(keypoints[27]);
+                                    // ControlPointsQ.push_back(keypoints[34]);
+                                    // ControlPointsQ.push_back(keypoints[35]);
+                                    /* wrist */
+                                    ControlPointsQ.push_back(destination[0]);
+                                    /* finger root */
+                                    ControlPointsQ.push_back(destination[2]);
+                                    // ControlPointsQ.push_back(destination[2]);
+                                    ControlPointsQ.push_back(destination[5]);
+                                    // ControlPointsQ.push_back(destination[6]);
+                                    ControlPointsQ.push_back(destination[9]);
+                                    // ControlPointsQ.push_back(destination[10]);
+                                    ControlPointsQ.push_back(destination[13]);
+                                    // ControlPointsQ.push_back(destination[14]);
+                                    ControlPointsQ.push_back(destination[17]);
+                                    // ControlPointsQ.push_back(destination[18]);
+                                    /* tips */
                                     ControlPointsQ.push_back(destination[4]);
                                     ControlPointsQ.push_back(destination[8]);
                                     ControlPointsQ.push_back(destination[12]);
                                     ControlPointsQ.push_back(destination[16]);
                                     ControlPointsQ.push_back(destination[20]);
-                                    //
+                                    /* 1 before tips */
                                     ControlPointsQ.push_back(destination[3]);
                                     ControlPointsQ.push_back(destination[7]);
                                     ControlPointsQ.push_back(destination[11]);
@@ -1331,14 +1346,14 @@ int main(int argc, char *argv[])
                     // std::cout << "mls thread killed !" << std::endl;
                 }
                 // render as post process
-                mls_fbo.bind();          // mls_fbo
-                glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
+                mls_fbo.bind(); // mls_fbo, postprocess_fbo
                 // PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
                 // PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
                 // vcolorShader.use();
                 // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                 // cloud_src.render();
                 // cloud_dst.render();
+                glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
                 hands_fbo.getTexture()->bind();
                 gridShader.use();
                 gridShader.setBool("flipVer", false);
@@ -1347,7 +1362,6 @@ int main(int argc, char *argv[])
                 // gridColorShader.use();
                 // deformationGrid.renderGridLines();
                 mls_fbo.unbind(); // mls_fbo
-                // mls_fbo.saveColorToFile("test.png");
                 postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 break;
             }
