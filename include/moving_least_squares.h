@@ -21,6 +21,8 @@ typedef struct _typeRigid
 /*Function to Compute the Weights*/
 inline cv::Mat MLSprecomputeWeights(cv::Mat p, cv::Mat v, double a)
 {
+	// p: 2 x n_control
+	// v: 2 x n_grid
 	cv::Mat w = cv::Mat::zeros(p.cols, v.cols, CV_32F);
 	cv::Mat p_resize;
 	cv::Mat norms = cv::Mat::zeros(2, v.cols, CV_32F);
@@ -31,7 +33,7 @@ inline cv::Mat MLSprecomputeWeights(cv::Mat p, cv::Mat v, double a)
 	for (int i = 0; i < p.cols; i++)
 	{
 		// compute the norms
-		p_resize = repeat(p.col(i), 1, v.cols);
+		p_resize = cv::repeat(p.col(i), 1, v.cols);
 		p_v = p_resize - v;
 		pow(p_v, 2, p_v);
 		norms = p_v.row(0) + p_v.row(1);

@@ -1200,11 +1200,19 @@ int main(int argc, char *argv[])
                             // std::cout << "mls thread launched !" << std::endl;
                             try
                             {
+                                // Timer mls_profile;
+                                // mls_profile.start();
                                 std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                                std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(projected);
+                                // mls_profile.stop();
+                                // std::cout << "MLS projection time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
+                                // mls_profile.start();
                                 std::vector<glm::vec2> pred_glm = mp_predict(camImage, totalFrameCount);
+                                // mls_profile.stop();
+                                // std::cout << "MLS prediction time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                 if (pred_glm.size() == 21)
                                 {
+                                    // mls_profile.start();
+                                    std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(projected);
                                     // std::cout << "MP prediction succeeded" << std::endl;
                                     std::vector<cv::Point2f> destination = Helpers::glm2opencv(pred_glm);
                                     ControlPointsP.clear();
@@ -1220,6 +1228,7 @@ int main(int argc, char *argv[])
                                     ControlPointsP.push_back(keypoints[27]);
                                     ControlPointsP.push_back(keypoints[34]);
                                     ControlPointsP.push_back(keypoints[35]);
+                                    //
                                     ControlPointsP.push_back(keypoints[9]);
                                     ControlPointsP.push_back(keypoints[17]);
                                     ControlPointsP.push_back(keypoints[25]);
@@ -1243,11 +1252,13 @@ int main(int argc, char *argv[])
                                     ControlPointsQ.push_back(keypoints[27]);
                                     ControlPointsQ.push_back(keypoints[34]);
                                     ControlPointsQ.push_back(keypoints[35]);
+                                    //
                                     ControlPointsQ.push_back(destination[4]);
                                     ControlPointsQ.push_back(destination[8]);
                                     ControlPointsQ.push_back(destination[12]);
                                     ControlPointsQ.push_back(destination[16]);
                                     ControlPointsQ.push_back(destination[20]);
+                                    //
                                     ControlPointsQ.push_back(destination[3]);
                                     ControlPointsQ.push_back(destination[7]);
                                     ControlPointsQ.push_back(destination[11]);
@@ -1257,24 +1268,33 @@ int main(int argc, char *argv[])
                                     // todo: refactor control points to avoid this part
                                     cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
                                     cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
-                                    // initializing p points for fish eye image
                                     for (int i = 0; i < ControlPointsP.size(); i++)
                                     {
                                         p.at<float>(0, i) = (ControlPointsP.at(i)).x;
                                         p.at<float>(1, i) = (ControlPointsP.at(i)).y;
                                     }
-                                    // initializing q points for fish eye image
                                     for (int i = 0; i < ControlPointsQ.size(); i++)
                                     {
                                         q.at<float>(0, i) = (ControlPointsQ.at(i)).x;
                                         q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
                                     }
                                     double alpha = 2.0;
+                                    // mls_profile.stop();
+                                    // std::cout << "MLS precomputation time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
+                                    // mls_profile.start();
                                     // weights
                                     cv::Mat w = MLSprecomputeWeights(p, MLS_M, alpha);
+                                    // mls_profile.stop();
+                                    // std::cout << "MLS weight time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     // affine
+                                    // mls_profile.start();
                                     cv::Mat A = MLSprecomputeAffine(p, MLS_M, w);
+                                    // mls_profile.stop();
+                                    // std::cout << "MLS affine time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
+                                    // mls_profile.start();
                                     fv = MLSPointsTransformAffine(w, A, q);
+                                    // mls_profile.stop();
+                                    // std::cout << "MLS transform time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     mls_succeed = true;
                                 }
                                 else
