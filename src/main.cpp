@@ -137,7 +137,7 @@ int n_points_cam_calib = 30;
 std::vector<double> calib_cam_matrix;
 std::vector<double> calib_cam_distortion;
 // global state
-int postprocess_mode = static_cast<int>(PostProcessMode::MASK);
+int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
 int sd_mode = static_cast<int>(SDMode::PROMPT);
 int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
