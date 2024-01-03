@@ -66,6 +66,7 @@ uniform sampler2D src;
 uniform bool useProjector = false;
 uniform bool flipTexVertically = false;
 uniform bool useGGX = false;
+uniform bool renderUV = false;
 
 vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal)
 {
@@ -167,8 +168,15 @@ void main()
         }
         else
         {
-            vec4 diffuse_color = texture(src, TexCoord0);
-            FragColor = diffuse_color;
+            if (renderUV)
+            {
+                FragColor = vec4(TexCoord0.xy, 0.0, 1.0);
+            }
+            else
+            {
+                vec4 diffuse_color = texture(src, TexCoord0);
+                FragColor = diffuse_color;
+            }
         }
     }
 }

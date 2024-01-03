@@ -96,6 +96,7 @@ bool sd_succeed = false;
 bool sd_running = false;
 bool mls_succeed = false;
 bool mls_running = false;
+bool use_mls = false;
 bool freecam_mode = false;
 bool use_cuda = false;
 bool simulated_camera = false;
@@ -259,6 +260,7 @@ int dst_height = cam_space ? cam_height : proj_height;
 FBO icp_fbo(cam_width, cam_height, 4, false);
 FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
+FBO uv_fbo(dst_width, dst_height, 4, false);
 FBO mls_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
@@ -452,6 +454,7 @@ int main(int argc, char *argv[])
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
+    uv_fbo.init(GL_RGBA, GL_RGBA32F);
     bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
@@ -540,6 +543,7 @@ int main(int argc, char *argv[])
          {1.0f, 1.0f, -1.0f}}};
     /* setup shaders*/
     Shader NNShader("../../src/shaders/NN_shader.vs", "../../src/shaders/NN_shader.fs");
+    Shader uv_NNShader("../../src/shaders/uv_NN_Shader.vs", "../../src/shaders/uv_NN_Shader.fs");
     Shader maskShader("../../src/shaders/mask.vs", "../../src/shaders/mask.fs");
     Shader jfaInitShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa_init.fs");
     Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
@@ -861,7 +865,7 @@ int main(int argc, char *argv[])
         {
             /* skin hand mesh with leap input */
             t_skin.start();
-            if (bones_to_world_right.size() > 0)
+            if (bones_to_world_right.size() > 0) // todo: refactor into function as this is duplicated per hand
             {
                 hands_fbo.bind(true);
                 glEnable(GL_DEPTH_TEST);
@@ -876,6 +880,7 @@ int main(int argc, char *argv[])
                     skinnedShader.setBool("flipTexVertically", false);
                     skinnedShader.setInt("src", 0);
                     skinnedShader.setBool("useGGX", false);
+                    skinnedShader.setBool("renderUV", false);
                     switch (texture_mode)
                     {
                     case static_cast<int>(TextureMode::ORIGINAL):
@@ -907,6 +912,7 @@ int main(int argc, char *argv[])
                     skinnedShader.setBool("flipTexVertically", false);
                     skinnedShader.setInt("src", 0);
                     skinnedShader.setBool("useGGX", true);
+                    skinnedShader.setBool("renderUV", false);
                     dirLight.calcLocalDirection(bones_to_world_right[0]);
                     skinnedShader.SetDirectionalLight(dirLight);
                     glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
@@ -940,6 +946,22 @@ int main(int argc, char *argv[])
                 }
                 hands_fbo.unbind();
                 glDisable(GL_DEPTH_TEST);
+                /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
+                if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
+                {
+                    uv_fbo.bind();
+                    skinnedShader.use();
+                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
+                    skinnedShader.setBool("bake", false);
+                    skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setInt("src", 0);
+                    skinnedShader.setBool("useGGX", false);
+                    skinnedShader.setBool("renderUV", true);
+                    skinnedShader.setBool("useProjector", false);
+                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                    uv_fbo.unbind();
+                }
+                // uv_fbo.saveColorToFile("test.png", true);
                 if (bakeRequest)
                 {
                     if (!sd_running)
@@ -1024,6 +1046,8 @@ int main(int argc, char *argv[])
                     skinnedShader.setBool("bake", true);
                     skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
                     skinnedShader.setBool("flipTexVertically", true);
+                    skinnedShader.setBool("renderUV", false);
+                    skinnedShader.setBool("useGGX", false);
                     skinnedShader.setInt("src", 0);
                     // dynamicTexture->bind();
                     rightHandModel.Render(skinnedShader, bones_to_world_right_bake, rotx, false, dynamicTexture);
@@ -1061,129 +1085,32 @@ int main(int argc, char *argv[])
                 skinnedShader.setBool("useProjector", false);
                 skinnedShader.setBool("bake", false);
                 skinnedShader.setBool("useGGX", false);
+                skinnedShader.setBool("renderUV", false);
                 skinnedShader.setInt("src", 0);
                 hands_fbo.bind(bones_to_world_right.size() == 0);
                 glEnable(GL_DEPTH_TEST);
                 leftHandModel.Render(skinnedShader, bones_to_world_left, rotx);
                 hands_fbo.unbind();
                 glDisable(GL_DEPTH_TEST);
+                /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
+                if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
+                {
+                    uv_fbo.bind(bones_to_world_right.size() == 0); // todo: can hands really share this fbo ?
+                    skinnedShader.use();
+                    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
+                    skinnedShader.setBool("bake", false);
+                    skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setInt("src", 0);
+                    skinnedShader.setBool("useGGX", false);
+                    skinnedShader.setBool("renderUV", true);
+                    skinnedShader.setBool("useProjector", false);
+                    rightHandModel.Render(skinnedShader, bones_to_world_left, rotx, false, nullptr);
+                    uv_fbo.unbind();
+                }
             }
             t_skin.stop();
-            /* post process fbo using camera input */
-            t_pp.start();
-            switch (postprocess_mode)
-            {
-            case static_cast<int>(PostProcessMode::NONE):
-            {
-                // bind fbo
-                postprocess_fbo.bind();
-                // bind texture
-                hands_fbo.getTexture()->bind();
-                // render
-                set_texture_shader(textureShader, false, false, false);
-                fullScreenQuad.render(false, false, true);
-                // if (skeleton_vertices.size() > 0)
-                // {
-                //     vcolorShader.use();
-                //     vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                //     std::vector<glm::vec2> skele_verts = Helpers::project_points(skeleton_vertices, glm::mat4(1.0f), cam_view_transform, cam_projection_transform);
-                //     PointCloud cloud3(skele_verts, screen_verts_color_green);
-                //     cloud3.render();
-                // }
-                // unbind fbo
-                postprocess_fbo.unbind();
-                break;
-            }
-            case static_cast<int>(PostProcessMode::CAM_FEED):
-            {
-                set_texture_shader(textureShader, true, true, true, threshold_flag, masking_threshold);
-                camTexture.bind();
-                postprocess_fbo.bind();
-                fullScreenQuad.render();
-                postprocess_fbo.unbind();
-                break;
-            }
-            case static_cast<int>(PostProcessMode::MASK):
-            {
-                postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
-                break;
-            }
-            case static_cast<int>(PostProcessMode::JUMP_FLOOD):
-            {
-                postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
-                break;
-            }
-            case static_cast<int>(PostProcessMode::CONTOUR):
-            {
-                std::vector<cv::Point> fingers_cv;
-                std::vector<cv::Point> valleys_cv;
-                cv::Mat fingerImage = postProcess.findFingers(camImageOrig, masking_threshold, fingers_cv, valleys_cv);
-                displayTexture.load((uint8_t *)fingerImage.data, true, cam_buffer_format);
-                postprocess_fbo.bind();
-                displayTexture.bind();
-                set_texture_shader(textureShader, true, false, true);
-                fullScreenQuad.render();
-                std::vector<glm::vec2> fingers = Helpers::opencv2glm(fingers_cv);
-                std::vector<glm::vec2> valleys = Helpers::opencv2glm(valleys_cv);
-                std::vector<glm::vec2> fingers_NDC = Helpers::ScreenToNDC(fingers, cam_width, cam_height, true);
-                std::vector<glm::vec2> valleys_NDC = Helpers::ScreenToNDC(valleys, cam_width, cam_height, true);
-                PointCloud cloud1(fingers_NDC, screen_verts_color_red);
-                PointCloud cloud2(valleys_NDC, screen_verts_color_blue);
-                vcolorShader.use();
-                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                cloud1.render();
-                cloud2.render();
-                postprocess_fbo.unbind();
-                break;
-            }
-            case static_cast<int>(PostProcessMode::ICP):
-            {
-                // get render in camera space
-                icp_fbo.bind();
-                hands_fbo.getTexture()->bind();
-                set_texture_shader(textureShader, true, false, false, true, masking_threshold);
-                fullScreenQuad.render();
-                icp_fbo.unbind();
-                std::vector<uchar> rendered_data = icp_fbo.getBuffer(1);
-                cv::Mat render_image = cv::Mat(cam_height, cam_width, CV_8UC1, rendered_data.data());
-                // std::vector<uchar> rendered_data = hands_fbo.getBuffer(4);
-                // cv::Mat render_image = cv::Mat(dst_height, dst_width, CV_8UC4, rendered_data.data());
-                // cv::Mat bgra[4];               // destination array
-                // cv::split(render_image, bgra); // split source
-                glm::mat4 transform = glm::mat4(1.0f);
-                cv::Mat debug = postProcess.icp(render_image, camImageOrig, masking_threshold, transform);
-                // postprocess_fbo.bind();
-                icp2_fbo.bind();
-                hands_fbo.getTexture()->bind();
-                if (icp_apply_transform)
-                {
-                    // displayTexture.load((uint8_t *)debug.data, true, cam_buffer_format);
-                    // displayTexture.bind();
-                    set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, transform);
-                }
-                else
-                {
-                    // icp_fbo.getTexture()->bind();
-                    set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f));
-                }
-                fullScreenQuad.render(false, false, true);
-                icp2_fbo.unbind();
-                postProcess.mask(maskShader, icp2_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
-                // fullScreenQuad.render();
-                // postprocess_fbo.unbind();
-                break;
-            }
-            case static_cast<int>(PostProcessMode::OVERLAY):
-            {
-                set_texture_shader(textureShader, true, true, true, threshold_flag, masking_threshold);
-                camTexture.bind();
-                postprocess2_fbo.bind();
-                fullScreenQuad.render();
-                postprocess2_fbo.unbind();
-                postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
-                break;
-            }
-            case static_cast<int>(PostProcessMode::MLS):
+            /* optionally, run MLS on MP prediction to reduce bias */
+            if (use_mls) // todo: what if two hands are in frame?
             {
                 if (!mls_running && !mls_succeed)
                 {
@@ -1362,7 +1289,110 @@ int main(int argc, char *argv[])
                 // gridColorShader.use();
                 // deformationGrid.renderGridLines();
                 mls_fbo.unbind(); // mls_fbo
-                postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+            }
+            /* post process fbo using camera input */
+            t_pp.start();
+            switch (postprocess_mode)
+            {
+            case static_cast<int>(PostProcessMode::NONE):
+            {
+                // bind fbo
+                postprocess_fbo.bind();
+                // bind texture
+                hands_fbo.getTexture()->bind();
+                // render
+                set_texture_shader(textureShader, false, false, false);
+                fullScreenQuad.render(false, false, true);
+                // if (skeleton_vertices.size() > 0)
+                // {
+                //     vcolorShader.use();
+                //     vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                //     std::vector<glm::vec2> skele_verts = Helpers::project_points(skeleton_vertices, glm::mat4(1.0f), cam_view_transform, cam_projection_transform);
+                //     PointCloud cloud3(skele_verts, screen_verts_color_green);
+                //     cloud3.render();
+                // }
+                // unbind fbo
+                postprocess_fbo.unbind();
+                break;
+            }
+            case static_cast<int>(PostProcessMode::CAM_FEED):
+            {
+                set_texture_shader(textureShader, true, true, true, threshold_flag, masking_threshold);
+                camTexture.bind();
+                postprocess_fbo.bind();
+                fullScreenQuad.render();
+                postprocess_fbo.unbind();
+                break;
+            }
+            case static_cast<int>(PostProcessMode::MASK):
+            {
+                if (use_mls)
+                    postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                else
+                    postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                break;
+            }
+            case static_cast<int>(PostProcessMode::JUMP_FLOOD):
+            {
+                if (use_mls)
+                    postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                else
+                    postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                break;
+            }
+            case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
+            {
+                postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, uv_fbo.getTexture()->getTexture(),
+                                          rightHandModel.GetMaterial().pDiffuse->getTexture(),
+                                          camTexture.getTexture(),
+                                          &postprocess_fbo, masking_threshold);
+                break;
+            }
+            case static_cast<int>(PostProcessMode::ICP):
+            {
+                // get render in camera space
+                icp_fbo.bind();
+                hands_fbo.getTexture()->bind();
+                set_texture_shader(textureShader, true, false, false, true, masking_threshold);
+                fullScreenQuad.render();
+                icp_fbo.unbind();
+                std::vector<uchar> rendered_data = icp_fbo.getBuffer(1);
+                cv::Mat render_image = cv::Mat(cam_height, cam_width, CV_8UC1, rendered_data.data());
+                // std::vector<uchar> rendered_data = hands_fbo.getBuffer(4);
+                // cv::Mat render_image = cv::Mat(dst_height, dst_width, CV_8UC4, rendered_data.data());
+                // cv::Mat bgra[4];               // destination array
+                // cv::split(render_image, bgra); // split source
+                glm::mat4 transform = glm::mat4(1.0f);
+                cv::Mat debug = postProcess.icp(render_image, camImageOrig, masking_threshold, transform);
+                // postprocess_fbo.bind();
+                icp2_fbo.bind();
+                hands_fbo.getTexture()->bind();
+                if (icp_apply_transform)
+                {
+                    // displayTexture.load((uint8_t *)debug.data, true, cam_buffer_format);
+                    // displayTexture.bind();
+                    set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, transform);
+                }
+                else
+                {
+                    // icp_fbo.getTexture()->bind();
+                    set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f));
+                }
+                fullScreenQuad.render(false, false, true);
+                icp2_fbo.unbind();
+                postProcess.mask(maskShader, icp2_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+                // fullScreenQuad.render();
+                // postprocess_fbo.unbind();
+                break;
+            }
+            case static_cast<int>(PostProcessMode::OVERLAY):
+            {
+                set_texture_shader(textureShader, true, true, true, threshold_flag, masking_threshold);
+                camTexture.bind();
+                postprocess2_fbo.bind();
+                fullScreenQuad.render();
+                postprocess2_fbo.unbind();
+                postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 break;
             }
             default:
@@ -2179,6 +2209,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
+                        skinnedShader.setBool("renderUV", false);
                         skinnedShader.setInt("src", 0);
                         rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
                         break;
@@ -2195,6 +2226,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
+                        skinnedShader.setBool("renderUV", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
@@ -2207,6 +2239,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
+                        skinnedShader.setBool("renderUV", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo.getTexture());
@@ -2250,6 +2283,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
+                        skinnedShader.setBool("renderUV", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         leftHandModel.Render(skinnedShader, bones_to_world_right, rotx);
@@ -2267,6 +2301,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setBool("useProjector", true);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
+                        skinnedShader.setBool("renderUV", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         leftHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
@@ -2279,6 +2314,7 @@ int main(int argc, char *argv[])
                         skinnedShader.setBool("useProjector", false);
                         skinnedShader.setBool("bake", false);
                         skinnedShader.setBool("useGGX", false);
+                        skinnedShader.setBool("renderUV", false);
                         skinnedShader.setBool("flipTexVertically", false);
                         skinnedShader.setInt("src", 0);
                         leftHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo.getTexture());
@@ -3732,6 +3768,7 @@ void openIMGUIFrame()
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Post Process"))
         {
+            ImGui::Checkbox("MLS?", &use_mls);
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {
@@ -3749,11 +3786,10 @@ void openIMGUIFrame()
             ImGui::RadioButton("Mask", &postprocess_mode, 2);
             ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
             ImGui::SameLine();
-            ImGui::RadioButton("Finger Track", &postprocess_mode, 4);
+            ImGui::RadioButton("Jump Flood UV", &postprocess_mode, 4);
             ImGui::SameLine();
             ImGui::RadioButton("ICP", &postprocess_mode, 5);
             ImGui::RadioButton("OVERLAY", &postprocess_mode, 6);
-            ImGui::RadioButton("MLS", &postprocess_mode, 7);
             if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
             {
                 ImGui::Checkbox("ICP on?", &icp_apply_transform);

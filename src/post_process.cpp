@@ -476,6 +476,82 @@ void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, u
     // unbind fbo
     target_fbo->unbind();
 }
+
+void PostProcess::jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shader, unsigned int uvTexture, unsigned int uvUnwrappedTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
+{
+    // jfaInit determines seeds for jump flood (everywhere there is information will be a seed)
+    // distances / nearest neighbors / etc will be calculated from these seeds (but not for the seeds themselves)
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, uvTexture);
+    // the pingpong framebuffers m_FBO[0] and m_FBO[1] will be used to store the result of the jump flood
+    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[0]);
+    jfaInit.use();
+    jfaInit.setInt("src", 0);
+    jfaInit.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
+    glViewport(0, 0, m_dstWidth, m_dstHeight);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    m_quad.render(false, false, true);
+    glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[0]);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[1]);
+    glViewport(0, 0, m_dstWidth, m_dstHeight);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // jump flood
+    int numPasses = 11; // generally log(max(width, height)) + 1 is a good number of passes, paper recommends + 2 for robustness
+    // see "Jump Flooding in GPU with Applications to Voronoi Diagram and Distance Transform"
+    for (int i = 0; i < numPasses; i++)
+    {
+        jfa.use();
+        jfa.setInt("src", 0);
+        jfa.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
+        jfa.setInt("pass", i);
+        jfa.setInt("numPasses", numPasses);
+        m_quad.render();
+        // bind texture from current iter, bind next fbo
+        glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[(i + 1) % 2]);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO[i % 2]);
+        // glViewport(0, 0, m_srcWidth, m_srcHeight);
+        // glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+    if (target_fbo != NULL)
+    {
+        target_fbo->bind();
+    }
+    else
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, m_dstWidth, m_dstHeight);
+    }
+    // flood fill result will be contained in the second ping pong buffer texture
+    // mask result using the camera texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, uvTexture); // the uvs of the mesh in camspace
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_pingpong_textures[1]); // the jumpflood nearest neighbor result
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, camTexture); // the camera image, used as a mask
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, uvUnwrappedTexture); // the unwrapped texture of the mesh, that can be used with the uvs to get the intended color
+    uv_NN_shader.use();
+    uv_NN_shader.setInt("uv", 0);
+    uv_NN_shader.setInt("jfa", 1);
+    uv_NN_shader.setInt("mask", 2);
+    uv_NN_shader.setInt("unwrapped", 3);
+    uv_NN_shader.setFloat("threshold", threshold);
+    uv_NN_shader.setBool("flipVer", false);
+    uv_NN_shader.setBool("maskIsGray", true);
+    uv_NN_shader.setBool("flipMaskVer", true);
+    uv_NN_shader.setBool("flipMaskHor", true);
+    uv_NN_shader.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
+    m_quad.render();
+    if (target_fbo != NULL)
+    {
+        target_fbo->unbind();
+    }
+}
+
 void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
 {
     // init jump flood seeds
@@ -546,10 +622,6 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, un
     {
         target_fbo->unbind();
     }
-}
-
-void PostProcess::optical_flow(Shader &shader, Texture renderedSceneTexture, Texture camTexture)
-{
 }
 
 void PostProcess::saveColorToFile(std::string filepath, unsigned int fbo_id)

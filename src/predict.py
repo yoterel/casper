@@ -3,6 +3,57 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+
+# nowhere smart to put this: a map between mediapipe and leap motion hand landmarks
+# MP
+# 	wrist: 0
+# 	thumb0: 1
+# 	thumb1: 2
+# 	thumb2: 3
+# 	thumbtip: 4
+# 	index0: 5
+# 	index1: 6
+# 	index2: 7
+# 	indextip: 8
+# 	middle0: 9
+# 	middle1: 10
+# 	middle2: 11
+# 	middletip: 12
+# 	ring0: 13
+# 	ring1: 14
+# 	ring2: 15
+# 	ringtip: 16
+# 	pinky0: 17
+# 	pinky1: 18
+# 	pinky2: 19
+# 	pinkytip: 20
+# LEAP
+# 	wrist:1
+# 	thumb0: 2
+# 	thumb1: 5
+# 	thumb2: 7
+# 	thumbtip:9
+# 	index0: 10
+# 	index1: 11
+# 	index2: 13
+# 	index3:15
+# 	indextip: 17
+# 	middle0: 18
+# 	middle1: 19
+# 	middle2: 21
+# 	middle3: 23
+# 	middletip: 25
+# 	ring0: 26
+# 	ring1: 27
+# 	ring2: 29
+# 	ring3: 31
+# 	ringtip: 33
+# 	pinky0: 34
+# 	pink1: 35
+# 	pink2: 37
+# 	pinky3: 39
+# 	pinkytip:41
+
 VisionRunningMode = mp.tasks.vision.RunningMode
 base_options = python.BaseOptions(
     model_asset_path="../../resource/hand_landmarker.task"

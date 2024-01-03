@@ -63,10 +63,9 @@ enum class PostProcessMode
     CAM_FEED = 1,
     MASK = 2,
     JUMP_FLOOD = 3,
-    CONTOUR = 4,
+    JUMP_FLOOD_UV = 4,
     ICP = 5,
-    OVERLAY = 6,
-    MLS = 7,
+    OVERLAY = 6
 };
 enum class LeapCalibrationSettings
 {

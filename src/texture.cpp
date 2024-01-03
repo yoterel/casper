@@ -113,7 +113,7 @@ void Texture::initInternal(void *image_data, unsigned int input_color_format, un
     glTexParameteri(m_textureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(m_textureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // glTexParameterf(m_textureTarget, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); // GL_REPEAT
+    glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); // GL_REPEAT, GL_CLAMP_TO_BORDER
     glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
     // glGenerateMipmap(m_textureTarget);
