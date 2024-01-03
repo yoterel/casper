@@ -1281,7 +1281,10 @@ int main(int argc, char *argv[])
                 // cloud_src.render();
                 // cloud_dst.render();
                 glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
-                hands_fbo.getTexture()->bind();
+                if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
+                    uv_fbo.getTexture()->bind();
+                else
+                    hands_fbo.getTexture()->bind();
                 gridShader.use();
                 gridShader.setBool("flipVer", false);
                 deformationGrid.render();
@@ -1299,7 +1302,10 @@ int main(int argc, char *argv[])
                 // bind fbo
                 postprocess_fbo.bind();
                 // bind texture
-                hands_fbo.getTexture()->bind();
+                if (use_mls)
+                    mls_fbo.getTexture()->bind();
+                else
+                    hands_fbo.getTexture()->bind();
                 // render
                 set_texture_shader(textureShader, false, false, false);
                 fullScreenQuad.render(false, false, true);
@@ -1324,7 +1330,7 @@ int main(int argc, char *argv[])
                 postprocess_fbo.unbind();
                 break;
             }
-            case static_cast<int>(PostProcessMode::MASK):
+            case static_cast<int>(PostProcessMode::OVERLAY):
             {
                 if (use_mls)
                     postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
@@ -1342,10 +1348,16 @@ int main(int argc, char *argv[])
             }
             case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
             {
-                postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, uv_fbo.getTexture()->getTexture(),
-                                          rightHandModel.GetMaterial().pDiffuse->getTexture(),
-                                          camTexture.getTexture(),
-                                          &postprocess_fbo, masking_threshold);
+                if (use_mls)
+                    postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, mls_fbo.getTexture()->getTexture(),
+                                              rightHandModel.GetMaterial().pDiffuse->getTexture(),
+                                              camTexture.getTexture(),
+                                              &postprocess_fbo, masking_threshold);
+                else
+                    postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, uv_fbo.getTexture()->getTexture(),
+                                              rightHandModel.GetMaterial().pDiffuse->getTexture(),
+                                              camTexture.getTexture(),
+                                              &postprocess_fbo, masking_threshold);
                 break;
             }
             case static_cast<int>(PostProcessMode::ICP):
@@ -1385,7 +1397,7 @@ int main(int argc, char *argv[])
                 // postprocess_fbo.unbind();
                 break;
             }
-            case static_cast<int>(PostProcessMode::OVERLAY):
+            case static_cast<int>(PostProcessMode::OVERLAY_DEBUG):
             {
                 set_texture_shader(textureShader, true, true, true, threshold_flag, masking_threshold);
                 camTexture.bind();
@@ -3779,17 +3791,17 @@ void openIMGUIFrame()
                 threshold_flag = false;
             }
             ImGui::Text("Post Processing Mode");
-            ImGui::RadioButton("None", &postprocess_mode, 0);
+            ImGui::RadioButton("Render Only", &postprocess_mode, 0);
             ImGui::SameLine();
             ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
             ImGui::SameLine();
-            ImGui::RadioButton("Mask", &postprocess_mode, 2);
+            ImGui::RadioButton("Overlay", &postprocess_mode, 2);
             ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
             ImGui::SameLine();
             ImGui::RadioButton("Jump Flood UV", &postprocess_mode, 4);
             ImGui::SameLine();
             ImGui::RadioButton("ICP", &postprocess_mode, 5);
-            ImGui::RadioButton("OVERLAY", &postprocess_mode, 6);
+            ImGui::RadioButton("Overly Debug", &postprocess_mode, 6);
             if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
             {
                 ImGui::Checkbox("ICP on?", &icp_apply_transform);

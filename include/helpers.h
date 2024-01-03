@@ -61,11 +61,11 @@ enum class PostProcessMode
 {
     NONE = 0,
     CAM_FEED = 1,
-    MASK = 2,
+    OVERLAY = 2,
     JUMP_FLOOD = 3,
     JUMP_FLOOD_UV = 4,
     ICP = 5,
-    OVERLAY = 6
+    OVERLAY_DEBUG = 6
 };
 enum class LeapCalibrationSettings
 {
