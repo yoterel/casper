@@ -945,7 +945,6 @@ int main(int argc, char *argv[])
                 }
                 }
                 hands_fbo.unbind();
-                glDisable(GL_DEPTH_TEST);
                 /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
                 if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
                 {
@@ -961,6 +960,7 @@ int main(int argc, char *argv[])
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
                     uv_fbo.unbind();
                 }
+                glDisable(GL_DEPTH_TEST);
                 // uv_fbo.saveColorToFile("test.png", true);
                 if (bakeRequest)
                 {
@@ -1091,7 +1091,6 @@ int main(int argc, char *argv[])
                 glEnable(GL_DEPTH_TEST);
                 leftHandModel.Render(skinnedShader, bones_to_world_left, rotx);
                 hands_fbo.unbind();
-                glDisable(GL_DEPTH_TEST);
                 /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
                 if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
                 {
@@ -1107,6 +1106,7 @@ int main(int argc, char *argv[])
                     rightHandModel.Render(skinnedShader, bones_to_world_left, rotx, false, nullptr);
                     uv_fbo.unbind();
                 }
+                glDisable(GL_DEPTH_TEST);
             }
             t_skin.stop();
             /* optionally, run MLS on MP prediction to reduce bias */
