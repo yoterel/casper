@@ -285,12 +285,10 @@ int grid_y_point_count = 41;
 float grid_x_spacing = 0.05;
 float grid_y_spacing = 0.05;
 Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
-cv::Mat fv;
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
 std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec2> ControlPointsQ_glm;
-cv::Mat MLS_M;
 
 int main(int argc, char *argv[])
 {
@@ -410,7 +408,6 @@ int main(int argc, char *argv[])
     std::cout << "  GLSL Version : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << std::endl;
     deformationGrid.initGLBuffers();
-    MLS_M = deformationGrid.AssembleM(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
     glfwSwapInterval(0);                       // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -868,7 +865,7 @@ int main(int argc, char *argv[])
             if (bones_to_world_right.size() > 0) // todo: refactor into function as this is duplicated per hand
             {
                 hands_fbo.bind(true);
-                glEnable(GL_DEPTH_TEST);
+                glEnable(GL_DEPTH_TEST); // depth test on (todo: why is it off ?)
                 switch (material_mode)
                 {
                 case static_cast<int>(MaterialMode::DIFFUSE):
@@ -960,7 +957,7 @@ int main(int argc, char *argv[])
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
                     uv_fbo.unbind();
                 }
-                glDisable(GL_DEPTH_TEST);
+                glDisable(GL_DEPTH_TEST); // todo: why not keep it on ?
                 // uv_fbo.saveColorToFile("test.png", true);
                 if (bakeRequest)
                 {
@@ -1038,7 +1035,7 @@ int main(int argc, char *argv[])
                     // bake dynamic texture
                     bake_fbo.bind(true);
                     /* hand */
-                    glDisable(GL_CULL_FACE);
+                    glDisable(GL_CULL_FACE); // todo: why disbale backface ? doesn't this mean bake will reach the back of the hand ?
                     glEnable(GL_DEPTH_TEST);
                     skinnedShader.use();
                     skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
@@ -1225,16 +1222,17 @@ int main(int argc, char *argv[])
                                     // std::cout << "MLS precomputation time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     // mls_profile.start();
                                     // weights
-                                    cv::Mat w = MLSprecomputeWeights(p, MLS_M, alpha);
+                                    cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), alpha);
                                     // mls_profile.stop();
                                     // std::cout << "MLS weight time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     // affine
                                     // mls_profile.start();
-                                    cv::Mat A = MLSprecomputeAffine(p, MLS_M, w);
+                                    cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
                                     // mls_profile.stop();
                                     // std::cout << "MLS affine time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     // mls_profile.start();
-                                    fv = MLSPointsTransformAffine(w, A, q);
+                                    cv::Mat fv = MLSPointsTransformAffine(w, A, q);
+                                    deformationGrid.constructDeformedGrid(fv);
                                     // mls_profile.stop();
                                     // std::cout << "MLS transform time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     mls_succeed = true;
@@ -1258,7 +1256,6 @@ int main(int argc, char *argv[])
                     // use new grid to deform rendered image
                     // todo split function into two parts for real time
                     // std::cout << "constructing grid !" << std::endl;
-                    deformationGrid.constructDeformedGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing, fv);
                     // deformationGrid.constructGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
                     // std::cout << "updating gl buffers !" << std::endl;
                     deformationGrid.updateGLBuffers();

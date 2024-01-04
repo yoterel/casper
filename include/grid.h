@@ -12,10 +12,12 @@ public:
 																											   Grid_VAO(0),
 																											   Grid_EBO(0)
 	{
-		// Grid_VAO = 0;
-		// Grid_VBO = 0;
-		// Grid_EBO = 0;
-		constructGrid(xPointCount, yPointCount, xSpacing, ySpacing);
+		m_xPointCount = xPointCount;
+		m_yPointCount = yPointCount;
+		m_xSpacing = xSpacing;
+		m_ySpacing = ySpacing;
+		constructGrid();
+		M = AssembleM();
 	}
 
 	~Grid()
@@ -30,52 +32,56 @@ public:
 	unsigned int Grid_VBO, Grid_VAO, Grid_EBO;
 
 	// Get the space coord from input idx
-	static GLfloat *ComputePointCoordinates(GLuint pointIndex, GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing);
-	static void ComputePointCoordinate(int pointIndex, int xPointCount, int yPointCount, float xSpacing, float ySpacing, float pt[3]);
+	GLfloat *ComputePointCoordinates(GLuint pointIndex);
+	void ComputePointCoordinate(int pointIndex, float pt[3]);
 
 	// render all grid points for calculation
-	cv::Mat AssembleM(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const;
 
 	void initGLBuffers();
 
 	void updateGLBuffers();
 
 	// Normal Grid
-	void constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing);
+	void constructGrid();
 
 	// Deformed Grid
-	void constructDeformedGrid(const GLuint xPointCount, const GLuint yPointCount, const GLfloat xSpacing, const GLfloat ySpacing, cv::Mat &fv);
+	void constructDeformedGrid(cv::Mat fv);
 
 	// Renders the actual Grid
 	void render();
 	void renderGridLines();
 	void renderGridPoints();
+	cv::Mat getM() { return M; };
+
+private:
+	cv::Mat AssembleM();
+	GLuint m_xPointCount;
+	GLuint m_yPointCount;
+	GLfloat m_xSpacing;
+	GLfloat m_ySpacing;
+	cv::Mat M;
 };
 
-inline GLfloat *Grid::ComputePointCoordinates(GLuint pointIndex,
-											  GLuint xPointCount, GLuint yPointCount,
-											  GLfloat xSpacing, GLfloat ySpacing)
+GLfloat *Grid::ComputePointCoordinates(GLuint pointIndex)
 {
 	static GLfloat pt[3];
 
-	GLfloat width = xSpacing * (xPointCount - 1);		  // 0.2*10 = 2.0
-	GLfloat height = ySpacing * (yPointCount - 1);		  // 0.2*10 = 2.0
-	GLfloat minX = -width / 2;							  // -2.0/2 = -1.0
-	GLfloat minY = -height / 2;							  // -2.0/2 = -1.0
-	pt[0] = minX + xSpacing * (pointIndex % xPointCount); //-1.0+0.2*(34%11) = x����
-	pt[1] = minY + ySpacing * (pointIndex / xPointCount); //-1.0+0.2*(34/11) = y����
+	GLfloat width = m_xSpacing * (m_xPointCount - 1);		  // 0.2*10 = 2.0
+	GLfloat height = m_ySpacing * (m_yPointCount - 1);		  // 0.2*10 = 2.0
+	GLfloat minX = -width / 2;								  // -2.0/2 = -1.0
+	GLfloat minY = -height / 2;								  // -2.0/2 = -1.0
+	pt[0] = minX + m_xSpacing * (pointIndex % m_xPointCount); //-1.0+0.2*(34%11) = x����
+	pt[1] = minY + m_ySpacing * (pointIndex / m_xPointCount); //-1.0+0.2*(34/11) = y����
 	pt[2] = 0;
 
 	return pt;
 }
 
-inline void Grid::ComputePointCoordinate(int pointIndex,
-										 int xPointCount, int yPointCount,
-										 float xSpacing, float ySpacing,
-										 float pt[3])
+void Grid::ComputePointCoordinate(int pointIndex,
+								  float pt[3])
 {
 	// ��׼����Ϊ��
-	float *tmp = ComputePointCoordinates(pointIndex, xPointCount, yPointCount, xSpacing, ySpacing);
+	float *tmp = ComputePointCoordinates(pointIndex);
 
 	pt[0] = tmp[0];
 	pt[1] = tmp[1];
@@ -83,25 +89,25 @@ inline void Grid::ComputePointCoordinate(int pointIndex,
 }
 
 // assemble grid points for fruther calculation
-inline cv::Mat Grid::AssembleM(int xPointCount, int yPointCount, double xSpacing, double ySpacing) const
+cv::Mat Grid::AssembleM()
 {
 	// change the size of the grid
-	cv::Mat a = cv::Mat::zeros(2, xPointCount * yPointCount, CV_32F); // 2 x 1600 x float
-	double width = xSpacing * (xPointCount - 1);					  // 2.0
-	double height = ySpacing * (yPointCount - 1);					  // 2.0
+	cv::Mat a = cv::Mat::zeros(2, m_xPointCount * m_yPointCount, CV_32F); // 2 x 1600 x float
+	double width = m_xSpacing * (m_xPointCount - 1);					  // 2.0
+	double height = m_ySpacing * (m_yPointCount - 1);					  // 2.0
 	double minX = -width / 2;
 	double minY = -height / 2;
 
-	for (int i = 0; i < xPointCount; i++)
+	for (int i = 0; i < m_xPointCount; i++)
 	{
-		for (int j = 0; j < yPointCount; j++)
+		for (int j = 0; j < m_yPointCount; j++)
 		{
-			double x = minX + i * xSpacing;
-			double y = minY + j * ySpacing;
+			double x = minX + i * m_xSpacing;
+			double y = minY + j * m_ySpacing;
 
 			// save the mat points to get v
-			a.at<float>(0, i * yPointCount + j) = static_cast<float>(x);
-			a.at<float>(1, i * yPointCount + j) = static_cast<float>(y);
+			a.at<float>(0, i * m_yPointCount + j) = static_cast<float>(x);
+			a.at<float>(1, i * m_yPointCount + j) = static_cast<float>(y);
 		}
 	}
 
@@ -137,34 +143,33 @@ void Grid::updateGLBuffers()
 {
 	glBindBuffer(GL_ARRAY_BUFFER, Grid_VBO);
 	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_STATIC_DRAW);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO); // todo: these don't really need to be uploaded every frame though
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, Grid_indices.size() * sizeof(glm::ivec3), &Grid_indices[0], GL_STATIC_DRAW);
 }
 
-inline void Grid::constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat xSpacing, GLfloat ySpacing)
+void Grid::constructGrid()
 {
-	float width = (xPointCount - 1) * xSpacing;
-	float height = (yPointCount - 1) * ySpacing;
+	float width = (m_xPointCount - 1) * m_xSpacing;
+	float height = (m_yPointCount - 1) * m_ySpacing;
 	float minX = -width / 2;
 	float minY = -height / 2;
 
 	Grid_vertices.clear();
 	Grid_indices.clear();
 
-	GLuint nrQuads = (xPointCount - 1) * (yPointCount - 1); // 1600
+	GLuint nrQuads = (m_xPointCount - 1) * (m_yPointCount - 1); // 1600
 	for (GLuint i = 0; i < nrQuads; i++)
 	{
-		GLuint k = i + i / (xPointCount - 1);
-		GLuint a = k;					// LU
-		GLuint b = k + 1;				// RU
-		GLuint c = k + 1 + xPointCount; // RD
-		GLuint d = k + xPointCount;		// LD
+		GLuint k = i + i / (m_xPointCount - 1);
+		GLuint a = k;					  // LU
+		GLuint b = k + 1;				  // RU
+		GLuint c = k + 1 + m_xPointCount; // RD
+		GLuint d = k + m_xPointCount;	  // LD
 		GLfloat aPt[3], bPt[3], cPt[3], dPt[3];
-		// ���ݶ����λ������������������
-		ComputePointCoordinate(a, xPointCount, yPointCount, xSpacing, ySpacing, aPt);
-		ComputePointCoordinate(b, xPointCount, yPointCount, xSpacing, ySpacing, bPt);
-		ComputePointCoordinate(c, xPointCount, yPointCount, xSpacing, ySpacing, cPt);
-		ComputePointCoordinate(d, xPointCount, yPointCount, xSpacing, ySpacing, dPt);
+		ComputePointCoordinate(a, aPt);
+		ComputePointCoordinate(b, bPt);
+		ComputePointCoordinate(c, cPt);
+		ComputePointCoordinate(d, dPt);
 
 		// Triangle 1 c d a
 		// Pos Color Coord
@@ -202,31 +207,31 @@ inline void Grid::constructGrid(GLuint xPointCount, GLuint yPointCount, GLfloat 
 	// printf("vertices length:%d indices length:%d\n", static_cast<int>(Grid_vertices.size()), static_cast<int>(Grid_indices.size()));
 }
 
-inline void Grid::constructDeformedGrid(const GLuint xPointCount, const GLuint yPointCount, const GLfloat xSpacing, const GLfloat ySpacing, cv::Mat &fv)
+void Grid::constructDeformedGrid(cv::Mat fv)
 {
-	double width = (xPointCount - 1) * xSpacing;
-	double height = (yPointCount - 1) * ySpacing;
+	double width = (m_xPointCount - 1) * m_xSpacing;
+	double height = (m_yPointCount - 1) * m_ySpacing;
 	double minX = -width / 2;
 	double minY = -height / 2;
 
 	Grid_vertices.clear();
 	Grid_indices.clear();
 
-	int nrQuads = (xPointCount - 1) * (yPointCount - 1);
+	int nrQuads = (m_xPointCount - 1) * (m_yPointCount - 1);
 	for (int i = 0; i < nrQuads; i++)
 	{
-		int k = i + i / (xPointCount - 1);
+		int k = i + i / (m_xPointCount - 1);
 		int a = k;
 		int b = k + 1;
-		int c = k + 1 + xPointCount;
-		int d = k + xPointCount;
+		int c = k + 1 + m_xPointCount;
+		int d = k + m_xPointCount;
 		double aPt[3], bPt[3], cPt[3], dPt[3];
 		float aPtIm[3], bPtIm[3], cPtIm[3], dPtIm[3];
 
-		ComputePointCoordinate(a, xPointCount, yPointCount, xSpacing, ySpacing, aPtIm);
-		ComputePointCoordinate(b, xPointCount, yPointCount, xSpacing, ySpacing, bPtIm);
-		ComputePointCoordinate(c, xPointCount, yPointCount, xSpacing, ySpacing, cPtIm);
-		ComputePointCoordinate(d, xPointCount, yPointCount, xSpacing, ySpacing, dPtIm);
+		ComputePointCoordinate(a, aPtIm);
+		ComputePointCoordinate(b, bPtIm);
+		ComputePointCoordinate(c, cPtIm);
+		ComputePointCoordinate(d, dPtIm);
 
 		// get the deformed points
 		aPt[0] = fv.at<float>(0, a);
@@ -282,22 +287,22 @@ inline void Grid::constructDeformedGrid(const GLuint xPointCount, const GLuint y
 	// printf("vertices length:%d indices length:%d\n", static_cast<int>(Grid_vertices.size()), static_cast<int>(Grid_indices.size()));
 }
 
-inline void Grid::render()
+void Grid::render()
 {
 	glBindVertexArray(Grid_VAO);
-	glDrawElements(GL_TRIANGLES, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+	glDrawElements(GL_TRIANGLES, (m_xPointCount - 1) * (m_yPointCount - 1) * 2 * 3, GL_UNSIGNED_INT, nullptr);
 }
 
-inline void Grid::renderGridLines()
+void Grid::renderGridLines()
 {
 	glBindVertexArray(Grid_VAO);
-	glDrawElements(GL_LINES, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+	glDrawElements(GL_LINES, (m_xPointCount - 1) * (m_yPointCount - 1) * 2 * 3, GL_UNSIGNED_INT, nullptr);
 }
 
-inline void Grid::renderGridPoints()
+void Grid::renderGridPoints()
 {
 	glBindVertexArray(Grid_VAO);
-	glDrawElements(GL_POINTS, Grid_indices.size() * 3, GL_UNSIGNED_INT, nullptr);
+	glDrawElements(GL_POINTS, (m_xPointCount - 1) * (m_yPointCount - 1) * 2 * 3, GL_UNSIGNED_INT, nullptr);
 }
 
 #endif GRID_H

@@ -93,7 +93,7 @@ void GridProcess()
   // NormalGrid.InitGrid(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING);
 
   // InitDeformedGrid
-  cv::Mat v = NormalGrid.AssembleM(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING);
+  // cv::Mat v = NormalGrid.AssembleM(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING);
   cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
   cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
   // initializing p points for fish eye image
@@ -111,7 +111,7 @@ void GridProcess()
 
   double a = 2.0;
   // Precompute
-  cv::Mat w = MLSprecomputeWeights(p, v, a);
+  cv::Mat w = MLSprecomputeWeights(p, NormalGrid.getM(), a);
   cv::Mat fv;             // coordinates of keypoints
   cv::Mat A;              // for affine Deformation
   std::vector<_typeA> tA; // for similarity Deformation
@@ -122,17 +122,17 @@ void GridProcess()
   switch (obj)
   {
   case 0:
-    A = MLSprecomputeAffine(p, v, w);
+    A = MLSprecomputeAffine(p, NormalGrid.getM(), w);
     fv = MLSPointsTransformAffine(w, A, q);
     break;
 
   case 1:
-    tA = MLSprecomputeSimilar(p, v, w);
+    tA = MLSprecomputeSimilar(p, NormalGrid.getM(), w);
     fv = MLSPointsTransformSimilar(w, tA, q);
     break;
 
   case 2:
-    mlsd = MLSprecomputeRigid(p, v, w);
+    mlsd = MLSprecomputeRigid(p, NormalGrid.getM(), w);
     fv = MLSPointsTransformRigid(w, mlsd, q);
     break;
   default:
@@ -142,9 +142,9 @@ void GridProcess()
   std::cout << "MLS Time: " << t1.getElapsedTimeInMilliSec() << std::endl;
   objChanged = false;
   if (obj < 3)
-    NormalGrid.constructDeformedGrid(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING, fv);
+    NormalGrid.constructDeformedGrid(fv);
   else
-    NormalGrid.constructGrid(X_POINT_COUNT, Y_POINT_COUNT, X_SPACING, Y_SPACING);
+    NormalGrid.constructGrid();
   NormalGrid.updateGLBuffers();
 }
 
