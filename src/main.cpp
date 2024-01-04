@@ -279,10 +279,11 @@ PyObject *predict_single;
 PyObject *predict_video;
 PyObject *init_detector;
 PyObject *single_detector;
-int grid_x_point_count = 41;
-int grid_y_point_count = 41;
-float grid_x_spacing = 0.05;
-float grid_y_spacing = 0.05;
+const int grid_x_point_count = 41;
+const int grid_y_point_count = 41;
+const float grid_x_spacing = 0.05;
+const float grid_y_spacing = 0.05;
+float mls_alpha = 0.5f;
 Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
@@ -1215,12 +1216,11 @@ int main(int argc, char *argv[])
                                         q.at<float>(0, i) = (ControlPointsQ.at(i)).x;
                                         q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
                                     }
-                                    double alpha = 2.0;
                                     // mls_profile.stop();
                                     // std::cout << "MLS precomputation time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     // mls_profile.start();
                                     // weights
-                                    cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), alpha);
+                                    cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), mls_alpha);
                                     // mls_profile.stop();
                                     // std::cout << "MLS weight time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     // affine
@@ -3778,6 +3778,8 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Post Process"))
         {
             ImGui::Checkbox("MLS?", &use_mls);
+            ImGui::SameLine();
+            ImGui::SliderFloat("Camera Exposure [us]", &mls_alpha, 0.01f, 5.0f);
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {
