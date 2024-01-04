@@ -265,7 +265,6 @@ FBO mls_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
-FBO postprocess2_fbo(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
 LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
 DynaFlashProjector projector(true, false);
@@ -451,14 +450,13 @@ int main(int argc, char *argv[])
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
-    uv_fbo.init(GL_RGBA, GL_RGBA32F);
+    uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
     bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
-    postprocess2_fbo.init();
     icp_fbo.init();
     icp2_fbo.init();
-    mls_fbo.init();
+    mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
     SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights.fbx",
                                "../../resource/uv.png", // uv.png
@@ -1254,7 +1252,6 @@ int main(int argc, char *argv[])
                 if (mls_succeed)
                 {
                     // use new grid to deform rendered image
-                    // todo split function into two parts for real time
                     // std::cout << "constructing grid !" << std::endl;
                     // deformationGrid.constructGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
                     // std::cout << "updating gl buffers !" << std::endl;
@@ -1285,10 +1282,10 @@ int main(int argc, char *argv[])
                 gridShader.use();
                 gridShader.setBool("flipVer", false);
                 deformationGrid.render();
-                glEnable(GL_CULL_FACE);
                 // gridColorShader.use();
                 // deformationGrid.renderGridLines();
                 mls_fbo.unbind(); // mls_fbo
+                glEnable(GL_CULL_FACE);
             }
             /* post process fbo using camera input */
             t_pp.start();
@@ -1392,16 +1389,6 @@ int main(int argc, char *argv[])
                 postProcess.mask(maskShader, icp2_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 // fullScreenQuad.render();
                 // postprocess_fbo.unbind();
-                break;
-            }
-            case static_cast<int>(PostProcessMode::OVERLAY_DEBUG):
-            {
-                set_texture_shader(textureShader, true, true, true, threshold_flag, masking_threshold);
-                camTexture.bind();
-                postprocess2_fbo.bind();
-                fullScreenQuad.render();
-                postprocess2_fbo.unbind();
-                postProcess.mask(maskShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
                 break;
             }
             default:
@@ -3658,14 +3645,27 @@ void openIMGUIFrame()
             {
                 std::string name = std::tmpnam(nullptr);
                 fs::path filename(name);
-                std::string savepath(std::string("../../debug/ss/"));
+                std::string savepath(std::string("../../debug/"));
                 // std::cout << "unique file name: " << filename.filename().string() << std::endl;
                 fs::path raw_image(savepath + filename.filename().string() + std::string("_raw_cam.png"));
+                fs::path mask_path(savepath + filename.filename().string() + std::string("_mask.png"));
                 fs::path render(savepath + filename.filename().string() + std::string("_render.png"));
+                fs::path uv(savepath + filename.filename().string() + std::string("_uv.png"));
+                fs::path mls(savepath + filename.filename().string() + std::string("_mls_fbo.png"));
+                fs::path pp(savepath + filename.filename().string() + std::string("_pp.png"));
+                fs::path coax(savepath + filename.filename().string() + std::string("_coax.png"));
                 fs::path keypoints(savepath + filename.filename().string() + std::string("_keypoints.npy"));
-                // cv::imwrite("../../debug/raw_cam_image.png", camImageOrig);
+                cv::Mat tmp, mask;
+                cv::flip(camImageOrig, tmp, 1); // flip horizontally
+                cv::resize(tmp, tmp, cv::Size(proj_width, proj_height));
+                cv::threshold(tmp, mask, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
+                cv::imwrite(raw_image.string(), tmp);
+                cv::imwrite(mask_path.string(), mask);
                 hands_fbo.saveColorToFile(render.string());
-                postprocess2_fbo.saveColorToFile(raw_image.string());
+                uv_fbo.saveColorToFile(uv.string());
+                mls_fbo.saveColorToFile(mls.string());
+                postprocess_fbo.saveColorToFile(pp.string());
+                c2p_fbo.saveColorToFile(coax.string());
                 if (skeleton_vertices.size() > 0)
                 {
                     std::vector<glm::vec2> projected = Helpers::project_points(skeleton_vertices, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
@@ -3798,7 +3798,6 @@ void openIMGUIFrame()
             ImGui::RadioButton("Jump Flood UV", &postprocess_mode, 4);
             ImGui::SameLine();
             ImGui::RadioButton("ICP", &postprocess_mode, 5);
-            ImGui::RadioButton("Overly Debug", &postprocess_mode, 6);
             if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
             {
                 ImGui::Checkbox("ICP on?", &icp_apply_transform);
