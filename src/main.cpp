@@ -153,7 +153,7 @@ int sd_outwidth, sd_outheight;
 bool useFingerWidth = false;
 Texture *dynamicTexture = nullptr;
 Texture *bakedTexture = nullptr;
-int magic_leap_time_delay = 40000; // us
+int magic_leap_time_delay = 10000; // us
 float leap_global_scaler = 1.0f;
 float magic_leap_scale_factor = 10.0f;
 float leap_arm_local_scaler = 0.019f;
@@ -719,7 +719,7 @@ int main(int argc, char *argv[])
         previousAppTime = currentAppTime;
         if (!leap_poll_mode)
         {
-            std::modf(currentAppTime, &whole);
+            std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
             LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
         }
         frameCount++;
@@ -834,7 +834,7 @@ int main(int argc, char *argv[])
         if (!leap_poll_mode)
         {
             // sync leap clock
-            std::modf(glfwGetTime(), &whole);
+            std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
             // get leap frame
         }
