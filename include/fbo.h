@@ -11,7 +11,10 @@ public:
     ~FBO();
     FBO(const FBO &) = delete;
     FBO &operator=(const FBO &) = delete;
-    void init(unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
+    void init(unsigned int input_color_format = GL_BGRA,
+              unsigned int texture_color_format = GL_RGBA,
+              unsigned int texture_interpolation_mode = GL_LINEAR,
+              unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
     void bind(bool clear = true);
     void unbind();
     void saveColorToFile(std::string filepath, bool flip_vertically = true);

@@ -27,9 +27,16 @@ FBO::~FBO()
     }
 }
 
-void FBO::init(unsigned int input_color_format, unsigned int texture_color_format)
+void FBO::init(unsigned int input_color_format,
+               unsigned int texture_color_format,
+               unsigned int texture_interpolation_mode,
+               unsigned int texture_wrap_mode)
 {
-    m_texture.init(m_width, m_height, m_channels, input_color_format, texture_color_format);
+    m_texture.init(m_width, m_height, m_channels,
+                   input_color_format,
+                   texture_color_format,
+                   texture_interpolation_mode,
+                   texture_wrap_mode);
     // glGenTextures(1, &m_texture);
     glGenRenderbuffers(1, &m_depthBuffer);
     glGenFramebuffers(1, &m_FBO);

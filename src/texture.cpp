@@ -77,13 +77,17 @@ bool Texture::init(const std::string &Filename)
 //     return true;
 // }
 
-void Texture::init(int width, int height, int bpp, unsigned int input_color_format, unsigned int texture_color_format)
+void Texture::init(int width, int height, int bpp,
+                   unsigned int input_color_format,
+                   unsigned int texture_color_format,
+                   unsigned int texture_interpolation_mode,
+                   unsigned int texture_wrap_mode)
 {
     m_imageWidth = width;
     m_imageHeight = height;
     m_imageBPP = bpp;
     m_sizeTexData = sizeof(GLubyte) * m_imageWidth * m_imageHeight * m_imageBPP;
-    initInternal(NULL, input_color_format, texture_color_format);
+    initInternal(NULL, input_color_format, texture_color_format, texture_interpolation_mode, texture_wrap_mode);
 }
 
 void Texture::init(uint8_t *buffer, int width, int height, int bpp)
@@ -96,7 +100,10 @@ void Texture::init(uint8_t *buffer, int width, int height, int bpp)
     // load(pData, false);
 }
 
-void Texture::initInternal(void *image_data, unsigned int input_color_format, unsigned int texture_color_format)
+void Texture::initInternal(void *image_data, unsigned int input_color_format,
+                           unsigned int texture_color_format,
+                           unsigned int texture_interpolation_mode,
+                           unsigned int texture_wrap_mode)
 {
     // pbo
     void *data = malloc(m_sizeTexData);
@@ -110,11 +117,11 @@ void Texture::initInternal(void *image_data, unsigned int input_color_format, un
     glGenTextures(1, &m_textureObj);
     glBindTexture(m_textureTarget, m_textureObj);
 
-    glTexParameteri(m_textureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(m_textureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(m_textureTarget, GL_TEXTURE_MIN_FILTER, texture_interpolation_mode); // GL_LINEAR, GL_NEAREST
+    glTexParameteri(m_textureTarget, GL_TEXTURE_MAG_FILTER, texture_interpolation_mode); // GL_LINEAR, GL_NEAREST
     // glTexParameterf(m_textureTarget, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); // GL_REPEAT, GL_CLAMP_TO_BORDER
-    glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_S, texture_wrap_mode); // GL_REPEAT, GL_MIRRORED_REPEAT, GL_CLAMP_TO_BORDER, GL_CLAMP_TO_EDGE
+    glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_T, texture_wrap_mode);
 
     // glGenerateMipmap(m_textureTarget);
 

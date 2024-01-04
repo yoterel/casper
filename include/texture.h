@@ -19,7 +19,11 @@ public:
 
     bool init(const std::string &Filename);
 
-    void init(int width, int height, int bpp = 4, unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
+    void init(int width, int height, int bpp = 4,
+              unsigned int input_color_format = GL_BGRA,
+              unsigned int texture_color_format = GL_RGBA,
+              unsigned int texture_interpolation_mode = GL_LINEAR,
+              unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
 
     void init(uint8_t *buffer, int width, int height, int bpp = 4);
 
@@ -40,7 +44,11 @@ public:
     GLuint getActualTextureFormat() const { return m_actualTextureFormat; }
 
 private:
-    void initInternal(void *image_data, unsigned int input_color_format = GL_BGRA, unsigned int texture_color_format = GL_RGBA);
+    void initInternal(void *image_data,
+                      unsigned int input_color_format = GL_BGRA,
+                      unsigned int texture_color_format = GL_RGBA,
+                      unsigned int texture_interpolation_mode = GL_LINEAR,
+                      unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
 
     std::string m_fileName;
     GLenum m_textureTarget;
