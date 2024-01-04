@@ -1,14 +1,14 @@
 #include "display.h"
 
-// CDynaFlash* DynaFlashProjector::pDynaFlash = NULL;
-
 bool DynaFlashProjector::init()
 {
-	// if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE))
-	// {
-	// 	std::cout << "SetProcessWorkingSetSize Failed!\n";
-	// 	return false;
-	// }
+	// apparently this is needed or else the projector will not work. perhaps dynaflash can't tolerate page faults?
+	if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE))
+	{
+		std::cout << "SetProcessWorkingSetSize Failed!\n";
+		return false;
+	}
+	/* create a DynaFlash instance */
 	pDynaFlash = CreateDynaFlash();
 	if (pDynaFlash == NULL)
 	{

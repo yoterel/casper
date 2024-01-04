@@ -37,17 +37,12 @@
             "console": "externalTerminal"
         },
         {
-            "name": "debug",
+            "name": "dyna_example",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
             "args": [
-                "-debug",
-                "-cam_free",
-                "-leap_poll",
-                // "-proj_on",
-                "-download_pbo"
-                // "-cam_fake",
+                "../../resource/test_pattern_60fps.mp4",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build//Debug",
