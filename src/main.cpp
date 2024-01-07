@@ -97,6 +97,7 @@ bool sd_running = false;
 bool mls_succeed = false;
 bool mls_running = false;
 bool use_mls = false;
+bool show_mls_landmarks = false;
 bool freecam_mode = false;
 bool use_cuda = false;
 bool simulated_camera = false;
@@ -273,7 +274,9 @@ moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
 moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
 bool close_signal = false;
 std::vector<glm::vec3> skeleton_vertices;
-
+float grab_angle_left = 0.0f;
+float grab_angle_right = 0.0f;
+float mls_grab_threshold = 0.3f;
 PyObject *myModule;
 PyObject *predict_single;
 PyObject *predict_video;
@@ -1152,30 +1155,22 @@ int main(int argc, char *argv[])
                                     ControlPointsP.push_back(keypoints[27]);
                                     // ControlPointsP.push_back(keypoints[34]);
                                     ControlPointsP.push_back(keypoints[35]);
-                                    /* tips */
-                                    ControlPointsP.push_back(keypoints[9]);
-                                    ControlPointsP.push_back(keypoints[17]);
-                                    ControlPointsP.push_back(keypoints[25]);
-                                    ControlPointsP.push_back(keypoints[33]);
-                                    ControlPointsP.push_back(keypoints[41]);
-                                    /* 1 before tips */
-                                    ControlPointsP.push_back(keypoints[7]);
-                                    ControlPointsP.push_back(keypoints[15]);
-                                    ControlPointsP.push_back(keypoints[23]);
-                                    ControlPointsP.push_back(keypoints[31]);
-                                    ControlPointsP.push_back(keypoints[39]);
+                                    if (grab_angle_left <= mls_grab_threshold)
+                                    {
+                                        /* tips */
+                                        ControlPointsP.push_back(keypoints[9]);
+                                        ControlPointsP.push_back(keypoints[17]);
+                                        ControlPointsP.push_back(keypoints[25]);
+                                        ControlPointsP.push_back(keypoints[33]);
+                                        ControlPointsP.push_back(keypoints[41]);
+                                        /* 1 before tips */
+                                        ControlPointsP.push_back(keypoints[7]);
+                                        ControlPointsP.push_back(keypoints[15]);
+                                        ControlPointsP.push_back(keypoints[23]);
+                                        ControlPointsP.push_back(keypoints[31]);
+                                        ControlPointsP.push_back(keypoints[39]);
+                                    }
                                     //
-                                    // ControlPointsQ.push_back(keypoints[1]);
-                                    // ControlPointsQ.push_back(keypoints[2]);
-                                    // ControlPointsQ.push_back(keypoints[5]);
-                                    // ControlPointsQ.push_back(keypoints[10]);
-                                    // ControlPointsQ.push_back(keypoints[11]);
-                                    // ControlPointsQ.push_back(keypoints[18]);
-                                    // ControlPointsQ.push_back(keypoints[19]);
-                                    // ControlPointsQ.push_back(keypoints[26]);
-                                    // ControlPointsQ.push_back(keypoints[27]);
-                                    // ControlPointsQ.push_back(keypoints[34]);
-                                    // ControlPointsQ.push_back(keypoints[35]);
                                     /* wrist */
                                     ControlPointsQ.push_back(destination[0]);
                                     /* finger root */
@@ -1189,18 +1184,21 @@ int main(int argc, char *argv[])
                                     // ControlPointsQ.push_back(destination[14]);
                                     ControlPointsQ.push_back(destination[17]);
                                     // ControlPointsQ.push_back(destination[18]);
-                                    /* tips */
-                                    ControlPointsQ.push_back(destination[4]);
-                                    ControlPointsQ.push_back(destination[8]);
-                                    ControlPointsQ.push_back(destination[12]);
-                                    ControlPointsQ.push_back(destination[16]);
-                                    ControlPointsQ.push_back(destination[20]);
-                                    /* 1 before tips */
-                                    ControlPointsQ.push_back(destination[3]);
-                                    ControlPointsQ.push_back(destination[7]);
-                                    ControlPointsQ.push_back(destination[11]);
-                                    ControlPointsQ.push_back(destination[15]);
-                                    ControlPointsQ.push_back(destination[19]);
+                                    if (grab_angle_left <= mls_grab_threshold)
+                                    {
+                                        /* tips */
+                                        ControlPointsQ.push_back(destination[4]);
+                                        ControlPointsQ.push_back(destination[8]);
+                                        ControlPointsQ.push_back(destination[12]);
+                                        ControlPointsQ.push_back(destination[16]);
+                                        ControlPointsQ.push_back(destination[20]);
+                                        /* 1 before tips */
+                                        ControlPointsQ.push_back(destination[3]);
+                                        ControlPointsQ.push_back(destination[7]);
+                                        ControlPointsQ.push_back(destination[11]);
+                                        ControlPointsQ.push_back(destination[15]);
+                                        ControlPointsQ.push_back(destination[19]);
+                                    }
                                     // deform grid using prediction
                                     // todo: refactor control points to avoid this part
                                     cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
@@ -1394,13 +1392,24 @@ int main(int argc, char *argv[])
                 break;
             }
             c2p_fbo.bind();
-
             if (use_coaxial_calib)
                 set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), c2p_homography);
             else
                 set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f));
             postprocess_fbo.getTexture()->bind();
             fullScreenQuad.render();
+            if (show_mls_landmarks)
+            {
+                vcolorShader.use();
+                PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
+                PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
+                if (use_coaxial_calib)
+                    vcolorShader.setMat4("MVP", c2p_homography);
+                else
+                    vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                cloud_src.render(5.0f);
+                cloud_dst.render(5.0f);
+            }
             c2p_fbo.unbind();
 
             // }
@@ -3068,6 +3077,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         // if (debug_vec.x > 0)
         if (hand->type == eLeapHandType_Right)
             chirality = flip_x;
+        float grab_angle = hand->grab_angle;
         std::vector<glm::mat4> bones_to_world;
         // palm
         glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
@@ -3147,9 +3157,15 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
             }
         }
         if (hand->type == eLeapHandType_Right)
+        {
             bones_to_world_right = std::move(bones_to_world);
+            grab_angle_right = grab_angle;
+        }
         else
+        {
             bones_to_world_left = std::move(bones_to_world);
+            grab_angle_left = grab_angle;
+        }
     }
     // Free the allocated buffer when done.
     if (leap_poll_mode)
@@ -3779,7 +3795,9 @@ void openIMGUIFrame()
         {
             ImGui::Checkbox("MLS?", &use_mls);
             ImGui::SameLine();
+            ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
+            ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {

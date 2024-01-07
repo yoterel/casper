@@ -89,6 +89,7 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
+            "cwd": "C:/src/augmented_hands/build/Release/",
             "console": "integratedTerminal",
             "justMyCode": true
         }

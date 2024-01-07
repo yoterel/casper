@@ -73,13 +73,13 @@ def init_detector(video=False):
     if video:
         my_options = vision.HandLandmarkerOptions(
             base_options=my_base_options,
-            num_hands=1,
+            num_hands=2,
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
         )
     else:
         my_options = vision.HandLandmarkerOptions(
             base_options=my_base_options,
-            num_hands=1,
+            num_hands=2,
         )
     my_detector = vision.HandLandmarker.create_from_options(my_options)
     return my_detector
@@ -145,17 +145,20 @@ def predict_video_aprox(image_orig, i, my_detector):
     detection_result = my_detector.detect_for_video(
         mp_image, i
     )  # detect_for_video(mp_image, i), detect(mp_image)
-    if len(detection_result.hand_landmarks) > 0:
-        mp_np = np.array(
+    if len(detection_result.hand_landmarks) == 0:
+        return np.zeros(1)
+    mp_np = np.zeros((len(detection_result.hand_landmarks), 21, 2), dtype=np.float32)
+    for j in range(len(detection_result.hand_landmarks)):
+        mp_np[j] = np.array(
             [
                 [landmark.x, landmark.y]
-                for landmark in detection_result.hand_landmarks[0]
+                for landmark in detection_result.hand_landmarks[j]
             ]
         ).astype(np.float32)
-        mp_np = (mp_np * 2) - 1  # 0:1 to -1:1
-        mp_np[:, 1] = -mp_np[:, 1]  # flip y
-    else:
-        mp_np = np.zeros(1)
+    mp_np = (mp_np * 2) - 1  # 0:1 to -1:1
+    mp_np[:, :, 1] = -mp_np[:, :, 1]  # flip y
+    # else:
+    #     mp_np = np.zeros(1)
     # print(mp_np.dtype)
     # print(mp_np.shape)
     return mp_np
@@ -244,14 +247,15 @@ if __name__ == "__main__":
     # benchmark mediapipe
     import time
     import cv2
+    from pathlib import Path
 
-    image_4channel = cv2.imread(
-        "../../resource/hand.png", cv2.IMREAD_UNCHANGED
-    )  # 4 channel
-    image_3channel = cv2.imread("../../resource/hand.png")  # 3 channel
-    image_1channel = cv2.imread(
-        "../../resource/hand.png", cv2.IMREAD_GRAYSCALE
-    )  # 1 channel
+    raw_image_path = "../../resource/hand.png"  # "../../resource/two_hands.jpg" # "../../resource/hand.png"
+    image_path = str(Path(raw_image_path).resolve())
+    image_4channel = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)  # 4 channel
+    if image_4channel.shape[-1] != 4:
+        image_4channel = cv2.cvtColor(image_4channel, cv2.COLOR_RGB2RGBA)
+    image_3channel = cv2.imread(image_path)  # 3 channel
+    image_1channel = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)  # 1 channel
     image_1channel_dummy = image_1channel.copy()[
         :, :, None
     ]  # 1 channel with dummy axis
@@ -278,7 +282,7 @@ if __name__ == "__main__":
             start = time.time()
             test = predict_single(image, my_detector)
             times.append(time.time() - start)
-            if test.shape[0] == 1:
+            if test.shape == (1,):
                 failures += 1
             # print(times[-1])
         single_avg_with_detector = np.array(times).mean()
@@ -290,7 +294,7 @@ if __name__ == "__main__":
             start = time.time()
             test = predict_single(image)
             times.append(time.time() - start)
-            if test.shape[0] == 1:
+            if test.shape == (1,):
                 failures += 1
             # print(times[-1])
         single_avg_no_detector = np.array(times).mean()
@@ -304,7 +308,7 @@ if __name__ == "__main__":
             start = time.time()
             test = predict_video_aprox(image, i, my_video_detector)
             times.append(time.time() - start)
-            if test.shape[0] == 1:
+            if test.shape == (1,):
                 failures += 1
             # print(times[-1])
         video_avg = np.array(times).mean()
