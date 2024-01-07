@@ -832,7 +832,6 @@ int main(int argc, char *argv[])
             // sync leap clock
             std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-            // get leap frame
         }
         LEAP_STATUS leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
         if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
@@ -3473,7 +3472,7 @@ void openIMGUIFrame()
             case static_cast<int>(CalibrationMode::LEAP):
             {
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
-                ImGui::SliderInt("# Points to Collect", &n_points_leap_calib, 10, 2000);
+                ImGui::SliderInt("# Points to Collect", &n_points_leap_calib, 1000, 100000);
                 ImGui::Checkbox("Use RANSAC", &leap_calib_use_ransac);
                 ImGui::Text("Collection Procedure");
                 ImGui::RadioButton("Manual Raw", &leap_collection_setting, 0);
@@ -3641,6 +3640,7 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
                 // std::cout << "new exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
             }
+            ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::Button("Screen Shot"))
             {
                 std::string name = std::tmpnam(nullptr);
@@ -3779,7 +3779,7 @@ void openIMGUIFrame()
         {
             ImGui::Checkbox("MLS?", &use_mls);
             ImGui::SameLine();
-            ImGui::SliderFloat("Camera Exposure [us]", &mls_alpha, 0.01f, 5.0f);
+            ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {
