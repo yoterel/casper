@@ -33,6 +33,7 @@ public:
     static void setupCubeTexturedBuffers(unsigned int &VAO, unsigned int &VBO1, unsigned int &VBO2);
     static void setupSkeletonBuffers(unsigned int &VAO, unsigned int &VBO);
     static float MSE(const std::vector<glm::vec2> &a, const std::vector<glm::vec2> &b /*, std::vector<float> &mse*/);
+    static std::vector<glm::vec2> accumulate(const std::vector<std::vector<glm::vec2>> &a, bool normalize = true);
 
 private:
     Helpers();
@@ -100,4 +101,4 @@ enum class CalibrationMode
     LEAP = 3,
 };
 
-#endif HELPERS_H
+#endif // HELPERS_H

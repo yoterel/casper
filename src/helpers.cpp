@@ -449,6 +449,32 @@ float Helpers::MSE(const std::vector<glm::vec2> &a, const std::vector<glm::vec2>
     avg_error /= a.size();
     return avg_error;
 }
+
+std::vector<glm::vec2> Helpers::accumulate(const std::vector<std::vector<glm::vec2>> &a, bool normalize)
+{
+    if (a.size() == 0)
+    {
+        std::cout << "ERROR: vector of vectors must have at least one vector." << std::endl;
+        return std::vector<glm::vec2>();
+    }
+    unsigned long long reduce_size = a[0].size();
+    std::vector<glm::vec2> accumulator(reduce_size, glm::vec2(0.0f, 0.0f));
+    for (int i = 0; i < a.size(); i++)
+    {
+        for (int j = 0; j < reduce_size; j++)
+        {
+            accumulator[j] += a[i][j];
+        }
+    }
+    if (normalize)
+    {
+        for (int i = 0; i < accumulator.size(); i++)
+        {
+            accumulator[i] /= a.size();
+        }
+    }
+    return accumulator;
+}
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
 // {
 //     std::vector<glm::vec3> vertices;

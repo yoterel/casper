@@ -142,9 +142,9 @@ void Grid::initGLBuffers()
 void Grid::updateGLBuffers()
 {
 	glBindBuffer(GL_ARRAY_BUFFER, Grid_VBO);
-	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_STATIC_DRAW);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO); // todo: these don't really need to be uploaded every frame though
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, Grid_indices.size() * sizeof(glm::ivec3), &Grid_indices[0], GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, Grid_vertices.size() * sizeof(glm::vec3), &Grid_vertices[0], GL_DYNAMIC_DRAW);
+	// glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Grid_EBO); // todo: these don't really need to be uploaded every frame though
+	// glBufferData(GL_ELEMENT_ARRAY_BUFFER, Grid_indices.size() * sizeof(glm::ivec3), &Grid_indices[0], GL_STATIC_DRAW);
 }
 
 void Grid::constructGrid()
@@ -305,4 +305,4 @@ void Grid::renderGridPoints()
 	glDrawElements(GL_POINTS, (m_xPointCount - 1) * (m_yPointCount - 1) * 2 * 3, GL_UNSIGNED_INT, nullptr);
 }
 
-#endif GRID_H
+#endif // GRID_H

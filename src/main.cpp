@@ -186,6 +186,7 @@ bool shift_modifier = false;
 bool ctrl_modifier = false;
 bool activateGUI = false;
 bool tab_pressed = false;
+bool rmb_pressed = false;
 unsigned int n_bones = 0;
 int totalFrameCount = 0;
 const unsigned int num_texels = proj_width * proj_height;
@@ -276,7 +277,7 @@ bool close_signal = false;
 std::vector<glm::vec3> skeleton_vertices;
 float grab_angle_left = 0.0f;
 float grab_angle_right = 0.0f;
-float mls_grab_threshold = 0.3f;
+float mls_grab_threshold = 5.0f;
 PyObject *myModule;
 PyObject *predict_single;
 PyObject *predict_video;
@@ -292,6 +293,8 @@ std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
 std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec2> ControlPointsQ_glm;
+std::vector<std::vector<glm::vec2>> prev_pred_glm;
+int mls_smooth_window = 0;
 
 int main(int argc, char *argv[])
 {
@@ -1131,11 +1134,19 @@ int main(int argc, char *argv[])
                                 // mls_profile.stop();
                                 // std::cout << "MLS projection time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                 // mls_profile.start();
-                                std::vector<glm::vec2> pred_glm = mp_predict(camImage, totalFrameCount);
+                                std::vector<glm::vec2> cur_pred_glm = mp_predict(camImage, totalFrameCount);
                                 // mls_profile.stop();
                                 // std::cout << "MLS prediction time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                                if (pred_glm.size() == 21)
+                                if (cur_pred_glm.size() == 21)
                                 {
+                                    prev_pred_glm.push_back(cur_pred_glm);
+                                    std::vector<glm::vec2> pred_glm = Helpers::accumulate(prev_pred_glm);
+                                    int diff = prev_pred_glm.size() - mls_smooth_window;
+                                    if (diff > 0)
+                                    {
+                                        for (int i = 0; i < diff; i++)
+                                            prev_pred_glm.erase(prev_pred_glm.begin());
+                                    }
                                     // mls_profile.start();
                                     std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(projected);
                                     // std::cout << "MP prediction succeeded" << std::endl;
@@ -2715,7 +2726,17 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
-    if (activateGUI)
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+    {
+        rmb_pressed = true;
+    }
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE)
+    {
+        if (rmb_pressed)
+            activateGUI = !activateGUI;
+        rmb_pressed = false;
+    }
+    if (activateGUI) // dont allow moving cameras when GUI active
         return;
     switch (calib_mode)
     {
@@ -3657,6 +3678,14 @@ void openIMGUIFrame()
                 // std::cout << "new exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
             }
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
+            if (ImGui::IsItemActive())
+            {
+                threshold_flag = true;
+            }
+            else
+            {
+                threshold_flag = false;
+            }
             if (ImGui::Button("Screen Shot"))
             {
                 std::string name = std::tmpnam(nullptr);
@@ -3798,6 +3827,7 @@ void openIMGUIFrame()
             ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
+            ImGui::SliderInt("MLS smooth window", &mls_smooth_window, 0, 10);
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {
@@ -3848,7 +3878,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
 
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
-            ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, 1, 100000);
+            ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, -50000, 50000);
             ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
             ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
