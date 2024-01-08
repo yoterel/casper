@@ -4,6 +4,8 @@
 
 std::vector<int> x_mouse_pos;
 std::vector<int> y_mouse_pos;
+int cur_x = 0;
+int cur_y = 0;
 
 cv::Point calcPoint(cv::Point2f center, double R, double angle);
 void circle_example();
@@ -80,8 +82,8 @@ void CallBackFunc(int event, int x, int y, int flags, void *userdata)
 {
     if (event == cv::EVENT_MOUSEMOVE)
     {
-        x_mouse_pos.push_back(x);
-        y_mouse_pos.push_back(y);
+        cur_x = x;
+        cur_y = y;
     }
 }
 void mouse_example()
@@ -98,6 +100,8 @@ void mouse_example()
     char code = (char)-1;
     for (;;)
     {
+        x_mouse_pos.push_back(cur_x);
+        y_mouse_pos.push_back(cur_y);
         if (x_mouse_pos.size() >= past_state_memory)
         {
 
