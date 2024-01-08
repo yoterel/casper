@@ -6,7 +6,7 @@ class Kalman1D
 public:
     Kalman1D(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f);
     cv::Mat predict();
-    void correct(cv::Mat measurement);
+    cv::Mat correct(cv::Mat measurement);
     cv::Mat forecast(int steps);
     cv::Mat getProcNoiseCoV()
     {
@@ -38,7 +38,7 @@ class Kalman2D
 public:
     Kalman2D(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f);
     cv::Mat predict();
-    void correct(cv::Mat measurement);
+    cv::Mat correct(cv::Mat measurement);
     cv::Mat forecast(int steps);
     cv::Mat getProcNoiseCoV()
     {

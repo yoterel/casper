@@ -92,6 +92,7 @@ add_executable(ahand
     src/fbo.cpp
     src/quad.cpp
     src/helpers.cpp
+    src/kalman.cpp
     third-party/imgui/imgui.cpp
     third-party/imgui/imgui_draw.cpp
     third-party/imgui/imgui_tables.cpp

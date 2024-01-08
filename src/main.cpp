@@ -27,6 +27,7 @@
 #include <filesystem>
 #include "helpers.h"
 #include "imgui.h"
+#include "kalman.h"
 #include "imgui_stdlib.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -295,7 +296,12 @@ std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec2> ControlPointsQ_glm;
 std::vector<std::vector<glm::vec2>> prev_pred_glm;
 int mls_smooth_window = 0;
-
+bool use_mp_kalman = false;
+float mp_kalman_process_noise = 0.00001f;
+float mp_kalman_measurement_noise = 0.00001f;
+float mp_kalman_error = 1.0f;
+std::vector<Kalman2D> kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+int kalman_lookahead = 0;
 int main(int argc, char *argv[])
 {
     /* parse cmd line options */
@@ -1135,17 +1141,34 @@ int main(int argc, char *argv[])
                                 // std::cout << "MLS projection time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                 // mls_profile.start();
                                 std::vector<glm::vec2> cur_pred_glm = mp_predict(camImage, totalFrameCount);
+                                std::vector<glm::vec2> pred_glm;
                                 // mls_profile.stop();
                                 // std::cout << "MLS prediction time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                 if (cur_pred_glm.size() == 21)
                                 {
                                     prev_pred_glm.push_back(cur_pred_glm);
-                                    std::vector<glm::vec2> pred_glm = Helpers::accumulate(prev_pred_glm);
+                                    pred_glm = Helpers::accumulate(prev_pred_glm);
                                     int diff = prev_pred_glm.size() - mls_smooth_window;
                                     if (diff > 0)
                                     {
                                         for (int i = 0; i < diff; i++)
                                             prev_pred_glm.erase(prev_pred_glm.begin());
+                                    }
+                                    if (use_mp_kalman)
+                                    {
+                                        std::vector<glm::vec2> kalman_forecast;
+                                        for (int i = 0; i < pred_glm.size(); i++)
+                                        {
+
+                                            kalman_filters[i].predict();
+                                            cv::Mat measurement(2, 1, CV_32F);
+                                            measurement.at<float>(0) = pred_glm[i].x;
+                                            measurement.at<float>(1) = pred_glm[i].y;
+                                            kalman_filters[i].correct(measurement);
+                                            cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
+                                            kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
+                                        }
+                                        pred_glm = kalman_forecast;
                                     }
                                     // mls_profile.start();
                                     std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(projected);
@@ -3824,6 +3847,26 @@ void openIMGUIFrame()
         {
             ImGui::Checkbox("MLS?", &use_mls);
             ImGui::SameLine();
+            ImGui::Checkbox("Kalman Filter", &use_mp_kalman);
+            ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 10);
+            ImGui::SliderFloat("Kalman Pnoise", &mp_kalman_process_noise, 0.000001f, 0.01f, "%.6f");
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                kalman_filters.clear();
+                kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+            }
+            ImGui::SliderFloat("Kalman Mnoise", &mp_kalman_measurement_noise, 0.000001f, 0.01f, "%.6f");
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                kalman_filters.clear();
+                kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+            }
+            ImGui::SliderFloat("Kalman err", &mp_kalman_error, 0.01f, 10.0f);
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                kalman_filters.clear();
+                kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+            }
             ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
