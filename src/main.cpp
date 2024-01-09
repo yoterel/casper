@@ -297,8 +297,8 @@ std::vector<glm::vec2> ControlPointsQ_glm;
 std::vector<std::vector<glm::vec2>> prev_pred_glm;
 int mls_smooth_window = 0;
 bool use_mp_kalman = false;
-float mp_kalman_process_noise = 0.00001f;
-float mp_kalman_measurement_noise = 0.00001f;
+float mp_kalman_process_noise = 0.01f;
+float mp_kalman_measurement_noise = 0.01f;
 float mp_kalman_error = 1.0f;
 std::vector<Kalman2D> kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
 int kalman_lookahead = 0;
@@ -825,9 +825,6 @@ int main(int argc, char *argv[])
             else
             {
                 camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-                // std::vector<glm::vec2> pred_glm = mp_predict(camImageOrig, totalFrameCount);
-                // if (pred_glm.size() != 0)
-                //     std::cout << pred_glm.size() << std::endl;
                 camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
             }
         }
@@ -1117,7 +1114,7 @@ int main(int argc, char *argv[])
             }
             t_skin.stop();
             /* optionally, run MLS on MP prediction to reduce bias */
-            if (use_mls) // todo: what if two hands are in frame?
+            if (use_mls) // todo: support two hands
             {
                 if (!mls_running && !mls_succeed)
                 {
@@ -1127,11 +1124,9 @@ int main(int argc, char *argv[])
                         std::vector<glm::vec3> to_project = skeleton_vertices;
                         if (run_mls.joinable())
                             run_mls.join();
-                        // std::cout << "mls thread will launch !" << std::endl;
                         mls_running = true;
                         camImage = camImageOrig.clone();
-                        run_mls = std::thread([to_project]() { // send raw cam for MP prediction asap
-                            // std::cout << "mls thread launched !" << std::endl;
+                        run_mls = std::thread([to_project]() { // send (forecasted) leap joints to MP
                             try
                             {
                                 // Timer mls_profile;
@@ -1141,7 +1136,7 @@ int main(int argc, char *argv[])
                                 // std::cout << "MLS projection time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                 // mls_profile.start();
                                 std::vector<glm::vec2> cur_pred_glm = mp_predict(camImage, totalFrameCount);
-                                std::vector<glm::vec2> pred_glm;
+                                std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
                                 // mls_profile.stop();
                                 // std::cout << "MLS prediction time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                 if (cur_pred_glm.size() == 21)
@@ -1156,82 +1151,91 @@ int main(int argc, char *argv[])
                                     }
                                     if (use_mp_kalman)
                                     {
-                                        std::vector<glm::vec2> kalman_forecast;
                                         for (int i = 0; i < pred_glm.size(); i++)
                                         {
-
-                                            kalman_filters[i].predict();
+                                            cv::Mat pred = kalman_filters[i].predict();
                                             cv::Mat measurement(2, 1, CV_32F);
                                             measurement.at<float>(0) = pred_glm[i].x;
                                             measurement.at<float>(1) = pred_glm[i].y;
-                                            kalman_filters[i].correct(measurement);
+                                            cv::Mat corr = kalman_filters[i].correct(measurement);
                                             cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
+                                            if (i == 0)
+                                            {
+                                                std::cout << "pred: " << pred << std::endl;
+                                                std::cout << "meas: " << measurement << std::endl;
+                                                std::cout << "corr: " << corr << std::endl;
+                                                std::cout << "forecast: " << forecast << std::endl;
+                                            }
                                             kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
                                         }
-                                        pred_glm = kalman_forecast;
+                                        // pred_glm = kalman_forecast;
                                     }
                                     // mls_profile.start();
-                                    std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(projected);
+                                    std::vector<cv::Point2f> leap_keypoints = Helpers::glm2opencv(projected);
                                     // std::cout << "MP prediction succeeded" << std::endl;
-                                    std::vector<cv::Point2f> destination = Helpers::glm2opencv(pred_glm);
+                                    std::vector<cv::Point2f> mp_keypoints;
+                                    if (use_mp_kalman)
+                                        mp_keypoints = Helpers::glm2opencv(kalman_forecast);
+                                    else
+                                        mp_keypoints = Helpers::glm2opencv(pred_glm);
                                     ControlPointsP.clear();
                                     ControlPointsQ.clear();
                                     /* wrist */
-                                    ControlPointsP.push_back(keypoints[1]);
+                                    ControlPointsP.push_back(leap_keypoints[1]);
                                     /* finger root */
                                     // ControlPointsP.push_back(keypoints[2]);
-                                    ControlPointsP.push_back(keypoints[5]);
+                                    ControlPointsP.push_back(leap_keypoints[5]);
                                     // ControlPointsP.push_back(keypoints[10]);
-                                    ControlPointsP.push_back(keypoints[11]);
+                                    ControlPointsP.push_back(leap_keypoints[11]);
                                     // ControlPointsP.push_back(keypoints[18]);
-                                    ControlPointsP.push_back(keypoints[19]);
+                                    ControlPointsP.push_back(leap_keypoints[19]);
                                     // ControlPointsP.push_back(keypoints[26]);
-                                    ControlPointsP.push_back(keypoints[27]);
+                                    ControlPointsP.push_back(leap_keypoints[27]);
                                     // ControlPointsP.push_back(keypoints[34]);
-                                    ControlPointsP.push_back(keypoints[35]);
+                                    ControlPointsP.push_back(leap_keypoints[35]);
                                     if (grab_angle_left <= mls_grab_threshold)
                                     {
                                         /* tips */
-                                        ControlPointsP.push_back(keypoints[9]);
-                                        ControlPointsP.push_back(keypoints[17]);
-                                        ControlPointsP.push_back(keypoints[25]);
-                                        ControlPointsP.push_back(keypoints[33]);
-                                        ControlPointsP.push_back(keypoints[41]);
+                                        ControlPointsP.push_back(leap_keypoints[9]);
+                                        ControlPointsP.push_back(leap_keypoints[17]);
+                                        ControlPointsP.push_back(leap_keypoints[25]);
+                                        ControlPointsP.push_back(leap_keypoints[33]);
+                                        ControlPointsP.push_back(leap_keypoints[41]);
                                         /* 1 before tips */
-                                        ControlPointsP.push_back(keypoints[7]);
-                                        ControlPointsP.push_back(keypoints[15]);
-                                        ControlPointsP.push_back(keypoints[23]);
-                                        ControlPointsP.push_back(keypoints[31]);
-                                        ControlPointsP.push_back(keypoints[39]);
+                                        ControlPointsP.push_back(leap_keypoints[7]);
+                                        ControlPointsP.push_back(leap_keypoints[15]);
+                                        ControlPointsP.push_back(leap_keypoints[23]);
+                                        ControlPointsP.push_back(leap_keypoints[31]);
+                                        ControlPointsP.push_back(leap_keypoints[39]);
                                     }
                                     //
                                     /* wrist */
-                                    ControlPointsQ.push_back(destination[0]);
+                                    ControlPointsQ.push_back(mp_keypoints[0]);
                                     /* finger root */
-                                    ControlPointsQ.push_back(destination[2]);
+                                    ControlPointsQ.push_back(mp_keypoints[2]);
                                     // ControlPointsQ.push_back(destination[2]);
-                                    ControlPointsQ.push_back(destination[5]);
+                                    ControlPointsQ.push_back(mp_keypoints[5]);
                                     // ControlPointsQ.push_back(destination[6]);
-                                    ControlPointsQ.push_back(destination[9]);
+                                    ControlPointsQ.push_back(mp_keypoints[9]);
                                     // ControlPointsQ.push_back(destination[10]);
-                                    ControlPointsQ.push_back(destination[13]);
+                                    ControlPointsQ.push_back(mp_keypoints[13]);
                                     // ControlPointsQ.push_back(destination[14]);
-                                    ControlPointsQ.push_back(destination[17]);
+                                    ControlPointsQ.push_back(mp_keypoints[17]);
                                     // ControlPointsQ.push_back(destination[18]);
                                     if (grab_angle_left <= mls_grab_threshold)
                                     {
                                         /* tips */
-                                        ControlPointsQ.push_back(destination[4]);
-                                        ControlPointsQ.push_back(destination[8]);
-                                        ControlPointsQ.push_back(destination[12]);
-                                        ControlPointsQ.push_back(destination[16]);
-                                        ControlPointsQ.push_back(destination[20]);
+                                        ControlPointsQ.push_back(mp_keypoints[4]);
+                                        ControlPointsQ.push_back(mp_keypoints[8]);
+                                        ControlPointsQ.push_back(mp_keypoints[12]);
+                                        ControlPointsQ.push_back(mp_keypoints[16]);
+                                        ControlPointsQ.push_back(mp_keypoints[20]);
                                         /* 1 before tips */
-                                        ControlPointsQ.push_back(destination[3]);
-                                        ControlPointsQ.push_back(destination[7]);
-                                        ControlPointsQ.push_back(destination[11]);
-                                        ControlPointsQ.push_back(destination[15]);
-                                        ControlPointsQ.push_back(destination[19]);
+                                        ControlPointsQ.push_back(mp_keypoints[3]);
+                                        ControlPointsQ.push_back(mp_keypoints[7]);
+                                        ControlPointsQ.push_back(mp_keypoints[11]);
+                                        ControlPointsQ.push_back(mp_keypoints[15]);
+                                        ControlPointsQ.push_back(mp_keypoints[19]);
                                     }
                                     // deform grid using prediction
                                     // todo: refactor control points to avoid this part
@@ -3848,14 +3852,14 @@ void openIMGUIFrame()
             ImGui::Checkbox("MLS?", &use_mls);
             ImGui::SameLine();
             ImGui::Checkbox("Kalman Filter", &use_mp_kalman);
-            ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 10);
-            ImGui::SliderFloat("Kalman Pnoise", &mp_kalman_process_noise, 0.000001f, 0.01f, "%.6f");
+            ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 100);
+            ImGui::SliderFloat("Kalman Pnoise", &mp_kalman_process_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
                 kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
             }
-            ImGui::SliderFloat("Kalman Mnoise", &mp_kalman_measurement_noise, 0.000001f, 0.01f, "%.6f");
+            ImGui::SliderFloat("Kalman Mnoise", &mp_kalman_measurement_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();

@@ -92,11 +92,9 @@ void mouse_example()
     cv::namedWindow("Kalman", 1);
     cv::setMouseCallback("Kalman", CallBackFunc, NULL);
     int past_state_memory = 5;
-    Kalman2D kalman = Kalman2D(1e-3, 1e-1, 1.0f);
-    // cv::Mat state(4, 1, CV_32F);                        /* actual state: (phi, delta_phi) */
-    cv::Mat past_state(4, 1, CV_32F);                   /* actual state: (phi, delta_phi) */
-    cv::Mat processNoise(2, 1, CV_32F);                 /* actual process noise: (phi_noise, delti_phi_noise) */
-    cv::Mat measurement = cv::Mat::zeros(2, 1, CV_32F); /* actual measurements: (phi) */
+    Kalman2D kalman = Kalman2D(1e-3, 1e-1, 1.0f, 1.0f);
+    cv::Mat past_state(4, 1, CV_32F);                   /* actual state: (x,y,dx,dy) */
+    cv::Mat measurement = cv::Mat::zeros(2, 1, CV_32F); /* actual measurements: (x, y) */
     char code = (char)-1;
     for (;;)
     {
