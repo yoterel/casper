@@ -58,3 +58,24 @@ Kalman2D::Kalman2D(float processNoise, float measurementNoise, float error, floa
     // setIdentity(KF.errorCovPost, cv::Scalar::all(error));
     randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
 }
+
+Kalman2DAcc::Kalman2DAcc(float processNoise, float measurementNoise, float error, float dt) : Kalman(6, 2, 0)
+{
+    // transition Matrix (F) = [1, 0, 1, 0; 0, 1, 0, 1; 0, 0, 1, 0; 0, 0, 0, 1] 4x4
+    // where state is 4x1 vector [x, y, dx, dy] (xn+1 = F * xn + process noise)
+    KF.transitionMatrix = (cv::Mat_<float>(6, 6) << 1, 0, dt, 0, dt * dt / 2, 0,
+                           0, 1, 0, dt, 0, dt * dt / 2,
+                           0, 0, 1, 0, dt, 0,
+                           0, 0, 0, 1, 0, dt,
+                           0, 0, 0, 0, 1, 0,
+                           0, 0, 0, 0, 0, 1);
+    // initial measurement matrix (H) = [1, 0, 0, 0; 0, 1, 0, 0] 2x4
+    // where measurement is 2x1 vector [x, y] (zn = H * xn + measurement noise)
+    setIdentity(KF.measurementMatrix);
+    // process noise covariance matrix (Q) = 4x4
+    setIdentity(KF.processNoiseCov, cv::Scalar::all(processNoise));
+    // measurement noise covariance matrix (R) = 2x2
+    setIdentity(KF.measurementNoiseCov, cv::Scalar::all(measurementNoise));
+    // setIdentity(KF.errorCovPost, cv::Scalar::all(error));
+    randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
+}

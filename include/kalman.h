@@ -46,9 +46,9 @@ public:
     Kalman2D(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f, float dt = 0.01f);
 };
 
-// class Kalman2DAcc : public Kalman
-// {
-// public:
-//     Kalman2DAcc(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f);
-// };
+class Kalman2DAcc : public Kalman
+{
+public:
+    Kalman2DAcc(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f, float dt = 0.01f);
+};
 #endif // KALMAN_H
