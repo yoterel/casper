@@ -3,6 +3,16 @@
 #include "quad.h"
 #include "shader.h"
 
+std::vector<glm::vec2> Helpers::vec3to2(std::vector<glm::vec3> vec)
+{
+    std::vector<glm::vec2> vec2;
+    for (int i = 0; i < vec.size(); i++)
+    {
+        vec2.push_back(glm::vec2(vec[i].x, vec[i].y));
+    }
+    return vec2;
+}
+
 glm::vec2 Helpers::ScreenToNDC(const glm::vec2 &pixel, int width, int height, bool flip_y)
 {
     glm::vec2 uv;
@@ -165,6 +175,20 @@ std::vector<glm::vec2> Helpers::project_points(std::vector<glm::vec3> points, gl
         point = projection * view * model * point;
         point /= point.w;
         projected_points.push_back(glm::vec2(point.x, point.y));
+    }
+    return projected_points;
+}
+
+std::vector<glm::vec3> Helpers::project_points_w_depth(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection)
+{
+    // project 3d points to NDC space
+    std::vector<glm::vec3> projected_points;
+    for (int i = 0; i < points.size(); i++)
+    {
+        glm::vec4 point = glm::vec4(points[i], 1.0f);
+        point = projection * view * model * point;
+        point /= point.w;
+        projected_points.push_back(glm::vec3(point.x, point.y, point.z));
     }
     return projected_points;
 }

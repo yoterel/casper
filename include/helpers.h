@@ -8,6 +8,7 @@
 class Helpers
 {
 public:
+    static std::vector<glm::vec2> vec3to2(std::vector<glm::vec3> vec);
     static glm::vec2 ScreenToNDC(const glm::vec2 &pixel, int width, int height, bool flip_y = false);
     static std::vector<glm::vec2> ScreenToNDC(const std::vector<glm::vec2> &pixels, int width, int height, bool flip_y);
     static glm::vec2 NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool flip_y = false);
@@ -27,6 +28,7 @@ public:
     static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point> vec);
     static std::vector<glm::vec3> opencv2glm(std::vector<cv::Point3f> vec);
     static std::vector<glm::vec2> project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
+    static std::vector<glm::vec3> project_points_w_depth(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupFrustrumBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupCubeBuffers(unsigned int &VAO, unsigned int &VBO);

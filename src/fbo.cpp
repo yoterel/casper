@@ -108,6 +108,7 @@ void FBO::unbind()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+// saves the color buffer to file
 void FBO::saveColorToFile(std::string filepath, bool flip_vertically)
 {
     std::vector<unsigned char> buffer(m_width * m_height * 4);
@@ -123,6 +124,44 @@ void FBO::saveColorToFile(std::string filepath, bool flip_vertically)
     this->unbind();
 }
 
+// saves the entire depth buffer to file
+void FBO::saveDepthToFile(std::string filepath, bool flip_vertically)
+{
+    std::vector<float> buffer(m_width * m_height);
+    GLsizei stride = m_width;
+    this->bind(false);
+    glReadBuffer(GL_DEPTH_ATTACHMENT);
+    glReadPixels(0, 0, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, &buffer);
+    if (flip_vertically)
+        stbi_flip_vertically_on_write(true);
+    else
+        stbi_flip_vertically_on_write(false);
+    stbi_write_png(filepath.c_str(), m_width, m_height, 1, buffer.data(), stride);
+    this->unbind();
+}
+
+// samples the depth buffer at the given locations
+std::vector<float> FBO::sampleDepthBuffer(std::vector<glm::vec2> sample_locations, glm::mat4 projection_mat)
+{
+    std::vector<float> depthBufferSamples;
+    this->bind(false);
+    glReadBuffer(GL_DEPTH_ATTACHMENT);
+    for (int i = 0; i < sample_locations.size(); i++)
+    {
+        float depth;
+        int point_x = static_cast<int>(sample_locations[i].x);
+        int point_y = static_cast<int>(sample_locations[i].y);
+        glReadPixels(point_x, point_y, // Cast 2D coordinates to GLint
+                     1, 1,             // Reading one pixel
+                     GL_DEPTH_COMPONENT, GL_FLOAT,
+                     &depth);
+        // depth = (2.0 * depth) - 1.0;                                        // logarithmic NDC
+        // depth = (2.0 * near * far) / (far + near - (depth * (far - near))); // linear <zNear,zFar>
+        depthBufferSamples.push_back(depth);
+    }
+    this->unbind();
+    return depthBufferSamples;
+}
 // Return the rendered texture as a vector of floats
 // n_channels is the number of channels in output.
 // width and height are determined by framebuffer size.

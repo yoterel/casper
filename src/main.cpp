@@ -294,12 +294,15 @@ std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
 std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec2> ControlPointsQ_glm;
+std::vector<bool> pseudo_visible_landmarks;
+std::vector<int> landmark_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
 std::vector<std::vector<glm::vec2>> prev_pred_glm;
 int mls_smooth_window = 0;
 bool use_mp_kalman = false;
 float mp_kalman_process_noise = 0.01f;
 float mp_kalman_measurement_noise = 0.01f;
 float mp_kalman_error = 1.0f;
+float mls_depth_threshold = 0.001f;
 std::vector<Kalman2D> kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
 int kalman_lookahead = 0;
 int main(int argc, char *argv[])
@@ -1122,6 +1125,33 @@ int main(int argc, char *argv[])
                     {
                         t_mls.start();
                         std::vector<glm::vec3> to_project = skeleton_vertices;
+                        std::vector<glm::vec3> projected_with_depth = Helpers::project_points_w_depth(to_project,
+                                                                                                      glm::mat4(1.0f),
+                                                                                                      gl_camera.getViewMatrix(),
+                                                                                                      gl_camera.getProjectionMatrix());
+                        std::vector<glm::vec2> screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth), dst_width, dst_height, false);
+                        std::vector<float> rendered_depths = hands_fbo.sampleDepthBuffer(screen_space, gl_camera.getProjectionMatrix());
+                        std::vector<bool> all_pseudo_visible_landmarks;
+                        for (int i = 0; i < projected_with_depth.size(); i++)
+                        {
+                            // if (i==0)
+                            // {
+                            //     std::cout << "rendered depth: " << rendered_depths[i] << std::endl;
+                            //     std::cout << "projected depth: " << projected_with_depth[i].z << std::endl;
+                            // }
+                            if (std::abs(rendered_depths[i] - projected_with_depth[i].z) <= mls_depth_threshold)
+                                all_pseudo_visible_landmarks.push_back(true);
+                            else
+                                all_pseudo_visible_landmarks.push_back(false);
+                        }
+                        std::vector<bool> selected_landmarks(landmark_selection_vector.size(), 0);
+                        // select only landmarks used for MLS
+                        std::transform(landmark_selection_vector.begin(),
+                                       landmark_selection_vector.end(),
+                                       selected_landmarks.begin(),
+                                       [all_pseudo_visible_landmarks](size_t pos)
+                                       { return all_pseudo_visible_landmarks[pos]; });
+                        pseudo_visible_landmarks = selected_landmarks;
                         if (run_mls.joinable())
                             run_mls.join();
                         mls_running = true;
@@ -1439,14 +1469,26 @@ int main(int argc, char *argv[])
             if (show_mls_landmarks)
             {
                 vcolorShader.use();
-                PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
-                PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
-                if (use_coaxial_calib)
-                    vcolorShader.setMat4("MVP", c2p_homography);
-                else
-                    vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                cloud_src.render(5.0f);
-                cloud_dst.render(5.0f);
+                std::vector<glm::vec2> selected_pointsP, selected_pointsQ;
+                for (int i = 0; i < ControlPointsP_glm.size(); i++)
+                {
+                    if (pseudo_visible_landmarks[i])
+                    {
+                        selected_pointsP.push_back(ControlPointsP_glm[i]);
+                        selected_pointsQ.push_back(ControlPointsQ_glm[i]);
+                    }
+                }
+                if (size(selected_pointsP) > 0)
+                {
+                    PointCloud cloud_src(selected_pointsP, screen_verts_color_red);
+                    PointCloud cloud_dst(selected_pointsQ, screen_verts_color_green);
+                    if (use_coaxial_calib)
+                        vcolorShader.setMat4("MVP", c2p_homography);
+                    else
+                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                    cloud_src.render(5.0f);
+                    cloud_dst.render(5.0f);
+                }
             }
             c2p_fbo.unbind();
 
@@ -3871,11 +3913,12 @@ void openIMGUIFrame()
                 kalman_filters.clear();
                 kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
             }
+            ImGui::SliderInt("MLS smooth window", &mls_smooth_window, 0, 10);
             ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
-            ImGui::SliderInt("MLS smooth window", &mls_smooth_window, 0, 10);
-            ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
+            ImGui::SliderFloat("MLS depth threshold", &mls_depth_threshold, 0.00001f, 0.01f, "%.6f");
+            ImGui::SliderFloat("Masking threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {
                 threshold_flag = true;

@@ -2,6 +2,7 @@
 #define FBO_H
 #include <string>
 #include <opencv2/opencv.hpp>
+#include <glm/glm.hpp>
 #include "texture.h"
 
 class FBO
@@ -18,6 +19,8 @@ public:
     void bind(bool clear = true);
     void unbind();
     void saveColorToFile(std::string filepath, bool flip_vertically = true);
+    void saveDepthToFile(std::string filepath, bool flip_vertically = true);
+    std::vector<float> sampleDepthBuffer(std::vector<glm::vec2> sample_locations, glm::mat4 projection_mat);
     std::vector<uchar> getBuffer(int n_channels);
     Texture *getTexture() { return &m_texture; };
 
