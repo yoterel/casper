@@ -15,9 +15,9 @@ public:
 
     ~Texture();
     // Should be called once to load the texture
-    bool init();
+    bool init_from_file(unsigned int texture_interpolation_mode = GL_LINEAR, unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
 
-    bool init(const std::string &Filename);
+    bool init_from_file(const std::string &Filename, unsigned int texture_interpolation_mode = GL_LINEAR, unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
 
     void init(int width, int height, int bpp = 4,
               unsigned int input_color_format = GL_BGRA,
@@ -50,7 +50,7 @@ private:
                       unsigned int texture_interpolation_mode = GL_LINEAR,
                       unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
 
-    std::string m_fileName;
+    std::string m_fileName = "";
     GLenum m_textureTarget;
     GLuint m_textureObj;
     GLuint m_PBO;

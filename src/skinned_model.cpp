@@ -313,7 +313,7 @@ void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *
         std::filesystem::path p = m_externalTextureFileName;
         std::cout << "Loading diffuse texture: " << std::filesystem::absolute(p) << std::endl;
         m_Materials[index].pDiffuse = new Texture(m_externalTextureFileName.c_str(), GL_TEXTURE_2D);
-        if (!m_Materials[index].pDiffuse->init())
+        if (!m_Materials[index].pDiffuse->init_from_file(GL_LINEAR, GL_REPEAT))
         {
             std::cout << "Error loading diffuse texture." << std::endl;
             exit(1);
@@ -338,7 +338,7 @@ void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *
 
                 m_Materials[index].pDiffuse = new Texture(FullPath.c_str(), GL_TEXTURE_2D);
 
-                if (!m_Materials[index].pDiffuse->init())
+                if (!m_Materials[index].pDiffuse->init_from_file(GL_LINEAR, GL_REPEAT))
                 {
                     std::cout << "Error loading diffuse texture '" << FullPath << "'" << std::endl;
                 }
@@ -376,7 +376,7 @@ void SkinnedModel::LoadSpecularTexture(const std::string &Dir, const aiMaterial 
 
             m_Materials[index].pSpecularExponent = new Texture(FullPath.c_str(), GL_TEXTURE_2D);
 
-            if (!m_Materials[index].pSpecularExponent->init())
+            if (!m_Materials[index].pSpecularExponent->init_from_file())
             {
                 printf("Error loading specular texture '%s'\n", FullPath.c_str());
                 exit(0);

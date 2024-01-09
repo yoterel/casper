@@ -27,6 +27,9 @@ void main()
     float avgMask = (maskCol.r + maskCol.g + maskCol.b) * 0.333333;
     // FragColor = texture(src, loc.xy / resolution);  // full frame jump flood
     if (avgMask >= threshold) { // select only pixels that are not black from the jump flood image
+        float dist = distance(loc.xy, gl_FragCoord.xy); // compute distance to nearest seed
+        if (dist >= 50.0)
+            discard;
         FragColor = texture(src, loc.xy / resolution); // sample texture using the locations of the nearest seeds
     } else {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);

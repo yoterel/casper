@@ -481,13 +481,13 @@ int main(int argc, char *argv[])
                                 cam_width, cam_height,
                                 false);
     dynamicTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
-    dynamicTexture->init();
+    dynamicTexture->init_from_file();
     const fs::path user_path{bakeFile};
     if (fs::exists(user_path))
         bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
     else
         bakedTexture = new Texture(testFile.c_str(), GL_TEXTURE_2D);
-    bakedTexture->init();
+    bakedTexture->init_from_file();
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
     PostProcess postProcess(cam_width, cam_height, dst_width, dst_height);

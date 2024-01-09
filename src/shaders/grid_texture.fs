@@ -7,5 +7,10 @@ uniform sampler2D ourTexture;
 
 void main()
 {
-    FragColor = texture(ourTexture, TexCoord);
+    vec4 color = texture(ourTexture, TexCoord);
+    // solve black fringe artifact due to alpha interpolation
+    // note: hack. the best solution is alpha premultiplication
+    if(color.a < 1.0)
+        discard;
+    FragColor = color;
 }

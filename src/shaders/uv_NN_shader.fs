@@ -28,8 +28,11 @@ void main()
     float avgMask = (maskCol.r + maskCol.g + maskCol.b) * 0.333333;
 
     if (avgMask >= threshold) { // select only pixels that are not black from the jump flood image
+        float dist = distance(loc.xy, gl_FragCoord.xy); // compute distance to nearest seed
+        if (dist >= 50.0)
+            discard;
         // step1: calculate location of reflection about nearest seed
-        vec2 reflection = 2*loc.xy - gl_FragCoord.xy; // computation of reflection point in uv space
+        vec2 reflection = 2*loc.xy - gl_FragCoord.xy; // computation of reflection point in pixel space
         // step2: calculate new uv based on reflection
         vec2 reflection_uv = texture(uv, reflection / resolution).xy; // get uv of reflection point (0:1)
         vec2 seed_uv = texture(uv, loc.xy / resolution).xy; // get uv of nearest seed point (0:1)

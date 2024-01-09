@@ -27,8 +27,13 @@ Texture::~Texture()
     }
 }
 
-bool Texture::init()
+bool Texture::init_from_file(unsigned int texture_interpolation_mode, unsigned int texture_wrap_mode)
 {
+    if (m_fileName == "")
+    {
+        std::cout << "Texture file name is empty" << std::endl;
+        exit(1);
+    }
     stbi_set_flip_vertically_on_load(1);
     unsigned char *image_data = stbi_load(m_fileName.c_str(), &m_imageWidth, &m_imageHeight, &m_imageBPP, 0);
     if (!image_data)
@@ -40,31 +45,31 @@ bool Texture::init()
     std::cout << "Width " << m_imageWidth << ", height " << m_imageHeight << ", bpp " << m_imageBPP << std::endl;
     if (m_imageBPP == 1)
     {
-        initInternal(image_data, GL_RED);
+        initInternal(image_data, GL_RED, GL_RED, texture_interpolation_mode, texture_wrap_mode);
         load(image_data, false, GL_RED);
     }
     else if (m_imageBPP == 2)
     {
-        initInternal(image_data, GL_RG, GL_RG32F);
+        initInternal(image_data, GL_RG, GL_RG32F, texture_interpolation_mode, texture_wrap_mode);
         load(image_data, false, GL_RG);
     }
     else if (m_imageBPP == 3)
     {
-        initInternal(image_data, GL_RGB);
+        initInternal(image_data, GL_RGB, GL_RGB, texture_interpolation_mode, texture_wrap_mode);
         load(image_data, false, GL_RGB);
     }
     else
     {
-        initInternal(image_data, GL_RGBA);
+        initInternal(image_data, GL_RGBA, GL_RGBA, texture_interpolation_mode, texture_wrap_mode);
         load(image_data, false, GL_RGBA);
     }
     return true;
 }
 
-bool Texture::init(const std::string &Filename)
+bool Texture::init_from_file(const std::string &Filename, unsigned int texture_interpolation_mode, unsigned int texture_wrap_mode)
 {
     m_fileName = Filename;
-    return init();
+    return init_from_file(texture_interpolation_mode, texture_wrap_mode);
 }
 
 // bool Texture::init(void *pData, uint32_t bufferSize)
