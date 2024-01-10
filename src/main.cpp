@@ -53,7 +53,7 @@
 #include "moving_least_squares.h"
 namespace fs = std::filesystem;
 
-// forward declarations
+/* forward declarations */
 void openIMGUIFrame();
 std::vector<glm::vec2> mp_predict(cv::Mat image, int timestamp);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
@@ -68,6 +68,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &skeleton_vertices, bool leap_poll_mode, int64_t &lastFrameID);
+LEAP_STATUS getLeapFramePreRecorded();
 void initGLBuffers(unsigned int *pbo);
 bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 glm::mat4 &w2c_auto,
@@ -88,94 +89,34 @@ void set_texture_shader(Shader &textureShader,
                         glm::mat4 model = glm::mat4(1.0f),
                         glm::mat4 projection = glm::mat4(1.0f),
                         glm::mat4 view = glm::mat4(1.0f));
-// global state
-bool debug_mode = false;
-bool cam_space = false;
-bool cmd_line_stats = true;
-bool bakeRequest = false;
-bool sd_succeed = false;
-bool sd_running = false;
-bool mls_succeed = false;
-bool mls_running = false;
-bool use_mls = false;
-bool show_mls_landmarks = false;
-bool freecam_mode = false;
-bool use_cuda = false;
-bool simulated_camera = false;
-bool use_pbo = true;
-bool use_projector = false;
-bool use_screen = true;
-bool leap_poll_mode = false;
-bool cam_color_mode = false;
-bool ready_to_collect = false;
-int calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
-int checkerboard_width = 10;
-int checkerboard_height = 7;
-int leap_collection_setting = static_cast<int>(LeapCollectionSettings::AUTO_RAW);
-int leap_mark_setting = static_cast<int>(LeapMarkSettings::STREAM);
-int leap_tracking_mode = eLeapTrackingMode_HMD;
-bool leap_calib_use_ransac = false;
-uint64_t leap_cur_frame_id = 0;
-int mark_bone_index = 17;
-int leap_calibration_mark_state = 0;
-int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-int calib_mode = static_cast<int>(CalibrationMode::OFF);
-std::string testFile("../../resource/uv.png");
-std::string bakeFile("../../resource/baked.png");
-std::string diffuseTextureFile("../../resource/uv.png");
-std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
-// std::string uvUnwrapFile("../../resource/UVUnwrapFile.png");
+/* engine state */
+// window controls
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
 const unsigned int cam_width = 720;
 const unsigned int cam_height = 540;
-uint32_t leap_width = 640;
-uint32_t leap_height = 240;
-unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
-unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
-float exposure = 1850.0f; // 1850.0f;
-int n_points_leap_calib = 2000;
-int n_points_cam_calib = 30;
-std::vector<double> calib_cam_matrix;
-std::vector<double> calib_cam_distortion;
-// global state
-int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
-int sd_mode = static_cast<int>(SDMode::PROMPT);
-int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-int sd_mask_mode = 2;
+// global controls
+bool debug_mode = false;
+bool cam_space = false;
+bool close_signal = false;
+bool cmd_line_stats = false;
+bool use_cuda = false;
+bool simulated_camera = false;
+bool freecam_mode = false;
+bool use_pbo = true;
+bool use_projector = false;
+bool use_screen = true;
+bool cam_color_mode = false;
 bool icp_apply_transform = true;
-bool use_coaxial_calib = false;
 bool showCamera = true;
 bool showProjector = true;
 bool undistortCamera = false;
-bool saveIntermed = false;
-std::vector<uint8_t> img2img_data;
-int sd_outwidth, sd_outheight;
-bool useFingerWidth = false;
-Texture *dynamicTexture = nullptr;
-Texture *bakedTexture = nullptr;
-int magic_leap_time_delay = 10000; // us
-float leap_global_scaler = 1.0f;
-float magic_leap_scale_factor = 10.0f;
-float leap_arm_local_scaler = 0.019f;
-float leap_palm_local_scaler = 0.011f;
-float leap_bone_local_scaler = 0.05f;
-float magic_wrist_offset = -65.0f;
-float magic_arm_forward_offset = -170.0f;
-int diffuse_seed = -1;
-float lastX = proj_width / 2.0f;
-float lastY = proj_height / 2.0f;
-bool firstMouse = true;
-bool dragging = false;
-int dragging_vert = 0;
-int closest_vert = 0;
-float min_dist = 100000.0f;
+int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
+int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
 bool threshold_flag = false;
-float leap_binary_threshold = 0.3f;
-bool leap_threshold_flag = false;
 glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
 glm::vec3 triangulated = glm::vec3(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
@@ -193,16 +134,16 @@ int totalFrameCount = 0;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
-cv::Mat curFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-cv::Mat prevFrame(cam_height, cam_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-float downscale_factor = 2.0f;
-cv::Size down_size = cv::Size(cam_width / downscale_factor, cam_height / downscale_factor);
-cv::Mat flow = cv::Mat::zeros(down_size, CV_32FC2);
-cv::Mat curFrame_gray, prevFrame_gray;
-cv::Mat camera_intrinsics_cv, camera_distortion_cv;
-// cv::Mat curCamImage;
-// std::vector<uint8_t> curCamBuf;
-cv::Mat curCamThresholded;
+// bake/sd controls
+bool bakeRequest = false;
+bool sd_succeed = false;
+bool sd_running = false;
+int sd_mode = static_cast<int>(SDMode::PROMPT);
+int sd_mask_mode = 2;
+bool saveIntermed = false;
+std::vector<uint8_t> img2img_data;
+int sd_outwidth, sd_outheight;
+int diffuse_seed = -1;
 std::vector<std::string> animals{
     "a fish",
     "an elephant",
@@ -220,6 +161,50 @@ std::vector<std::string> animals{
     "a monkey",
     "a gorilla",
     "a panda"};
+// leap controls
+bool leap_poll_mode = false;
+bool pre_recorded_session = false;
+bool leap_record_session = false;
+int leap_tracking_mode = eLeapTrackingMode_HMD;
+uint64_t leap_cur_frame_id = 0;
+uint32_t leap_width = 640;
+uint32_t leap_height = 240;
+bool useFingerWidth = false;
+int magic_leap_time_delay = 10000; // us
+float leap_global_scaler = 1.0f;
+float magic_leap_scale_factor = 10.0f;
+float leap_arm_local_scaler = 0.019f;
+float leap_palm_local_scaler = 0.011f;
+float leap_bone_local_scaler = 0.05f;
+float magic_wrist_offset = -65.0f;
+float magic_arm_forward_offset = -170.0f;
+float leap_binary_threshold = 0.3f;
+bool leap_threshold_flag = false;
+LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
+// calibration controls
+bool ready_to_collect = false;
+bool use_coaxial_calib = false;
+int calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
+int checkerboard_width = 10;
+int checkerboard_height = 7;
+int leap_collection_setting = static_cast<int>(LeapCollectionSettings::AUTO_RAW);
+int leap_mark_setting = static_cast<int>(LeapMarkSettings::STREAM);
+bool leap_calib_use_ransac = false;
+int mark_bone_index = 17;
+int leap_calibration_mark_state = 0;
+int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
+int calib_mode = static_cast<int>(CalibrationMode::OFF);
+int n_points_leap_calib = 2000;
+int n_points_cam_calib = 30;
+std::vector<double> calib_cam_matrix;
+std::vector<double> calib_cam_distortion;
+float lastX = proj_width / 2.0f;
+float lastY = proj_height / 2.0f;
+bool firstMouse = true;
+bool dragging = false;
+int dragging_vert = 0;
+int closest_vert = 0;
+float min_dist = 100000.0f;
 std::vector<glm::vec3> points_3d;
 std::vector<glm::vec2> points_2d, points_2d_inliners;
 std::vector<glm::vec2> points_2d_reprojected, points_2d_inliers_reprojected;
@@ -231,6 +216,7 @@ bool showInliersOnly = true;
 bool showReprojections = false;
 bool showTestPoints = false;
 bool calibrationSuccess = false;
+cv::Mat camera_intrinsics_cv, camera_distortion_cv;
 std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_green = {{0.0f, 1.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
@@ -246,11 +232,14 @@ glm::vec2 cur_screen_vert = {0.0f, 0.0f};
 glm::vec2 marked_2d_pos1, marked_2d_pos2;
 std::vector<glm::vec3> triangulated_marked;
 std::vector<glm::vec2> marked_reprojected;
-// GLCamera gl_projector(glm::vec3(41.64f, 26.92f, -2.48f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f)); // "fixed" camera
+cv::Mat tvec_calib, rvec_calib;
+// camera controls
+unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
+unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
+float exposure = 1850.0f; // 1850.0f;
 GLCamera gl_flycamera;
 GLCamera gl_projector;
 GLCamera gl_camera;
-cv::Mat tvec_calib, rvec_calib;
 cv::Mat camImage, camImageOrig, undistort_map1, undistort_map2;
 glm::mat4 w2c_auto, w2c_user;
 glm::mat4 proj_project;
@@ -259,7 +248,17 @@ std::vector<double> camera_distortion;
 glm::mat4 c2p_homography;
 int dst_width = cam_space ? cam_width : proj_width;
 int dst_height = cam_space ? cam_height : proj_height;
-// GLCamera gl_projector(glm::vec3(0.0f, -20.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)); // "orbit" camera
+DynaFlashProjector projector(true, false);
+BaslerCamera camera;
+moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
+moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
+// GL controls
+std::string testFile("../../resource/uv.png");
+std::string bakeFile("../../resource/baked.png");
+std::string diffuseTextureFile("../../resource/uv.png");
+std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
+Texture *dynamicTexture = nullptr;
+Texture *bakedTexture = nullptr;
 FBO icp_fbo(cam_width, cam_height, 4, false);
 FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
@@ -269,21 +268,14 @@ FBO bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
-LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
-DynaFlashProjector projector(true, false);
-BaslerCamera camera;
-moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
-moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
-bool close_signal = false;
 std::vector<glm::vec3> skeleton_vertices;
-float grab_angle_left = 0.0f;
-float grab_angle_right = 0.0f;
-float mls_grab_threshold = 5.0f;
+// python controls
 PyObject *myModule;
 PyObject *predict_single;
 PyObject *predict_video;
 PyObject *init_detector;
 PyObject *single_detector;
+// mls controls
 const int grid_x_point_count = 41;
 const int grid_y_point_count = 41;
 const float grid_x_spacing = 0.05;
@@ -294,17 +286,24 @@ std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
 std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec2> ControlPointsQ_glm;
-std::vector<bool> pseudo_visible_landmarks;
-std::vector<int> landmark_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
+std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
+std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
 std::vector<std::vector<glm::vec2>> prev_pred_glm;
+bool mls_succeed = false;
+bool mls_running = false;
+bool use_mls = true;
+bool show_mls_landmarks = false;
 int mls_smooth_window = 0;
 bool use_mp_kalman = false;
 float mp_kalman_process_noise = 0.01f;
 float mp_kalman_measurement_noise = 0.01f;
 float mp_kalman_error = 1.0f;
-float mls_depth_threshold = 0.001f;
+float mls_depth_threshold = 215.0f;
+bool mls_depth_test = true;
 std::vector<Kalman2D> kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
 int kalman_lookahead = 0;
+
+/* main */
 int main(int argc, char *argv[])
 {
     /* parse cmd line options */
@@ -839,14 +838,22 @@ int main(int argc, char *argv[])
 
         /* deal with leap input */
         t_leap.start();
-        if (!leap_poll_mode)
+        LEAP_STATUS leap_status;
+        if (pre_recorded_session)
         {
-            // sync leap clock
-            std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-            LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+            leap_status = getLeapFramePreRecorded();
         }
-        LEAP_STATUS leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
-        if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
+        else
+        {
+            if (!leap_poll_mode)
+            {
+                // sync leap clock
+                std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+                LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+            }
+            leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
+        }
+        if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
         {
             glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
             if (bones_to_world_right.size() > 0)
@@ -1125,38 +1132,23 @@ int main(int argc, char *argv[])
                     {
                         t_mls.start();
                         std::vector<glm::vec3> to_project = skeleton_vertices;
-                        std::vector<glm::vec3> projected_with_depth = Helpers::project_points_w_depth(to_project,
-                                                                                                      glm::mat4(1.0f),
-                                                                                                      gl_camera.getViewMatrix(),
-                                                                                                      gl_camera.getProjectionMatrix());
-                        std::vector<glm::vec2> screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth), dst_width, dst_height, false);
-                        std::vector<float> rendered_depths = hands_fbo.sampleDepthBuffer(screen_space, gl_camera.getProjectionMatrix());
-                        std::vector<bool> all_pseudo_visible_landmarks;
-                        for (int i = 0; i < projected_with_depth.size(); i++)
+                        bool any_visible = false;
+                        std::vector<float> rendered_depths;
+                        std::vector<glm::vec3> projected_with_depth;
+                        if (mls_depth_test)
                         {
-                            // if (i==0)
-                            // {
-                            //     std::cout << "rendered depth: " << rendered_depths[i] << std::endl;
-                            //     std::cout << "projected depth: " << projected_with_depth[i].z << std::endl;
-                            // }
-                            if (std::abs(rendered_depths[i] - projected_with_depth[i].z) <= mls_depth_threshold)
-                                all_pseudo_visible_landmarks.push_back(true);
-                            else
-                                all_pseudo_visible_landmarks.push_back(false);
+                            projected_with_depth = Helpers::project_points_w_depth(to_project,
+                                                                                   glm::mat4(1.0f),
+                                                                                   gl_camera.getViewMatrix(),
+                                                                                   gl_camera.getProjectionMatrix());
+                            std::vector<glm::vec2> screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth), dst_width, dst_height, false);
+                            rendered_depths = hands_fbo.sampleDepthBuffer(screen_space); // todo: make async
                         }
-                        std::vector<bool> selected_landmarks(landmark_selection_vector.size(), 0);
-                        // select only landmarks used for MLS
-                        std::transform(landmark_selection_vector.begin(),
-                                       landmark_selection_vector.end(),
-                                       selected_landmarks.begin(),
-                                       [all_pseudo_visible_landmarks](size_t pos)
-                                       { return all_pseudo_visible_landmarks[pos]; });
-                        pseudo_visible_landmarks = selected_landmarks;
                         if (run_mls.joinable())
                             run_mls.join();
                         mls_running = true;
                         camImage = camImageOrig.clone();
-                        run_mls = std::thread([to_project]() { // send (forecasted) leap joints to MP
+                        run_mls = std::thread([to_project, rendered_depths, projected_with_depth]() { // send (forecasted) leap joints to MP
                             try
                             {
                                 // Timer mls_profile;
@@ -1197,112 +1189,79 @@ int main(int argc, char *argv[])
                                                 std::cout << "forecast: " << forecast << std::endl;
                                             }
                                             kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
+                                            pred_glm = kalman_forecast;
                                         }
                                         // pred_glm = kalman_forecast;
                                     }
                                     // mls_profile.start();
                                     std::vector<cv::Point2f> leap_keypoints = Helpers::glm2opencv(projected);
-                                    // std::cout << "MP prediction succeeded" << std::endl;
-                                    std::vector<cv::Point2f> mp_keypoints;
-                                    if (use_mp_kalman)
-                                        mp_keypoints = Helpers::glm2opencv(kalman_forecast);
-                                    else
-                                        mp_keypoints = Helpers::glm2opencv(pred_glm);
+                                    std::vector<cv::Point2f> mp_keypoints = Helpers::glm2opencv(pred_glm);
                                     ControlPointsP.clear();
                                     ControlPointsQ.clear();
-                                    /* wrist */
-                                    ControlPointsP.push_back(leap_keypoints[1]);
-                                    /* finger root */
-                                    // ControlPointsP.push_back(keypoints[2]);
-                                    ControlPointsP.push_back(leap_keypoints[5]);
-                                    // ControlPointsP.push_back(keypoints[10]);
-                                    ControlPointsP.push_back(leap_keypoints[11]);
-                                    // ControlPointsP.push_back(keypoints[18]);
-                                    ControlPointsP.push_back(leap_keypoints[19]);
-                                    // ControlPointsP.push_back(keypoints[26]);
-                                    ControlPointsP.push_back(leap_keypoints[27]);
-                                    // ControlPointsP.push_back(keypoints[34]);
-                                    ControlPointsP.push_back(leap_keypoints[35]);
-                                    if (grab_angle_left <= mls_grab_threshold)
+                                    std::vector<bool> visible_landmarks(leap_keypoints.size(), true);
+                                    for (int i = 0; i < projected_with_depth.size(); i++)
                                     {
-                                        /* tips */
-                                        ControlPointsP.push_back(leap_keypoints[9]);
-                                        ControlPointsP.push_back(leap_keypoints[17]);
-                                        ControlPointsP.push_back(leap_keypoints[25]);
-                                        ControlPointsP.push_back(leap_keypoints[33]);
-                                        ControlPointsP.push_back(leap_keypoints[41]);
-                                        /* 1 before tips */
-                                        ControlPointsP.push_back(leap_keypoints[7]);
-                                        ControlPointsP.push_back(leap_keypoints[15]);
-                                        ControlPointsP.push_back(leap_keypoints[23]);
-                                        ControlPointsP.push_back(leap_keypoints[31]);
-                                        ControlPointsP.push_back(leap_keypoints[39]);
+                                        float rendered_depth = rendered_depths[i];
+                                        float projected_depth = projected_with_depth[i].z;
+                                        float cam_near = 1.0f;
+                                        float cam_far = 1500.0f;
+                                        rendered_depth = (2.0 * rendered_depth) - 1.0; // logarithmic NDC
+                                        rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near)));
+                                        projected_depth = (2.0 * projected_depth) - 1.0; // logarithmic NDC
+                                        projected_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (projected_depth * (cam_far - cam_near)));
+                                        if ((std::abs(rendered_depth - projected_depth) <= mls_depth_threshold) && (i != 1)) // always include wrist
+                                        {
+                                            visible_landmarks[i] = false;
+                                        }
                                     }
-                                    //
-                                    /* wrist */
-                                    ControlPointsQ.push_back(mp_keypoints[0]);
-                                    /* finger root */
-                                    ControlPointsQ.push_back(mp_keypoints[2]);
-                                    // ControlPointsQ.push_back(destination[2]);
-                                    ControlPointsQ.push_back(mp_keypoints[5]);
-                                    // ControlPointsQ.push_back(destination[6]);
-                                    ControlPointsQ.push_back(mp_keypoints[9]);
-                                    // ControlPointsQ.push_back(destination[10]);
-                                    ControlPointsQ.push_back(mp_keypoints[13]);
-                                    // ControlPointsQ.push_back(destination[14]);
-                                    ControlPointsQ.push_back(mp_keypoints[17]);
-                                    // ControlPointsQ.push_back(destination[18]);
-                                    if (grab_angle_left <= mls_grab_threshold)
+                                    for (int i = 0; i < leap_selection_vector.size(); i++)
                                     {
-                                        /* tips */
-                                        ControlPointsQ.push_back(mp_keypoints[4]);
-                                        ControlPointsQ.push_back(mp_keypoints[8]);
-                                        ControlPointsQ.push_back(mp_keypoints[12]);
-                                        ControlPointsQ.push_back(mp_keypoints[16]);
-                                        ControlPointsQ.push_back(mp_keypoints[20]);
-                                        /* 1 before tips */
-                                        ControlPointsQ.push_back(mp_keypoints[3]);
-                                        ControlPointsQ.push_back(mp_keypoints[7]);
-                                        ControlPointsQ.push_back(mp_keypoints[11]);
-                                        ControlPointsQ.push_back(mp_keypoints[15]);
-                                        ControlPointsQ.push_back(mp_keypoints[19]);
+                                        if (visible_landmarks[leap_selection_vector[i]])
+                                        {
+                                            ControlPointsP.push_back(leap_keypoints[leap_selection_vector[i]]);
+                                            ControlPointsQ.push_back(mp_keypoints[mp_selection_vector[i]]);
+                                        }
                                     }
                                     // deform grid using prediction
-                                    // todo: refactor control points to avoid this part
-                                    cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
-                                    cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
-                                    for (int i = 0; i < ControlPointsP.size(); i++)
+                                    if (ControlPointsP.size() > 0)
                                     {
-                                        p.at<float>(0, i) = (ControlPointsP.at(i)).x;
-                                        p.at<float>(1, i) = (ControlPointsP.at(i)).y;
+                                        // deform grid using prediction
+                                        // todo: refactor control points to avoid this part
+                                        cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
+                                        cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
+                                        for (int i = 0; i < ControlPointsP.size(); i++)
+                                        {
+                                            p.at<float>(0, i) = (ControlPointsP.at(i)).x;
+                                            p.at<float>(1, i) = (ControlPointsP.at(i)).y;
+                                        }
+                                        for (int i = 0; i < ControlPointsQ.size(); i++)
+                                        {
+                                            q.at<float>(0, i) = (ControlPointsQ.at(i)).x;
+                                            q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
+                                        }
+                                        // mls_profile.stop();
+                                        // std::cout << "MLS precomputation time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
+                                        // mls_profile.start();
+                                        // weights
+                                        cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), mls_alpha);
+                                        // mls_profile.stop();
+                                        // std::cout << "MLS weight time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
+                                        // affine
+                                        // mls_profile.start();
+                                        cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
+                                        // mls_profile.stop();
+                                        // std::cout << "MLS affine time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
+                                        // mls_profile.start();
+                                        cv::Mat fv = MLSPointsTransformAffine(w, A, q);
+                                        deformationGrid.constructDeformedGrid(fv);
+                                        // mls_profile.stop();
+                                        // std::cout << "MLS transform time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     }
-                                    for (int i = 0; i < ControlPointsQ.size(); i++)
+                                    else
                                     {
-                                        q.at<float>(0, i) = (ControlPointsQ.at(i)).x;
-                                        q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
+                                        deformationGrid.constructGrid();
                                     }
-                                    // mls_profile.stop();
-                                    // std::cout << "MLS precomputation time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                                    // mls_profile.start();
-                                    // weights
-                                    cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), mls_alpha);
-                                    // mls_profile.stop();
-                                    // std::cout << "MLS weight time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                                    // affine
-                                    // mls_profile.start();
-                                    cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
-                                    // mls_profile.stop();
-                                    // std::cout << "MLS affine time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                                    // mls_profile.start();
-                                    cv::Mat fv = MLSPointsTransformAffine(w, A, q);
-                                    deformationGrid.constructDeformedGrid(fv);
-                                    // mls_profile.stop();
-                                    // std::cout << "MLS transform time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                     mls_succeed = true;
-                                }
-                                else
-                                {
-                                    std::cout << "MP prediction failed" << std::endl;
                                 }
                             }
                             catch (const std::exception &e)
@@ -1312,8 +1271,8 @@ int main(int argc, char *argv[])
                             // std::cout << "mls thread dying !" << std::endl;
                             mls_running = false;
                         });
-                    }
-                }
+                    } // if (skeleton_vertices.size() > 0)
+                }     // if (!mls_running && !mls_succeed)
                 if (mls_succeed)
                 {
                     // use new grid to deform rendered image
@@ -1466,22 +1425,13 @@ int main(int argc, char *argv[])
                 set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f));
             postprocess_fbo.getTexture()->bind();
             fullScreenQuad.render();
-            if (show_mls_landmarks)
+            if (show_mls_landmarks && use_mls)
             {
                 vcolorShader.use();
-                std::vector<glm::vec2> selected_pointsP, selected_pointsQ;
-                for (int i = 0; i < ControlPointsP_glm.size(); i++)
+                if (size(ControlPointsP_glm) > 0)
                 {
-                    if (pseudo_visible_landmarks[i])
-                    {
-                        selected_pointsP.push_back(ControlPointsP_glm[i]);
-                        selected_pointsQ.push_back(ControlPointsQ_glm[i]);
-                    }
-                }
-                if (size(selected_pointsP) > 0)
-                {
-                    PointCloud cloud_src(selected_pointsP, screen_verts_color_red);
-                    PointCloud cloud_dst(selected_pointsQ, screen_verts_color_green);
+                    PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
+                    PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
                     if (use_coaxial_calib)
                         vcolorShader.setMat4("MVP", c2p_homography);
                     else
@@ -2535,7 +2485,7 @@ int main(int argc, char *argv[])
             if (use_pbo)
             {
                 t_download.start();
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]);
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[frameCount % 2]); // todo: replace with totalFrameCount
                 glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
                 t_download.stop();
 
@@ -3095,6 +3045,11 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     return true;
 }
 
+LEAP_STATUS getLeapFramePreRecorded()
+{
+    return LEAP_STATUS::LEAP_NEWFRAME;
+}
+
 LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
@@ -3102,7 +3057,6 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          bool leap_poll_mode,
                          int64_t &lastFrameID)
 {
-    // todo: most likely leaks memory / stack overflow here
     //  some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -3249,12 +3203,12 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         if (hand->type == eLeapHandType_Right)
         {
             bones_to_world_right = std::move(bones_to_world);
-            grab_angle_right = grab_angle;
+            // grab_angle_right = grab_angle;
         }
         else
         {
             bones_to_world_left = std::move(bones_to_world);
-            grab_angle_left = grab_angle;
+            // grab_angle_left = grab_angle;
         }
     }
     // Free the allocated buffer when done.
@@ -3891,7 +3845,7 @@ void openIMGUIFrame()
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Post Process"))
         {
-            ImGui::Checkbox("MLS?", &use_mls);
+            ImGui::Checkbox("MLS", &use_mls);
             ImGui::SameLine();
             ImGui::Checkbox("Kalman Filter", &use_mp_kalman);
             ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 100);
@@ -3916,8 +3870,10 @@ void openIMGUIFrame()
             ImGui::SliderInt("MLS smooth window", &mls_smooth_window, 0, 10);
             ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
-            ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
-            ImGui::SliderFloat("MLS depth threshold", &mls_depth_threshold, 0.00001f, 0.01f, "%.6f");
+            // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
+            ImGui::Checkbox("MLS depth test?", &mls_depth_test);
+            ImGui::SameLine();
+            ImGui::SliderFloat("d. thre", &mls_depth_threshold, 1.0f, 1500.0f, "%.6f");
             ImGui::SliderFloat("Masking threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {

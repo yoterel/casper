@@ -141,7 +141,7 @@ void FBO::saveDepthToFile(std::string filepath, bool flip_vertically)
 }
 
 // samples the depth buffer at the given locations
-std::vector<float> FBO::sampleDepthBuffer(std::vector<glm::vec2> sample_locations, glm::mat4 projection_mat)
+std::vector<float> FBO::sampleDepthBuffer(std::vector<glm::vec2> sample_locations)
 {
     std::vector<float> depthBufferSamples;
     this->bind(false);
@@ -155,8 +155,6 @@ std::vector<float> FBO::sampleDepthBuffer(std::vector<glm::vec2> sample_location
                      1, 1,             // Reading one pixel
                      GL_DEPTH_COMPONENT, GL_FLOAT,
                      &depth);
-        // depth = (2.0 * depth) - 1.0;                                        // logarithmic NDC
-        // depth = (2.0 * near * far) / (far + near - (depth * (far - near))); // linear <zNear,zFar>
         depthBufferSamples.push_back(depth);
     }
     this->unbind();
