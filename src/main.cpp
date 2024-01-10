@@ -168,6 +168,7 @@ std::vector<std::string> animals{
 // leap controls
 bool leap_poll_mode = false;
 bool use_pre_recorded_session = false;
+std::string session_name = "s42k.0";
 bool pre_recorded_session_loaded = false;
 bool leap_record_session = false;
 std::vector<glm::mat4> session_bones_left;
@@ -3144,11 +3145,10 @@ LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
 
 bool loadPrerecordedSession()
 {
-    std::string tmp_filename("s42k.0");
     std::string recordings("../../debug/recordings/");
-    fs::path bones_left_path(recordings + tmp_filename + std::string("_bones_left.npy"));
+    fs::path bones_left_path(recordings + session_name + std::string("_bones_left.npy"));
     // fs::path bones_right_path(recordings + tmp_filename + std::string("_bones_right.npy"));
-    fs::path joints_path(recordings + tmp_filename + std::string("_joints.npy"));
+    fs::path joints_path(recordings + session_name + std::string("_joints.npy"));
     cnpy::NpyArray bones_left_npy, joints_npy;
     if (fs::exists(bones_left_path))
     {
@@ -4036,6 +4036,11 @@ void openIMGUIFrame()
             {
                 leap.setPollMode(leap_poll_mode);
             }
+            ImGui::Checkbox("Record Session", &leap_record_session);
+            ImGui::SameLine();
+            ImGui::Checkbox("Use Recorded Session", &use_pre_recorded_session);
+            ImGui::SameLine();
+            ImGui::InputText("Session Name", &session_name);
             if (ImGui::RadioButton("Desktop", &leap_tracking_mode, 0))
             {
                 leap.setTrackingMode(eLeapTrackingMode_Desktop);
@@ -4050,9 +4055,6 @@ void openIMGUIFrame()
             {
                 leap.setTrackingMode(eLeapTrackingMode_HMD);
             }
-            ImGui::SameLine();
-            ImGui::Checkbox("Record Session", &leap_record_session);
-            ImGui::Checkbox("Use Recorded Session", &use_pre_recorded_session);
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, -50000, 50000);
             ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
