@@ -95,12 +95,13 @@ enum class LeapMarkSettings
     WHOLE_HAND = 2,
     ONE_BONE = 3,
 };
-enum class CalibrationMode
+enum class OperationMode
 {
-    OFF = 0,
+    NORMAL = 0,
     CAMERA = 1,
     COAXIAL = 2,
     LEAP = 3,
+    VIDEO = 4,
 };
 
 #endif // HELPERS_H

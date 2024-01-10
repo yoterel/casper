@@ -68,7 +68,10 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &skeleton_vertices, bool leap_poll_mode, int64_t &lastFrameID);
-LEAP_STATUS getLeapFramePreRecorded();
+LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
+                                    std::vector<glm::mat4> &bones_to_world_right,
+                                    std::vector<glm::vec3> &skeleton_vertices);
+bool loadPrerecordedSession();
 void initGLBuffers(unsigned int *pbo);
 bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 glm::mat4 &w2c_auto,
@@ -164,8 +167,15 @@ std::vector<std::string> animals{
     "a panda"};
 // leap controls
 bool leap_poll_mode = false;
-bool pre_recorded_session = false;
+bool use_pre_recorded_session = false;
+bool pre_recorded_session_loaded = false;
 bool leap_record_session = false;
+std::vector<glm::mat4> session_bones_left;
+std::vector<glm::mat4> session_bones_right;
+std::vector<glm::vec3> session_joints;
+int session_counter = 0;
+std::string tmp_name = std::tmpnam(nullptr);
+fs::path tmp_filename(tmp_name);
 int leap_tracking_mode = eLeapTrackingMode_HMD;
 uint64_t leap_cur_frame_id = 0;
 uint32_t leap_width = 640;
@@ -197,7 +207,7 @@ bool leap_calib_use_ransac = false;
 int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-int calib_mode = static_cast<int>(CalibrationMode::OFF);
+int operation_mode = static_cast<int>(OperationMode::NORMAL);
 int n_points_leap_calib = 2000;
 int n_points_cam_calib = 30;
 std::vector<double> calib_cam_matrix;
@@ -782,9 +792,9 @@ int main(int argc, char *argv[])
         }
         else
         {
-            switch (calib_mode)
+            switch (operation_mode)
             {
-            case static_cast<int>(CalibrationMode::OFF):
+            case static_cast<int>(OperationMode::NORMAL):
             {
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 break;
@@ -810,7 +820,7 @@ int main(int argc, char *argv[])
         // else
         // {
         // std::cout << "before: " << camera_queue.size_approx() << std::endl;
-        if (calib_mode != static_cast<int>(CalibrationMode::LEAP) && calib_mode != static_cast<int>(CalibrationMode::CAMERA))
+        if (operation_mode != static_cast<int>(OperationMode::LEAP) && operation_mode != static_cast<int>(OperationMode::CAMERA) && operation_mode != static_cast<int>(OperationMode::VIDEO))
         {
             bool sucess = camera.capture_single_image(ptrGrabResult);
             if (!sucess)
@@ -840,9 +850,16 @@ int main(int argc, char *argv[])
         /* deal with leap input */
         t_leap.start();
         LEAP_STATUS leap_status;
-        if (pre_recorded_session)
+        if (use_pre_recorded_session)
         {
-            leap_status = getLeapFramePreRecorded();
+            if (!pre_recorded_session_loaded)
+            {
+                if (loadPrerecordedSession())
+                    pre_recorded_session_loaded = true;
+                else
+                    std::cout << "Failed to load prerecorded session" << std::endl;
+            }
+            leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, skeleton_vertices);
         }
         else
         {
@@ -853,6 +870,23 @@ int main(int argc, char *argv[])
                 LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
             }
             leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, skeleton_vertices, leap_poll_mode, lastFrameID);
+            if (leap_record_session)
+            {
+                std::string savepath(std::string("../../debug/recordings/"));
+                fs::path bones_left(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
+                // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
+                fs::path joints(savepath + tmp_filename.filename().string() + std::string("_joints.npy"));
+                // fs::path session(savepath + tmp_filename.filename().string() + std::string("_session.npz"));
+                if ((skeleton_vertices.size() > 0) && (bones_to_world_left.size() > 0))
+                {
+                    // cnpy::npy_save(session.string().c_str(), "joints", &skeleton_vertices[0].x, {skeleton_vertices.size(), 3}, "a");
+                    // cnpy::npy_save(session.string().c_str(), "bones_left", &bones_to_world_left[0][0].x, {bones_to_world_left.size(), 4, 4}, "a");
+                    // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
+                    cnpy::npy_save(bones_left.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
+                    // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
+                    cnpy::npy_save(joints.string().c_str(), &skeleton_vertices[0].x, {1, skeleton_vertices.size(), 3}, "a");
+                }
+            }
         }
         if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
         {
@@ -874,9 +908,9 @@ int main(int argc, char *argv[])
         glm::mat4 cam_projection_transform = gl_camera.getProjectionMatrix();
         t_leap.stop();
         /* render warped cam image */
-        switch (calib_mode)
+        switch (operation_mode)
         {
-        case static_cast<int>(CalibrationMode::OFF):
+        case static_cast<int>(OperationMode::NORMAL):
         {
             /* skin hand mesh with leap input */
             t_skin.start();
@@ -1499,7 +1533,7 @@ int main(int argc, char *argv[])
             }
             break;
         }
-        case static_cast<int>(CalibrationMode::CAMERA):
+        case static_cast<int>(OperationMode::CAMERA):
         {
             switch (calibration_state)
             {
@@ -1562,7 +1596,7 @@ int main(int argc, char *argv[])
 
             break;
         }
-        case static_cast<int>(CalibrationMode::COAXIAL):
+        case static_cast<int>(OperationMode::COAXIAL):
         {
             std::vector<cv::Point2f> origpts, newpts;
             for (int i = 0; i < 4; ++i)
@@ -1599,7 +1633,7 @@ int main(int argc, char *argv[])
             cloud.render();
             break;
         }
-        case static_cast<int>(CalibrationMode::LEAP):
+        case static_cast<int>(OperationMode::LEAP):
         {
 
             switch (calibration_state)
@@ -2116,12 +2150,23 @@ int main(int argc, char *argv[])
                 break;
             } // switch (calibration_state)
             break;
-        } // CalibrationMode::LEAP
+        } // OperationMode::LEAP
+        case static_cast<int>(OperationMode::VIDEO):
+        {
+            // get pre-recorded leap info i
+            // produce fake cam image, using interpolated leap info between i and i + 1, to achieve required simulated latency
+            // glm::quat interpolatedquat = glm::mix(quat1,quat2,0.5f)
+            // render scene with desired effect
+            // save render to disk as png
+            // offline: produce a compressed video from the pngs
+            // online: load video into memory and stream to projector in full fps
+            break;
+        }
         default:
             break;
         } // switch(calib_mode)
 
-        if (debug_mode && calib_mode == static_cast<int>(CalibrationMode::OFF))
+        if (debug_mode && operation_mode == static_cast<int>(OperationMode::NORMAL))
         {
             t_debug.start();
             glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
@@ -2695,7 +2740,7 @@ void process_input(GLFWwindow *window)
         {
             space_modifier = false;
             displayBoneIndex = (displayBoneIndex + 1) % n_bones;
-            if (calib_mode == static_cast<int>(CalibrationMode::LEAP))
+            if (operation_mode == static_cast<int>(OperationMode::LEAP))
             {
                 switch (calibration_state)
                 {
@@ -2789,13 +2834,13 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     }
     if (activateGUI) // dont allow moving cameras when GUI active
         return;
-    switch (calib_mode)
+    switch (operation_mode)
     {
-    case static_cast<int>(CalibrationMode::OFF):
+    case static_cast<int>(OperationMode::NORMAL):
     {
         break;
     }
-    case static_cast<int>(CalibrationMode::COAXIAL):
+    case static_cast<int>(OperationMode::COAXIAL):
     {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
@@ -2814,7 +2859,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         }
         break;
     }
-    case static_cast<int>(CalibrationMode::LEAP):
+    case static_cast<int>(OperationMode::LEAP):
     {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
@@ -2851,9 +2896,9 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
     lastY = ypos;
     if (activateGUI)
         return;
-    switch (calib_mode)
+    switch (operation_mode)
     {
-    case static_cast<int>(CalibrationMode::OFF):
+    case static_cast<int>(OperationMode::NORMAL):
     {
         if (shift_modifier)
         {
@@ -2872,7 +2917,7 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         }
         break;
     }
-    case static_cast<int>(CalibrationMode::COAXIAL):
+    case static_cast<int>(OperationMode::COAXIAL):
     {
 
         // glm::vec2 mouse_pos = glm::vec2((2.0f * xpos / proj_width) - 1.0f, -1.0f * ((2.0f * ypos / proj_height) - 1.0f));
@@ -2897,7 +2942,7 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         }
         break;
     }
-    case static_cast<int>(CalibrationMode::LEAP):
+    case static_cast<int>(OperationMode::LEAP):
     {
         glm::vec2 mouse_pos_NDC = Helpers::ScreenToNDC(glm::vec2(xpos, ypos), proj_width, proj_height, true);
         if (dragging)
@@ -3077,9 +3122,61 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     return true;
 }
 
-LEAP_STATUS getLeapFramePreRecorded()
+LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
+                                    std::vector<glm::mat4> &bones_to_world_right,
+                                    std::vector<glm::vec3> &skeleton_vertices)
 {
+
+    bones_to_world_left.clear();
+    bones_to_world_right.clear();
+    skeleton_vertices.clear();
+    for (int i = 0; i < 22; i++)
+    {
+        bones_to_world_left.push_back(session_bones_left[session_counter * 22 + i]);
+    }
+    for (int i = 0; i < 42; i++)
+    {
+        skeleton_vertices.push_back(session_joints[session_counter * 42 + i]);
+    }
+    session_counter = (session_counter + 1) % (session_bones_left.size() / 22);
     return LEAP_STATUS::LEAP_NEWFRAME;
+}
+
+bool loadPrerecordedSession()
+{
+    std::string tmp_filename("s42k.0");
+    std::string recordings("../../debug/recordings/");
+    fs::path bones_left_path(recordings + tmp_filename + std::string("_bones_left.npy"));
+    // fs::path bones_right_path(recordings + tmp_filename + std::string("_bones_right.npy"));
+    fs::path joints_path(recordings + tmp_filename + std::string("_joints.npy"));
+    cnpy::NpyArray bones_left_npy, joints_npy;
+    if (fs::exists(bones_left_path))
+    {
+        bones_left_npy = cnpy::npy_load(bones_left_path.string());
+        std::vector<float> raw_data = bones_left_npy.as_vec<float>();
+        for (int i = 0; i < raw_data.size(); i += 16)
+        {
+            session_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
+        }
+    }
+    else
+    {
+        return false;
+    }
+    if (fs::exists(joints_path))
+    {
+        joints_npy = cnpy::npy_load(joints_path.string());
+        std::vector<float> raw_data = joints_npy.as_vec<float>();
+        for (int i = 0; i < raw_data.size(); i += 3)
+        {
+            session_joints.push_back(glm::make_vec3(raw_data.data() + i));
+        }
+    }
+    else
+    {
+        return false;
+    }
+    return true;
 }
 
 LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
@@ -3432,13 +3529,8 @@ void openIMGUIFrame()
             }
             ImGui::SameLine();
             ImGui::Checkbox("PBO", &use_pbo);
-            ImGui::TreePop();
-        }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Calibration"))
-        {
-            ImGui::Text("Calibration Mode");
-            if (ImGui::RadioButton("Off", &calib_mode, 0))
+            ImGui::Text("Operation Mode");
+            if (ImGui::RadioButton("Normal", &operation_mode, 0))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
@@ -3446,14 +3538,14 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Camera", &calib_mode, 1))
+            if (ImGui::RadioButton("Camera", &operation_mode, 1))
             {
                 leap.setImageMode(false);
                 exposure = 10000.0f;
                 camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Coaxial Calibration", &calib_mode, 2))
+            if (ImGui::RadioButton("Coaxial Calibration", &operation_mode, 2))
             {
                 debug_mode = false;
                 leap.setImageMode(false);
@@ -3461,7 +3553,7 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Leap Calibration", &calib_mode, 3))
+            if (ImGui::RadioButton("Leap Calibration", &operation_mode, 3))
             {
                 projector.kill();
                 use_projector = false;
@@ -3476,9 +3568,14 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
                 debug_mode = false;
             }
-            switch (calib_mode)
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Calibration"))
+        {
+            switch (operation_mode)
             {
-            case static_cast<int>(CalibrationMode::OFF):
+            case static_cast<int>(OperationMode::NORMAL):
             {
                 if (ImGui::Button("Save Current Extrinsics"))
                 {
@@ -3490,7 +3587,7 @@ void openIMGUIFrame()
                 }
                 break;
             }
-            case static_cast<int>(CalibrationMode::CAMERA):
+            case static_cast<int>(OperationMode::CAMERA):
             {
                 if (ImGui::Checkbox("Ready To Collect", &ready_to_collect))
                 {
@@ -3535,7 +3632,7 @@ void openIMGUIFrame()
                 }
                 break;
             }
-            case static_cast<int>(CalibrationMode::COAXIAL):
+            case static_cast<int>(OperationMode::COAXIAL):
             {
                 if (ImGui::Button("Save Coaxial Calibration"))
                 {
@@ -3560,7 +3657,7 @@ void openIMGUIFrame()
                 }
                 break;
             }
-            case static_cast<int>(CalibrationMode::LEAP):
+            case static_cast<int>(OperationMode::LEAP):
             {
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
                 ImGui::SliderInt("# Points to Collect", &n_points_leap_calib, 1000, 100000);
@@ -3954,7 +4051,8 @@ void openIMGUIFrame()
                 leap.setTrackingMode(eLeapTrackingMode_HMD);
             }
             ImGui::SameLine();
-
+            ImGui::Checkbox("Record Session", &leap_record_session);
+            ImGui::Checkbox("Use Recorded Session", &use_pre_recorded_session);
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, -50000, 50000);
             ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
