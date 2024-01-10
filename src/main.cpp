@@ -134,6 +134,7 @@ int totalFrameCount = 0;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
+Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls;
 // bake/sd controls
 bool bakeRequest = false;
 bool sd_succeed = false;
@@ -180,6 +181,9 @@ float magic_wrist_offset = -65.0f;
 float magic_arm_forward_offset = -170.0f;
 float leap_binary_threshold = 0.3f;
 bool leap_threshold_flag = false;
+int64_t targetFrameTime = 0;
+double whole = 0.0;
+LEAP_CLOCK_REBASER clockSynchronizer;
 LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
 // calibration controls
 bool ready_to_collect = false;
@@ -295,11 +299,12 @@ bool use_mls = true;
 bool show_mls_landmarks = false;
 int mls_smooth_window = 0;
 bool use_mp_kalman = false;
+bool mls_forecast = true;
 float mp_kalman_process_noise = 0.01f;
 float mp_kalman_measurement_noise = 0.01f;
 float mp_kalman_error = 1.0f;
 float mls_depth_threshold = 215.0f;
-bool mls_depth_test = true;
+bool mls_depth_test = false;
 std::vector<Kalman2D> kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
 int kalman_lookahead = 0;
 
@@ -353,7 +358,6 @@ int main(int argc, char *argv[])
         std::cout << "Camera in color mode" << std::endl;
         cam_color_mode = true;
     }
-    Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls;
     t_app.start();
     /* py init */
     Py_Initialize();
@@ -589,9 +593,7 @@ int main(int argc, char *argv[])
     double previousAppTime = t_app.getElapsedTimeInSec();
     double previousSecondAppTime = t_app.getElapsedTimeInSec();
     double currentAppTime = t_app.getElapsedTimeInSec();
-    double whole = 0.0;
     long frameCount = 0;
-    int64_t targetFrameTime = 0;
     uint64_t targetFrameSize = 0;
     std::vector<glm::mat4> bones_to_world_left;
     std::vector<glm::mat4> bones_to_world_right;
@@ -615,7 +617,6 @@ int main(int argc, char *argv[])
             use_projector = false;
         }
     }
-    LEAP_CLOCK_REBASER clockSynchronizer;
     LeapCreateClockRebaser(&clockSynchronizer);
     std::thread producer, consumer, run_sd, run_mls;
     // load calibration results if they exist
@@ -1159,6 +1160,7 @@ int main(int argc, char *argv[])
                                 // mls_profile.start();
                                 std::vector<glm::vec2> cur_pred_glm = mp_predict(camImage, totalFrameCount);
                                 std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
+                                std::vector<glm::vec2> projected_diff(projected.size(), glm::vec2(0.0f, 0.0f));
                                 // mls_profile.stop();
                                 // std::cout << "MLS prediction time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                                 if (cur_pred_glm.size() == 21)
@@ -1193,9 +1195,39 @@ int main(int argc, char *argv[])
                                         }
                                         // pred_glm = kalman_forecast;
                                     }
+                                    std::vector<cv::Point2f> leap_keypoints, diff_keypoints, mp_keypoints;
+                                    if (mls_forecast)
+                                    {
+                                        // fix prediction with current leap info
+                                        // sync leap clock
+                                        std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+                                        LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
+                                        std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+                                        LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+                                        std::vector<glm::mat4> cur_left_bones, cur_right_bones;
+                                        std::vector<glm::vec3> cur_vertices;
+                                        LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices, leap_poll_mode, lastFrameID);
+                                        if (status == LEAP_STATUS::LEAP_NEWFRAME && cur_vertices.size() > 0)
+                                        {
+                                            std::vector<glm::vec2> projected_new = Helpers::project_points(cur_vertices, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                                            for (int i = 0; i < projected_new.size(); i++)
+                                            {
+                                                projected_diff[i] += projected_new[i] - projected[i];
+                                            }
+                                            leap_keypoints = Helpers::glm2opencv(projected_new);
+                                        }
+                                        else
+                                        {
+                                            leap_keypoints = Helpers::glm2opencv(projected);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        leap_keypoints = Helpers::glm2opencv(projected);
+                                    }
+                                    diff_keypoints = Helpers::glm2opencv(projected_diff);
+                                    mp_keypoints = Helpers::glm2opencv(pred_glm);
                                     // mls_profile.start();
-                                    std::vector<cv::Point2f> leap_keypoints = Helpers::glm2opencv(projected);
-                                    std::vector<cv::Point2f> mp_keypoints = Helpers::glm2opencv(pred_glm);
                                     ControlPointsP.clear();
                                     ControlPointsQ.clear();
                                     std::vector<bool> visible_landmarks(leap_keypoints.size(), true);
@@ -1219,7 +1251,7 @@ int main(int argc, char *argv[])
                                         if (visible_landmarks[leap_selection_vector[i]])
                                         {
                                             ControlPointsP.push_back(leap_keypoints[leap_selection_vector[i]]);
-                                            ControlPointsQ.push_back(mp_keypoints[mp_selection_vector[i]]);
+                                            ControlPointsQ.push_back(mp_keypoints[mp_selection_vector[i]] + diff_keypoints[mp_selection_vector[i]]);
                                         }
                                     }
                                     // deform grid using prediction
@@ -3090,7 +3122,6 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
     }
     else
     {
-        /* code */
         skeleton_vertices.clear();
         bones_to_world_left.clear();
         bones_to_world_right.clear();
@@ -3847,6 +3878,7 @@ void openIMGUIFrame()
         {
             ImGui::Checkbox("MLS", &use_mls);
             ImGui::SameLine();
+            ImGui::Checkbox("Forecast", &mls_forecast);
             ImGui::Checkbox("Kalman Filter", &use_mp_kalman);
             ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 100);
             ImGui::SliderFloat("Kalman Pnoise", &mp_kalman_process_noise, 0.00001f, 1.0f, "%.6f");
