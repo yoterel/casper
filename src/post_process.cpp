@@ -12,12 +12,11 @@ PostProcess::PostProcess(unsigned int srcWidth, unsigned int srcHeight,
                                                                           m_srcHeight(srcHeight),
                                                                           m_dstWidth(dstWidth),
                                                                           m_dstHeight(dstHeight),
-                                                                          m_quad(0.0f)
+                                                                          m_quad(0.0f, false)
 {
     m_num_texels = m_srcWidth * m_srcHeight;
     m_num_values = m_num_texels * 4;
     m_size_tex_data = sizeof(GLubyte) * m_num_values;
-    initGLBuffers();
 }
 
 glm::mat4 PostProcess::findHomography(std::vector<glm::vec2> screen_verts)
@@ -639,6 +638,7 @@ void PostProcess::saveColorToFile(std::string filepath, unsigned int fbo_id)
 
 void PostProcess::initGLBuffers()
 {
+    m_quad.init();
     // todo: replace with FBO class
     // create fbos
     glGenTextures(2, m_pingpong_textures);

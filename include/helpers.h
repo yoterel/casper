@@ -58,7 +58,7 @@ enum class MaterialMode
 {
     DIFFUSE = 0,
     GGX = 1,
-    WIREFRAME = 2,
+    SKELETON = 2,
 };
 enum class PostProcessMode
 {
@@ -98,10 +98,10 @@ enum class LeapMarkSettings
 enum class OperationMode
 {
     NORMAL = 0,
-    CAMERA = 1,
-    COAXIAL = 2,
-    LEAP = 3,
-    VIDEO = 4,
+    VIDEO = 1,
+    CAMERA = 2,
+    COAXIAL = 3,
+    LEAP = 4,
 };
 
 #endif // HELPERS_H

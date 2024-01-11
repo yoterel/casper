@@ -4,7 +4,7 @@
 #include <glm/gtx/normal.hpp>
 #include <glm/gtx/norm.hpp>
 
-Quad::Quad(std::vector<glm::vec3> &vertices)
+Quad::Quad(std::vector<glm::vec3> &vertices, bool autoinit)
 {
     std::vector<float> verts{
         // positions          // colors           // texture coords
@@ -25,9 +25,11 @@ Quad::Quad(std::vector<glm::vec3> &vertices)
         exit(1);
     }
     m_normal = normal1;
-    this->init(verts);
+    m_verts = verts;
+    if (autoinit)
+        this->init();
 }
-Quad::Quad(std::vector<glm::vec2> &vertices)
+Quad::Quad(std::vector<glm::vec2> &vertices, bool autoinit)
 {
     std::vector<float> verts{
         // positions          // colors           // texture coords
@@ -48,9 +50,11 @@ Quad::Quad(std::vector<glm::vec2> &vertices)
         exit(1);
     }
     m_normal = normal1;
-    this->init(verts);
+    m_verts = verts;
+    if (autoinit)
+        this->init();
 }
-Quad::Quad(float depth)
+Quad::Quad(float depth, bool autoinit)
 {
     std::vector<float> verts{
         -1.0f, 1.0f, depth, 0.0f, 1.0f,  // top left
@@ -60,10 +64,12 @@ Quad::Quad(float depth)
         -1.0f, 1.0f, depth, 0.0f, 1.0f, // top left
         1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
         1.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
-    this->init(verts);
+    m_verts = verts;
+    if (autoinit)
+        this->init();
 }
 
-Quad::Quad(std::string location, float depth)
+Quad::Quad(std::string location, float depth, bool autoinit)
 {
     std::vector<float> verts;
     if (location == "top_half")
@@ -165,7 +171,9 @@ Quad::Quad(std::string location, float depth)
             1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
             1.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
     }
-    this->init(verts);
+    m_verts = verts;
+    if (autoinit)
+        this->init();
 }
 
 Quad::~Quad()
@@ -182,16 +190,20 @@ Quad::~Quad()
     }
 }
 
-void Quad::init(std::vector<float> &verts)
+void Quad::init()
 {
     // unsigned int VBO, VAO, EBO;
-
+    if (m_verts.size() != 30) // 6 verts * 5 (xyz + uv)
+    {
+        std::cout << "Error: Quad missing vertices!" << std::endl;
+        exit(1);
+    }
     glGenVertexArrays(1, &m_VAO);
     glGenBuffers(1, &m_VBO);
 
     glBindVertexArray(m_VAO);
     glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * verts.size(), verts.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * m_verts.size(), m_verts.data(), GL_STATIC_DRAW);
     // position attribute
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);

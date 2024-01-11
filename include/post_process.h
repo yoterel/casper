@@ -30,9 +30,9 @@ public:
     bool isFinger(cv::Point a, cv::Point b, cv::Point c, double limit_angle_inf, double limit_angle_sup, cv::Point palm_center, double min_distance_from_palm);
     double findAngle(cv::Point a, cv::Point b, cv::Point c);
     void drawVectorPoints(cv::Mat image, std::vector<cv::Point> points, cv::Scalar color, bool with_numbers);
+    void initGLBuffers();
 
 private:
-    void initGLBuffers();
     Quad m_quad;
     unsigned int m_srcWidth, m_srcHeight;
     unsigned int m_dstWidth, m_dstHeight;
