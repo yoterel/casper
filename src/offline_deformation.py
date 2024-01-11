@@ -139,7 +139,7 @@ def predict():
 
     # some inits
     VisionRunningMode = mp.tasks.vision.RunningMode
-    base_options = python.BaseOptions(model_asset_path="hand_landmarker.task")
+    base_options = python.BaseOptions(model_asset_path="models/hand_landmarker.task")
     options = vision.HandLandmarkerOptions(
         base_options=base_options, num_hands=1  # , running_mode=VisionRunningMode.VIDEO
     )
@@ -303,7 +303,7 @@ def predict():
     # mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cam_image)
     # # STEP 2: Create an HandLandmarker object.
     # VisionRunningMode = mp.tasks.vision.RunningMode
-    # base_options = python.BaseOptions(model_asset_path="hand_landmarker.task")
+    # base_options = python.BaseOptions(model_asset_path="models/hand_landmarker.task")
     # options = vision.HandLandmarkerOptions(
     #     base_options=base_options, num_hands=1  # , running_mode=VisionRunningMode.VIDEO
     # )

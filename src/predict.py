@@ -56,7 +56,7 @@ from mediapipe.tasks.python import vision
 
 VisionRunningMode = mp.tasks.vision.RunningMode
 base_options = python.BaseOptions(
-    model_asset_path="../../resource/hand_landmarker.task"
+    model_asset_path="../../resource/models/hand_landmarker.task"
 )
 options = vision.HandLandmarkerOptions(
     base_options=base_options,
@@ -68,7 +68,7 @@ detector = vision.HandLandmarker.create_from_options(options)
 
 def init_detector(video=False):
     my_base_options = python.BaseOptions(
-        model_asset_path="../../resource/hand_landmarker.task"
+        model_asset_path="../../resource/models/hand_landmarker.task"
     )
     if video:
         my_options = vision.HandLandmarkerOptions(
@@ -183,7 +183,7 @@ def predict_single(image_orig, my_detector=None, verbose=False):
         if verbose:
             print("initializing detector")
         single_base_options = python.BaseOptions(
-            model_asset_path="../../resource/hand_landmarker.task"
+            model_asset_path="../../resource/models/hand_landmarker.task"
         )
         single_options = vision.HandLandmarkerOptions(
             base_options=single_base_options, num_hands=1
