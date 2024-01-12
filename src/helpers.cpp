@@ -2,6 +2,8 @@
 #include "fbo.h"
 #include "quad.h"
 #include "shader.h"
+#include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 std::vector<glm::vec2> Helpers::vec3to2(std::vector<glm::vec3> vec)
 {
@@ -498,6 +500,32 @@ std::vector<glm::vec2> Helpers::accumulate(const std::vector<std::vector<glm::ve
         }
     }
     return accumulator;
+}
+
+glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale)
+{
+    // if you can't join'm, slerp'm.
+    glm::mat4 mat1, mat2;
+    glm::mat4 scalar = glm::scale(glm::mat4(1.0f), glm::vec3(10.f));
+    glm::mat4 inv_scalar = glm::inverse(scalar);
+    if (prescale)
+    {
+        mat1 = _mat1 * inv_scalar;
+        mat2 = _mat2 * inv_scalar;
+    }
+    else
+    {
+        mat1 = _mat1;
+        mat2 = _mat2;
+    }
+    glm::quat rot1 = glm::quat_cast(mat1);
+    glm::quat rot2 = glm::quat_cast(mat2);
+    glm::quat finalRot = glm::slerp(rot1, rot2, _time);
+    glm::mat4 finalMat = glm::mat4_cast(finalRot);
+    if (prescale)
+        finalMat = finalMat * scalar;
+    finalMat[3] = _mat1[3] * (1 - _time) + _mat2[3] * _time; // lerp them for translation though
+    return finalMat;
 }
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
 // {
