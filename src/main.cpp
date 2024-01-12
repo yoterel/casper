@@ -156,6 +156,7 @@ float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
 int64_t totalFrameCount = 0;
 int64_t videoFrameCount = 0;
+int64_t maxVideoFrameCount = 0;
 int64_t lastFrameID = 0;
 bool space_modifier = false;
 bool shift_modifier = false;
@@ -204,8 +205,9 @@ std::string session_name = "s42k.0";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool playback_video = false;
-std::string playback_video_name = "s42k.0";
+std::string playback_video_name = "test";
 std::string loaded_playback_video_name = "";
+static uint8_t *pFrameData[400] = {NULL};
 bool playback_video_loaded = false;
 int total_session_time_stamps = 0;
 bool leap_record_session = false;
@@ -1008,7 +1010,14 @@ int main(int argc, char *argv[])
             {
                 if (playback_video)
                 {
-                    std::cout << "not implemented" << std::endl;
+                    if (playback_video_loaded)
+                    {
+                        videoFrameCount += 1;
+                        if (videoFrameCount >= maxVideoFrameCount)
+                        {
+                            videoFrameCount = 0;
+                        }
+                    }
                 }
             }
             break;
@@ -1643,35 +1652,42 @@ int main(int argc, char *argv[])
 
         if (use_projector)
         {
-            // send result to projector queue
-            glReadBuffer(GL_FRONT);
-            if (use_pbo) // todo: investigate better way to download asynchornously
+            if (operation_mode != static_cast<int>(OperationMode::VIDEO))
             {
-                t_download.start();
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[totalFrameCount % 2]); // todo: replace with totalFrameCount
-                glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
-                t_download.stop();
-
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(totalFrameCount + 1) % 2]);
-                GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
-                if (src)
+                // send result to projector queue
+                glReadBuffer(GL_FRONT);
+                if (use_pbo) // todo: investigate better way to download asynchornously
                 {
-                    // std::vector<uint8_t> data(src, src + image_size);
-                    // tmpdata.assign(src, src + image_size);
-                    // std::copy(src, src + tmpdata.size(), tmpdata.begin());
-                    memcpy(colorBuffer, src, projected_image_size);
-                    projector_queue.try_enqueue(colorBuffer);
-                    glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
+                    t_download.start();
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[totalFrameCount % 2]); // todo: replace with totalFrameCount
+                    glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
+                    t_download.stop();
+
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(totalFrameCount + 1) % 2]);
+                    GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+                    if (src)
+                    {
+                        // std::vector<uint8_t> data(src, src + image_size);
+                        // tmpdata.assign(src, src + image_size);
+                        // std::copy(src, src + tmpdata.size(), tmpdata.begin());
+                        memcpy(colorBuffer, src, projected_image_size);
+                        projector_queue.try_enqueue(colorBuffer);
+                        glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
+                    }
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
                 }
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+                else
+                {
+                    t_download.start();
+                    glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
+                    t_download.stop();
+                    // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
+                    projector_queue.try_enqueue(colorBuffer);
+                }
             }
             else
             {
-                t_download.start();
-                glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
-                t_download.stop();
-                // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
-                projector_queue.try_enqueue(colorBuffer);
+                projector_queue.try_enqueue(pFrameData[videoFrameCount]);
             }
         }
         // glCheckError();
@@ -2245,6 +2261,19 @@ LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
 
 bool loadVideo()
 {
+    std::string video("../../debug/video/");
+    fs::path video_path(video);
+    int frame_size = 1024 * 768 * 3;
+    int counter = 0;
+    for (const auto &entry : fs::directory_iterator(video_path))
+    {
+        cv::Mat image = cv::imread(entry.path().string(), cv::IMREAD_COLOR);
+        pFrameData[counter] = (uint8_t *)malloc(frame_size);
+        memcpy((void *)pFrameData[counter], (void *)image.data, frame_size);
+        std::cout << entry.path() << std::endl;
+        counter += 1;
+    }
+    maxVideoFrameCount = counter;
     return true;
 }
 
@@ -4283,9 +4312,14 @@ void openIMGUIFrame()
                 if (playback_video_name != loaded_playback_video_name)
                 {
                     if (loadVideo())
+                    {
+                        videoFrameCount = -1;
                         playback_video_loaded = true;
+                    }
                     else
+                    {
                         std::cout << "Failed to load video: " << session_name << std::endl;
+                    }
                 }
             }
             ImGui::SameLine();
