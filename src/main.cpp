@@ -930,19 +930,20 @@ int main(int argc, char *argv[])
         {
             if (pre_recorded_session_loaded && use_pre_recorded_session)
             {
+                // compute how many frames ahead we need to render
                 float diff_between_frames_ms = 1000.0f / 120.0f;             // ~8.33f
                 float factor = required_latency_ms / diff_between_frames_ms; // ~0.6f
                 float interp_factor, whole;
                 interp_factor = std::modf(factor, &whole);
                 int n_frames_ahead = static_cast<int>(whole);
-                // get pre-recorded leap info i
+                // get pre-recorded leap info (current frame, will be rendered)
                 LEAP_STATUS leap_status = handleLeapInput(videoFrameCount);
                 std::vector<glm::mat4> bones_to_world_cur, bones_to_world_left_interp1, bones_to_world_left_interp2;
                 if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
                 {
                     break;
                 }
-                // get pre-recorded leap info i
+                // get pre-recorded leap info (some future frame, will be used as camera input)
                 bones_to_world_cur = bones_to_world_left;
                 if (n_frames_ahead == 0)
                 {
@@ -963,15 +964,13 @@ int main(int argc, char *argv[])
                     break;
                 }
                 bones_to_world_left_interp2 = bones_to_world_left;
-                // produce fake cam image, using interpolated leap info between i and i + 1, to achieve required simulated latency
-
                 bones_to_world_left_interp.clear();
                 for (int i = 0; i < bones_to_world_left.size(); i++)
                 {
                     glm::mat4 interpolated = Helpers::interpolate(bones_to_world_left_interp1[i], bones_to_world_left_interp2[i], interp_factor, true);
                     bones_to_world_left_interp.push_back(interpolated);
                 }
-                // render scene
+                // produce fake camera image
                 // render left hand
                 bones_to_world_left = bones_to_world_left_interp;
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
@@ -982,18 +981,13 @@ int main(int argc, char *argv[])
                 hands_fbo.getTexture()->bind();
                 fullScreenQuad.render();
                 fake_cam_fbo.unbind();
-                // fake_cam_fbo.saveColorToFile(std::format("../../debug/video/cam_{:05d}.png", totalFrameCount), false);
                 std::vector<uchar> fake_cam_image = fake_cam_fbo.getBuffer(1);
                 // load as a regular camera image
                 camTexture.load(fake_cam_image.data(), true, cam_buffer_format);
                 camImageOrig = cv::Mat(cam_height, cam_width, CV_8UC1, fake_cam_image.data()).clone();
-                // cv::imwrite("test2.png", camImageOrig);
-                // hands_fbo.bind(false, true, false);
-                // glBlitFramebuffer(0, 0, dst_width, dst_height, 0, 0, dst_width, dst_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
                 // render the scene as normal
                 bones_to_world_left = bones_to_world_cur;
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                // hands_fbo.saveColorToFile(std::format("../../debug/video/render_{:05d}.png", totalFrameCount), false);
                 // post process them with any required effect
                 handlePostProcess(leftHandModel.GetMaterial().pDiffuse, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader);
                 if (!debug_mode)
@@ -1005,7 +999,7 @@ int main(int argc, char *argv[])
                     fullScreenQuad.render();
                 }
                 // save render to disk as png
-                // c2p_fbo.saveColorToFile(std::format("../../debug/video/final_{:05d}.png", totalFrameCount), false);
+                c2p_fbo.saveColorToFile(std::format("../../debug/video/final_{:05d}.png", totalFrameCount), false);
                 // offline: produce a compressed video from the pngs
                 // online: load video into memory and stream to projector in full fps
                 videoFrameCount += 1;
