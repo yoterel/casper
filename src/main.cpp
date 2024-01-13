@@ -57,7 +57,7 @@ namespace fs = std::filesystem;
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult);
 LEAP_STATUS handleLeapInput(uint64_t frameCounter);
-void handlePostProcess(Texture *handTexture, Shader &textureShader, Shader &maskShader, Shader &jfaInitShader, Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader, Shader &vcolorShader);
+void handlePostProcess(Texture &handTexture, Texture &camTexture, Shader &textureShader, Shader &maskShader, Shader &jfaInitShader, Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader, Shader &vcolorShader);
 void handleSkinning(SkinningShader &skinnedShader,
                     Shader &vcolorShader,
                     SkinnedModel &handModel,
@@ -94,11 +94,10 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left,
                          std::vector<glm::vec3> &joints_right,
-                         bool leap_poll_mode, int64_t &lastFrameID);
+                         bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp);
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     std::vector<glm::mat4> &bones_to_world_right,
-                                    std::vector<glm::vec3> &joints_left,
-                                    std::vector<glm::vec3> &joints_right);
+                                    uint64_t frameCounter);
 bool loadPrerecordedSession();
 bool loadVideo();
 void initGLBuffers(unsigned int *pbo);
@@ -157,7 +156,8 @@ unsigned int displayBoneIndex = 0;
 int64_t totalFrameCount = 0;
 int64_t videoFrameCount = 0;
 int64_t maxVideoFrameCount = 0;
-int64_t lastFrameID = 0;
+int64_t curFrameID = 0;
+int64_t curFrameTimeStamp = 0;
 bool space_modifier = false;
 bool shift_modifier = false;
 bool ctrl_modifier = false;
@@ -201,7 +201,7 @@ std::vector<std::string> animals{
 bool leap_poll_mode = false;
 bool use_pre_recorded_session = false;
 float required_latency_ms = 1.0f;
-std::string session_name = "s42k.0";
+std::string session_name = "sfrs.0";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool playback_video = false;
@@ -209,11 +209,14 @@ std::string playback_video_name = "test";
 std::string loaded_playback_video_name = "";
 static uint8_t *pFrameData[400] = {NULL};
 bool playback_video_loaded = false;
+int total_raw_session_time_stamps = 0;
 int total_session_time_stamps = 0;
 bool leap_record_session = false;
+std::vector<glm::mat4> raw_session_bones_left;
 std::vector<glm::mat4> session_bones_left;
 std::vector<glm::mat4> session_bones_right;
-std::vector<glm::vec3> session_joints;
+std::vector<float> raw_session_timestamps;
+std::vector<float> session_timestamps;
 // int session_counter = 0;
 std::string tmp_name = std::tmpnam(nullptr);
 fs::path tmp_filename(tmp_name);
@@ -910,7 +913,7 @@ int main(int argc, char *argv[])
 
             /* post process fbo using camera input */
             t_pp.start();
-            handlePostProcess(rightHandModel.GetMaterial().pDiffuse, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader);
+            handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader);
             /* render final output to screen */
             if (!debug_mode)
             {
@@ -932,12 +935,16 @@ int main(int argc, char *argv[])
         {
             if (pre_recorded_session_loaded && use_pre_recorded_session)
             {
-                // compute how many frames ahead we need to render
-                float diff_between_frames_ms = 1000.0f / 120.0f;             // ~8.33f
-                float factor = required_latency_ms / diff_between_frames_ms; // ~0.6f
-                float interp_factor, whole;
-                interp_factor = std::modf(factor, &whole);
-                int n_frames_ahead = static_cast<int>(whole);
+                float required_time = required_latency_ms + session_timestamps[videoFrameCount];
+                auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time);
+                int interp_index = upper_iter - session_timestamps.begin();
+                if (interp_index >= session_timestamps.size())
+                {
+                    break;
+                }
+                float interp1 = session_timestamps[interp_index - 1];
+                float interp2 = session_timestamps[interp_index];
+                float interp_factor = (required_time - interp1) / (interp2 - interp1);
                 // get pre-recorded leap info (current frame, will be rendered)
                 LEAP_STATUS leap_status = handleLeapInput(videoFrameCount);
                 std::vector<glm::mat4> bones_to_world_cur, bones_to_world_left_interp1, bones_to_world_left_interp2;
@@ -947,20 +954,13 @@ int main(int argc, char *argv[])
                 }
                 // get pre-recorded leap info (some future frame, will be used as camera input)
                 bones_to_world_cur = bones_to_world_left;
-                if (n_frames_ahead == 0)
+                leap_status = handleLeapInput(interp_index - 1);
+                if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
                 {
-                    bones_to_world_left_interp1 = bones_to_world_cur;
+                    break;
                 }
-                else
-                {
-                    leap_status = handleLeapInput(videoFrameCount + n_frames_ahead);
-                    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-                    {
-                        break;
-                    }
-                    bones_to_world_left_interp1 = bones_to_world_left;
-                }
-                leap_status = handleLeapInput(videoFrameCount + n_frames_ahead + 1);
+                bones_to_world_left_interp1 = bones_to_world_left;
+                leap_status = handleLeapInput(interp_index);
                 if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
                 {
                     break;
@@ -977,21 +977,21 @@ int main(int argc, char *argv[])
                 bones_to_world_left = bones_to_world_left_interp;
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
                 // convert to gray scale single channel image
-                FBO fake_cam_fbo(cam_width, cam_height, 1);
+                FBO fake_cam_fbo(dst_width, dst_height, 1);
                 fake_cam_fbo.bind();
                 set_texture_shader(textureShader, true, true, false, true, masking_threshold);
                 hands_fbo.getTexture()->bind();
                 fullScreenQuad.render();
                 fake_cam_fbo.unbind();
-                std::vector<uchar> fake_cam_image = fake_cam_fbo.getBuffer(1);
+                // std::vector<uchar> fake_cam_image = fake_cam_fbo.getBuffer(1);
                 // load as a regular camera image
-                camTexture.load(fake_cam_image.data(), true, cam_buffer_format);
-                camImageOrig = cv::Mat(cam_height, cam_width, CV_8UC1, fake_cam_image.data()).clone();
+                // camTexture.load(fake_cam_image.data(), true, cam_buffer_format);
+                // camImageOrig = cv::Mat(cam_height, cam_width, CV_8UC1, fake_cam_image.data()).clone();
                 // render the scene as normal
                 bones_to_world_left = bones_to_world_cur;
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
                 // post process them with any required effect
-                handlePostProcess(leftHandModel.GetMaterial().pDiffuse, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader);
+                handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader);
                 if (!debug_mode)
                 {
                     glViewport(0, 0, proj_width, proj_height); // set viewport
@@ -1001,7 +1001,7 @@ int main(int argc, char *argv[])
                     fullScreenQuad.render();
                 }
                 // save render to disk as png
-                c2p_fbo.saveColorToFile(std::format("../../debug/video/final_{:05d}.png", totalFrameCount), false);
+                // c2p_fbo.saveColorToFile(std::format("../../debug/video/final_{:05d}.png", totalFrameCount), false);
                 // offline: produce a compressed video from the pngs
                 // online: load video into memory and stream to projector in full fps
                 videoFrameCount += 1;
@@ -2226,8 +2226,6 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
 
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     std::vector<glm::mat4> &bones_to_world_right,
-                                    std::vector<glm::vec3> &joints_left,
-                                    std::vector<glm::vec3> &joints_right,
                                     uint64_t frameCounter)
 {
     if (pre_recorded_session_loaded)
@@ -2236,16 +2234,13 @@ LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
         {
             bones_to_world_left.clear();
             bones_to_world_right.clear();
-            joints_left.clear();
-            joints_right.clear();
+            // joints_left.clear();
+            // joints_right.clear();
             for (int i = 0; i < 22; i++)
             {
                 bones_to_world_left.push_back(session_bones_left[frameCounter * 22 + i]);
             }
-            for (int i = 0; i < 42; i++)
-            {
-                joints_left.push_back(session_joints[frameCounter * 42 + i]);
-            }
+            // timestamp = session_timestamps[frameCounter];
             return LEAP_STATUS::LEAP_NEWFRAME;
         }
         else
@@ -2282,35 +2277,64 @@ bool loadPrerecordedSession()
     std::string recordings("../../debug/recordings/");
     fs::path bones_left_path(recordings + session_name + std::string("_bones_left.npy"));
     // fs::path bones_right_path(recordings + tmp_filename + std::string("_bones_right.npy"));
-    fs::path joints_path(recordings + session_name + std::string("_joints.npy"));
-    cnpy::NpyArray bones_left_npy, joints_npy;
+    fs::path timestamps_path(recordings + session_name + std::string("_timestamps.npy"));
+    cnpy::NpyArray bones_left_npy, timestamps_npy;
     if (fs::exists(bones_left_path))
     {
+        raw_session_bones_left.clear();
         bones_left_npy = cnpy::npy_load(bones_left_path.string());
         std::vector<float> raw_data = bones_left_npy.as_vec<float>();
         for (int i = 0; i < raw_data.size(); i += 16)
         {
-            session_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
+            raw_session_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
         }
     }
     else
     {
         return false;
     }
-    if (fs::exists(joints_path))
+    if (fs::exists(timestamps_path))
     {
-        joints_npy = cnpy::npy_load(joints_path.string());
-        std::vector<float> raw_data = joints_npy.as_vec<float>();
-        for (int i = 0; i < raw_data.size(); i += 3)
+        raw_session_timestamps.clear();
+        timestamps_npy = cnpy::npy_load(timestamps_path.string());
+        std::vector<uint64_t> raw_data = timestamps_npy.as_vec<uint64_t>();
+        // todo: convert to std iterators
+        uint64_t first_timestamp = raw_data[0];
+        for (int i = 0; i < raw_data.size(); i++)
         {
-            session_joints.push_back(glm::make_vec3(raw_data.data() + i));
+            raw_session_timestamps.push_back((raw_data[i] - first_timestamp) / 1000.0f);
         }
     }
     else
     {
         return false;
     }
-    total_session_time_stamps = session_joints.size() / 42;
+    total_raw_session_time_stamps = session_timestamps.size();
+    // create a simulated session where every frame is 1 ms apart
+    float whole;
+    std::vector<glm::mat4> bones_to_world_left_simulated;
+    std::modf(raw_session_timestamps[raw_session_timestamps.size() - 1], &whole);
+    total_session_time_stamps = static_cast<int>(whole);
+    for (int i = 0; i < total_session_time_stamps; i++)
+    {
+        float required_time = static_cast<float>(i);
+        auto upper_iter = std::upper_bound(raw_session_timestamps.begin(), raw_session_timestamps.end(), required_time);
+        int interp_index = upper_iter - raw_session_timestamps.begin();
+        float interp1 = raw_session_timestamps[interp_index - 1];
+        float interp2 = raw_session_timestamps[interp_index];
+        float interp_factor = (required_time - interp1) / (interp2 - interp1);
+        for (int j = 0; j < 22; j++)
+        {
+            glm::mat4 interpolated = Helpers::interpolate(raw_session_bones_left[22 * (interp_index - 1) + j], raw_session_bones_left[22 * interp_index + j], interp_factor, true);
+            bones_to_world_left_simulated.push_back(interpolated);
+        }
+    }
+    session_bones_left = bones_to_world_left_simulated;
+    session_timestamps.clear();
+    for (int i = 0; i < total_session_time_stamps; i++)
+    {
+        session_timestamps.push_back(static_cast<float>(i));
+    }
     return true;
 }
 
@@ -2319,8 +2343,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left, // todo: remove joints, they are redundant
                          std::vector<glm::vec3> &joints_right,
-                         bool leap_poll_mode,
-                         int64_t &lastFrameID)
+                         bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp)
 {
     //  some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -2341,13 +2364,14 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
     if (leap_poll_mode)
     {
         frame = leap.getFrame();
-        if (frame != NULL && (frame->tracking_frame_id > lastFrameID))
+        if (frame != NULL && (frame->tracking_frame_id > curFrameID))
         {
-            lastFrameID = frame->tracking_frame_id;
+            curFrameID = frame->tracking_frame_id;
             joints_left.clear();
             joints_right.clear();
             bones_to_world_left.clear();
             bones_to_world_right.clear();
+            curFrameTimeStamp = frame->info.timestamp;
         }
         else
         {
@@ -2376,6 +2400,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
             // std::cout << "ERROR: LeapInterpolateFrame() returned " << retVal << std::endl;
             return LEAP_STATUS::LEAP_FAILED;
         }
+        curFrameTimeStamp = frame->info.timestamp;
     }
     // Use the data...
     //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
@@ -2674,7 +2699,7 @@ LEAP_STATUS handleLeapInput(uint64_t frameCounter)
     LEAP_STATUS leap_status;
     if (use_pre_recorded_session)
     {
-        leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, joints_left, joints_right, frameCounter);
+        leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, frameCounter);
     }
     else
     {
@@ -2684,22 +2709,24 @@ LEAP_STATUS handleLeapInput(uint64_t frameCounter)
             std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         }
-        leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, lastFrameID);
+        leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp);
         if (leap_record_session)
         {
-            std::string savepath(std::string("../../debug/recordings/"));
-            fs::path bones_left(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
-            // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
-            fs::path joints(savepath + tmp_filename.filename().string() + std::string("_joints.npy"));
-            // fs::path session(savepath + tmp_filename.filename().string() + std::string("_session.npz"));
-            if ((joints_left.size() > 0) && (bones_to_world_left.size() > 0))
+            if ((leap_status == LEAP_STATUS::LEAP_NEWFRAME) && (bones_to_world_left.size() > 0))
             {
+                std::string savepath(std::string("../../debug/recordings/"));
+                fs::path bones_left(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
+                fs::path timestamps(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
+                // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
+                // fs::path joints(savepath + tmp_filename.filename().string() + std::string("_joints.npy"));
+                // fs::path session(savepath + tmp_filename.filename().string() + std::string("_session.npz"));
                 // cnpy::npy_save(session.string().c_str(), "joints", &skeleton_vertices[0].x, {skeleton_vertices.size(), 3}, "a");
                 // cnpy::npy_save(session.string().c_str(), "bones_left", &bones_to_world_left[0][0].x, {bones_to_world_left.size(), 4, 4}, "a");
                 // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
                 cnpy::npy_save(bones_left.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
+                cnpy::npy_save(timestamps.string().c_str(), &curFrameTimeStamp, {1}, "a");
                 // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
-                cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
+                // cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
             }
         }
     }
@@ -2720,7 +2747,8 @@ LEAP_STATUS handleLeapInput(uint64_t frameCounter)
     return leap_status;
 }
 
-void handlePostProcess(Texture *handTexture,
+void handlePostProcess(Texture &handTexture,
+                       Texture &camTexture,
                        Shader &textureShader,
                        Shader &maskShader,
                        Shader &jfaInitShader,
@@ -2784,12 +2812,12 @@ void handlePostProcess(Texture *handTexture,
     {
         if (use_mls)
             postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, mls_fbo.getTexture()->getTexture(),
-                                      handTexture->getTexture(),
+                                      handTexture.getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
         else
             postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, uv_fbo.getTexture()->getTexture(),
-                                      handTexture->getTexture(),
+                                      handTexture.getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
         break;
@@ -3200,7 +3228,7 @@ void handleMLS(Shader &gridShader)
                                 LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
                                 std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                 std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-                                LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, lastFrameID);
+                                LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp);
                                 if (status == LEAP_STATUS::LEAP_NEWFRAME && cur_vertices_left.size() > 0)
                                 {
                                     std::vector<glm::vec2> projected_new = Helpers::project_points(cur_vertices_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
@@ -4230,6 +4258,21 @@ void openIMGUIFrame()
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Post Process"))
         {
+            ImGui::Text("Post Processing Mode");
+            ImGui::RadioButton("Render Only", &postprocess_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Overlay", &postprocess_mode, 2);
+            ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
+            ImGui::SameLine();
+            ImGui::RadioButton("Jump Flood UV", &postprocess_mode, 4);
+            ImGui::SameLine();
+            ImGui::RadioButton("ICP", &postprocess_mode, 5);
+            if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
+            {
+                ImGui::Checkbox("ICP on?", &icp_apply_transform);
+            }
             ImGui::Checkbox("MLS", &use_mls);
             ImGui::SameLine();
             ImGui::Checkbox("Forecast", &mls_forecast);
@@ -4269,21 +4312,6 @@ void openIMGUIFrame()
             {
                 threshold_flag = false;
             }
-            ImGui::Text("Post Processing Mode");
-            ImGui::RadioButton("Render Only", &postprocess_mode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
-            ImGui::SameLine();
-            ImGui::RadioButton("Overlay", &postprocess_mode, 2);
-            ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
-            ImGui::SameLine();
-            ImGui::RadioButton("Jump Flood UV", &postprocess_mode, 4);
-            ImGui::SameLine();
-            ImGui::RadioButton("ICP", &postprocess_mode, 5);
-            if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
-            {
-                ImGui::Checkbox("ICP on?", &icp_apply_transform);
-            }
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
@@ -4299,9 +4327,14 @@ void openIMGUIFrame()
                 if (session_name != loaded_session_name)
                 {
                     if (loadPrerecordedSession())
+                    {
                         pre_recorded_session_loaded = true;
+                        videoFrameCount = 0;
+                    }
                     else
+                    {
                         std::cout << "Failed to load prerecorded session: " << session_name << std::endl;
+                    }
                 }
             }
             ImGui::SameLine();
