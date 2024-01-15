@@ -32,6 +32,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "diffuse.h"
+#include "human_trial.h"
 #ifdef _DEBUG
 #undef _DEBUG
 #include <Python.h>
