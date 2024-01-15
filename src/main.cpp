@@ -336,6 +336,7 @@ Texture *bakedTextureRight = nullptr;
 FBO icp_fbo(cam_width, cam_height, 4, false);
 FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
+FBO fake_cam_fbo(dst_width, dst_height, 1, false);
 FBO uv_fbo(dst_width, dst_height, 4, false);
 FBO mls_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo_right(1024, 1024, 4, false);
@@ -551,6 +552,7 @@ int main(int argc, char *argv[])
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
+    fake_cam_fbo.init();
     uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
     bake_fbo_right.init();
     bake_fbo_left.init();
@@ -942,6 +944,7 @@ int main(int argc, char *argv[])
         {
             if (pre_recorded_session_loaded && use_pre_recorded_session)
             {
+                t_debug.start();
                 float required_time = required_latency_ms + session_timestamps[videoFrameCount];
                 auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time);
                 int interp_index = upper_iter - session_timestamps.begin();
@@ -979,12 +982,13 @@ int main(int argc, char *argv[])
                     glm::mat4 interpolated = Helpers::interpolate(bones_to_world_left_interp1[i], bones_to_world_left_interp2[i], interp_factor, true);
                     bones_to_world_left_interp.push_back(interpolated);
                 }
+                t_debug.stop();
+                t_skin.start();
                 // produce fake camera image
                 // render left hand
                 bones_to_world_left = bones_to_world_left_interp;
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
                 // convert to gray scale single channel image
-                FBO fake_cam_fbo(dst_width, dst_height, 1);
                 fake_cam_fbo.bind();
                 set_texture_shader(textureShader, true, true, false, true, masking_threshold);
                 hands_fbo.getTexture()->bind();
@@ -997,6 +1001,8 @@ int main(int argc, char *argv[])
                 // render the scene as normal
                 bones_to_world_left = bones_to_world_cur;
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                t_skin.stop();
+                t_pp.start();
                 // post process them with any required effect
                 handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
                 if (!debug_mode)
@@ -1007,6 +1013,7 @@ int main(int argc, char *argv[])
                     c2p_fbo.getTexture()->bind();
                     fullScreenQuad.render();
                 }
+                t_pp.stop();
                 // save render to disk as png
                 // c2p_fbo.saveColorToFile(std::format("../../debug/video/final_{:05d}.png", totalFrameCount), false);
                 // offline: produce a compressed video from the pngs
