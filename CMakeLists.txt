@@ -93,6 +93,7 @@ add_executable(ahand
     src/quad.cpp
     src/helpers.cpp
     src/kalman.cpp
+    src/grid.cpp
     third-party/imgui/imgui.cpp
     third-party/imgui/imgui_draw.cpp
     third-party/imgui/imgui_tables.cpp
@@ -186,6 +187,7 @@ add_executable(deformation_example
     src/fbo.cpp
     src/quad.cpp
     src/texture.cpp
+    src/grid.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
 target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/include")

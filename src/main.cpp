@@ -120,7 +120,7 @@ void set_texture_shader(Shader &textureShader,
                         glm::mat4 model = glm::mat4(1.0f),
                         glm::mat4 projection = glm::mat4(1.0f),
                         glm::mat4 view = glm::mat4(1.0f));
-/* engine state */
+/* global engine state */
 // window controls
 const unsigned int proj_width = 1024;
 const unsigned int proj_height = 768;
@@ -378,7 +378,8 @@ bool mls_succeed = false;
 bool mls_running = false;
 bool use_mls = true;
 bool show_mls_landmarks = false;
-int mls_smooth_window = 0;
+int mls_cp_smooth_window = 0;
+int mls_grid_smooth_window = 0;
 bool use_mp_kalman = false;
 bool mls_forecast = true;
 float mp_kalman_process_noise = 0.01f;
@@ -3010,7 +3011,7 @@ void handleBaking(SkinningShader &skinnedShader,
                   glm::mat4 cam_projection_transform,
                   bool isRightHand)
 {
-    if ((bones_to_world_right.size() > 0) || (bones_to_world_left.size() > 0)) // refactor into function
+    if ((bones_to_world_right.size() > 0) || (bones_to_world_left.size() > 0))
     {
         if (bakeRequest)
         {
@@ -3088,7 +3089,7 @@ void handleBaking(SkinningShader &skinnedShader,
             dynamicTexture->load(img2img_data.data(), true, GL_RGB);
             // bake dynamic texture
             bake_fbo_right.bind(true);
-            /* hand */
+            /* right hand */
             glDisable(GL_CULL_FACE); // todo: why disbale backface ? doesn't this mean bake will reach the back of the hand ?
             glEnable(GL_DEPTH_TEST);
             skinnedShader.use();
@@ -3103,7 +3104,7 @@ void handleBaking(SkinningShader &skinnedShader,
             rightHandModel.Render(skinnedShader, bones_to_world_right_bake, rotx, false, dynamicTexture);
             bake_fbo_right.unbind();
             bake_fbo_left.bind();
-            /* hand */
+            /* left hand */
             skinnedShader.use();
             skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
             skinnedShader.setBool("useProjector", true);
@@ -3174,27 +3175,22 @@ void handleMLS(Shader &gridShader)
                 run_mls = std::thread([to_project, rendered_depths, projected_with_depth]() { // send (forecasted) leap joints to MP
                     try
                     {
-                        // Timer mls_profile;
-                        // mls_profile.start();
                         std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                        // mls_profile.stop();
-                        // std::cout << "MLS projection time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                        // mls_profile.start();
                         std::vector<glm::vec2> cur_pred_glm = mp_predict(camImage, totalFrameCount);
                         std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
                         std::vector<glm::vec2> projected_diff(projected.size(), glm::vec2(0.0f, 0.0f));
-                        // mls_profile.stop();
-                        // std::cout << "MLS prediction time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
                         if (cur_pred_glm.size() == 21)
                         {
+                            // perform smoothing over control points (when mls_cp_smooth_window > 0)
                             prev_pred_glm.push_back(cur_pred_glm);
                             pred_glm = Helpers::accumulate(prev_pred_glm);
-                            int diff = prev_pred_glm.size() - mls_smooth_window;
+                            int diff = prev_pred_glm.size() - mls_cp_smooth_window;
                             if (diff > 0)
                             {
                                 for (int i = 0; i < diff; i++)
                                     prev_pred_glm.erase(prev_pred_glm.begin());
                             }
+                            // possibly use kalman to forecast the measurements, since mp takes ~17ms to run
                             if (use_mp_kalman)
                             {
                                 for (int i = 0; i < pred_glm.size(); i++)
@@ -3218,9 +3214,9 @@ void handleMLS(Shader &gridShader)
                                 // pred_glm = kalman_forecast;
                             }
                             std::vector<cv::Point2f> leap_keypoints, diff_keypoints, mp_keypoints;
+                            // possibly, instead of forecasting, use current leap info to move mp keypoints
                             if (mls_forecast)
                             {
-                                // fix prediction with current leap info
                                 // sync leap clock
                                 std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
                                 LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
@@ -3249,10 +3245,10 @@ void handleMLS(Shader &gridShader)
                             }
                             diff_keypoints = Helpers::glm2opencv(projected_diff);
                             mp_keypoints = Helpers::glm2opencv(pred_glm);
-                            // mls_profile.start();
                             ControlPointsP.clear();
                             ControlPointsQ.clear();
                             std::vector<bool> visible_landmarks(leap_keypoints.size(), true);
+                            // if mls_depth_test was on, we need to filter out control points that are occluded
                             for (int i = 0; i < projected_with_depth.size(); i++)
                             {
                                 float rendered_depth = rendered_depths[i];
@@ -3268,6 +3264,7 @@ void handleMLS(Shader &gridShader)
                                     visible_landmarks[i] = false;
                                 }
                             }
+                            // final control points computation
                             for (int i = 0; i < leap_selection_vector.size(); i++)
                             {
                                 if (visible_landmarks[leap_selection_vector[i]])
@@ -3276,11 +3273,10 @@ void handleMLS(Shader &gridShader)
                                     ControlPointsQ.push_back(mp_keypoints[mp_selection_vector[i]] + diff_keypoints[mp_selection_vector[i]]);
                                 }
                             }
-                            // deform grid using prediction
+                            // deform grid using control points
                             if (ControlPointsP.size() > 0)
                             {
-                                // deform grid using prediction
-                                // todo: refactor control points to avoid this part
+                                // todo: can refactor control points to avoid this part
                                 cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
                                 cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
                                 for (int i = 0; i < ControlPointsP.size(); i++)
@@ -3293,23 +3289,12 @@ void handleMLS(Shader &gridShader)
                                     q.at<float>(0, i) = (ControlPointsQ.at(i)).x;
                                     q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
                                 }
-                                // mls_profile.stop();
-                                // std::cout << "MLS precomputation time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                                // mls_profile.start();
-                                // weights
+                                // compute deformation
                                 cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), mls_alpha);
-                                // mls_profile.stop();
-                                // std::cout << "MLS weight time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                                // affine
-                                // mls_profile.start();
                                 cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
-                                // mls_profile.stop();
-                                // std::cout << "MLS affine time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
-                                // mls_profile.start();
                                 cv::Mat fv = MLSPointsTransformAffine(w, A, q);
-                                deformationGrid.constructDeformedGrid(fv);
-                                // mls_profile.stop();
-                                // std::cout << "MLS transform time: " << mls_profile.getElapsedTimeInMilliSec() << std::endl;
+                                // update grid
+                                deformationGrid.constructDeformedGridSmooth(fv, mls_grid_smooth_window);
                             }
                             else
                             {
@@ -3322,7 +3307,6 @@ void handleMLS(Shader &gridShader)
                     {
                         std::cerr << e.what() << '\n';
                     }
-                    // std::cout << "mls thread dying !" << std::endl;
                     mls_running = false;
                 });
             } // if (skeleton_vertices.size() > 0)
@@ -4296,7 +4280,8 @@ void openIMGUIFrame()
                 kalman_filters.clear();
                 kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
             }
-            ImGui::SliderInt("MLS smooth window", &mls_smooth_window, 0, 10);
+            ImGui::SliderInt("MLS cp smooth window", &mls_cp_smooth_window, 0, 10);
+            ImGui::SliderInt("MLS grid smooth window", &mls_grid_smooth_window, 0, 10);
             ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
