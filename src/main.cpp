@@ -57,7 +57,7 @@ namespace fs = std::filesystem;
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult);
 LEAP_STATUS handleLeapInput(uint64_t frameCounter);
-void handlePostProcess(Texture &handTexture, Texture &camTexture, Shader &textureShader, Shader &maskShader, Shader &jfaInitShader, Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader, Shader &vcolorShader);
+void handlePostProcess(Texture &handTexture, Texture &camTexture, Shader &textureShader, Shader &maskShader, Shader &jfaInitShader, Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader, Shader &vcolorShader, Shader &gridColorShader);
 void handleSkinning(SkinningShader &skinnedShader,
                     Shader &vcolorShader,
                     SkinnedModel &handModel,
@@ -94,7 +94,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left,
                          std::vector<glm::vec3> &joints_right,
-                         bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp);
+                         bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp, int magic_time_delay);
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     std::vector<glm::mat4> &bones_to_world_right,
                                     uint64_t frameCounter);
@@ -229,7 +229,8 @@ uint64_t leap_cur_frame_id = 0;
 uint32_t leap_width = 640;
 uint32_t leap_height = 240;
 bool useFingerWidth = false;
-int magic_leap_time_delay = 10000; // us
+int magic_leap_time_delay = 10000;     // us
+int magic_leap_time_delay_mls = 10000; // us
 float leap_global_scaler = 1.0f;
 float magic_leap_scale_factor = 10.0f;
 float leap_arm_local_scaler = 0.019f;
@@ -382,6 +383,7 @@ bool mls_succeed = false;
 bool mls_running = false;
 bool use_mls = true;
 bool show_mls_landmarks = false;
+bool show_mls_grid = false;
 int mls_cp_smooth_window = 0;
 int mls_grid_smooth_window = 0;
 bool use_mp_kalman = false;
@@ -918,7 +920,7 @@ int main(int argc, char *argv[])
 
             /* post process fbo using camera input */
             t_pp.start();
-            handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader);
+            handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
             /* render final output to screen */
             if (!debug_mode)
             {
@@ -996,7 +998,7 @@ int main(int argc, char *argv[])
                 bones_to_world_left = bones_to_world_cur;
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
                 // post process them with any required effect
-                handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader);
+                handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
                 if (!debug_mode)
                 {
                     glViewport(0, 0, proj_width, proj_height); // set viewport
@@ -2348,7 +2350,10 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left, // todo: remove joints, they are redundant
                          std::vector<glm::vec3> &joints_right,
-                         bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp)
+                         bool leap_poll_mode,
+                         int64_t &curFrameID,
+                         int64_t &curFrameTimeStamp,
+                         int magic_time_delay)
 {
     //  some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -2390,7 +2395,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         bones_to_world_left.clear();
         bones_to_world_right.clear();
         // Get the buffer size needed to hold the tracking data
-        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, &targetFrameSize);
+        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_time_delay, &targetFrameSize);
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapGetFrameSize() returned " << retVal << std::endl;
@@ -2399,7 +2404,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         // Allocate enough memory
         frame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
         // Get the frame data
-        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime + magic_leap_time_delay, frame, targetFrameSize);
+        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime + magic_time_delay, frame, targetFrameSize);
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapInterpolateFrame() returned " << retVal << std::endl;
@@ -2714,7 +2719,7 @@ LEAP_STATUS handleLeapInput(uint64_t frameCounter)
             std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         }
-        leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp);
+        leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay);
         if (leap_record_session)
         {
             if ((leap_status == LEAP_STATUS::LEAP_NEWFRAME) && (bones_to_world_left.size() > 0))
@@ -2760,7 +2765,8 @@ void handlePostProcess(Texture &handTexture,
                        Shader &jfaShader,
                        Shader &NNShader,
                        Shader &uv_NNShader,
-                       Shader &vcolorShader)
+                       Shader &vcolorShader,
+                       Shader &gridColorShader)
 {
     switch (postprocess_mode)
     {
@@ -2878,19 +2884,28 @@ void handlePostProcess(Texture &handTexture,
         set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f));
     postprocess_fbo.getTexture()->bind();
     fullScreenQuad.render();
-    if (show_mls_landmarks && use_mls)
+    if (use_mls)
     {
-        vcolorShader.use();
-        if (size(ControlPointsP_glm) > 0)
+        if (show_mls_grid)
         {
-            PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
-            PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
-            if (use_coaxial_calib)
-                vcolorShader.setMat4("MVP", c2p_homography);
-            else
-                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-            cloud_src.render(5.0f);
-            cloud_dst.render(5.0f);
+            gridColorShader.use();
+            gridColorShader.setBool("flipVer", false);
+            deformationGrid.renderGridPoints();
+        }
+        if (show_mls_landmarks)
+        {
+            vcolorShader.use();
+            if (size(ControlPointsP_glm) > 0)
+            {
+                PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
+                PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
+                if (use_coaxial_calib)
+                    vcolorShader.setMat4("MVP", c2p_homography);
+                else
+                    vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                cloud_src.render(5.0f);
+                cloud_dst.render(5.0f);
+            }
         }
     }
     c2p_fbo.unbind();
@@ -3227,12 +3242,12 @@ void handleMLS(Shader &gridShader)
                             {
                                 // sync leap clock
                                 std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-                                LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
+                                LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime()); // sync clocks
                                 std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-                                LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+                                LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                 std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                 std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-                                LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp);
+                                LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay_mls);
                                 if (status == LEAP_STATUS::LEAP_NEWFRAME && cur_vertices_left.size() > 0)
                                 {
                                     std::vector<glm::vec2> projected_new = Helpers::project_points(cur_vertices_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
@@ -4283,7 +4298,14 @@ void openIMGUIFrame()
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &use_mls);
             ImGui::SameLine();
-            ImGui::Checkbox("Forecast", &mls_forecast);
+            ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
+            ImGui::SameLine();
+            ImGui::Checkbox("Show MLS grid", &show_mls_grid);
+            ImGui::SameLine();
+            ImGui::Checkbox("Forecast MP w LEAP", &mls_forecast);
+            ImGui::SliderInt("MLS cp smooth window", &mls_cp_smooth_window, 0, 10);
+            ImGui::SliderInt("MLS grid smooth window", &mls_grid_smooth_window, 0, 10);
+            ImGui::SliderInt("MLS Leap Prediction [us]", &magic_leap_time_delay_mls, -50000, 50000);
             ImGui::Checkbox("Kalman Filter", &use_mp_kalman);
             ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 100);
             ImGui::SliderFloat("Kalman Pnoise", &mp_kalman_process_noise, 0.00001f, 1.0f, "%.6f");
@@ -4304,12 +4326,9 @@ void openIMGUIFrame()
                 kalman_filters.clear();
                 kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
             }
-            ImGui::SliderInt("MLS cp smooth window", &mls_cp_smooth_window, 0, 10);
-            ImGui::SliderInt("MLS grid smooth window", &mls_grid_smooth_window, 0, 10);
-            ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
-            ImGui::Checkbox("MLS depth test?", &mls_depth_test);
+            ImGui::Checkbox("MLS depth test", &mls_depth_test);
             ImGui::SameLine();
             ImGui::SliderFloat("d. thre", &mls_depth_threshold, 1.0f, 1500.0f, "%.6f");
             ImGui::TreePop();

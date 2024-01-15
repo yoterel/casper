@@ -336,8 +336,9 @@ void Grid::renderGridLines()
     glDrawElements(GL_LINES, (m_xPointCount - 1) * (m_yPointCount - 1) * 2 * 3, GL_UNSIGNED_INT, nullptr);
 }
 
-void Grid::renderGridPoints()
+void Grid::renderGridPoints(float pointSize)
 {
+    glPointSize(pointSize);
     glBindVertexArray(Grid_VAO);
     glDrawElements(GL_POINTS, (m_xPointCount - 1) * (m_yPointCount - 1) * 2 * 3, GL_UNSIGNED_INT, nullptr);
 }

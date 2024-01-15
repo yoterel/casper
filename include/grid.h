@@ -35,7 +35,7 @@ public:
 	// Renders the actual Grid
 	void render();
 	void renderGridLines();
-	void renderGridPoints();
+	void renderGridPoints(float pointSize = 5.0f);
 	cv::Mat getM() { return M; };
 
 private:
