@@ -655,6 +655,7 @@ int main(int argc, char *argv[])
     Shader projectorShader("../../src/shaders/projector_shader.vs", "../../src/shaders/projector_shader.fs");
     Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
     Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
+    Shader thresholdAlphaShader("../../src/shaders/threshold_alpha.vs", "../../src/shaders/threshold_alpha.fs");
     Shader gridShader("../../src/shaders/grid_texture.vs", "../../src/shaders/grid_texture.fs");
     Shader gridColorShader("../../src/shaders/grid_color.vs", "../../src/shaders/grid_color.fs");
     Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
@@ -990,7 +991,16 @@ int main(int argc, char *argv[])
                 handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
                 // convert to gray scale single channel image
                 fake_cam_fbo.bind();
-                set_texture_shader(textureShader, true, true, false, true, masking_threshold);
+                thresholdAlphaShader.use();
+                thresholdAlphaShader.setMat4("view", glm::mat4(1.0));
+                thresholdAlphaShader.setMat4("projection", glm::mat4(1.0));
+                thresholdAlphaShader.setMat4("model", glm::mat4(1.0));
+                thresholdAlphaShader.setFloat("threshold", 0.5);
+                thresholdAlphaShader.setBool("flipHor", true);
+                thresholdAlphaShader.setBool("flipVer", true);
+                thresholdAlphaShader.setBool("isGray", false);
+                thresholdAlphaShader.setBool("binary", true);
+                thresholdAlphaShader.setInt("src", 0);
                 hands_fbo.getTexture()->bind();
                 fullScreenQuad.render();
                 fake_cam_fbo.unbind();
@@ -3281,6 +3291,7 @@ void handleMLS(Shader &gridShader)
                             // if mls_depth_test was on, we need to filter out control points that are occluded
                             for (int i = 0; i < projected_with_depth.size(); i++)
                             {
+                                // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
                                 float rendered_depth = rendered_depths[i];
                                 float projected_depth = projected_with_depth[i].z;
                                 float cam_near = 1.0f;
