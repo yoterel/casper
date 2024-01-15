@@ -178,45 +178,45 @@ target_link_libraries(ahand PRIVATE Python::Python Python::NumPy)
 # target_include_directories(registration_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
 # target_link_libraries(registration_example PRIVATE ${OpenCV_LIBS})
 ####################################### deformation example
-add_executable(deformation_example
-    src/deformation_example.cpp
-    src/timer.cpp
-    src/cnpy.cpp
-    src/point_cloud.cpp
-    src/helpers.cpp
-    src/fbo.cpp
-    src/quad.cpp
-    src/texture.cpp
-    src/grid.cpp
-    third-party/glad${GLAD_VER}/src/glad.c
-)
-target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# GLFW
-target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
-target_link_libraries(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
-# GLAD
-target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
-# opencv
-target_link_libraries(deformation_example PRIVATE ${OpenCV_LIBS})
-# stb
-target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
-# glm
-target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
-# python
-target_link_libraries(deformation_example PRIVATE Python::Python Python::NumPy)
-# zlib
-target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
-target_link_libraries(deformation_example PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
+# add_executable(deformation_example
+#     src/deformation_example.cpp
+#     src/timer.cpp
+#     src/cnpy.cpp
+#     src/point_cloud.cpp
+#     src/helpers.cpp
+#     src/fbo.cpp
+#     src/quad.cpp
+#     src/texture.cpp
+#     src/grid.cpp
+#     third-party/glad${GLAD_VER}/src/glad.c
+# )
+# target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# # GLFW
+# target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+# target_link_libraries(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# # GLAD
+# target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# # opencv
+# target_link_libraries(deformation_example PRIVATE ${OpenCV_LIBS})
+# # stb
+# target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# # glm
+# target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# # python
+# target_link_libraries(deformation_example PRIVATE Python::Python Python::NumPy)
+# # zlib
+# target_include_directories(deformation_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
+# target_link_libraries(deformation_example PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
 
 ####################################### kalman filter example
-add_executable(kalman_example
-    src/kalman_example.cpp
-    src/kalman.cpp
-    src/timer.cpp
-)
-target_include_directories(kalman_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# opencv
-target_link_libraries(kalman_example PRIVATE ${OpenCV_LIBS})
+# add_executable(kalman_example
+#     src/kalman_example.cpp
+#     src/kalman.cpp
+#     src/timer.cpp
+# )
+# target_include_directories(kalman_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# # opencv
+# target_link_libraries(kalman_example PRIVATE ${OpenCV_LIBS})
 ####################################### ONYX example
 # add_executable(onyx_example
 #     src/onyx_example.cpp
@@ -276,7 +276,7 @@ target_link_libraries(kalman_example PRIVATE ${OpenCV_LIBS})
 # # freetype
 # target_include_directories(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
 # target_link_libraries(coaxial_calib PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
-####################################### leap->proejctor calibration
+####################################### leap->projector calibration
 # add_executable(leap_calib 
 #     src/leap_calibration.cpp
 #     src/display
@@ -373,7 +373,6 @@ file(GLOB OPENCV_DLLS "${OpenCV_DIR}/x64/${OPENCV_COMPILER}/bin/*.dll")
 # message(OPENCV_DLLS="${OPENCV_DLLS}")
 list(LENGTH OPENCV_DLLS RES_LEN)
 if(NOT RES_LEN EQUAL 0)
-# DIR is empty, do something
     add_custom_command(TARGET ahand 
                         POST_BUILD
                         COMMAND ${CMAKE_COMMAND} -E copy_if_different

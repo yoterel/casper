@@ -150,7 +150,6 @@ float masking_threshold = 0.035f;
 glm::vec3 mask_bg_color(0.0f, 0.0f, 0.0f);
 glm::vec3 mask_missing_info_color(1.0, 0.0, 0.0);
 glm::vec3 mask_unused_info_color(1.0f, 0.0f, 1.0f);
-
 bool threshold_flag = false;
 glm::vec3 debug_vec(0.0f, 0.0f, 0.0f);
 glm::vec3 triangulated(0.0f, 0.0f, 0.0f);
@@ -159,6 +158,7 @@ float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
 int64_t totalFrameCount = 0;
 int64_t videoFrameCount = 0;
+float videoFrameCountCont = 0.0;
 int64_t maxVideoFrameCount = 0;
 int64_t curFrameID = 0;
 int64_t curFrameTimeStamp = 0;
@@ -204,7 +204,9 @@ std::vector<std::string> animals{
 // leap controls
 bool leap_poll_mode = false;
 bool use_pre_recorded_session = false;
-float required_latency_ms = 1.0f;
+float vid_simulated_latency_ms = 1.0f;
+float vid_playback_fps_limiter = 900.0;
+float vid_playback_speed = 1.7f;
 std::string session_name = "sfrs.0";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
@@ -687,6 +689,8 @@ int main(int argc, char *argv[])
     double previousAppTime = t_app.getElapsedTimeInSec();
     double previousSecondAppTime = t_app.getElapsedTimeInSec();
     double currentAppTime = t_app.getElapsedTimeInSec();
+    double prev_vid_time = t_app.getElapsedTimeInMilliSec();
+    double cur_vid_time = t_app.getElapsedTimeInMilliSec();
     long frameCount = 0;
     uint64_t targetFrameSize = 0;
     size_t n_skeleton_primitives = 0;
@@ -946,7 +950,7 @@ int main(int argc, char *argv[])
             if (pre_recorded_session_loaded && use_pre_recorded_session)
             {
                 t_debug.start();
-                float required_time = required_latency_ms + session_timestamps[videoFrameCount];
+                float required_time = vid_simulated_latency_ms + session_timestamps[videoFrameCount];
                 auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time);
                 int interp_index = upper_iter - session_timestamps.begin();
                 if (interp_index >= session_timestamps.size())
@@ -1024,11 +1028,18 @@ int main(int argc, char *argv[])
                     fullScreenQuad.render();
                 }
                 t_pp.stop();
-                // save render to disk as png
+                // save render to disk as png?
                 // c2p_fbo.saveColorToFile(std::format("../../debug/video/final_{:05d}.png", totalFrameCount), false);
                 // offline: produce a compressed video from the pngs
                 // online: load video into memory and stream to projector in full fps
-                videoFrameCount += 1;
+                // fps limiter to control speed
+                cur_vid_time = t_app.getElapsedTimeInMilliSec();
+                if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                {
+                    prev_vid_time = cur_vid_time;
+                    videoFrameCountCont += vid_playback_speed;
+                    videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
+                }
             }
             else
             {
@@ -4393,6 +4404,7 @@ void openIMGUIFrame()
                     {
                         pre_recorded_session_loaded = true;
                         videoFrameCount = 0;
+                        videoFrameCountCont = 0.0f;
                     }
                     else
                     {
@@ -4402,7 +4414,9 @@ void openIMGUIFrame()
             }
             ImGui::SameLine();
             ImGui::InputText("Session Name", &session_name);
-            ImGui::SliderFloat("Desired Latency [ms]", &required_latency_ms, 1.0f, 50.0f);
+            ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 1.0f, 50.0f);
+            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 100.0f, 900.0f);
+            ImGui::SliderFloat("Video playback speed", &vid_playback_speed, 0.1f, 10.0f);
             if (ImGui::Checkbox("Playback Video", &playback_video))
             {
                 if (playback_video_name != loaded_playback_video_name)
