@@ -8,6 +8,9 @@ uniform bool flipMaskVer = true;
 uniform bool flipMaskHor = true;
 uniform bool maskIsGray = false;
 uniform float threshold = 0.01;
+uniform vec3 missingInfoColor = vec3(1.0, 0.0, 0.0);
+uniform vec3 unusedInfoColor = vec3(1.0, 0.0, 1.0);
+uniform vec3 bgColor = vec3(0.0, 0.0, 0.0);
 
 void main()
 {
@@ -25,12 +28,12 @@ void main()
     FragColor = texture(src, TexCoord); // sample texture using the locations of the nearest seeds
     if (avgMask >= threshold) { // if cam pixel is "on"
         if (FragColor.w == 0.0) {  // but render doesn't have info
-            FragColor = vec4(1.0, 0.0, 0.0, 1.0);  // color red indicating missing info
+            FragColor = vec4(missingInfoColor, 1.0);  // color red indicating missing info
         }
     } else { // if cam pixel is "off"
         if (FragColor.w == 1.0)  // but render has info
-            FragColor = vec4(1.0, 0.0, 1.0, 1.0);  // color purple indicating unused info
+            FragColor = vec4(unusedInfoColor, 1.0);  // color purple indicating unused info
         else
-            FragColor = vec4(0.0, 0.0, 0.0, 1.0);  // otherwise color black
+            FragColor = vec4(bgColor, 1.0);  // otherwise color black
     }
 }

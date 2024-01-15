@@ -147,9 +147,13 @@ int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
+glm::vec3 mask_bg_color(0.0f, 0.0f, 0.0f);
+glm::vec3 mask_missing_info_color(1.0, 0.0, 0.0);
+glm::vec3 mask_unused_info_color(1.0f, 0.0f, 1.0f);
+
 bool threshold_flag = false;
-glm::vec3 debug_vec = glm::vec3(0.0f, 0.0f, 0.0f);
-glm::vec3 triangulated = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 debug_vec(0.0f, 0.0f, 0.0f);
+glm::vec3 triangulated(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
@@ -2795,6 +2799,10 @@ void handlePostProcess(Texture &handTexture,
     }
     case static_cast<int>(PostProcessMode::OVERLAY):
     {
+        maskShader.use();
+        maskShader.setVec3("bgColor", mask_bg_color);
+        maskShader.setVec3("missingInfoColor", mask_missing_info_color);
+        maskShader.setVec3("unusedInfoColor", mask_unused_info_color);
         if (use_mls)
             postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
         else
@@ -3786,7 +3794,7 @@ void openIMGUIFrame()
             }
             ImGui::SameLine();
             ImGui::Checkbox("PBO", &use_pbo);
-            ImGui::Text("Operation Mode");
+            ImGui::SeparatorText("Operation Mode");
             if (ImGui::RadioButton("Normal", &operation_mode, 0))
             {
                 leap.setImageMode(false);
@@ -4083,9 +4091,6 @@ void openIMGUIFrame()
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Camera Controls"))
         {
-            ImGui::Checkbox("Show Camera", &showCamera);
-            ImGui::SameLine();
-            ImGui::Checkbox("Show Projector", &showProjector);
             if (ImGui::SliderFloat("Camera Exposure [us]", &exposure, 300.0f, 10000.0f))
             {
                 // std::cout << "current exposure: " << camera.get_exposure_time() << " [us]" << std::endl;
@@ -4138,6 +4143,12 @@ void openIMGUIFrame()
                 }
             }
             ImGui::SameLine();
+            ImGui::Checkbox("Undistort Camera Input", &undistortCamera);
+            ImGui::SeparatorText("Debug Mode Controls");
+            ImGui::Checkbox("Show Camera", &showCamera);
+            ImGui::SameLine();
+            ImGui::Checkbox("Show Projector", &showProjector);
+            ImGui::SameLine();
             if (ImGui::Button("Cam2view"))
             {
                 gl_camera.setViewMatrix(gl_flycamera.getViewMatrix());
@@ -4148,7 +4159,7 @@ void openIMGUIFrame()
             {
                 gl_flycamera.setViewMatrix(gl_camera.getViewMatrix());
             }
-            ImGui::Checkbox("Undistort Camera Input", &undistortCamera);
+
             ImGui::Text("Cam2World (row major, OpenGL convention)");
             if (ImGui::BeginTable("Cam2World", 4))
             {
@@ -4242,7 +4253,7 @@ void openIMGUIFrame()
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Post Process"))
         {
-            ImGui::Text("Post Processing Mode");
+            ImGui::SeparatorText("Post Processing Mode");
             ImGui::RadioButton("Render Only", &postprocess_mode, 0);
             ImGui::SameLine();
             ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
@@ -4257,6 +4268,19 @@ void openIMGUIFrame()
             {
                 ImGui::Checkbox("ICP on?", &icp_apply_transform);
             }
+            ImGui::SliderFloat("Masking threshold", &masking_threshold, 0.0f, 1.0f);
+            if (ImGui::IsItemActive())
+            {
+                threshold_flag = true;
+            }
+            else
+            {
+                threshold_flag = false;
+            }
+            ImGui::ColorEdit3("bg color", &mask_bg_color.x, ImGuiColorEditFlags_NoOptions);
+            ImGui::ColorEdit3("missing info color", &mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
+            ImGui::ColorEdit3("unused info color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
+            ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &use_mls);
             ImGui::SameLine();
             ImGui::Checkbox("Forecast", &mls_forecast);
@@ -4288,24 +4312,41 @@ void openIMGUIFrame()
             ImGui::Checkbox("MLS depth test?", &mls_depth_test);
             ImGui::SameLine();
             ImGui::SliderFloat("d. thre", &mls_depth_threshold, 1.0f, 1500.0f, "%.6f");
-            ImGui::SliderFloat("Masking threshold", &masking_threshold, 0.0f, 1.0f);
-            if (ImGui::IsItemActive())
-            {
-                threshold_flag = true;
-            }
-            else
-            {
-                threshold_flag = false;
-            }
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Leap Controls"))
         {
+            ImGui::SeparatorText("General Controls");
             if (ImGui::Checkbox("Leap Polling Mode", &leap_poll_mode))
             {
                 leap.setPollMode(leap_poll_mode);
             }
+            if (ImGui::RadioButton("Desktop", &leap_tracking_mode, 0))
+            {
+                leap.setTrackingMode(eLeapTrackingMode_Desktop);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("HMD", &leap_tracking_mode, 1))
+            {
+                leap.setTrackingMode(eLeapTrackingMode_ScreenTop);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Screentop", &leap_tracking_mode, 2))
+            {
+                leap.setTrackingMode(eLeapTrackingMode_HMD);
+            }
+            ImGui::Checkbox("Use Finger Width", &useFingerWidth);
+            ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, -50000, 50000);
+            ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
+            ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
+            ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
+            ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);
+            ImGui::SliderFloat("Leap Local Bone Scale", &leap_bone_local_scaler, 0.001f, 0.1f);
+            ImGui::SliderFloat("Leap Palm Scale", &leap_palm_local_scaler, 0.001f, 0.1f);
+            ImGui::SliderFloat("Leap Arm Scale", &leap_arm_local_scaler, 0.001f, 0.1f);
+
+            ImGui::SeparatorText("Record & Playback");
             ImGui::Checkbox("Record Session", &leap_record_session);
             if (ImGui::Checkbox("Use Recorded Session", &use_pre_recorded_session))
             {
@@ -4343,29 +4384,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::InputText("Video Name", &playback_video_name);
             ImGui::SameLine();
-            if (ImGui::RadioButton("Desktop", &leap_tracking_mode, 0))
-            {
-                leap.setTrackingMode(eLeapTrackingMode_Desktop);
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("HMD", &leap_tracking_mode, 1))
-            {
-                leap.setTrackingMode(eLeapTrackingMode_ScreenTop);
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Screentop", &leap_tracking_mode, 2))
-            {
-                leap.setTrackingMode(eLeapTrackingMode_HMD);
-            }
-            ImGui::Checkbox("Use Finger Width", &useFingerWidth);
-            ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, -50000, 50000);
-            ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
-            ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
-            ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
-            ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);
-            ImGui::SliderFloat("Leap Local Bone Scale", &leap_bone_local_scaler, 0.001f, 0.1f);
-            ImGui::SliderFloat("Leap Palm Scale", &leap_palm_local_scaler, 0.001f, 0.1f);
-            ImGui::SliderFloat("Leap Arm Scale", &leap_arm_local_scaler, 0.001f, 0.1f);
+
             ImGui::TreePop();
         }
     }
