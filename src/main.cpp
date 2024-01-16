@@ -32,7 +32,8 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "diffuse.h"
-#include "human_trial.h"
+#include "user_study.h"
+#include "MidiControllerAPI.h"
 #ifdef _DEBUG
 #undef _DEBUG
 #include <Python.h>
@@ -57,7 +58,7 @@ namespace fs = std::filesystem;
 /* forward declarations */
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult);
-LEAP_STATUS handleLeapInput(uint64_t frameCounter);
+LEAP_STATUS handleLeapInput(bool prerecorded = false, uint64_t frameCounter = 0);
 void handlePostProcess(Texture &handTexture, Texture &camTexture, Shader &textureShader, Shader &maskShader, Shader &jfaInitShader, Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader, Shader &vcolorShader, Shader &gridColorShader);
 void handleSkinning(SkinningShader &skinnedShader,
                     Shader &vcolorShader,
@@ -70,8 +71,16 @@ void handleBaking(SkinningShader &skinnedShader,
                   SkinnedModel &leftHandModel,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
-                  glm::mat4 cam_projection_transform,
-                  bool isRightHand);
+                  glm::mat4 cam_projection_transform);
+void handleBakingInternal(SkinningShader &skinnedShader,
+                          Texture &bakeTexture,
+                          SkinnedModel &leftHandModel,
+                          SkinnedModel &rightHandModel,
+                          glm::mat4 cam_view_transform,
+                          glm::mat4 cam_projection_transform,
+                          bool flipVertical,
+                          bool flipHorizontal,
+                          bool projSingleChannel);
 void handleMLS(Shader &gridShader);
 void handleDebugMode(SkinningShader &skinnedShader,
                      Shader &textureShader,
@@ -81,6 +90,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
                      Text &text);
+bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current);
 std::vector<glm::vec2> mp_predict(cv::Mat image, int timestamp);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
@@ -173,13 +183,15 @@ unsigned int n_bones = 0;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
-Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake;
+Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_interp;
 std::thread producer, consumer, run_sd, run_mls;
 // bake/sd controls
 bool bakeRequest = false;
-bool sd_succeed = false;
+bool bake_preproc_succeed = false;
 bool sd_running = false;
 int sd_mode = static_cast<int>(SDMode::PROMPT);
+int bake_mode = static_cast<int>(BakeMode::SD);
+Texture toBakeTexture;
 int sd_mask_mode = 2;
 bool saveIntermed = false;
 std::vector<uint8_t> img2img_data;
@@ -202,16 +214,23 @@ std::vector<std::string> animals{
     "a monkey",
     "a gorilla",
     "a panda"};
+// user study controls
+bool run_user_study = false;
+int motion_model = static_cast<int>(MotionModel::ALL);
+UserStudy user_study = UserStudy();
+int humanChoice = 1;
+bool video_reached_end = true;
+bool is_first_in_video_pair = true;
 // leap controls
 bool leap_poll_mode = false;
-bool use_pre_recorded_session = false;
+bool debug_playback = false;
 float vid_simulated_latency_ms = 1.0f;
 float vid_playback_fps_limiter = 900.0;
-float vid_playback_speed = 1.7f;
-std::string session_name = "sfrs.0";
+float vid_playback_speed = 6.0f;
+std::string session_name = "all";
+std::string subject_name = "tester1";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
-bool playback_video = false;
 std::string playback_video_name = "test";
 std::string loaded_playback_video_name = "";
 static uint8_t *pFrameData[400] = {NULL};
@@ -329,9 +348,11 @@ moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
 moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
 // GL controls
 std::string testFile("../../resource/uv.png");
+std::string inputBakeFile("../../resource/butterfly.jpg");
 std::string bakeFileLeft("../../resource/baked_left.png");
 std::string bakeFileRight("../../resource/baked_right.png");
 std::string diffuseTextureFile("../../resource/uv.png");
+std::string curDiffuseTextureFile("../../resource/uv.png");
 std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
 Texture *dynamicTexture = nullptr;
 Texture *bakedTextureLeft = nullptr;
@@ -698,10 +719,12 @@ int main(int argc, char *argv[])
     uint8_t *colorBuffer = new uint8_t[projected_image_size];
     CGrabResultPtr ptrGrabResult;
     camTexture = Texture();
+    toBakeTexture = Texture();
     // Texture flowTexture = Texture();
     Texture displayTexture = Texture();
     displayTexture.init(cam_width, cam_height, n_cam_channels);
     camTexture.init(cam_width, cam_height, n_cam_channels);
+    toBakeTexture.init(dst_width, dst_height, 4);
     // flowTexture.init(cam_width, cam_height, 2);
     if (use_projector)
     {
@@ -907,7 +930,7 @@ int main(int argc, char *argv[])
 
             /* deal with leap input */
             t_leap.start();
-            LEAP_STATUS leap_status = handleLeapInput(0);
+            LEAP_STATUS leap_status = handleLeapInput();
             t_leap.stop();
 
             /* skin hand meshes */
@@ -918,7 +941,7 @@ int main(int argc, char *argv[])
 
             /* deal with bake request */
             t_bake.start();
-            handleBaking(skinnedShader, textureShader, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true);
+            handleBaking(skinnedShader, textureShader, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
             t_bake.stop();
 
             /* run MLS on MP prediction to reduce bias */
@@ -948,110 +971,179 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(OperationMode::VIDEO): // record and playback session
         {
-            if (pre_recorded_session_loaded && use_pre_recorded_session)
+            if (pre_recorded_session_loaded)
             {
-                t_debug.start();
-                float required_time = vid_simulated_latency_ms + session_timestamps[videoFrameCount];
-                auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time);
-                int interp_index = upper_iter - session_timestamps.begin();
-                if (interp_index >= session_timestamps.size())
+                if (run_user_study)
                 {
-                    break;
-                }
-                float interp1 = session_timestamps[interp_index - 1];
-                float interp2 = session_timestamps[interp_index];
-                float interp_factor = (required_time - interp1) / (interp2 - interp1);
-                // get pre-recorded leap info (current frame, will be rendered)
-                LEAP_STATUS leap_status = handleLeapInput(videoFrameCount);
-                std::vector<glm::mat4> bones_to_world_cur, bones_to_world_left_interp1, bones_to_world_left_interp2;
-                if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-                {
-                    break;
-                }
-                // get pre-recorded leap info (some future frame, will be used as camera input)
-                bones_to_world_cur = bones_to_world_left;
-                leap_status = handleLeapInput(interp_index - 1);
-                if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-                {
-                    break;
-                }
-                bones_to_world_left_interp1 = bones_to_world_left;
-                leap_status = handleLeapInput(interp_index);
-                if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-                {
-                    break;
-                }
-                bones_to_world_left_interp2 = bones_to_world_left;
-                bones_to_world_left_interp.clear();
-                for (int i = 0; i < bones_to_world_left.size(); i++)
-                {
-                    glm::mat4 interpolated = Helpers::interpolate(bones_to_world_left_interp1[i], bones_to_world_left_interp2[i], interp_factor, true);
-                    bones_to_world_left_interp.push_back(interpolated);
-                }
-                t_debug.stop();
-                t_skin.start();
-                // produce fake camera image
-                // render left hand
-                bones_to_world_left = bones_to_world_left_interp;
-                handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                // convert to gray scale single channel image
-                fake_cam_fbo.bind();
-                thresholdAlphaShader.use();
-                thresholdAlphaShader.setMat4("view", glm::mat4(1.0));
-                thresholdAlphaShader.setMat4("projection", glm::mat4(1.0));
-                thresholdAlphaShader.setMat4("model", glm::mat4(1.0));
-                thresholdAlphaShader.setFloat("threshold", 0.5);
-                thresholdAlphaShader.setBool("flipHor", true);
-                thresholdAlphaShader.setBool("flipVer", true);
-                thresholdAlphaShader.setBool("isGray", false);
-                thresholdAlphaShader.setBool("binary", true);
-                thresholdAlphaShader.setInt("src", 0);
-                hands_fbo.getTexture()->bind();
-                fullScreenQuad.render();
-                fake_cam_fbo.unbind();
-                // std::vector<uchar> fake_cam_image = fake_cam_fbo.getBuffer(1);
-                // load as a regular camera image
-                // camTexture.load(fake_cam_image.data(), true, cam_buffer_format);
-                // camImageOrig = cv::Mat(cam_height, cam_width, CV_8UC1, fake_cam_image.data()).clone();
-                // render the scene as normal
-                bones_to_world_left = bones_to_world_cur;
-                handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                t_skin.stop();
-                t_pp.start();
-                // post process them with any required effect
-                handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
-                if (!debug_mode)
-                {
-                    glViewport(0, 0, proj_width, proj_height); // set viewport
-                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                    set_texture_shader(textureShader, false, false, false);
-                    c2p_fbo.getTexture()->bind();
-                    fullScreenQuad.render();
-                }
-                t_pp.stop();
-                // save render to disk as png?
-                // c2p_fbo.saveColorToFile(std::format("../../debug/video/final_{:05d}.png", totalFrameCount), false);
-                // offline: produce a compressed video from the pngs
-                // online: load video into memory and stream to projector in full fps
-                // fps limiter to control speed
-                cur_vid_time = t_app.getElapsedTimeInMilliSec();
-                if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
-                {
-                    prev_vid_time = cur_vid_time;
-                    videoFrameCountCont += vid_playback_speed;
-                    videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
-                }
-            }
-            else
-            {
-                if (playback_video)
-                {
-                    if (playback_video_loaded)
+                    if (video_reached_end)
                     {
-                        videoFrameCount += 1;
-                        if (videoFrameCount >= maxVideoFrameCount)
+                        if (user_study.getTrialFinished())
                         {
-                            videoFrameCount = 0;
+                            user_study.printStats();
+                            run_user_study = false;
+                        }
+                        int attempts = user_study.getAttempts();
+                        if (attempts % 2 == 0)
+                        {
+                            if (attempts != 0)
+                            {
+                                // get input from human
+                                bool button_values[9] = {false, false, false, false, false, false, false, false, false};
+                                bool sucess = GetButtonStates(button_values);
+                                if (!sucess)
+                                {
+                                    std::cout << "Failed to get button states" << std::endl;
+                                    break;
+                                }
+                                humanChoice = 0;
+                                if (button_values[0])
+                                    humanChoice = 1;
+                                if (button_values[1])
+                                    humanChoice = 2;
+                                if (humanChoice == 0)
+                                {
+                                    break;
+                                }
+                            }
+                            is_first_in_video_pair = true;
+                        }
+                        else
+                        {
+                            is_first_in_video_pair = false;
+                        }
+                        vid_simulated_latency_ms = user_study.randomTrial(humanChoice);
+                        attempts = user_study.getAttempts();
+                        videoFrameCountCont = 0.0f;
+                        videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
+                        video_reached_end = false;
+                        // let human rest a bit
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    }
+                    else
+                    {
+                        // interpolate hand pose to therequired latency
+                        t_interp.start();
+                        std::vector<glm::mat4> bones_to_world_current;
+                        bool success = handleInterpolateFrames(bones_to_world_current);
+                        if (!success)
+                        {
+                            video_reached_end = true;
+                            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                            break;
+                        }
+                        t_interp.stop();
+                        t_camera.start();
+                        // produce fake camera image
+                        // render left hand
+                        bones_to_world_left = bones_to_world_left_interp;
+                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        // convert to gray scale single channel image
+                        fake_cam_fbo.bind();
+                        thresholdAlphaShader.use();
+                        thresholdAlphaShader.setMat4("view", glm::mat4(1.0));
+                        thresholdAlphaShader.setMat4("projection", glm::mat4(1.0));
+                        thresholdAlphaShader.setMat4("model", glm::mat4(1.0));
+                        thresholdAlphaShader.setFloat("threshold", 0.5);
+                        thresholdAlphaShader.setBool("flipHor", true);
+                        thresholdAlphaShader.setBool("flipVer", true);
+                        thresholdAlphaShader.setBool("isGray", false);
+                        thresholdAlphaShader.setBool("binary", true);
+                        thresholdAlphaShader.setInt("src", 0);
+                        hands_fbo.getTexture()->bind();
+                        fullScreenQuad.render();
+                        fake_cam_fbo.unbind();
+                        t_camera.stop();
+                        // render the scene as normal
+                        t_skin.start();
+                        bones_to_world_left = bones_to_world_current;
+                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        t_skin.stop();
+                        t_pp.start();
+                        // post process them with any required effect
+                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                        if (!debug_mode)
+                        {
+                            glViewport(0, 0, proj_width, proj_height); // set viewport
+                            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                            set_texture_shader(textureShader, false, false, false);
+                            c2p_fbo.getTexture()->bind();
+                            fullScreenQuad.render();
+                        }
+                        t_pp.stop();
+                        t_debug.start();
+                        float text_spacing = 10.0f;
+                        std::vector<std::string> texts_to_render = {std::format("{}", is_first_in_video_pair ? "1" : "2")};
+                        for (int i = 0; i < texts_to_render.size(); ++i)
+                        {
+                            text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        }
+                        t_debug.stop();
+                        // fps limiter to control speed
+                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
+                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                        {
+                            prev_vid_time = cur_vid_time;
+                            videoFrameCountCont += vid_playback_speed;
+                            videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
+                        }
+                    }
+                }
+                else
+                {
+                    if (debug_playback)
+                    {
+                        // interpolate hand pose to therequired latency
+                        t_interp.start();
+                        std::vector<glm::mat4> bones_to_world_current;
+                        bool success = handleInterpolateFrames(bones_to_world_current);
+                        if (!success)
+                            break;
+                        t_interp.stop();
+                        t_camera.start();
+                        // produce fake camera image
+                        // render left hand
+                        bones_to_world_left = bones_to_world_left_interp;
+                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        // convert to gray scale single channel image
+                        fake_cam_fbo.bind();
+                        thresholdAlphaShader.use();
+                        thresholdAlphaShader.setMat4("view", glm::mat4(1.0));
+                        thresholdAlphaShader.setMat4("projection", glm::mat4(1.0));
+                        thresholdAlphaShader.setMat4("model", glm::mat4(1.0));
+                        thresholdAlphaShader.setFloat("threshold", 0.5);
+                        thresholdAlphaShader.setBool("flipHor", true);
+                        thresholdAlphaShader.setBool("flipVer", true);
+                        thresholdAlphaShader.setBool("isGray", false);
+                        thresholdAlphaShader.setBool("binary", true);
+                        thresholdAlphaShader.setInt("src", 0);
+                        hands_fbo.getTexture()->bind();
+                        fullScreenQuad.render();
+                        fake_cam_fbo.unbind();
+                        t_camera.stop();
+                        // render the scene as normal
+                        t_skin.start();
+                        bones_to_world_left = bones_to_world_current;
+                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        t_skin.stop();
+                        t_pp.start();
+                        // post process them with any required effect
+                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                        if (!debug_mode)
+                        {
+                            glViewport(0, 0, proj_width, proj_height); // set viewport
+                            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                            set_texture_shader(textureShader, false, false, false);
+                            c2p_fbo.getTexture()->bind();
+                            fullScreenQuad.render();
+                        }
+                        t_pp.stop();
+                        // fps limiter to control speed
+                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
+                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                        {
+                            prev_vid_time = cur_vid_time;
+                            videoFrameCountCont += vid_playback_speed;
+                            videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
                         }
                     }
                 }
@@ -1165,7 +1257,7 @@ int main(int argc, char *argv[])
         {
             /* deal with leap input */
             t_leap.start();
-            LEAP_STATUS leap_status = handleLeapInput(0);
+            LEAP_STATUS leap_status = handleLeapInput();
             t_leap.stop();
             switch (calibration_state)
             {
@@ -1688,42 +1780,35 @@ int main(int argc, char *argv[])
 
         if (use_projector)
         {
-            if (operation_mode != static_cast<int>(OperationMode::VIDEO))
+            // send result to projector queue
+            glReadBuffer(GL_FRONT);
+            if (use_pbo) // todo: investigate better way to download asynchornously
             {
-                // send result to projector queue
-                glReadBuffer(GL_FRONT);
-                if (use_pbo) // todo: investigate better way to download asynchornously
-                {
-                    t_download.start();
-                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[totalFrameCount % 2]); // todo: replace with totalFrameCount
-                    glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
-                    t_download.stop();
+                t_download.start();
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[totalFrameCount % 2]); // todo: replace with totalFrameCount
+                glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
+                t_download.stop();
 
-                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(totalFrameCount + 1) % 2]);
-                    GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
-                    if (src)
-                    {
-                        // std::vector<uint8_t> data(src, src + image_size);
-                        // tmpdata.assign(src, src + image_size);
-                        // std::copy(src, src + tmpdata.size(), tmpdata.begin());
-                        memcpy(colorBuffer, src, projected_image_size);
-                        projector_queue.try_enqueue(colorBuffer);
-                        glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
-                    }
-                    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-                }
-                else
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(totalFrameCount + 1) % 2]);
+                GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+                if (src)
                 {
-                    t_download.start();
-                    glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
-                    t_download.stop();
-                    // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
+                    // std::vector<uint8_t> data(src, src + image_size);
+                    // tmpdata.assign(src, src + image_size);
+                    // std::copy(src, src + tmpdata.size(), tmpdata.begin());
+                    memcpy(colorBuffer, src, projected_image_size);
                     projector_queue.try_enqueue(colorBuffer);
+                    glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
                 }
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
             }
             else
             {
-                projector_queue.try_enqueue(pFrameData[videoFrameCount]);
+                t_download.start();
+                glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
+                t_download.stop();
+                // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
+                projector_queue.try_enqueue(colorBuffer);
             }
         }
         // glCheckError();
@@ -2310,9 +2395,9 @@ bool loadVideo()
 
 bool loadPrerecordedSession()
 {
+    // load raw session data (hand poses n x 22 x 4 x 4, and timestamps n x 1)
     std::string recordings("../../debug/recordings/");
     fs::path bones_left_path(recordings + session_name + std::string("_bones_left.npy"));
-    // fs::path bones_right_path(recordings + tmp_filename + std::string("_bones_right.npy"));
     fs::path timestamps_path(recordings + session_name + std::string("_timestamps.npy"));
     cnpy::NpyArray bones_left_npy, timestamps_npy;
     if (fs::exists(bones_left_path))
@@ -2347,13 +2432,14 @@ bool loadPrerecordedSession()
     }
     total_raw_session_time_stamps = session_timestamps.size();
     // create a simulated session where every frame is 1 ms apart
-    float whole;
+    float resolution = 1.0f; // resolution of simulated session in ms
+    float whole;             // find the whole part of the last timestamp
     std::vector<glm::mat4> bones_to_world_left_simulated;
     std::modf(raw_session_timestamps[raw_session_timestamps.size() - 1], &whole);
-    total_session_time_stamps = static_cast<int>(whole);
+    total_session_time_stamps = static_cast<int>(whole); // the timestamps are in ms, so this integer represents the final timestamp (roughly)
     for (int i = 0; i < total_session_time_stamps; i++)
     {
-        float required_time = static_cast<float>(i);
+        float required_time = resolution * static_cast<float>(i);
         auto upper_iter = std::upper_bound(raw_session_timestamps.begin(), raw_session_timestamps.end(), required_time);
         int interp_index = upper_iter - raw_session_timestamps.begin();
         float interp1 = raw_session_timestamps[interp_index - 1];
@@ -2733,10 +2819,10 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult)
     // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
 }
 
-LEAP_STATUS handleLeapInput(uint64_t frameCounter)
+LEAP_STATUS handleLeapInput(bool prerecorded, uint64_t frameCounter)
 {
     LEAP_STATUS leap_status;
-    if (use_pre_recorded_session)
+    if (prerecorded)
     {
         leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, frameCounter);
     }
@@ -2965,6 +3051,8 @@ void handleSkinning(SkinningShader &skinnedShader,
             skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
             skinnedShader.setBool("bake", false);
             skinnedShader.setBool("flipTexVertically", false);
+            skinnedShader.setBool("flipTexHorizontally", false);
+            skinnedShader.setBool("projectorIsSingleChannel", false);
             skinnedShader.setInt("src", 0);
             skinnedShader.setBool("useGGX", false);
             skinnedShader.setBool("renderUV", false);
@@ -2984,9 +3072,19 @@ void handleSkinning(SkinningShader &skinnedShader,
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
                 skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
                 skinnedShader.setBool("useProjector", true);
-                skinnedShader.setBool("flipTexVertically", true);
                 handModel.Render(skinnedShader, bones_to_world, rotx, false, dynamicTexture);
                 break;
+            case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
+                skinnedShader.setBool("useProjector", false);
+                handModel.Render(skinnedShader, bones_to_world, rotx, false, dynamicTexture);
+                break;
+            case static_cast<int>(TextureMode::CAMERA):
+                skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShader.setBool("useProjector", true);
+                skinnedShader.setBool("flipTexVertically", true);
+                skinnedShader.setBool("flipTexHorizontally", true);
+                skinnedShader.setBool("projectorIsSingleChannel", true);
+                handModel.Render(skinnedShader, bones_to_world, rotx, false, &camTexture);
             default:
                 skinnedShader.setBool("useProjector", false); // original texture loaded with mesh
                 handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
@@ -3000,6 +3098,8 @@ void handleSkinning(SkinningShader &skinnedShader,
             skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
             skinnedShader.setBool("bake", false);
             skinnedShader.setBool("flipTexVertically", false);
+            skinnedShader.setBool("flipTexHorizontally", false);
+            skinnedShader.setBool("projectorIsSingleChannel", false);
             skinnedShader.setInt("src", 0);
             skinnedShader.setBool("useGGX", true);
             skinnedShader.setBool("renderUV", false);
@@ -3044,6 +3144,8 @@ void handleSkinning(SkinningShader &skinnedShader,
             skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
             skinnedShader.setBool("bake", false);
             skinnedShader.setBool("flipTexVertically", false);
+            skinnedShader.setBool("flipTexHorizontally", false);
+            skinnedShader.setBool("projectorIsSingleChannel", false);
             skinnedShader.setInt("src", 0);
             skinnedShader.setBool("useGGX", false);
             skinnedShader.setBool("renderUV", true);
@@ -3054,146 +3156,195 @@ void handleSkinning(SkinningShader &skinnedShader,
         glDisable(GL_DEPTH_TEST); // todo: why not keep it on ?
     }
 }
-
+void handleBakingInternal(SkinningShader &skinnedShader,
+                          Texture &texture,
+                          SkinnedModel &leftHandModel,
+                          SkinnedModel &rightHandModel,
+                          glm::mat4 cam_view_transform,
+                          glm::mat4 cam_projection_transform,
+                          bool flipVertical,
+                          bool flipHorizontal,
+                          bool projSingleChannel)
+{
+    bake_fbo_right.bind(true);
+    /* right hand */
+    glDisable(GL_CULL_FACE); // todo: why disbale backface ? doesn't this mean bake will reach the back of the hand ?
+    glEnable(GL_DEPTH_TEST);
+    skinnedShader.use();
+    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
+    skinnedShader.setBool("useProjector", true);
+    skinnedShader.setBool("bake", true);
+    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
+    skinnedShader.setBool("flipTexVertically", flipVertical);
+    skinnedShader.setBool("flipTexHorizontally", flipHorizontal);
+    skinnedShader.setBool("projectorIsSingleChannel", projSingleChannel);
+    skinnedShader.setBool("renderUV", false);
+    skinnedShader.setBool("useGGX", false);
+    skinnedShader.setInt("src", 0);
+    rightHandModel.Render(skinnedShader, bones_to_world_right_bake, rotx, false, &texture);
+    bake_fbo_right.unbind();
+    bake_fbo_left.bind();
+    /* left hand */
+    skinnedShader.use();
+    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
+    skinnedShader.setBool("useProjector", true);
+    skinnedShader.setBool("bake", true);
+    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
+    skinnedShader.setBool("flipTexVertically", flipVertical);
+    skinnedShader.setBool("flipTexHorizontally", flipHorizontal);
+    skinnedShader.setBool("projectorIsSingleChannel", projSingleChannel);
+    skinnedShader.setBool("renderUV", false);
+    skinnedShader.setBool("useGGX", false);
+    skinnedShader.setInt("src", 0);
+    leftHandModel.Render(skinnedShader, bones_to_world_left_bake, rotx, false, &texture);
+    /* debug points */
+    // vcolorShader.use();
+    // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+    // std::vector<glm::vec2> points;
+    // rightHandModel.getUnrolledTexCoords(points);
+    // Helpers::UV2NDC(points);
+    // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
+    // PointCloud cloud(points, screen_vert_color);
+    // cloud.render();
+    bake_fbo_left.unbind();
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    // glDisable(GL_DEPTH_TEST);
+    if (saveIntermed)
+    {
+        bake_fbo_right.saveColorToFile(bakeFileRight);
+        bake_fbo_left.saveColorToFile(bakeFileLeft);
+    }
+    // if (bakedTexture != nullptr)
+    // {
+    //     delete bakedTexture;
+    //     bakedTexture = nullptr;
+    // }
+    // bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
+    // bakedTexture->init();
+}
 void handleBaking(SkinningShader &skinnedShader,
                   Shader &textureShader,
                   SkinnedModel &leftHandModel,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
-                  glm::mat4 cam_projection_transform,
-                  bool isRightHand)
+                  glm::mat4 cam_projection_transform)
 {
     if ((bones_to_world_right.size() > 0) || (bones_to_world_left.size() > 0))
     {
-        if (bakeRequest)
+        switch (bake_mode)
         {
-            if (!sd_running)
+        case static_cast<int>(BakeMode::SD):
+        {
+            if (bakeRequest)
             {
-                sd_running = true;
+                if (!sd_running)
+                {
+                    sd_running = true;
+                    bones_to_world_right_bake = bones_to_world_right;
+                    bones_to_world_left_bake = bones_to_world_left;
+                    // launch thread etc.
+                    // download camera image to cpu (resizing to 1024x1024)
+                    sd_fbo.bind(true);
+                    set_texture_shader(textureShader, false, true, true, false);
+                    camTexture.bind();
+                    fullScreenQuad.render();
+                    sd_fbo.unbind();
+                    if (saveIntermed)
+                        sd_fbo.saveColorToFile("../../resource/camera_image.png", false);
+                    std::vector<uint8_t> buf = sd_fbo.getBuffer(1);
+                    // download camera image thresholded to cpu (todo: consider doing all this on CPU)
+                    sd_fbo.bind(true);
+                    set_texture_shader(textureShader, false, true, true, true, masking_threshold);
+                    camTexture.bind();
+                    fullScreenQuad.render();
+                    sd_fbo.unbind();
+                    if (saveIntermed)
+                        sd_fbo.saveColorToFile("../../resource/camera_mask.png", false);
+                    std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
+                    run_sd = std::thread([buf, buf_mask]() { // send camera image to stable diffusion
+                        std::string myprompt;
+                        std::vector<std::string> random_animal;
+                        switch (sd_mode)
+                        {
+                        case static_cast<int>(SDMode::ANIMAL):
+                            std::sample(animals.begin(),
+                                        animals.end(),
+                                        std::back_inserter(random_animal),
+                                        1,
+                                        std::mt19937{std::random_device{}()});
+                            myprompt = random_animal[0];
+                            break;
+                        default:
+                            myprompt = sd_prompt;
+                            break;
+                        }
+                        try
+                        {
+                            img2img_data = Diffuse::img2img(myprompt.c_str(),
+                                                            sd_outwidth, sd_outheight,
+                                                            buf, buf_mask, diffuse_seed,
+                                                            1024, 1024, 1,
+                                                            512, 512, false, false, sd_mask_mode);
+                            if (saveIntermed)
+                            {
+                                cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
+                                cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
+                                cv::imwrite("../../resource/sd_result.png", img2img_result);
+                            }
+                            bake_preproc_succeed = true;
+                        }
+                        catch (const std::exception &e)
+                        {
+                            std::cerr << e.what() << '\n';
+                        }
+                        sd_running = false;
+                    });
+                }
+                bakeRequest = false;
+            }
+            if (bake_preproc_succeed)
+            {
+                if (dynamicTexture != nullptr)
+                    delete dynamicTexture;
+                dynamicTexture = new Texture(GL_TEXTURE_2D);
+                dynamicTexture->init(sd_outwidth, sd_outheight, 3);
+                dynamicTexture->load(img2img_data.data(), true, GL_RGB);
+                // bake dynamic texture
+                handleBakingInternal(skinnedShader, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                bake_preproc_succeed = false;
+                run_sd.join();
+            }
+            break;
+        }
+        case static_cast<int>(BakeMode::FILE):
+        {
+            if (bakeRequest)
+            {
                 bones_to_world_right_bake = bones_to_world_right;
                 bones_to_world_left_bake = bones_to_world_left;
-                // launch thread etc.
-                // download camera image to cpu (resizing to 1024x1024)
-                sd_fbo.bind(true);
-                set_texture_shader(textureShader, false, true, true, false);
-                camTexture.bind();
-                fullScreenQuad.render();
-                sd_fbo.unbind();
-                if (saveIntermed)
-                    sd_fbo.saveColorToFile("../../resource/camera_image.png", false);
-                std::vector<uint8_t> buf = sd_fbo.getBuffer(1);
-                // download camera image thresholded to cpu (todo: consider doing all this on CPU)
-                sd_fbo.bind(true);
-                set_texture_shader(textureShader, false, true, true, true, masking_threshold);
-                camTexture.bind();
-                fullScreenQuad.render();
-                sd_fbo.unbind();
-                if (saveIntermed)
-                    sd_fbo.saveColorToFile("../../resource/camera_mask.png", false);
-                std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
-                run_sd = std::thread([buf, buf_mask]() { // send camera image to stable diffusion
-                    std::string myprompt;
-                    std::vector<std::string> random_animal;
-                    switch (sd_mode)
-                    {
-                    case static_cast<int>(SDMode::ANIMAL):
-                        std::sample(animals.begin(),
-                                    animals.end(),
-                                    std::back_inserter(random_animal),
-                                    1,
-                                    std::mt19937{std::random_device{}()});
-                        myprompt = random_animal[0];
-                        break;
-                    default:
-                        myprompt = sd_prompt;
-                        break;
-                    }
-                    try
-                    {
-                        img2img_data = Diffuse::img2img(myprompt.c_str(),
-                                                        sd_outwidth, sd_outheight,
-                                                        buf, buf_mask, diffuse_seed,
-                                                        1024, 1024, 1,
-                                                        512, 512, false, false, sd_mask_mode);
-                        if (saveIntermed)
-                        {
-                            cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
-                            cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
-                            cv::imwrite("../../resource/sd_result.png", img2img_result);
-                        }
-                        sd_succeed = true;
-                    }
-                    catch (const std::exception &e)
-                    {
-                        std::cerr << e.what() << '\n';
-                    }
-                    sd_running = false;
-                });
+                Texture tmp(inputBakeFile.c_str(), GL_TEXTURE_2D);
+                tmp.init_from_file(GL_LINEAR, GL_CLAMP_TO_BORDER);
+                handleBakingInternal(skinnedShader, tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                bakeRequest = false;
             }
-            bakeRequest = false;
+            break;
         }
-        if (sd_succeed)
+        case static_cast<int>(BakeMode::CAMERA):
         {
-            if (dynamicTexture != nullptr)
-                delete dynamicTexture;
-            dynamicTexture = new Texture(GL_TEXTURE_2D);
-            dynamicTexture->init(sd_outwidth, sd_outheight, 3);
-            dynamicTexture->load(img2img_data.data(), true, GL_RGB);
-            // bake dynamic texture
-            bake_fbo_right.bind(true);
-            /* right hand */
-            glDisable(GL_CULL_FACE); // todo: why disbale backface ? doesn't this mean bake will reach the back of the hand ?
-            glEnable(GL_DEPTH_TEST);
-            skinnedShader.use();
-            skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
-            skinnedShader.setBool("useProjector", true);
-            skinnedShader.setBool("bake", true);
-            skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
-            skinnedShader.setBool("flipTexVertically", true);
-            skinnedShader.setBool("renderUV", false);
-            skinnedShader.setBool("useGGX", false);
-            skinnedShader.setInt("src", 0);
-            rightHandModel.Render(skinnedShader, bones_to_world_right_bake, rotx, false, dynamicTexture);
-            bake_fbo_right.unbind();
-            bake_fbo_left.bind();
-            /* left hand */
-            skinnedShader.use();
-            skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
-            skinnedShader.setBool("useProjector", true);
-            skinnedShader.setBool("bake", true);
-            skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
-            skinnedShader.setBool("flipTexVertically", true);
-            skinnedShader.setBool("renderUV", false);
-            skinnedShader.setBool("useGGX", false);
-            skinnedShader.setInt("src", 0);
-            leftHandModel.Render(skinnedShader, bones_to_world_left_bake, rotx, false, dynamicTexture);
-            /* debug points */
-            // vcolorShader.use();
-            // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-            // std::vector<glm::vec2> points;
-            // rightHandModel.getUnrolledTexCoords(points);
-            // Helpers::UV2NDC(points);
-            // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
-            // PointCloud cloud(points, screen_vert_color);
-            // cloud.render();
-            bake_fbo_left.unbind();
-            glDisable(GL_DEPTH_TEST);
-            glEnable(GL_CULL_FACE);
-            // glDisable(GL_DEPTH_TEST);
-            if (saveIntermed)
+            if (bakeRequest)
             {
-                bake_fbo_right.saveColorToFile(bakeFileRight);
-                bake_fbo_left.saveColorToFile(bakeFileLeft);
+                bones_to_world_right_bake = bones_to_world_right;
+                bones_to_world_left_bake = bones_to_world_left;
+                handleBakingInternal(skinnedShader, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true);
+                bakeRequest = false;
             }
-            // if (bakedTexture != nullptr)
-            // {
-            //     delete bakedTexture;
-            //     bakedTexture = nullptr;
-            // }
-            // bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
-            // bakedTexture->init();
-            sd_succeed = false;
-            run_sd.join();
+            break;
+        }
+        default:
+        {
+            break;
+        }
         }
     }
 }
@@ -3397,6 +3548,41 @@ void handleMLS(Shader &gridShader)
     }
 }
 
+bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
+{
+    if (videoFrameCount >= session_timestamps.size())
+        return false;
+    float required_time = vid_simulated_latency_ms + session_timestamps[videoFrameCount];
+    auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time);
+    int interp_index = upper_iter - session_timestamps.begin();
+    if (interp_index >= session_timestamps.size())
+        return false;
+    float interp1 = session_timestamps[interp_index - 1];
+    float interp2 = session_timestamps[interp_index];
+    float interp_factor = (required_time - interp1) / (interp2 - interp1);
+    // get pre-recorded leap info (current frame, will be rendered)
+    LEAP_STATUS leap_status = handleLeapInput(true, videoFrameCount);
+    std::vector<glm::mat4> bones_to_world_left_interp1, bones_to_world_left_interp2;
+    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+        return false;
+    // get pre-recorded leap info (some future frame, will be used as camera input)
+    bones_to_world_current = bones_to_world_left;
+    leap_status = handleLeapInput(true, interp_index - 1);
+    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+        return false;
+    bones_to_world_left_interp1 = bones_to_world_left;
+    leap_status = handleLeapInput(true, interp_index);
+    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+        return false;
+    bones_to_world_left_interp2 = bones_to_world_left;
+    bones_to_world_left_interp.clear();
+    for (int i = 0; i < bones_to_world_left.size(); i++)
+    {
+        glm::mat4 interpolated = Helpers::interpolate(bones_to_world_left_interp1[i], bones_to_world_left_interp2[i], interp_factor, true);
+        bones_to_world_left_interp.push_back(interpolated);
+    }
+    return true;
+}
 void handleDebugMode(SkinningShader &skinnedShader,
                      Shader &textureShader,
                      Shader &vcolorShader,
@@ -3580,6 +3766,8 @@ void handleDebugMode(SkinningShader &skinnedShader,
                     skinnedShader.setBool("useGGX", false);
                     skinnedShader.setBool("renderUV", false);
                     skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setBool("flipTexHorizontally", false);
+                    skinnedShader.setBool("projectorIsSingleChannel", false);
                     skinnedShader.setInt("src", 0);
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture);
                     break;
@@ -3593,6 +3781,8 @@ void handleDebugMode(SkinningShader &skinnedShader,
                     skinnedShader.setBool("useGGX", false);
                     skinnedShader.setBool("renderUV", false);
                     skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setBool("flipTexHorizontally", false);
+                    skinnedShader.setBool("projectorIsSingleChannel", false);
                     skinnedShader.setInt("src", 0);
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo_right.getTexture());
                     break;
@@ -3637,6 +3827,8 @@ void handleDebugMode(SkinningShader &skinnedShader,
                     skinnedShader.setBool("useGGX", false);
                     skinnedShader.setBool("renderUV", false);
                     skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setBool("flipTexHorizontally", false);
+                    skinnedShader.setBool("projectorIsSingleChannel", false);
                     skinnedShader.setInt("src", 0);
                     leftHandModel.Render(skinnedShader, bones_to_world_left, rotx);
                     break;
@@ -3655,6 +3847,8 @@ void handleDebugMode(SkinningShader &skinnedShader,
                     skinnedShader.setBool("useGGX", false);
                     skinnedShader.setBool("renderUV", false);
                     skinnedShader.setBool("flipTexVertically", false);
+                    skinnedShader.setBool("flipTexHorizontally", false);
+                    skinnedShader.setBool("projectorIsSingleChannel", false);
                     skinnedShader.setInt("src", 0);
                     leftHandModel.Render(skinnedShader, bones_to_world_left, rotx, false, dynamicTexture);
                     break;
@@ -3796,6 +3990,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
         }
     }
 }
+// ---------------------------------------------------------------------------------------------
 // IMGUI frame creator
 // ---------------------------------------------------------------------------------------------
 void openIMGUIFrame()
@@ -3811,7 +4006,6 @@ void openIMGUIFrame()
     ImGui::Begin("augmented hands", NULL, window_flags);
     if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("General"))
         {
             if (ImGui::Checkbox("Use Projector", &use_projector))
@@ -4246,45 +4440,86 @@ void openIMGUIFrame()
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Material"))
         {
-            ImGui::Text("Material Type");
+            ImGui::SeparatorText("Material Type");
             ImGui::RadioButton("Diffuse", &material_mode, 0);
             ImGui::SameLine();
             ImGui::RadioButton("GGX", &material_mode, 1);
             ImGui::SameLine();
             ImGui::RadioButton("Wireframe", &material_mode, 2);
-
-            ImGui::Text("Diffuse Texture Type");
+            ImGui::SeparatorText("Diffuse Texture Type");
             ImGui::RadioButton("Original", &texture_mode, 0);
             ImGui::SameLine();
             ImGui::RadioButton("From File", &texture_mode, 1);
             ImGui::SameLine();
-            ImGui::RadioButton("Projective", &texture_mode, 2);
-            ImGui::SameLine();
+            ImGui::RadioButton("Projective Texture", &texture_mode, 2);
             ImGui::RadioButton("Baked", &texture_mode, 3);
-            ImGui::InputText("Diffuse Texture File", &diffuseTextureFile, 20);
+            ImGui::SameLine();
+            ImGui::RadioButton("Camera", &texture_mode, 4);
+            ImGui::InputText("Texture File", &diffuseTextureFile);
+            if (ImGui::Button("Load Texture File"))
+            {
+                if (curDiffuseTextureFile != diffuseTextureFile)
+                {
+                    fs::path diffuseTextureFilePath{diffuseTextureFile};
+                    if (fs::exists(diffuseTextureFilePath))
+                    {
+                        if (fs::is_regular_file(diffuseTextureFilePath))
+                        {
+                            if (dynamicTexture != nullptr)
+                                delete dynamicTexture;
+                            dynamicTexture = new Texture(diffuseTextureFile.c_str(), GL_TEXTURE_2D);
+                            dynamicTexture->init_from_file();
+                        }
+                    }
+                    curDiffuseTextureFile = diffuseTextureFile;
+                }
+            }
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Diffusion"))
+        if (ImGui::TreeNode("Bake"))
         {
-            ImGui::InputInt("Diffuse Seed", &diffuse_seed);
-            if (ImGui::Button("Bake StableDiffusion Texture"))
+            ImGui::SeparatorText("Bake Mode");
+            ImGui::RadioButton("Stable Diffusion", &bake_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("From File", &bake_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Camera", &bake_mode, 2);
+            if (bake_mode == static_cast<int>(BakeMode::FILE))
             {
-                bakeRequest = true;
+                ImGui::InputText("Input file", &inputBakeFile);
+            }
+            ImGui::InputText("Bake texture file (right)", &bakeFileRight);
+            ImGui::InputText("Bake texture file (left)", &bakeFileLeft);
+            if (ImGui::Button("Bake"))
+            {
+                if (bake_mode == static_cast<int>(BakeMode::FILE))
+                {
+                    fs::path inputBakeFilePath{inputBakeFile};
+                    if (fs::exists(inputBakeFilePath))
+                    {
+                        if (fs::is_regular_file(inputBakeFilePath))
+                        {
+                            bakeRequest = true;
+                        }
+                    }
+                }
+                else
+                {
+                    bakeRequest = true;
+                }
             }
             ImGui::SameLine();
             ImGui::Checkbox("Save Intermediate Outputs", &saveIntermed);
-            ImGui::InputText("Baked Texture File (right)", &bakeFileRight);
-            ImGui::InputText("Baked Texture File (left)", &bakeFileLeft);
+            ImGui::SeparatorText("Stable Diffusion");
+            ImGui::InputInt("Diffuse Seed", &diffuse_seed);
             ImGui::InputText("Prompt", &sd_prompt);
-            ImGui::Text("Stable Diffusion Mode");
+            ImGui::Text("SD Mode");
             ImGui::SameLine();
             ImGui::RadioButton("Use prompt", &sd_mode, 0);
             ImGui::SameLine();
             ImGui::RadioButton("Random Animal", &sd_mode, 1);
-            ImGui::SameLine();
-            ImGui::RadioButton("Gesture", &sd_mode, 2);
-            ImGui::Text("Mask Mode");
+            ImGui::Text("SD Mask Mode");
             ImGui::SameLine();
             ImGui::RadioButton("Fill", &sd_mask_mode, 0);
             ImGui::SameLine();
@@ -4397,46 +4632,101 @@ void openIMGUIFrame()
 
             ImGui::SeparatorText("Record & Playback");
             ImGui::Checkbox("Record Session", &leap_record_session);
-            if (ImGui::Checkbox("Use Recorded Session", &use_pre_recorded_session))
+            if (ImGui::Checkbox("Run User Study", &run_user_study))
             {
-                if (session_name != loaded_session_name)
+                if (run_user_study)
                 {
-                    if (loadPrerecordedSession())
+                    if (!OpenMidiController())
+                        std::cout << "Midi Controller is not available!" << std::endl;
+                    switch (motion_model)
                     {
-                        pre_recorded_session_loaded = true;
-                        videoFrameCount = 0;
-                        videoFrameCountCont = 0.0f;
+                    case static_cast<int>(MotionModel::TRANSLATION):
+                        session_name = "translation";
+                        break;
+                    case static_cast<int>(MotionModel::ROTATION):
+                        session_name = "rotation";
+                        break;
+                    case static_cast<int>(MotionModel::DEFORMATION):
+                        session_name = "deformation";
+                        break;
+                    case static_cast<int>(MotionModel::ALL):
+                        session_name = "all";
+                        break;
+                    default:
+                        session_name = "all";
+                        break;
                     }
-                    else
+                    if (session_name != loaded_session_name)
                     {
-                        std::cout << "Failed to load prerecorded session: " << session_name << std::endl;
+                        if (loadPrerecordedSession())
+                        {
+                            pre_recorded_session_loaded = true;
+                            loaded_session_name = session_name;
+                        }
+                        else
+                        {
+                            std::cout << "Failed to load prerecorded session: " << session_name << std::endl;
+                        }
                     }
+                    videoFrameCount = 0;
+                    videoFrameCountCont = 0.0f;
+                    user_study.reset();
+                }
+                else
+                {
+                    CloseMidiController();
                 }
             }
+            ImGui::RadioButton("translation", &motion_model, 0);
             ImGui::SameLine();
+            ImGui::RadioButton("rotation", &motion_model, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("deformation", &motion_model, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("all", &motion_model, 3);
             ImGui::InputText("Session Name", &session_name);
+            ImGui::InputText("Subject Name", &subject_name);
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 1.0f, 50.0f);
-            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 100.0f, 900.0f);
             ImGui::SliderFloat("Video playback speed", &vid_playback_speed, 0.1f, 10.0f);
-            if (ImGui::Checkbox("Playback Video", &playback_video))
+            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 100.0f, 900.0f);
+            if (ImGui::Checkbox("Debug Playback", &debug_playback))
             {
-                if (playback_video_name != loaded_playback_video_name)
+                if (debug_playback)
                 {
-                    if (loadVideo())
+                    switch (motion_model)
                     {
-                        videoFrameCount = -1;
-                        playback_video_loaded = true;
+                    case static_cast<int>(MotionModel::TRANSLATION):
+                        session_name = "translation";
+                        break;
+                    case static_cast<int>(MotionModel::ROTATION):
+                        session_name = "rotation";
+                        break;
+                    case static_cast<int>(MotionModel::DEFORMATION):
+                        session_name = "deformation";
+                        break;
+                    case static_cast<int>(MotionModel::ALL):
+                        session_name = "all";
+                        break;
+                    default:
+                        session_name = "all";
+                        break;
                     }
-                    else
+                    if (session_name != loaded_session_name)
                     {
-                        std::cout << "Failed to load video: " << session_name << std::endl;
+                        if (loadPrerecordedSession())
+                        {
+                            pre_recorded_session_loaded = true;
+                            loaded_session_name = session_name;
+                        }
+                        else
+                        {
+                            std::cout << "Failed to load prerecorded session: " << session_name << std::endl;
+                        }
                     }
+                    videoFrameCount = 0;
+                    videoFrameCountCont = 0.0f;
                 }
             }
-            ImGui::SameLine();
-            ImGui::InputText("Video Name", &playback_video_name);
-            ImGui::SameLine();
-
             ImGui::TreePop();
         }
     }

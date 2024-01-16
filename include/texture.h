@@ -15,9 +15,14 @@ public:
 
     ~Texture();
     // Should be called once to load the texture
-    bool init_from_file(unsigned int texture_interpolation_mode = GL_LINEAR, unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
+    bool init_from_file(unsigned int texture_interpolation_mode = GL_LINEAR,
+                        unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER,
+                        bool flip_vertically = true);
 
-    bool init_from_file(const std::string &Filename, unsigned int texture_interpolation_mode = GL_LINEAR, unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
+    bool init_from_file(const std::string &Filename,
+                        unsigned int texture_interpolation_mode = GL_LINEAR,
+                        unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER,
+                        bool flip_vertically = true);
 
     void init(int width, int height, int bpp = 4,
               unsigned int input_color_format = GL_BGRA,

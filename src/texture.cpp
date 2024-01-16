@@ -27,14 +27,17 @@ Texture::~Texture()
     }
 }
 
-bool Texture::init_from_file(unsigned int texture_interpolation_mode, unsigned int texture_wrap_mode)
+bool Texture::init_from_file(unsigned int texture_interpolation_mode, unsigned int texture_wrap_mode, bool flip_vertically)
 {
     if (m_fileName == "")
     {
         std::cout << "Texture file name is empty" << std::endl;
         exit(1);
     }
-    stbi_set_flip_vertically_on_load(1);
+    if (flip_vertically)
+        stbi_set_flip_vertically_on_load(1);
+    else
+        stbi_set_flip_vertically_on_load(0);
     unsigned char *image_data = stbi_load(m_fileName.c_str(), &m_imageWidth, &m_imageHeight, &m_imageBPP, 0);
     if (!image_data)
     {
@@ -66,10 +69,10 @@ bool Texture::init_from_file(unsigned int texture_interpolation_mode, unsigned i
     return true;
 }
 
-bool Texture::init_from_file(const std::string &Filename, unsigned int texture_interpolation_mode, unsigned int texture_wrap_mode)
+bool Texture::init_from_file(const std::string &Filename, unsigned int texture_interpolation_mode, unsigned int texture_wrap_mode, bool flip_vertically)
 {
     m_fileName = Filename;
-    return init_from_file(texture_interpolation_mode, texture_wrap_mode);
+    return init_from_file(texture_interpolation_mode, texture_wrap_mode, flip_vertically);
 }
 
 // bool Texture::init(void *pData, uint32_t bufferSize)

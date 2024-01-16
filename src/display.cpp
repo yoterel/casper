@@ -204,19 +204,21 @@ void DynaFlashProjector::show(const cv::Mat frame)
 	}
 }
 
-void DynaFlashProjector::show_buffer(const uint8_t *buffer)
+void DynaFlashProjector::show_buffer(const uint8_t *buffer, const bool verbose)
 {
 	if (initialized)
 	{
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
 		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
 		{
-			std::cout << "dropping frame, as (input buffer - output buffer) > 100" << std::endl;
+			if (verbose)
+				std::cout << "dropping frame, as (input buffer - output buffer) > 100" << std::endl;
 			return;
 		}
 		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
-			std::cout << "GetFrameBuffer Error\n";
+			if (verbose)
+				std::cout << "GetFrameBuffer Error\n";
 			gracefully_close();
 		}
 		if ((pBuf != NULL) && (nGetFrameCnt != 0))
@@ -225,7 +227,8 @@ void DynaFlashProjector::show_buffer(const uint8_t *buffer)
 			memcpy(pBuf, buffer, frame_size);
 			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
 			{
-				std::cout << "PostFrameBuffer Error\n";
+				if (verbose)
+					std::cout << "PostFrameBuffer Error\n";
 				gracefully_close();
 			}
 		}

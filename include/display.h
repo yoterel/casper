@@ -30,7 +30,7 @@ public:
     };
     bool init();
     void show(const cv::Mat frame);
-    void show_buffer(const uint8_t *buffer);
+    void show_buffer(const uint8_t *buffer, const bool verbose = false);
     void show();
     void kill() { gracefully_close(); };
     bool is_initialized() { return initialized; };

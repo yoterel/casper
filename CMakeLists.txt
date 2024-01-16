@@ -94,7 +94,8 @@ add_executable(ahand
     src/helpers.cpp
     src/kalman.cpp
     src/grid.cpp
-    src/human_trial.cpp
+    src/user_study.cpp
+    src/MidiControllerAPI.cpp
     third-party/imgui/imgui.cpp
     third-party/imgui/imgui_draw.cpp
     third-party/imgui/imgui_tables.cpp

@@ -49,12 +49,18 @@ enum class TextureMode
     FROM_FILE = 1,
     PROJECTIVE = 2,
     BAKED = 3,
+    CAMERA = 4,
 };
 enum class SDMode
 {
     PROMPT = 0,
     ANIMAL = 1,
-    GESTURE = 2,
+};
+enum class BakeMode
+{
+    SD = 0,
+    FILE = 1,
+    CAMERA = 2,
 };
 enum class MaterialMode
 {
@@ -104,6 +110,13 @@ enum class OperationMode
     CAMERA = 2,
     COAXIAL = 3,
     LEAP = 4,
+};
+enum class MotionModel
+{
+    TRANSLATION = 0,
+    ROTATION = 1,
+    DEFORMATION = 2,
+    ALL = 3,
 };
 
 #endif // HELPERS_H

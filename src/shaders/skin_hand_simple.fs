@@ -64,7 +64,9 @@ uniform sampler2D gSamplerSpecularExponent;
 uniform vec3 gCameraLocalPos;
 uniform sampler2D src;
 uniform bool useProjector = false;
+uniform bool projectorIsSingleChannel = false;
 uniform bool flipTexVertically = false;
+uniform bool flipTexHorizontally = false;
 uniform bool useGGX = false;
 uniform bool renderUV = false;
 
@@ -163,7 +165,19 @@ void main()
             {
                 v = 1.0 - v;
             }
-            vec3 projColor = texture(src, vec2(u, v)).rgb;
+            if (flipTexHorizontally)
+            {
+                u = 1.0 - u;
+            }
+            vec3 projColor;
+            if (projectorIsSingleChannel)
+            {
+                projColor = texture(src, vec2(u, v)).rrr;
+            }
+            else
+            {
+                projColor = texture(src, vec2(u, v)).rgb;
+            }
             FragColor = vec4(projColor, 1.0);
         }
         else
