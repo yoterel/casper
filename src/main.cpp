@@ -67,12 +67,14 @@ void handleSkinning(SkinningShader &skinnedShader,
                     glm::mat4 cam_projection_transform,
                     bool isRightHand);
 void handleBaking(SkinningShader &skinnedShader,
+                  Shader &uvDilateShader,
                   Shader &textureShader,
                   SkinnedModel &leftHandModel,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
                   glm::mat4 cam_projection_transform);
 void handleBakingInternal(SkinningShader &skinnedShader,
+                          Shader &uvDilateShader,
                           Texture &bakeTexture,
                           SkinnedModel &leftHandModel,
                           SkinnedModel &rightHandModel,
@@ -365,6 +367,7 @@ FBO uv_fbo(dst_width, dst_height, 4, false);
 FBO mls_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo_right(1024, 1024, 4, false);
 FBO bake_fbo_left(1024, 1024, 4, false);
+FBO pre_bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
@@ -580,6 +583,7 @@ int main(int argc, char *argv[])
     uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
     bake_fbo_right.init();
     bake_fbo_left.init();
+    pre_bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
     icp_fbo.init();
@@ -674,7 +678,6 @@ int main(int argc, char *argv[])
     Shader maskShader("../../src/shaders/mask.vs", "../../src/shaders/mask.fs");
     Shader jfaInitShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa_init.fs");
     Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
-    Shader fastTrackerShader("../../src/shaders/fast_tracker.vs", "../../src/shaders/fast_tracker.fs");
     Shader debugShader("../../src/shaders/debug.vs", "../../src/shaders/debug.fs");
     Shader projectorShader("../../src/shaders/projector_shader.vs", "../../src/shaders/projector_shader.fs");
     Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
@@ -683,11 +686,11 @@ int main(int argc, char *argv[])
     Shader gridShader("../../src/shaders/grid_texture.vs", "../../src/shaders/grid_texture.fs");
     Shader gridColorShader("../../src/shaders/grid_color.vs", "../../src/shaders/grid_color.fs");
     Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
-    Shader coordShader("../../src/shaders/coords.vs", "../../src/shaders/coords.fs");
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
-    SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     Shader bakeSimple("../../src/shaders/bake_proj_simple.vs", "../../src/shaders/bake_proj_simple.fs");
+    Shader uvDilateShader("../../src/shaders/uv_dilate.vs", "../../src/shaders/uv_dilate.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
+    SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
@@ -941,7 +944,7 @@ int main(int argc, char *argv[])
 
             /* deal with bake request */
             t_bake.start();
-            handleBaking(skinnedShader, textureShader, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
+            handleBaking(skinnedShader, uvDilateShader, textureShader, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
             t_bake.stop();
 
             /* run MLS on MP prediction to reduce bias */
@@ -971,25 +974,25 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(OperationMode::VIDEO): // record and playback session
         {
-            if (pre_recorded_session_loaded)
+            if (pre_recorded_session_loaded) // a video was loaded
             {
-                if (run_user_study)
+                if (run_user_study) // user marked the checkbox
                 {
-                    if (video_reached_end)
+                    if (video_reached_end) // we reached the video end, or we just started
                     {
-                        if (user_study.getTrialFinished())
+                        if (user_study.getTrialFinished()) // experiment is finished
                         {
                             user_study.printStats();
                             run_user_study = false;
+                            break;
                         }
                         int attempts = user_study.getAttempts();
-                        if (attempts % 2 == 0)
+                        if (attempts % 2 == 0) // if this is an even attempt, we should get human response and start a new trial
                         {
                             if (attempts != 0)
                             {
-                                // get input from human
                                 bool button_values[9] = {false, false, false, false, false, false, false, false, false};
-                                bool sucess = GetButtonStates(button_values);
+                                bool sucess = GetButtonStates(button_values); // get input from human
                                 if (!sucess)
                                 {
                                     std::cout << "Failed to get button states" << std::endl;
@@ -1011,17 +1014,15 @@ int main(int argc, char *argv[])
                         {
                             is_first_in_video_pair = false;
                         }
-                        vid_simulated_latency_ms = user_study.randomTrial(humanChoice);
-                        attempts = user_study.getAttempts();
-                        videoFrameCountCont = 0.0f;
+                        vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given human choice
+                        videoFrameCountCont = 0.0f;                                     // reset video playback
                         videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
                         video_reached_end = false;
-                        // let human rest a bit
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let human rest a bit
                     }
                     else
                     {
-                        // interpolate hand pose to therequired latency
+                        // interpolate hand pose to the required latency
                         t_interp.start();
                         std::vector<glm::mat4> bones_to_world_current;
                         bool success = handleInterpolateFrames(bones_to_world_current);
@@ -1032,9 +1033,8 @@ int main(int argc, char *argv[])
                             break;
                         }
                         t_interp.stop();
+                        // produce fake camera image (left hand only)
                         t_camera.start();
-                        // produce fake camera image
-                        // render left hand
                         bones_to_world_left = bones_to_world_left_interp;
                         handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
                         // convert to gray scale single channel image
@@ -1059,17 +1059,16 @@ int main(int argc, char *argv[])
                         handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
                         t_skin.stop();
                         t_pp.start();
-                        // post process them with any required effect
+                        // post process with any required effect
                         handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
-                        if (!debug_mode)
-                        {
-                            glViewport(0, 0, proj_width, proj_height); // set viewport
-                            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                            set_texture_shader(textureShader, false, false, false);
-                            c2p_fbo.getTexture()->bind();
-                            fullScreenQuad.render();
-                        }
+                        // render onto actual screen (until now everything was rendered to framebuffers)
+                        glViewport(0, 0, proj_width, proj_height);
+                        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                        set_texture_shader(textureShader, false, false, false);
+                        c2p_fbo.getTexture()->bind();
+                        fullScreenQuad.render();
                         t_pp.stop();
+                        // add a "number" to the screen to indicate which video is being played
                         t_debug.start();
                         float text_spacing = 10.0f;
                         std::vector<std::string> texts_to_render = {std::format("{}", is_first_in_video_pair ? "1" : "2")};
@@ -3157,6 +3156,7 @@ void handleSkinning(SkinningShader &skinnedShader,
     }
 }
 void handleBakingInternal(SkinningShader &skinnedShader,
+                          Shader &uvDilateShader,
                           Texture &texture,
                           SkinnedModel &leftHandModel,
                           SkinnedModel &rightHandModel,
@@ -3166,8 +3166,8 @@ void handleBakingInternal(SkinningShader &skinnedShader,
                           bool flipHorizontal,
                           bool projSingleChannel)
 {
-    bake_fbo_right.bind(true);
-    /* right hand */
+    /* right hand baking */
+    pre_bake_fbo.bind();
     glDisable(GL_CULL_FACE); // todo: why disbale backface ? doesn't this mean bake will reach the back of the hand ?
     glEnable(GL_DEPTH_TEST);
     skinnedShader.use();
@@ -3182,9 +3182,18 @@ void handleBakingInternal(SkinningShader &skinnedShader,
     skinnedShader.setBool("useGGX", false);
     skinnedShader.setInt("src", 0);
     rightHandModel.Render(skinnedShader, bones_to_world_right_bake, rotx, false, &texture);
+    pre_bake_fbo.unbind();
+    // finally, dilate the baked texture
+    bake_fbo_right.bind();
+    uvDilateShader.use();
+    uvDilateShader.setMat4("mvp", glm::mat4(1.0f));
+    uvDilateShader.setVec2("resolution", glm::vec2(1024.0f, 1024.0f));
+    uvDilateShader.setInt("src", 0);
+    pre_bake_fbo.getTexture()->bind();
+    fullScreenQuad.render();
     bake_fbo_right.unbind();
-    bake_fbo_left.bind();
-    /* left hand */
+    /* left hand baking */
+    pre_bake_fbo.bind(); // we bake into right hand fbo, and post process into left hand fbo
     skinnedShader.use();
     skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
     skinnedShader.setBool("useProjector", true);
@@ -3206,6 +3215,15 @@ void handleBakingInternal(SkinningShader &skinnedShader,
     // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
     // PointCloud cloud(points, screen_vert_color);
     // cloud.render();
+    pre_bake_fbo.unbind();
+    // finally, dilate the baked texture
+    bake_fbo_left.bind();
+    uvDilateShader.use();
+    uvDilateShader.setMat4("mvp", glm::mat4(1.0f));
+    uvDilateShader.setVec2("resolution", glm::vec2(1024.0f, 1024.0f));
+    uvDilateShader.setInt("src", 0);
+    pre_bake_fbo.getTexture()->bind();
+    fullScreenQuad.render();
     bake_fbo_left.unbind();
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -3224,6 +3242,7 @@ void handleBakingInternal(SkinningShader &skinnedShader,
     // bakedTexture->init();
 }
 void handleBaking(SkinningShader &skinnedShader,
+                  Shader &uvDilateShader,
                   Shader &textureShader,
                   SkinnedModel &leftHandModel,
                   SkinnedModel &rightHandModel,
@@ -3311,7 +3330,7 @@ void handleBaking(SkinningShader &skinnedShader,
                 dynamicTexture->init(sd_outwidth, sd_outheight, 3);
                 dynamicTexture->load(img2img_data.data(), true, GL_RGB);
                 // bake dynamic texture
-                handleBakingInternal(skinnedShader, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                handleBakingInternal(skinnedShader, uvDilateShader, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
                 bake_preproc_succeed = false;
                 run_sd.join();
             }
@@ -3325,7 +3344,7 @@ void handleBaking(SkinningShader &skinnedShader,
                 bones_to_world_left_bake = bones_to_world_left;
                 Texture tmp(inputBakeFile.c_str(), GL_TEXTURE_2D);
                 tmp.init_from_file(GL_LINEAR, GL_CLAMP_TO_BORDER);
-                handleBakingInternal(skinnedShader, tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                handleBakingInternal(skinnedShader, uvDilateShader, tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
                 bakeRequest = false;
             }
             break;
@@ -3336,7 +3355,7 @@ void handleBaking(SkinningShader &skinnedShader,
             {
                 bones_to_world_right_bake = bones_to_world_right;
                 bones_to_world_left_bake = bones_to_world_left;
-                handleBakingInternal(skinnedShader, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true);
+                handleBakingInternal(skinnedShader, uvDilateShader, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true);
                 bakeRequest = false;
             }
             break;

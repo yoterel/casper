@@ -7,7 +7,7 @@ vec4 empty = vec4(0.,0.,0.,1.);
 
 void main(){
     // vec2 fragCoords = gl_FragCoord.xy;
-    vec2 uv = gl_FragCoord.xy / resolution;  // (0:W-1, 0:H-1)
+    vec2 uv = gl_FragCoord.xy / resolution;  // (0:W-1, 0:H-1) --> (0:1, 0:1)
     vec4 col = texture(src, uv);  // color at uv
     // float avg = (col.r + col.g + col.b) * 0.333333;
     vec4 outcol;

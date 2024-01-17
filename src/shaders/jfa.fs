@@ -8,7 +8,7 @@ uniform int numPasses;
 vec4 empty = vec4(0., 0., 0., 1.);
 
 void main(){
-    vec2 uv = vec2(gl_FragCoord.xy); // float between 0.0 and W/H - 1
+    vec2 uv = vec2(gl_FragCoord.xy); // (0:W-1, 0:H-1)
     int stepsize = int(exp2(numPasses - pass - 1));
     float minDist = 9999.;
     vec4 outCol = empty;
