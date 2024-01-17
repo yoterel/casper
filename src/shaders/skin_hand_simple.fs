@@ -63,14 +63,16 @@ uniform Material gMaterial;
 uniform sampler2D gSamplerSpecularExponent;
 uniform vec3 gCameraLocalPos;
 uniform sampler2D src;
+uniform sampler2D projector;
 uniform bool useProjector = false;
+uniform bool projectorOnly = true;
 uniform bool projectorIsSingleChannel = false;
 uniform bool flipTexVertically = false;
 uniform bool flipTexHorizontally = false;
 uniform bool useGGX = false;
 uniform bool renderUV = false;
 
-vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal)
+vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 projectiveColor)
 {
     vec4 AmbientColor = vec4(Light.Color, 1.0f) *
                         Light.AmbientIntensity *
@@ -85,7 +87,7 @@ vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal)
         DiffuseColor = vec4(Light.Color, 1.0f) *
                        Light.DiffuseIntensity *
                        vec4(gMaterial.DiffuseColor, 1.0f) *
-                       DiffuseFactor;
+                       DiffuseFactor * projectiveColor;
 
         vec3 PixelToCamera = normalize(gCameraLocalPos - LocalPos0);
         vec3 LightReflect = normalize(reflect(LightDirection, Normal));
@@ -105,9 +107,9 @@ vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal)
 }
 
 
-vec4 CalcDirectionalLight(vec3 Normal)
+vec4 CalcDirectionalLight(vec3 Normal, vec4 projectiveColor)
 {
-    return CalcLightInternal(gDirectionalLight.Base, gDirectionalLight.Direction, Normal);
+    return CalcLightInternal(gDirectionalLight.Base, gDirectionalLight.Direction, Normal, projectiveColor);
 }
 
 vec4 CalcPointLight(PointLight l, vec3 Normal)
@@ -116,7 +118,7 @@ vec4 CalcPointLight(PointLight l, vec3 Normal)
     float Distance = length(LightDirection);
     LightDirection = normalize(LightDirection);
 
-    vec4 Color = CalcLightInternal(l.Base, LightDirection, Normal);
+    vec4 Color = CalcLightInternal(l.Base, LightDirection, Normal, vec4(1.0, 1.0, 1.0, 1.0));
     float Attenuation =  l.Atten.Constant +
                          l.Atten.Linear * Distance +
                          l.Atten.Exp * Distance * Distance;
@@ -143,8 +145,31 @@ void main()
 {
     if (useGGX)
     {
+        vec4 projColor = vec4(1.0, 1.0, 1.0, 1.0);
+        if (useProjector)
+        {
+            float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
+            float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
+            if (flipTexVertically)
+            {
+                v = 1.0 - v;
+            }
+            if (flipTexHorizontally)
+            {
+                u = 1.0 - u;
+            }
+            
+            if (projectorIsSingleChannel)
+            {
+                projColor = texture(projector, vec2(u, v)).rrrr;
+            }
+            else
+            {
+                projColor = texture(projector, vec2(u, v)).rgba;
+            }
+        }
         vec3 Normal = normalize(Normal0);
-        vec4 TotalLight = CalcDirectionalLight(Normal);
+        vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
 
         for (int i = 0 ;i < gNumPointLights ;i++) {
             TotalLight += CalcPointLight(gPointLights[i], Normal);
@@ -172,13 +197,22 @@ void main()
             vec3 projColor;
             if (projectorIsSingleChannel)
             {
-                projColor = texture(src, vec2(u, v)).rrr;
+                projColor = texture(projector, vec2(u, v)).rrr;
             }
             else
             {
-                projColor = texture(src, vec2(u, v)).rgb;
+                projColor = texture(projector, vec2(u, v)).rgb;
             }
-            FragColor = vec4(projColor, 1.0);
+            if (projectorOnly)
+            {
+                FragColor = vec4(projColor, 1.0);
+            }
+            else
+            {
+                vec3 diffuse_color = texture(src, TexCoord0).rgb;
+                vec3 ambient_color = diffuse_color * 0.5;
+                FragColor = vec4(ambient_color * projColor, 1.0);
+            }
         }
         else
         {

@@ -535,7 +535,8 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
     }
 }
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                          const glm::mat4 &local_to_world, const bool use_bones, Texture *customDiffuseTexture)
+                          const glm::mat4 &local_to_world, const bool use_bones,
+                          Texture *customDiffuseTexture, Texture *customProjectiveTexture)
 {
     shader.use();
     shader.SetMaterial(GetMaterial());
@@ -566,6 +567,11 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
                 m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
             }
         }
+        if (customProjectiveTexture != NULL)
+        {
+            customProjectiveTexture->bind(GL_TEXTURE1);
+            shader.setInt("projector", 1);
+        }
         if (m_Materials[MaterialIndex].pSpecularExponent)
         {
             m_Materials[MaterialIndex].pSpecularExponent->bind(GL_TEXTURE6);
@@ -579,60 +585,6 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
     }
     // Make sure the VAO is not changed from the outside
     glBindVertexArray(0);
-}
-
-void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
-                          const glm::mat4 &local_to_world, unsigned int camTex, bool useFBO, bool use_bones)
-{
-    shader.use();
-    shader.SetMaterial(this->GetMaterial());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, camTex);
-    if (useFBO)
-    {
-        m_fbo.bind();
-        glEnable(GL_DEPTH_TEST);
-    }
-    // glActiveTexture(GL_TEXTURE1);
-    // glBindTexture(GL_TEXTURE_2D, m_cam_texture);
-    std::vector<glm::mat4> Transforms;
-    this->GetBoneTransforms(Transforms, bones_to_world, local_to_world, use_bones);
-    for (unsigned int i = 0; i < Transforms.size(); i++)
-    {
-        shader.SetBoneTransform(i, Transforms[i]);
-    }
-    glBindVertexArray(m_VAO);
-
-    for (unsigned int i = 0; i < m_Meshes.size(); i++)
-    {
-        unsigned int MaterialIndex = m_Meshes[i].MaterialIndex;
-
-        assert(MaterialIndex < m_Materials.size());
-
-        if (m_Materials[MaterialIndex].pDiffuse)
-        {
-            m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
-        }
-
-        if (m_Materials[MaterialIndex].pSpecularExponent)
-        {
-            m_Materials[MaterialIndex].pSpecularExponent->bind(GL_TEXTURE6);
-        }
-
-        glDrawElementsBaseVertex(GL_TRIANGLES,
-                                 m_Meshes[i].NumIndices,
-                                 GL_UNSIGNED_INT,
-                                 (void *)(sizeof(unsigned int) * m_Meshes[i].BaseIndex),
-                                 m_Meshes[i].BaseVertex);
-    }
-
-    // Make sure the VAO is not changed from the outside
-    glBindVertexArray(0);
-    if (useFBO)
-    {
-        m_fbo.unbind();
-        glDisable(GL_DEPTH_TEST);
-    }
 }
 
 const Material &SkinnedModel::GetMaterial()
