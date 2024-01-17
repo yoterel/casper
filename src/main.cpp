@@ -59,7 +59,12 @@ namespace fs = std::filesystem;
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult);
 LEAP_STATUS handleLeapInput(bool prerecorded = false, uint64_t frameCounter = 0);
-void handlePostProcess(Texture &handTexture, Texture &camTexture, Shader &textureShader, Shader &maskShader, Shader &jfaInitShader, Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader, Shader &vcolorShader, Shader &gridColorShader);
+void handlePostProcess(Texture &leftHandTexture,
+                       Texture &rightHandTexture,
+                       Texture &camTexture,
+                       Shader &textureShader, Shader &maskShader, Shader &jfaInitShader,
+                       Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader,
+                       Shader &vcolorShader, Shader &gridColorShader);
 void handleSkinning(SkinningShader &skinnedShader,
                     Shader &vcolorShader,
                     SkinnedModel &handModel,
@@ -954,7 +959,29 @@ int main(int argc, char *argv[])
 
             /* post process fbo using camera input */
             t_pp.start();
-            handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+            switch (texture_mode)
+            {
+            case static_cast<int>(TextureMode::ORIGINAL):
+            {
+                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                break;
+            }
+            case static_cast<int>(TextureMode::BAKED):
+            {
+                handlePostProcess(*bake_fbo_left.getTexture(), *bake_fbo_right.getTexture(), camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                break;
+            }
+            case static_cast<int>(TextureMode::FROM_FILE):
+            {
+                handlePostProcess(*dynamicTexture, *dynamicTexture, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                break;
+            }
+            default:
+            {
+                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                break;
+            }
+            }
             /* render final output to screen */
             if (!debug_mode)
             {
@@ -1060,7 +1087,7 @@ int main(int argc, char *argv[])
                         t_skin.stop();
                         t_pp.start();
                         // post process with any required effect
-                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
                         // render onto actual screen (until now everything was rendered to framebuffers)
                         glViewport(0, 0, proj_width, proj_height);
                         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -1126,7 +1153,7 @@ int main(int argc, char *argv[])
                         t_skin.stop();
                         t_pp.start();
                         // post process them with any required effect
-                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *leftHandModel.GetMaterial().pDiffuse, *fake_cam_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
                         if (!debug_mode)
                         {
                             glViewport(0, 0, proj_width, proj_height); // set viewport
@@ -2871,7 +2898,8 @@ LEAP_STATUS handleLeapInput(bool prerecorded, uint64_t frameCounter)
     return leap_status;
 }
 
-void handlePostProcess(Texture &handTexture,
+void handlePostProcess(Texture &leftHandTexture,
+                       Texture &rightHandTexture,
                        Texture &camTexture,
                        Shader &textureShader,
                        Shader &maskShader,
@@ -2939,14 +2967,15 @@ void handlePostProcess(Texture &handTexture,
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
     {
+        // todo: assumes both hand use same texture, which is not the case generally
         if (use_mls)
             postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, mls_fbo.getTexture()->getTexture(),
-                                      handTexture.getTexture(),
+                                      leftHandTexture.getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
         else
             postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, uv_fbo.getTexture()->getTexture(),
-                                      handTexture.getTexture(),
+                                      leftHandTexture.getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
         break;
@@ -3136,21 +3165,25 @@ void handleSkinning(SkinningShader &skinnedShader,
         hands_fbo.unbind();
         /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
         // todo: if this pp is enabled, hands_fbo above performs redundant work: refactor.
-        if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
+        if (!isRightHand)
         {
-            uv_fbo.bind();
-            skinnedShader.use();
-            skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-            skinnedShader.setBool("bake", false);
-            skinnedShader.setBool("flipTexVertically", false);
-            skinnedShader.setBool("flipTexHorizontally", false);
-            skinnedShader.setBool("projectorIsSingleChannel", false);
-            skinnedShader.setInt("src", 0);
-            skinnedShader.setBool("useGGX", false);
-            skinnedShader.setBool("renderUV", true);
-            skinnedShader.setBool("useProjector", false);
-            handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
-            uv_fbo.unbind();
+            // todo: currently only works for left hand. make it work for both
+            if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
+            {
+                uv_fbo.bind();
+                skinnedShader.use();
+                skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
+                skinnedShader.setBool("bake", false);
+                skinnedShader.setBool("flipTexVertically", false);
+                skinnedShader.setBool("flipTexHorizontally", false);
+                skinnedShader.setBool("projectorIsSingleChannel", false);
+                skinnedShader.setInt("src", 0);
+                skinnedShader.setBool("useGGX", false);
+                skinnedShader.setBool("renderUV", true);
+                skinnedShader.setBool("useProjector", false);
+                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
+                uv_fbo.unbind();
+            }
         }
         glDisable(GL_DEPTH_TEST); // todo: why not keep it on ?
     }
@@ -3206,15 +3239,6 @@ void handleBakingInternal(SkinningShader &skinnedShader,
     skinnedShader.setBool("useGGX", false);
     skinnedShader.setInt("src", 0);
     leftHandModel.Render(skinnedShader, bones_to_world_left_bake, rotx, false, &texture);
-    /* debug points */
-    // vcolorShader.use();
-    // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-    // std::vector<glm::vec2> points;
-    // rightHandModel.getUnrolledTexCoords(points);
-    // Helpers::UV2NDC(points);
-    // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
-    // PointCloud cloud(points, screen_vert_color);
-    // cloud.render();
     pre_bake_fbo.unbind();
     // finally, dilate the baked texture
     bake_fbo_left.bind();
@@ -3225,21 +3249,22 @@ void handleBakingInternal(SkinningShader &skinnedShader,
     pre_bake_fbo.getTexture()->bind();
     fullScreenQuad.render();
     bake_fbo_left.unbind();
+    /* debug points */
+    // vcolorShader.use();
+    // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+    // std::vector<glm::vec2> points;
+    // rightHandModel.getUnrolledTexCoords(points);
+    // Helpers::UV2NDC(points);
+    // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
+    // PointCloud cloud(points, screen_vert_color);
+    // cloud.render();
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    // glDisable(GL_DEPTH_TEST);
     if (saveIntermed)
     {
         bake_fbo_right.saveColorToFile(bakeFileRight);
         bake_fbo_left.saveColorToFile(bakeFileLeft);
     }
-    // if (bakedTexture != nullptr)
-    // {
-    //     delete bakedTexture;
-    //     bakedTexture = nullptr;
-    // }
-    // bakedTexture = new Texture(bakeFile.c_str(), GL_TEXTURE_2D);
-    // bakedTexture->init();
 }
 void handleBaking(SkinningShader &skinnedShader,
                   Shader &uvDilateShader,
