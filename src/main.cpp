@@ -62,24 +62,18 @@ LEAP_STATUS handleLeapInput(bool prerecorded = false, uint64_t frameCounter = 0)
 void handlePostProcess(Texture &leftHandTexture,
                        Texture &rightHandTexture,
                        Texture &camTexture,
-                       Shader &textureShader, Shader &maskShader, Shader &jfaInitShader,
-                       Shader &jfaShader, Shader &NNShader, Shader &uv_NNShader,
-                       Shader &vcolorShader, Shader &gridColorShader);
-void handleSkinning(SkinningShader &skinnedShader,
-                    Shader &vcolorShader,
+                       std::unordered_map<std::string, Shader *> &shader_map);
+void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
                     SkinnedModel &handModel,
                     glm::mat4 cam_view_transform,
                     glm::mat4 cam_projection_transform,
                     bool isRightHand);
-void handleBaking(SkinningShader &skinnedShader,
-                  Shader &uvDilateShader,
-                  Shader &textureShader,
+void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   SkinnedModel &leftHandModel,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
                   glm::mat4 cam_projection_transform);
-void handleBakingInternal(SkinningShader &skinnedShader,
-                          Shader &uvDilateShader,
+void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           Texture &bakeTexture,
                           SkinnedModel &leftHandModel,
                           SkinnedModel &rightHandModel,
@@ -118,6 +112,11 @@ LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     uint64_t frameCounter);
 bool loadPrerecordedSession();
 bool loadVideo();
+bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
+               SkinnedModel &leftHandModel,
+               Text &text,
+               glm::mat4 &cam_view_transform,
+               glm::mat4 &cam_projection_transform);
 void initGLBuffers(unsigned int *pbo);
 bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 glm::mat4 &w2c_auto,
@@ -128,7 +127,7 @@ bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 cv::Mat &camera_intrinsics_cv,
                                 cv::Mat &camera_distortion_cv);
 bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
-void set_texture_shader(Shader &textureShader,
+void set_texture_shader(Shader *textureShader,
                         bool flipVer,
                         bool flipHor,
                         bool isGray,
@@ -228,6 +227,8 @@ UserStudy user_study = UserStudy();
 int humanChoice = 1;
 bool video_reached_end = true;
 bool is_first_in_video_pair = true;
+double prev_vid_time;
+double cur_vid_time;
 // leap controls
 bool leap_poll_mode = false;
 bool debug_playback = false;
@@ -702,17 +703,37 @@ int main(int argc, char *argv[])
     Shader uvDilateShader("../../src/shaders/uv_dilate.vs", "../../src/shaders/uv_dilate.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
+    std::unordered_map<std::string, Shader *> shaderMap = {
+        {"NNShader", &NNShader},
+        {"uv_NNShader", &uv_NNShader},
+        {"maskShader", &maskShader},
+        {"jfaInitShader", &jfaInitShader},
+        {"jfaShader", &jfaShader},
+        {"debugShader", &debugShader},
+        {"projectorShader", &projectorShader},
+        {"projectorOnlyShader", &projectorOnlyShader},
+        {"textureShader", &textureShader},
+        {"overlayShader", &overlayShader},
+        {"thresholdAlphaShader", &thresholdAlphaShader},
+        {"gridShader", &gridShader},
+        {"gridColorShader", &gridColorShader},
+        {"lineShader", &lineShader},
+        {"vcolorShader", &vcolorShader},
+        {"bakeSimple", &bakeSimple},
+        {"uvDilateShader", &uvDilateShader},
+        {"textShader", &textShader},
+        {"skinnedShader", &skinnedShader}};
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
-    set_texture_shader(textureShader, false, false, false);
+    set_texture_shader(&textureShader, false, false, false);
     fullScreenQuad.render();
     bake_fbo_right.unbind();
     bake_fbo_left.bind(true);
     bakedTextureLeft->bind();
-    set_texture_shader(textureShader, false, false, false);
+    set_texture_shader(&textureShader, false, false, false);
     fullScreenQuad.render();
     bake_fbo_left.unbind();
     glDisable(GL_DEPTH_TEST);
@@ -725,8 +746,8 @@ int main(int argc, char *argv[])
     double previousAppTime = t_app.getElapsedTimeInSec();
     double previousSecondAppTime = t_app.getElapsedTimeInSec();
     double currentAppTime = t_app.getElapsedTimeInSec();
-    double prev_vid_time = t_app.getElapsedTimeInMilliSec();
-    double cur_vid_time = t_app.getElapsedTimeInMilliSec();
+    prev_vid_time = t_app.getElapsedTimeInMilliSec();
+    cur_vid_time = t_app.getElapsedTimeInMilliSec();
     long frameCount = 0;
     uint64_t targetFrameSize = 0;
     size_t n_skeleton_primitives = 0;
@@ -949,13 +970,13 @@ int main(int argc, char *argv[])
 
             /* skin hand meshes */
             t_skin.start();
-            handleSkinning(skinnedShader, vcolorShader, rightHandModel, cam_view_transform, cam_projection_transform, true);
-            handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
+            handleSkinning(shaderMap, rightHandModel, cam_view_transform, cam_projection_transform, true);
+            handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
             t_skin.stop();
 
             /* deal with bake request */
             t_bake.start();
-            handleBaking(skinnedShader, uvDilateShader, textureShader, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
+            handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
             t_bake.stop();
 
             /* run MLS on MP prediction to reduce bias */
@@ -969,22 +990,22 @@ int main(int argc, char *argv[])
             {
             case static_cast<int>(TextureMode::ORIGINAL):
             {
-                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, shaderMap);
                 break;
             }
             case static_cast<int>(TextureMode::BAKED):
             {
-                handlePostProcess(*bake_fbo_left.getTexture(), *bake_fbo_right.getTexture(), camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                handlePostProcess(*bake_fbo_left.getTexture(), *bake_fbo_right.getTexture(), camTexture, shaderMap);
                 break;
             }
             case static_cast<int>(TextureMode::FROM_FILE):
             {
-                handlePostProcess(*dynamicTexture, *dynamicTexture, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                handlePostProcess(*dynamicTexture, *dynamicTexture, camTexture, shaderMap);
                 break;
             }
             default:
             {
-                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
+                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, shaderMap);
                 break;
             }
             }
@@ -993,7 +1014,7 @@ int main(int argc, char *argv[])
             {
                 glViewport(0, 0, proj_width, proj_height); // set viewport
                 glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                set_texture_shader(textureShader, false, false, false);
+                set_texture_shader(&textureShader, false, false, false);
                 c2p_fbo.getTexture()->bind();
                 fullScreenQuad.render();
             }
@@ -1055,151 +1076,22 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        // interpolate hand pose to the required latency
-                        t_interp.start();
-                        std::vector<glm::mat4> bones_to_world_current;
-                        bool success = handleInterpolateFrames(bones_to_world_current);
-                        if (!success)
-                        {
-                            video_reached_end = true;
-                            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                            break;
-                        }
-                        t_interp.stop();
-                        // produce fake camera image (left hand only)
-                        t_camera.start();
-                        bones_to_world_left = bones_to_world_left_interp;
-                        texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                        // convert to gray scale single channel image
-                        fake_cam_binary_fbo.bind();
-                        thresholdAlphaShader.use();
-                        thresholdAlphaShader.setMat4("view", glm::mat4(1.0));
-                        thresholdAlphaShader.setMat4("projection", glm::mat4(1.0));
-                        thresholdAlphaShader.setMat4("model", glm::mat4(1.0));
-                        thresholdAlphaShader.setFloat("threshold", 0.5);
-                        thresholdAlphaShader.setBool("flipHor", true);
-                        thresholdAlphaShader.setBool("flipVer", true);
-                        thresholdAlphaShader.setBool("isGray", false);
-                        thresholdAlphaShader.setBool("binary", true);
-                        thresholdAlphaShader.setInt("src", 0);
-                        hands_fbo.getTexture()->bind();
-                        fullScreenQuad.render();
-                        fake_cam_binary_fbo.unbind();
-                        //
-                        fake_cam_fbo.bind();
-                        set_texture_shader(textureShader, true, true, false);
-                        hands_fbo.getTexture()->bind();
-                        fullScreenQuad.render();
-                        fake_cam_fbo.unbind();
-                        t_camera.stop();
-                        // render the scene as normal
-                        t_skin.start();
-                        bones_to_world_left = bones_to_world_current;
-                        texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                        t_skin.stop();
-                        t_pp.start();
-                        // post process with any required effect
-                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *leftHandModel.GetMaterial().pDiffuse, *fake_cam_binary_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
-                        // overlay final render and camera image, and render to screen
-                        glViewport(0, 0, proj_width, proj_height);
-                        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                        overlayShader.use();
-                        overlayShader.setMat4("mvp", glm::mat4(1.0));
-                        overlayShader.setInt("projectiveTexture", 0);
-                        c2p_fbo.getTexture()->bind(GL_TEXTURE0);
-                        overlayShader.setInt("objectTexture", 1);
-                        fake_cam_fbo.getTexture()->bind(GL_TEXTURE1);
-                        // set_texture_shader(textureShader, false, false, false);
-                        fullScreenQuad.render();
-                        t_pp.stop();
-                        // add a "number" to the screen to indicate which video is being played
-                        t_debug.start();
-                        float text_spacing = 10.0f;
-                        std::vector<std::string> texts_to_render = {std::format("{}", is_first_in_video_pair ? "1" : "2")};
-                        for (int i = 0; i < texts_to_render.size(); ++i)
-                        {
-                            text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-                        }
-                        t_debug.stop();
-                        // fps limiter to control speed
-                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
-                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
-                        {
-                            prev_vid_time = cur_vid_time;
-                            videoFrameCountCont += vid_playback_speed;
-                            videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
-                        }
+                        playVideo(shaderMap,
+                                  leftHandModel,
+                                  text,
+                                  cam_view_transform,
+                                  cam_projection_transform);
                     }
                 }
                 else
                 {
                     if (debug_playback)
                     {
-                        // interpolate hand pose to therequired latency
-                        t_interp.start();
-                        std::vector<glm::mat4> bones_to_world_current;
-                        bool success = handleInterpolateFrames(bones_to_world_current);
-                        if (!success)
-                            break;
-                        t_interp.stop();
-                        t_camera.start();
-                        // produce fake camera image
-                        // render left hand
-                        bones_to_world_left = bones_to_world_left_interp;
-                        texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                        // convert to gray scale single channel image
-                        fake_cam_binary_fbo.bind();
-                        thresholdAlphaShader.use();
-                        thresholdAlphaShader.setMat4("view", glm::mat4(1.0));
-                        thresholdAlphaShader.setMat4("projection", glm::mat4(1.0));
-                        thresholdAlphaShader.setMat4("model", glm::mat4(1.0));
-                        thresholdAlphaShader.setFloat("threshold", 0.5);
-                        thresholdAlphaShader.setBool("flipHor", true);
-                        thresholdAlphaShader.setBool("flipVer", true);
-                        thresholdAlphaShader.setBool("isGray", false);
-                        thresholdAlphaShader.setBool("binary", true);
-                        thresholdAlphaShader.setInt("src", 0);
-                        hands_fbo.getTexture()->bind();
-                        fullScreenQuad.render();
-                        fake_cam_binary_fbo.unbind();
-                        //
-                        fake_cam_fbo.bind();
-                        set_texture_shader(textureShader, true, true, false);
-                        hands_fbo.getTexture()->bind();
-                        fullScreenQuad.render();
-                        fake_cam_fbo.unbind();
-                        t_camera.stop();
-                        // render the scene as normal
-                        t_skin.start();
-                        bones_to_world_left = bones_to_world_current;
-                        texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-                        handleSkinning(skinnedShader, vcolorShader, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                        t_skin.stop();
-                        t_pp.start();
-                        // post process them with any required effect
-                        handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *leftHandModel.GetMaterial().pDiffuse, *fake_cam_binary_fbo.getTexture(), textureShader, maskShader, jfaInitShader, jfaShader, NNShader, uv_NNShader, vcolorShader, gridColorShader);
-                        glViewport(0, 0, proj_width, proj_height); // set viewport
-                        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                        overlayShader.use();
-                        overlayShader.setMat4("mvp", glm::mat4(1.0));
-                        overlayShader.setInt("projectiveTexture", 0);
-                        c2p_fbo.getTexture()->bind(GL_TEXTURE0);
-                        overlayShader.setInt("objectTexture", 1);
-                        fake_cam_fbo.getTexture()->bind(GL_TEXTURE1);
-                        // set_texture_shader(textureShader, false, false, false);
-                        fullScreenQuad.render();
-                        t_pp.stop();
-                        // fps limiter to control speed
-                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
-                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
-                        {
-                            prev_vid_time = cur_vid_time;
-                            videoFrameCountCont += vid_playback_speed;
-                            videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
-                        }
+                        playVideo(shaderMap,
+                                  leftHandModel,
+                                  text,
+                                  cam_view_transform,
+                                  cam_projection_transform);
                     }
                 }
             }
@@ -1225,7 +1117,7 @@ int main(int argc, char *argv[])
                         imgpoints.push_back(corner_pts);
                 }
                 displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                set_texture_shader(textureShader, true, false, true);
+                set_texture_shader(&textureShader, true, false, true);
                 displayTexture.bind();
                 fullScreenQuad.render();
                 if (imgpoints.size() >= n_points_cam_calib)
@@ -1299,7 +1191,7 @@ int main(int argc, char *argv[])
             }
             glm::mat4 viewMatrix;
             GLMHelpers::CV2GLM(perspective, &viewMatrix);
-            set_texture_shader(textureShader, true, true, true, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f), viewMatrix);
+            set_texture_shader(&textureShader, true, true, true, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f), viewMatrix);
             camTexture.bind();
             fullScreenQuad.render();
             PointCloud cloud(cur_screen_verts, screen_verts_color_red);
@@ -1344,12 +1236,12 @@ int main(int argc, char *argv[])
                             leapTexture1.load(buffer1, true, cam_buffer_format);
                             leapTexture2.load(buffer2, true, cam_buffer_format);
                             leapTexture1.bind();
-                            set_texture_shader(textureShader, true, false, true, leap_threshold_flag, leap_binary_threshold);
+                            set_texture_shader(&textureShader, true, false, true, leap_threshold_flag, leap_binary_threshold);
                             bottomLeftQuad.render();
                             leapTexture2.bind();
                             bottomRightQuad.render();
                             displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                            set_texture_shader(textureShader, true, false, true, threshold_flag, masking_threshold);
+                            set_texture_shader(&textureShader, true, false, true, threshold_flag, masking_threshold);
                             displayTexture.bind();
                             topHalfQuad.render();
                             glm::vec2 center_NDC;
@@ -1422,7 +1314,7 @@ int main(int argc, char *argv[])
                         cv::threshold(camImage, thr, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
                         // render binary leap texture to bottom half of screen
                         displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                        set_texture_shader(textureShader, true, false, true, threshold_flag, masking_threshold);
+                        set_texture_shader(&textureShader, true, false, true, threshold_flag, masking_threshold);
                         displayTexture.bind();
                         fullScreenQuad.render();
                         glm::vec2 center_NDC;
@@ -1480,7 +1372,7 @@ int main(int argc, char *argv[])
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                    set_texture_shader(textureShader, true, false, true);
+                    set_texture_shader(&textureShader, true, false, true);
                     displayTexture.bind();
                     fullScreenQuad.render();
                     vcolorShader.use();
@@ -1645,11 +1537,11 @@ int main(int argc, char *argv[])
                             leapTexture1.load(buffer1, true, cam_buffer_format);
                             leapTexture2.load(buffer2, true, cam_buffer_format);
                             leapTexture1.bind();
-                            set_texture_shader(textureShader, true, false, true, leap_threshold_flag, leap_binary_threshold);
+                            set_texture_shader(&textureShader, true, false, true, leap_threshold_flag, leap_binary_threshold);
                             bottomLeftQuad.render();
                             leapTexture2.bind();
                             bottomRightQuad.render();
-                            set_texture_shader(textureShader, true, true, true);
+                            set_texture_shader(&textureShader, true, true, true);
                             displayTexture.bind();
                             topHalfQuad.render();
                             cv::Mat leap1_thr, leap2_thr;
@@ -1703,7 +1595,7 @@ int main(int argc, char *argv[])
                     case 0:
                     {
                         displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                        set_texture_shader(textureShader, true, false, true);
+                        set_texture_shader(&textureShader, true, false, true);
                         displayTexture.bind();
                         fullScreenQuad.render();
                         vcolorShader.use();
@@ -1725,7 +1617,7 @@ int main(int argc, char *argv[])
                             // leapTexture2.init(leap_width, leap_height, 1);
                             // leapTexture2.load(buffer2, true, cam_buffer_format);
                             leapTexture.bind();
-                            set_texture_shader(textureShader, true, false, true);
+                            set_texture_shader(&textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
                             vcolorShader.setMat4("MVP", glm::mat4(1.0f));
@@ -1748,7 +1640,7 @@ int main(int argc, char *argv[])
                             // leapTexture2.init(leap_width, leap_height, 1);
                             // leapTexture2.load(buffer2, true, cam_buffer_format);
                             leapTexture.bind();
-                            set_texture_shader(textureShader, true, false, true);
+                            set_texture_shader(&textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
                             vcolorShader.setMat4("MVP", glm::mat4(1.0f));
@@ -1769,7 +1661,7 @@ int main(int argc, char *argv[])
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                    set_texture_shader(textureShader, true, false, true);
+                    set_texture_shader(&textureShader, true, false, true);
                     displayTexture.bind();
                     fullScreenQuad.render();
                     if (joints_right.size() > 0)
@@ -1799,7 +1691,7 @@ int main(int argc, char *argv[])
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
                     displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                    set_texture_shader(textureShader, true, false, true);
+                    set_texture_shader(&textureShader, true, false, true);
                     displayTexture.bind();
                     fullScreenQuad.render();
                     if (joints_right.size() > 0)
@@ -2736,19 +2628,19 @@ bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid)
     return true;
 }
 
-void set_texture_shader(Shader &textureShader, bool flipVer, bool flipHor, bool isGray, bool binary, float threshold,
+void set_texture_shader(Shader *textureShader, bool flipVer, bool flipHor, bool isGray, bool binary, float threshold,
                         int src, glm::mat4 model, glm::mat4 projection, glm::mat4 view)
 {
-    textureShader.use();
-    textureShader.setMat4("view", view);
-    textureShader.setMat4("projection", projection);
-    textureShader.setMat4("model", model);
-    textureShader.setFloat("threshold", threshold);
-    textureShader.setBool("flipHor", flipHor);
-    textureShader.setBool("flipVer", flipVer);
-    textureShader.setBool("binary", binary);
-    textureShader.setBool("isGray", isGray);
-    textureShader.setInt("src", src);
+    textureShader->use();
+    textureShader->setMat4("view", view);
+    textureShader->setMat4("projection", projection);
+    textureShader->setMat4("model", model);
+    textureShader->setFloat("threshold", threshold);
+    textureShader->setBool("flipHor", flipHor);
+    textureShader->setBool("flipVer", flipVer);
+    textureShader->setBool("binary", binary);
+    textureShader->setBool("isGray", isGray);
+    textureShader->setInt("src", src);
 }
 
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
@@ -2930,15 +2822,16 @@ LEAP_STATUS handleLeapInput(bool prerecorded, uint64_t frameCounter)
 void handlePostProcess(Texture &leftHandTexture,
                        Texture &rightHandTexture,
                        Texture &camTexture,
-                       Shader &textureShader,
-                       Shader &maskShader,
-                       Shader &jfaInitShader,
-                       Shader &jfaShader,
-                       Shader &NNShader,
-                       Shader &uv_NNShader,
-                       Shader &vcolorShader,
-                       Shader &gridColorShader)
+                       std::unordered_map<std::string, Shader *> &shader_map)
 {
+    Shader *textureShader = shader_map["textureShader"];
+    Shader *vcolorShader = shader_map["vcolorShader"];
+    Shader *maskShader = shader_map["maskShader"];
+    Shader *jfaInitShader = shader_map["jfaInitShader"];
+    Shader *jfaShader = shader_map["jfaShader"];
+    Shader *NNShader = shader_map["NNShader"];
+    Shader *uv_NNShader = shader_map["uv_NNShader"];
+    Shader *gridColorShader = shader_map["gridColorShader"];
     switch (postprocess_mode)
     {
     case static_cast<int>(PostProcessMode::NONE):
@@ -2976,10 +2869,10 @@ void handlePostProcess(Texture &leftHandTexture,
     }
     case static_cast<int>(PostProcessMode::OVERLAY):
     {
-        maskShader.use();
-        maskShader.setVec3("bgColor", mask_bg_color);
-        maskShader.setVec3("missingInfoColor", mask_missing_info_color);
-        maskShader.setVec3("unusedInfoColor", mask_unused_info_color);
+        maskShader->use();
+        maskShader->setVec3("bgColor", mask_bg_color);
+        maskShader->setVec3("missingInfoColor", mask_missing_info_color);
+        maskShader->setVec3("unusedInfoColor", mask_unused_info_color);
         if (use_mls)
             postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
         else
@@ -2989,21 +2882,21 @@ void handlePostProcess(Texture &leftHandTexture,
     case static_cast<int>(PostProcessMode::JUMP_FLOOD):
     {
         if (use_mls)
-            postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+            postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
         else
-            postProcess.jump_flood(jfaInitShader, jfaShader, NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+            postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
         break;
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
     {
         // todo: assumes both hand use same texture, which is not the case generally
         if (use_mls)
-            postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, mls_fbo.getTexture()->getTexture(),
+            postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
                                       leftHandTexture.getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
         else
-            postProcess.jump_flood_uv(jfaInitShader, jfaShader, uv_NNShader, uv_fbo.getTexture()->getTexture(),
+            postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, uv_fbo.getTexture()->getTexture(),
                                       leftHandTexture.getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
@@ -3060,21 +2953,21 @@ void handlePostProcess(Texture &leftHandTexture,
     {
         if (show_mls_grid)
         {
-            gridColorShader.use();
-            gridColorShader.setBool("flipVer", false);
+            gridColorShader->use();
+            gridColorShader->setBool("flipVer", false);
             deformationGrid.renderGridPoints();
         }
         if (show_mls_landmarks)
         {
-            vcolorShader.use();
+            vcolorShader->use();
             if (size(ControlPointsP_glm) > 0)
             {
                 PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
                 PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
                 if (use_coaxial_calib)
-                    vcolorShader.setMat4("MVP", c2p_homography);
+                    vcolorShader->setMat4("MVP", c2p_homography);
                 else
-                    vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                    vcolorShader->setMat4("MVP", glm::mat4(1.0f));
                 cloud_src.render(5.0f);
                 cloud_dst.render(5.0f);
             }
@@ -3083,13 +2976,14 @@ void handlePostProcess(Texture &leftHandTexture,
     c2p_fbo.unbind();
 }
 
-void handleSkinning(SkinningShader &skinnedShader,
-                    Shader &vcolorShader,
+void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
                     SkinnedModel &handModel,
                     glm::mat4 cam_view_transform,
                     glm::mat4 cam_projection_transform,
                     bool isRightHand)
 {
+    SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
+    Shader *vcolorShader = shader_map["vcolorShader"];
     std::vector<glm::mat4> bones_to_world = isRightHand ? bones_to_world_right : bones_to_world_left;
     if (bones_to_world.size() > 0)
     {
@@ -3104,103 +2998,103 @@ void handleSkinning(SkinningShader &skinnedShader,
         case static_cast<int>(MaterialMode::DIFFUSE):
         {
             /* render skinned mesh to fbo, in camera space*/
-            skinnedShader.use();
-            skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-            skinnedShader.setBool("bake", false);
-            skinnedShader.setBool("flipTexVertically", false);
-            skinnedShader.setBool("flipTexHorizontally", false);
-            skinnedShader.setBool("projectorIsSingleChannel", false);
-            skinnedShader.setInt("src", 0);
-            skinnedShader.setBool("useGGX", false);
-            skinnedShader.setBool("renderUV", false);
-            skinnedShader.setBool("projectorOnly", true);
+            skinnedShader->use();
+            skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
+            skinnedShader->setBool("bake", false);
+            skinnedShader->setBool("flipTexVertically", false);
+            skinnedShader->setBool("flipTexHorizontally", false);
+            skinnedShader->setBool("projectorIsSingleChannel", false);
+            skinnedShader->setInt("src", 0);
+            skinnedShader->setBool("useGGX", false);
+            skinnedShader->setBool("renderUV", false);
+            skinnedShader->setBool("projectorOnly", true);
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL): // original texture loaded with mesh
-                skinnedShader.setBool("useProjector", false);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
+                skinnedShader->setBool("useProjector", false);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             case static_cast<int>(TextureMode::BAKED): // a baked texture from a bake operation
-                skinnedShader.setBool("useProjector", false);
+                skinnedShader->setBool("useProjector", false);
                 if (isRightHand)
-                    handModel.Render(skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
+                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
                 else
-                    handModel.Render(skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
+                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader.setBool("useProjector", true);
-                skinnedShader.setBool("projectorOnly", false);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
+                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShader->setBool("useProjector", true);
+                skinnedShader->setBool("projectorOnly", false);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader.setBool("useProjector", false);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, dynamicTexture);
+                skinnedShader->setBool("useProjector", false);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture);
                 break;
             case static_cast<int>(TextureMode::CAMERA):
-                skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader.setBool("useProjector", true);
-                skinnedShader.setBool("projectorOnly", true);
-                skinnedShader.setBool("flipTexVertically", true);
-                skinnedShader.setBool("flipTexHorizontally", true);
-                skinnedShader.setBool("projectorIsSingleChannel", true);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
+                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShader->setBool("useProjector", true);
+                skinnedShader->setBool("projectorOnly", true);
+                skinnedShader->setBool("flipTexVertically", true);
+                skinnedShader->setBool("flipTexHorizontally", true);
+                skinnedShader->setBool("projectorIsSingleChannel", true);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
             default:
-                skinnedShader.setBool("useProjector", false); // original texture loaded with mesh
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
+                skinnedShader->setBool("useProjector", false); // original texture loaded with mesh
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             }
             break;
         }
         case static_cast<int>(MaterialMode::GGX): // uses GGX material with the original diffuse texture loaded with mesh
         {
-            skinnedShader.use();
-            skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-            skinnedShader.setBool("bake", false);
-            skinnedShader.setBool("flipTexVertically", false);
-            skinnedShader.setBool("flipTexHorizontally", false);
-            skinnedShader.setBool("projectorIsSingleChannel", false);
-            skinnedShader.setInt("src", 0);
-            skinnedShader.setBool("useGGX", true);
-            skinnedShader.setBool("renderUV", false);
+            skinnedShader->use();
+            skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
+            skinnedShader->setBool("bake", false);
+            skinnedShader->setBool("flipTexVertically", false);
+            skinnedShader->setBool("flipTexHorizontally", false);
+            skinnedShader->setBool("projectorIsSingleChannel", false);
+            skinnedShader->setInt("src", 0);
+            skinnedShader->setBool("useGGX", true);
+            skinnedShader->setBool("renderUV", false);
             dirLight.calcLocalDirection(bones_to_world[0]);
-            skinnedShader.SetDirectionalLight(dirLight);
+            skinnedShader->SetDirectionalLight(dirLight);
             glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
-            skinnedShader.SetCameraLocalPos(camWorldPos);
+            skinnedShader->SetCameraLocalPos(camWorldPos);
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL):
-                skinnedShader.setBool("useProjector", false);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
+                skinnedShader->setBool("useProjector", false);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             case static_cast<int>(TextureMode::BAKED):
-                skinnedShader.setBool("useProjector", false);
+                skinnedShader->setBool("useProjector", false);
                 if (isRightHand)
-                    handModel.Render(skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
+                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
                 else
-                    handModel.Render(skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
+                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader.setBool("useProjector", true);
-                skinnedShader.setBool("projectorOnly", false);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
+                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShader->setBool("useProjector", true);
+                skinnedShader->setBool("projectorOnly", false);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader.setBool("useProjector", false);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, dynamicTexture);
+                skinnedShader->setBool("useProjector", false);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture);
                 break;
             case static_cast<int>(TextureMode::CAMERA):
-                skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader.setBool("useProjector", true);
-                skinnedShader.setBool("flipTexVertically", true);
-                skinnedShader.setBool("flipTexHorizontally", true);
-                skinnedShader.setBool("projectorIsSingleChannel", true);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
+                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
+                skinnedShader->setBool("useProjector", true);
+                skinnedShader->setBool("flipTexVertically", true);
+                skinnedShader->setBool("flipTexHorizontally", true);
+                skinnedShader->setBool("projectorIsSingleChannel", true);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
                 break;
             default:
-                skinnedShader.setBool("useProjector", false);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
+                skinnedShader->setBool("useProjector", false);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             }
             break;
@@ -3217,8 +3111,8 @@ void handleSkinning(SkinningShader &skinnedShader,
                 skele_for_upload.push_back(green);
             }
             glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skele_for_upload.size(), skele_for_upload.data(), GL_STATIC_DRAW);
-            vcolorShader.use();
-            vcolorShader.setMat4("MVP", cam_projection_transform * cam_view_transform * global_scale);
+            vcolorShader->use();
+            vcolorShader->setMat4("MVP", cam_projection_transform * cam_view_transform * global_scale);
             glBindVertexArray(skeletonVAO);
             glDrawArrays(GL_LINES, 0, static_cast<int>(skele_for_upload.size() / 2));
             break;
@@ -3237,26 +3131,25 @@ void handleSkinning(SkinningShader &skinnedShader,
             if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
             {
                 uv_fbo.bind();
-                skinnedShader.use();
-                skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-                skinnedShader.setBool("bake", false);
-                skinnedShader.setBool("flipTexVertically", false);
-                skinnedShader.setBool("flipTexHorizontally", false);
-                skinnedShader.setBool("projectorIsSingleChannel", false);
-                skinnedShader.setInt("src", 0);
-                skinnedShader.setBool("useGGX", false);
-                skinnedShader.setBool("renderUV", true);
-                skinnedShader.setBool("useProjector", false);
-                skinnedShader.setBool("projectorOnly", true);
-                handModel.Render(skinnedShader, bones_to_world, rotx, false, nullptr);
+                skinnedShader->use();
+                skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
+                skinnedShader->setBool("bake", false);
+                skinnedShader->setBool("flipTexVertically", false);
+                skinnedShader->setBool("flipTexHorizontally", false);
+                skinnedShader->setBool("projectorIsSingleChannel", false);
+                skinnedShader->setInt("src", 0);
+                skinnedShader->setBool("useGGX", false);
+                skinnedShader->setBool("renderUV", true);
+                skinnedShader->setBool("useProjector", false);
+                skinnedShader->setBool("projectorOnly", true);
+                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 uv_fbo.unbind();
             }
         }
         glDisable(GL_DEPTH_TEST); // todo: why not keep it on ?
     }
 }
-void handleBakingInternal(SkinningShader &skinnedShader,
-                          Shader &uvDilateShader,
+void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           Texture &texture,
                           SkinnedModel &leftHandModel,
                           SkinnedModel &rightHandModel,
@@ -3266,55 +3159,57 @@ void handleBakingInternal(SkinningShader &skinnedShader,
                           bool flipHorizontal,
                           bool projSingleChannel)
 {
+    SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
+    Shader *uvDilateShader = shader_map["uvDilateShader"];
     /* right hand baking */
     pre_bake_fbo.bind();
     glDisable(GL_CULL_FACE); // todo: why disbale backface ? doesn't this mean bake will reach the back of the hand ?
     glEnable(GL_DEPTH_TEST);
-    skinnedShader.use();
-    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
-    skinnedShader.setBool("useProjector", true);
-    skinnedShader.setBool("bake", true);
-    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
-    skinnedShader.setBool("flipTexVertically", flipVertical);
-    skinnedShader.setBool("flipTexHorizontally", flipHorizontal);
-    skinnedShader.setBool("projectorIsSingleChannel", projSingleChannel);
-    skinnedShader.setBool("renderUV", false);
-    skinnedShader.setBool("useGGX", false);
-    skinnedShader.setBool("projectorOnly", true);
-    skinnedShader.setInt("src", 0);
-    rightHandModel.Render(skinnedShader, bones_to_world_right_bake, rotx, false, nullptr, &texture);
+    skinnedShader->use();
+    skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
+    skinnedShader->setBool("useProjector", true);
+    skinnedShader->setBool("bake", true);
+    skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
+    skinnedShader->setBool("flipTexVertically", flipVertical);
+    skinnedShader->setBool("flipTexHorizontally", flipHorizontal);
+    skinnedShader->setBool("projectorIsSingleChannel", projSingleChannel);
+    skinnedShader->setBool("renderUV", false);
+    skinnedShader->setBool("useGGX", false);
+    skinnedShader->setBool("projectorOnly", true);
+    skinnedShader->setInt("src", 0);
+    rightHandModel.Render(*skinnedShader, bones_to_world_right_bake, rotx, false, nullptr, &texture);
     pre_bake_fbo.unbind();
     // finally, dilate the baked texture
     bake_fbo_right.bind();
-    uvDilateShader.use();
-    uvDilateShader.setMat4("mvp", glm::mat4(1.0f));
-    uvDilateShader.setVec2("resolution", glm::vec2(1024.0f, 1024.0f));
-    uvDilateShader.setInt("src", 0);
+    uvDilateShader->use();
+    uvDilateShader->setMat4("mvp", glm::mat4(1.0f));
+    uvDilateShader->setVec2("resolution", glm::vec2(1024.0f, 1024.0f));
+    uvDilateShader->setInt("src", 0);
     pre_bake_fbo.getTexture()->bind();
     fullScreenQuad.render();
     bake_fbo_right.unbind();
     /* left hand baking */
     pre_bake_fbo.bind(); // we bake into right hand fbo, and post process into left hand fbo
-    skinnedShader.use();
-    skinnedShader.SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
-    skinnedShader.setBool("useProjector", true);
-    skinnedShader.setBool("bake", true);
-    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
-    skinnedShader.setBool("flipTexVertically", flipVertical);
-    skinnedShader.setBool("flipTexHorizontally", flipHorizontal);
-    skinnedShader.setBool("projectorIsSingleChannel", projSingleChannel);
-    skinnedShader.setBool("renderUV", false);
-    skinnedShader.setBool("useGGX", false);
-    skinnedShader.setBool("projectorOnly", true);
-    skinnedShader.setInt("src", 0);
-    leftHandModel.Render(skinnedShader, bones_to_world_left_bake, rotx, false, nullptr, &texture);
+    skinnedShader->use();
+    skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
+    skinnedShader->setBool("useProjector", true);
+    skinnedShader->setBool("bake", true);
+    skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
+    skinnedShader->setBool("flipTexVertically", flipVertical);
+    skinnedShader->setBool("flipTexHorizontally", flipHorizontal);
+    skinnedShader->setBool("projectorIsSingleChannel", projSingleChannel);
+    skinnedShader->setBool("renderUV", false);
+    skinnedShader->setBool("useGGX", false);
+    skinnedShader->setBool("projectorOnly", true);
+    skinnedShader->setInt("src", 0);
+    leftHandModel.Render(*skinnedShader, bones_to_world_left_bake, rotx, false, nullptr, &texture);
     pre_bake_fbo.unbind();
     // finally, dilate the baked texture
     bake_fbo_left.bind();
-    uvDilateShader.use();
-    uvDilateShader.setMat4("mvp", glm::mat4(1.0f));
-    uvDilateShader.setVec2("resolution", glm::vec2(1024.0f, 1024.0f));
-    uvDilateShader.setInt("src", 0);
+    uvDilateShader->use();
+    uvDilateShader->setMat4("mvp", glm::mat4(1.0f));
+    uvDilateShader->setVec2("resolution", glm::vec2(1024.0f, 1024.0f));
+    uvDilateShader->setInt("src", 0);
     pre_bake_fbo.getTexture()->bind();
     fullScreenQuad.render();
     bake_fbo_left.unbind();
@@ -3335,14 +3230,13 @@ void handleBakingInternal(SkinningShader &skinnedShader,
         bake_fbo_left.saveColorToFile(bakeFileLeft);
     }
 }
-void handleBaking(SkinningShader &skinnedShader,
-                  Shader &uvDilateShader,
-                  Shader &textureShader,
+void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   SkinnedModel &leftHandModel,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
                   glm::mat4 cam_projection_transform)
 {
+    Shader *textureShader = shader_map["textureShader"];
     if ((bones_to_world_right.size() > 0) || (bones_to_world_left.size() > 0))
     {
         switch (bake_mode)
@@ -3424,7 +3318,7 @@ void handleBaking(SkinningShader &skinnedShader,
                 dynamicTexture->init(sd_outwidth, sd_outheight, 3);
                 dynamicTexture->load(img2img_data.data(), true, GL_RGB);
                 // bake dynamic texture
-                handleBakingInternal(skinnedShader, uvDilateShader, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
                 bake_preproc_succeed = false;
                 run_sd.join();
             }
@@ -3438,7 +3332,7 @@ void handleBaking(SkinningShader &skinnedShader,
                 bones_to_world_left_bake = bones_to_world_left;
                 Texture tmp(inputBakeFile.c_str(), GL_TEXTURE_2D);
                 tmp.init_from_file(GL_LINEAR, GL_CLAMP_TO_BORDER);
-                handleBakingInternal(skinnedShader, uvDilateShader, tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                handleBakingInternal(shader_map, tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
                 bakeRequest = false;
             }
             break;
@@ -3449,7 +3343,7 @@ void handleBaking(SkinningShader &skinnedShader,
             {
                 bones_to_world_right_bake = bones_to_world_right;
                 bones_to_world_left_bake = bones_to_world_left;
-                handleBakingInternal(skinnedShader, uvDilateShader, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true);
+                handleBakingInternal(shader_map, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true);
                 bakeRequest = false;
             }
             break;
@@ -4048,7 +3942,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 Quad camNearQuad(camNearVerts);
                 // Quad camMidQuad(camMidVerts);
                 // directly render camera input or any other texture
-                set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
+                set_texture_shader(&textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                 // camTexture.bind();
                 // glBindTexture(GL_TEXTURE_2D, resTexture);
                 postprocess_fbo.getTexture()->bind();
@@ -4077,7 +3971,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 Quad projNearQuad(projNearVerts);
                 // Quad projMidQuad(projMidVerts);
                 Quad projFarQuad(projFarVerts);
-                set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
+                set_texture_shader(&textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                 c2p_fbo.getTexture()->bind();
                 projNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, projNearQuad);
                 t_warp.stop();
@@ -4104,6 +3998,102 @@ void handleDebugMode(SkinningShader &skinnedShader,
             }
         }
     }
+}
+
+bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
+               SkinnedModel &leftHandModel,
+               Text &text,
+               glm::mat4 &cam_view_transform,
+               glm::mat4 &cam_projection_transform)
+{
+    Shader *thresholdAlphaShader = shader_map["thresholdAlphaShader"];
+    Shader *textureShader = shader_map["textureShader"];
+    Shader *overlayShader = shader_map["overlayShader"];
+    Shader *textShader = shader_map["textShader"];
+    Shader *maskShader = shader_map["maskShader"];
+    Shader *jfaInitShader = shader_map["jfaInitShader"];
+    Shader *jfaShader = shader_map["jfaShader"];
+    Shader *NNShader = shader_map["NNShader"];
+    Shader *uv_NNShader = shader_map["uv_NNShader"];
+    Shader *vcolorShader = shader_map["vcolorShader"];
+    Shader *gridColorShader = shader_map["gridColorShader"];
+    // interpolate hand pose to the required latency
+    t_interp.start();
+    std::vector<glm::mat4> bones_to_world_current;
+    bool success = handleInterpolateFrames(bones_to_world_current);
+    if (!success)
+    {
+        video_reached_end = true;
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        return false;
+    }
+    t_interp.stop();
+    // produce fake camera image (left hand only)
+    t_camera.start();
+    bones_to_world_left = bones_to_world_left_interp;
+    texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+    handleSkinning(shader_map, leftHandModel, cam_view_transform, cam_projection_transform, false);
+    // convert to gray scale single channel image
+    fake_cam_binary_fbo.bind();
+    thresholdAlphaShader->use();
+    thresholdAlphaShader->setMat4("view", glm::mat4(1.0));
+    thresholdAlphaShader->setMat4("projection", glm::mat4(1.0));
+    thresholdAlphaShader->setMat4("model", glm::mat4(1.0));
+    thresholdAlphaShader->setFloat("threshold", 0.5);
+    thresholdAlphaShader->setBool("flipHor", true);
+    thresholdAlphaShader->setBool("flipVer", true);
+    thresholdAlphaShader->setBool("isGray", false);
+    thresholdAlphaShader->setBool("binary", true);
+    thresholdAlphaShader->setInt("src", 0);
+    hands_fbo.getTexture()->bind();
+    fullScreenQuad.render();
+    fake_cam_binary_fbo.unbind();
+    //
+    fake_cam_fbo.bind();
+    set_texture_shader(textureShader, true, true, false);
+    hands_fbo.getTexture()->bind();
+    fullScreenQuad.render();
+    fake_cam_fbo.unbind();
+    t_camera.stop();
+    // render the scene as normal
+    t_skin.start();
+    bones_to_world_left = bones_to_world_current;
+    texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+    handleSkinning(shader_map, leftHandModel, cam_view_transform, cam_projection_transform, false);
+    t_skin.stop();
+    t_pp.start();
+    // post process with any required effect
+    handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *leftHandModel.GetMaterial().pDiffuse, *fake_cam_binary_fbo.getTexture(), shader_map);
+    // overlay final render and camera image, and render to screen
+    glViewport(0, 0, proj_width, proj_height);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    overlayShader->use();
+    overlayShader->setMat4("mvp", glm::mat4(1.0));
+    overlayShader->setInt("projectiveTexture", 0);
+    c2p_fbo.getTexture()->bind(GL_TEXTURE0);
+    overlayShader->setInt("objectTexture", 1);
+    fake_cam_fbo.getTexture()->bind(GL_TEXTURE1);
+    // set_texture_shader(textureShader, false, false, false);
+    fullScreenQuad.render();
+    t_pp.stop();
+    // add a "number" to the screen to indicate which video is being played
+    t_debug.start();
+    float text_spacing = 10.0f;
+    std::vector<std::string> texts_to_render = {std::format("{}", is_first_in_video_pair ? "1" : "2")};
+    for (int i = 0; i < texts_to_render.size(); ++i)
+    {
+        text.Render(*textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    }
+    t_debug.stop();
+    // fps limiter to control speed
+    cur_vid_time = t_app.getElapsedTimeInMilliSec();
+    if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+    {
+        prev_vid_time = cur_vid_time;
+        videoFrameCountCont += vid_playback_speed;
+        videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
+    }
+    return true;
 }
 // ---------------------------------------------------------------------------------------------
 // IMGUI frame creator

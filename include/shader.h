@@ -15,6 +15,7 @@ class Shader
 public:
     unsigned int ID;
     Shader(){};
+    virtual ~Shader(){};
     Shader(Shader &s) // copy constructor
     {
         ID = s.ID;

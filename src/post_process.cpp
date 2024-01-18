@@ -453,7 +453,7 @@ void PostProcess::bake(Shader &uvShader, unsigned int textureToBake, unsigned in
     // render screen sized quad and look up texture coordinates from the baked texture
 }
 
-void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
+void PostProcess::mask(Shader *mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
 {
     // bind fbo
     target_fbo->bind();
@@ -463,14 +463,14 @@ void PostProcess::mask(Shader &mask_shader, unsigned int renderedSceneTexture, u
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, camTexture);
     // render
-    mask_shader.use();
-    mask_shader.setInt("src", 0);
-    mask_shader.setInt("mask", 1);
-    mask_shader.setFloat("threshold", threshold);
-    mask_shader.setBool("maskIsGray", true);
-    mask_shader.setBool("flipVer", false);
-    mask_shader.setBool("flipMaskVer", true);
-    mask_shader.setBool("flipMaskHor", true);
+    mask_shader->use();
+    mask_shader->setInt("src", 0);
+    mask_shader->setInt("mask", 1);
+    mask_shader->setFloat("threshold", threshold);
+    mask_shader->setBool("maskIsGray", true);
+    mask_shader->setBool("flipVer", false);
+    mask_shader->setBool("flipMaskVer", true);
+    mask_shader->setBool("flipMaskHor", true);
     m_quad.render(false, false, true);
     // unbind fbo
     target_fbo->unbind();
