@@ -433,6 +433,7 @@ float mls_depth_threshold = 215.0f;
 bool mls_depth_test = false;
 std::vector<Kalman2D> kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
 int kalman_lookahead = 0;
+int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 
 /* main */
 int main(int argc, char *argv[])
@@ -3561,9 +3562,35 @@ void handleMLS(Shader &gridShader)
                                     q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
                                 }
                                 // compute deformation
+                                cv::Mat fv;
                                 cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), mls_alpha);
-                                cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
-                                cv::Mat fv = MLSPointsTransformAffine(w, A, q);
+                                switch (deformation_mode)
+                                {
+                                case static_cast<int>(DeformationMode::AFFINE):
+                                {
+                                    cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
+                                    fv = MLSPointsTransformAffine(w, A, q);
+                                    break;
+                                }
+                                case static_cast<int>(DeformationMode::SIMILARITY):
+                                {
+                                    std::vector<_typeA> A = MLSprecomputeSimilar(p, deformationGrid.getM(), w);
+                                    fv = MLSPointsTransformSimilar(w, A, q);
+                                    break;
+                                }
+                                case static_cast<int>(DeformationMode::RIGID):
+                                {
+                                    typeRigid A = MLSprecomputeRigid(p, deformationGrid.getM(), w);
+                                    fv = MLSPointsTransformRigid(w, A, q);
+                                    break;
+                                }
+                                default:
+                                {
+                                    cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
+                                    fv = MLSPointsTransformAffine(w, A, q);
+                                    break;
+                                }
+                                }
                                 // update grid
                                 deformationGrid.constructDeformedGridSmooth(fv, mls_grid_smooth_window);
                             }
@@ -4751,7 +4778,11 @@ void openIMGUIFrame()
             ImGui::ColorEdit3("unused info color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &use_mls);
+            ImGui::RadioButton("Rigid", &deformation_mode, 0);
             ImGui::SameLine();
+            ImGui::RadioButton("Similarity", &deformation_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Affine", &deformation_mode, 2);
             ImGui::Checkbox("Show landmarks", &show_mls_landmarks);
             ImGui::SameLine();
             ImGui::Checkbox("Show MLS grid", &show_mls_grid);

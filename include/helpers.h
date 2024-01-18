@@ -118,5 +118,10 @@ enum class MotionModel
     DEFORMATION = 2,
     ALL = 3,
 };
-
+enum class DeformationMode
+{
+    RIGID = 0,
+    SIMILARITY = 1,
+    AFFINE = 2,
+};
 #endif // HELPERS_H
