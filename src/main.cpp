@@ -59,8 +59,8 @@ namespace fs = std::filesystem;
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult);
 LEAP_STATUS handleLeapInput(bool prerecorded = false, uint64_t frameCounter = 0);
-void handlePostProcess(Texture &leftHandTexture,
-                       Texture &rightHandTexture,
+void handlePostProcess(SkinnedModel &leftHandModel,
+                       SkinnedModel &rightHandModel,
                        Texture &camTexture,
                        std::unordered_map<std::string, Shader *> &shader_map);
 void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
@@ -92,7 +92,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                      SkinnedModel &leftHandModel,
                      Text &text);
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current);
-std::vector<glm::vec2> mp_predict(cv::Mat image, int timestamp);
+bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
 bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
@@ -986,29 +986,7 @@ int main(int argc, char *argv[])
 
             /* post process fbo using camera input */
             t_pp.start();
-            switch (texture_mode)
-            {
-            case static_cast<int>(TextureMode::ORIGINAL):
-            {
-                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, shaderMap);
-                break;
-            }
-            case static_cast<int>(TextureMode::BAKED):
-            {
-                handlePostProcess(*bake_fbo_left.getTexture(), *bake_fbo_right.getTexture(), camTexture, shaderMap);
-                break;
-            }
-            case static_cast<int>(TextureMode::FROM_FILE):
-            {
-                handlePostProcess(*dynamicTexture, *dynamicTexture, camTexture, shaderMap);
-                break;
-            }
-            default:
-            {
-                handlePostProcess(*rightHandModel.GetMaterial().pDiffuse, *rightHandModel.GetMaterial().pDiffuse, camTexture, shaderMap);
-                break;
-            }
-            }
+            handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
             /* render final output to screen */
             if (!debug_mode)
             {
@@ -2668,7 +2646,7 @@ glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &le
     return point_3d;
 }
 
-std::vector<glm::vec2> mp_predict(cv::Mat origImage, int timestamp)
+bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right)
 {
     cv::Mat image;
     cv::flip(origImage, image, 1);
@@ -2693,13 +2671,30 @@ std::vector<glm::vec2> mp_predict(cv::Mat origImage, int timestamp)
     {
         std::cout << "Call failed!" << std::endl;
         PyErr_Print();
-        return std::vector<glm::vec2>();
+        return false;
         // exit(1);
     }
+    int n_hands = 0;
+    PyObject *pyLeftLandmarks, *pyRightLandmarks;
+    if (!PyArg_ParseTuple(myResult, "OOi", &pyLeftLandmarks, &pyRightLandmarks, &n_hands))
+    {
+        std::cout << "Parse failed!" << std::endl;
+        PyErr_Print();
+        return false;
+        // exit(1);
+    }
+    std::vector<glm::vec2> data_vec;
+    if (n_hands == 0)
+        return false;
     // PyObject* myResult = PyObject_CallFunction(myprofile, "O", image_object);
-    PyArrayObject *myNumpyArray = reinterpret_cast<PyArrayObject *>(myResult);
-    glm::vec2 *data = (glm::vec2 *)PyArray_DATA(myNumpyArray);
-    std::vector<glm::vec2> data_vec(data, data + PyArray_SIZE(myNumpyArray) / 2);
+    PyArrayObject *leftNumpyArray = reinterpret_cast<PyArrayObject *>(pyLeftLandmarks);
+    glm::vec2 *leftData = (glm::vec2 *)PyArray_DATA(leftNumpyArray);
+    std::vector<glm::vec2> raw_left(leftData, leftData + PyArray_SIZE(leftNumpyArray) / 2);
+    left = std::move(raw_left);
+    PyArrayObject *rightNumpyArray = reinterpret_cast<PyArrayObject *>(pyRightLandmarks);
+    glm::vec2 *rightData = (glm::vec2 *)PyArray_DATA(rightNumpyArray);
+    std::vector<glm::vec2> raw_right(rightData, rightData + PyArray_SIZE(rightNumpyArray) / 2);
+    right = std::move(raw_right);
     // for (int j = 0; j < data_vec.size(); j+=2)
     // {
     //   std::cout << data_vec[j] << data_vec[j+1] << std::endl;
@@ -2720,7 +2715,7 @@ std::vector<glm::vec2> mp_predict(cv::Mat origImage, int timestamp)
     // Py_XDECREF(myObject);
     // Py_XDECREF(myFunction);
     // Py_XDECREF(myResult);
-    return data_vec;
+    return true;
 }
 
 void handleCameraInput(CGrabResultPtr ptrGrabResult)
@@ -2819,8 +2814,8 @@ LEAP_STATUS handleLeapInput(bool prerecorded, uint64_t frameCounter)
     return leap_status;
 }
 
-void handlePostProcess(Texture &leftHandTexture,
-                       Texture &rightHandTexture,
+void handlePostProcess(SkinnedModel &leftHandModel,
+                       SkinnedModel &rightHandModel,
                        Texture &camTexture,
                        std::unordered_map<std::string, Shader *> &shader_map)
 {
@@ -2832,6 +2827,36 @@ void handlePostProcess(Texture &leftHandTexture,
     Shader *NNShader = shader_map["NNShader"];
     Shader *uv_NNShader = shader_map["uv_NNShader"];
     Shader *gridColorShader = shader_map["gridColorShader"];
+    Texture *leftHandTexture;
+    Texture *rightHandTexture;
+    switch (texture_mode)
+    {
+    case static_cast<int>(TextureMode::ORIGINAL):
+    {
+        leftHandTexture = rightHandModel.GetMaterial().pDiffuse;
+        rightHandTexture = rightHandModel.GetMaterial().pDiffuse;
+        break;
+    }
+    case static_cast<int>(TextureMode::BAKED):
+    {
+        leftHandTexture = bake_fbo_left.getTexture();
+        rightHandTexture = bake_fbo_right.getTexture();
+        break;
+    }
+    case static_cast<int>(TextureMode::FROM_FILE):
+    {
+        leftHandTexture = dynamicTexture;
+        rightHandTexture = dynamicTexture;
+        break;
+    }
+    default:
+    {
+        leftHandTexture = rightHandModel.GetMaterial().pDiffuse;
+        rightHandTexture = rightHandModel.GetMaterial().pDiffuse;
+        break;
+    }
+    }
+
     switch (postprocess_mode)
     {
     case static_cast<int>(PostProcessMode::NONE):
@@ -2892,12 +2917,12 @@ void handlePostProcess(Texture &leftHandTexture,
         // todo: assumes both hand use same texture, which is not the case generally
         if (use_mls)
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
-                                      leftHandTexture.getTexture(),
+                                      leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
         else
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, uv_fbo.getTexture()->getTexture(),
-                                      leftHandTexture.getTexture(),
+                                      leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, masking_threshold);
         break;
@@ -3125,9 +3150,9 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
         hands_fbo.unbind();
         /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
         // todo: if this pp is enabled, hands_fbo above performs redundant work: refactor.
-        if (!isRightHand)
+        if (isRightHand)
         {
-            // todo: currently only works for left hand. make it work for both
+            // todo: currently only works for one hand. make it work for both
             if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
             {
                 uv_fbo.bind();
@@ -3386,11 +3411,15 @@ void handleMLS(Shader &gridShader)
                     try
                     {
                         std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                        std::vector<glm::vec2> cur_pred_glm = mp_predict(camImage, totalFrameCount);
+                        std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
                         std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
                         std::vector<glm::vec2> projected_diff(projected.size(), glm::vec2(0.0f, 0.0f));
-                        if (cur_pred_glm.size() == 21)
+                        if (mp_predict(camImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
                         {
+                            if (cur_pred_glm_left.size() > 0)
+                                cur_pred_glm = cur_pred_glm_left;
+                            else
+                                cur_pred_glm = cur_pred_glm_right;
                             // perform smoothing over control points (when mls_cp_smooth_window > 0)
                             prev_pred_glm.push_back(cur_pred_glm);
                             pred_glm = Helpers::accumulate(prev_pred_glm);
@@ -3400,7 +3429,7 @@ void handleMLS(Shader &gridShader)
                                 for (int i = 0; i < diff; i++)
                                     prev_pred_glm.erase(prev_pred_glm.begin());
                             }
-                            // possibly use kalman to forecast the measurements, since mp takes ~17ms to run
+                            // possibly use kalman to filter/predict the measurements, since mp takes ~17ms to run
                             if (use_mp_kalman)
                             {
                                 for (int i = 0; i < pred_glm.size(); i++)
@@ -3424,7 +3453,7 @@ void handleMLS(Shader &gridShader)
                                 // pred_glm = kalman_forecast;
                             }
                             std::vector<cv::Point2f> leap_keypoints, diff_keypoints, mp_keypoints;
-                            // possibly, instead of forecasting, use current leap info to move mp keypoints
+                            // possibly, instead of filtering, use current leap info to move mp keypoints
                             if (mls_forecast)
                             {
                                 // sync leap clock
@@ -4063,7 +4092,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     t_skin.stop();
     t_pp.start();
     // post process with any required effect
-    handlePostProcess(*leftHandModel.GetMaterial().pDiffuse, *leftHandModel.GetMaterial().pDiffuse, *fake_cam_binary_fbo.getTexture(), shader_map);
+    handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
     // overlay final render and camera image, and render to screen
     glViewport(0, 0, proj_width, proj_height);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
