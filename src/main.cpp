@@ -411,6 +411,8 @@ Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, gri
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
 std::vector<glm::vec2> ControlPointsP_glm;
+std::vector<glm::vec2> ControlPointsP_input_tmp;
+std::vector<glm::vec2> ControlPointsP_input_glm;
 std::vector<glm::vec2> ControlPointsQ_glm;
 std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
 std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
@@ -2987,12 +2989,14 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             vcolorShader->use();
             if (size(ControlPointsP_glm) > 0)
             {
+                PointCloud cloud_src_input(ControlPointsP_input_glm, screen_verts_color_blue);
                 PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
                 PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
                 if (use_coaxial_calib)
                     vcolorShader->setMat4("MVP", c2p_homography);
                 else
                     vcolorShader->setMat4("MVP", glm::mat4(1.0f));
+                cloud_src_input.render(5.0f);
                 cloud_src.render(5.0f);
                 cloud_dst.render(5.0f);
             }
@@ -3174,6 +3178,7 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
         glDisable(GL_DEPTH_TEST); // todo: why not keep it on ?
     }
 }
+
 void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           Texture &texture,
                           SkinnedModel &leftHandModel,
@@ -3383,14 +3388,15 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
 
 void handleMLS(Shader &gridShader)
 {
-    if (use_mls) // todo: support two hands
+    if (use_mls) // todo: support two hands, currently prioritizes right if both hands are in frame
     {
         if (!mls_running && !mls_succeed)
         {
-            if (joints_left.size() > 0)
+            if (joints_left.size() > 0 || joints_right.size() > 0)
             {
+                bool isRightHand = joints_right.size() > 0;
                 t_mls_thread.start();
-                std::vector<glm::vec3> to_project = joints_left;
+                std::vector<glm::vec3> to_project = isRightHand ? joints_right : joints_left;
                 bool any_visible = false;
                 std::vector<float> rendered_depths;
                 std::vector<glm::vec3> projected_with_depth;
@@ -3407,19 +3413,40 @@ void handleMLS(Shader &gridShader)
                     run_mls.join();
                 mls_running = true;
                 camImage = camImageOrig.clone();
-                run_mls = std::thread([to_project, rendered_depths, projected_with_depth]() { // send (forecasted) leap joints to MP
+                run_mls = std::thread([to_project, rendered_depths, projected_with_depth, isRightHand]() { // send (forecasted) leap joints to MP
                     try
                     {
                         std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                        ControlPointsP_input_tmp = projected;
                         std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
                         std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
                         std::vector<glm::vec2> projected_diff(projected.size(), glm::vec2(0.0f, 0.0f));
                         if (mp_predict(camImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
                         {
-                            if (cur_pred_glm_left.size() > 0)
-                                cur_pred_glm = cur_pred_glm_left;
+                            if (isRightHand)
+                            {
+                                if (cur_pred_glm_right.size() > 0)
+                                {
+                                    cur_pred_glm = cur_pred_glm_right;
+                                }
+                                else
+                                {
+                                    mls_running = false;
+                                    return;
+                                }
+                            }
                             else
-                                cur_pred_glm = cur_pred_glm_right;
+                            {
+                                if (cur_pred_glm_left.size() > 0)
+                                {
+                                    cur_pred_glm = cur_pred_glm_left;
+                                }
+                                else
+                                {
+                                    mls_running = false;
+                                    return;
+                                }
+                            }
                             // perform smoothing over control points (when mls_cp_smooth_window > 0)
                             prev_pred_glm.push_back(cur_pred_glm);
                             pred_glm = Helpers::accumulate(prev_pred_glm);
@@ -3462,11 +3489,15 @@ void handleMLS(Shader &gridShader)
                                 std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
                                 LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                 std::vector<glm::mat4> cur_left_bones, cur_right_bones;
-                                std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
+                                std::vector<glm::vec3> cur_verts, cur_vertices_left, cur_vertices_right;
                                 LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay_mls);
-                                if (status == LEAP_STATUS::LEAP_NEWFRAME && cur_vertices_left.size() > 0)
+                                if (isRightHand)
+                                    cur_verts = std::move(cur_vertices_right);
+                                else
+                                    cur_verts = std::move(cur_vertices_left);
+                                if (status == LEAP_STATUS::LEAP_NEWFRAME && cur_verts.size() > 0)
                                 {
-                                    std::vector<glm::vec2> projected_new = Helpers::project_points(cur_vertices_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                                    std::vector<glm::vec2> projected_new = Helpers::project_points(cur_verts, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
                                     for (int i = 0; i < projected_new.size(); i++)
                                     {
                                         projected_diff[i] += projected_new[i] - projected[i];
@@ -3557,6 +3588,11 @@ void handleMLS(Shader &gridShader)
             mls_succeed = false;
             ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
             ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
+            ControlPointsP_input_glm.clear();
+            for (int i = 0; i < leap_selection_vector.size(); i++)
+            {
+                ControlPointsP_input_glm.push_back(ControlPointsP_input_tmp[leap_selection_vector[i]]);
+            }
             if (run_mls.joinable())
                 run_mls.join();
             t_mls_thread.stop();
@@ -4716,7 +4752,7 @@ void openIMGUIFrame()
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &use_mls);
             ImGui::SameLine();
-            ImGui::Checkbox("Show MLS landmarks", &show_mls_landmarks);
+            ImGui::Checkbox("Show landmarks", &show_mls_landmarks);
             ImGui::SameLine();
             ImGui::Checkbox("Show MLS grid", &show_mls_grid);
             ImGui::SameLine();
