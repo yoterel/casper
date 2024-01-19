@@ -59,6 +59,7 @@ namespace fs = std::filesystem;
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult);
 LEAP_STATUS handleLeapInput(bool prerecorded = false, uint64_t frameCounter = 0);
+void recordSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp);
 void handlePostProcess(SkinnedModel &leftHandModel,
                        SkinnedModel &rightHandModel,
                        Texture &camTexture,
@@ -229,8 +230,7 @@ bool video_reached_end = true;
 bool is_first_in_video_pair = true;
 double prev_vid_time;
 double cur_vid_time;
-// leap controls
-bool leap_poll_mode = false;
+// record & playback controls
 bool debug_playback = false;
 float vid_simulated_latency_ms = 1.0f;
 float vid_playback_fps_limiter = 900.0;
@@ -239,21 +239,23 @@ std::string session_name = "all";
 std::string subject_name = "tester1";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
+bool simulation_loaded = false;
 std::string playback_video_name = "test";
 std::string loaded_playback_video_name = "";
 static uint8_t *pFrameData[400] = {NULL};
 bool playback_video_loaded = false;
 int total_raw_session_time_stamps = 0;
 int total_session_time_stamps = 0;
-bool leap_record_session = false;
+bool record_session = false;
 std::vector<glm::mat4> raw_session_bones_left;
 std::vector<glm::mat4> session_bones_left;
 std::vector<glm::mat4> session_bones_right;
 std::vector<float> raw_session_timestamps;
 std::vector<float> session_timestamps;
-// int session_counter = 0;
 std::string tmp_name = std::tmpnam(nullptr);
 fs::path tmp_filename(tmp_name);
+// leap controls
+bool leap_poll_mode = false;
 int leap_tracking_mode = eLeapTrackingMode_HMD;
 uint64_t leap_cur_frame_id = 0;
 uint32_t leap_width = 640;
@@ -969,6 +971,8 @@ int main(int argc, char *argv[])
             /* deal with leap input */
             t_leap.start();
             LEAP_STATUS leap_status = handleLeapInput();
+            if (record_session)
+                recordSession(std::string("../../debug/recordings/"), leap_status, totalFrameCount);
             t_leap.stop();
 
             /* skin hand meshes */
@@ -1007,7 +1011,7 @@ int main(int argc, char *argv[])
             t_debug.stop();
             break;
         }
-        case static_cast<int>(OperationMode::VIDEO): // record and playback session
+        case static_cast<int>(OperationMode::USER_STUDY): // record and playback session
         {
             if (pre_recorded_session_loaded) // a video was loaded
             {
@@ -1075,6 +1079,22 @@ int main(int argc, char *argv[])
                                   cam_projection_transform);
                     }
                 }
+            }
+            break;
+        }
+        case static_cast<int>(OperationMode::SIMULATION):
+        {
+            if (simulation_loaded)
+            {
+                // get current simulated camera image
+                // get current leap information
+                // skin the leap info
+                // perform MLS by using a deformable grid from a kalman filter
+                // the kalman is fed with velocity grid measurements from leap info, and its state is saved until an MP prediction is available
+                // then, grid is rewinded to past, the MP measurement is incorperated, and we propagate the grid to the present.
+                // post process simple effect
+                // render to screen, optionally the predicted grid, estimated grid
+                // get camera input
             }
             break;
         }
@@ -2764,6 +2784,33 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult)
     // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
 }
 
+void recordSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp)
+{
+    if (leap_global_scaler != 1.0f)
+    {
+        std::cout << "cannot record session with global scale transform" << std::endl;
+        return;
+    }
+    if ((leap_status == LEAP_STATUS::LEAP_NEWFRAME) && (bones_to_world_left.size() > 0))
+    {
+        // save leap frame
+        fs::path bones_left(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
+        fs::path timestamps(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
+        // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
+        // fs::path joints(savepath + tmp_filename.filename().string() + std::string("_joints.npy"));
+        // fs::path session(savepath + tmp_filename.filename().string() + std::string("_session.npz"));
+        // cnpy::npy_save(session.string().c_str(), "joints", &skeleton_vertices[0].x, {skeleton_vertices.size(), 3}, "a");
+        // cnpy::npy_save(session.string().c_str(), "bones_left", &bones_to_world_left[0][0].x, {bones_to_world_left.size(), 4, 4}, "a");
+        // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
+        cnpy::npy_save(bones_left.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
+        cnpy::npy_save(timestamps.string().c_str(), &curFrameTimeStamp, {1}, "a");
+        // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
+        // cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
+
+        // also save the current camera image
+        cv::imwrite(savepath + tmp_filename.filename().string() + std::format("{:06d}", image_timestamp) + std::string("_cam.png"), camImageOrig);
+    }
+}
 LEAP_STATUS handleLeapInput(bool prerecorded, uint64_t frameCounter)
 {
     LEAP_STATUS leap_status;
@@ -2780,25 +2827,6 @@ LEAP_STATUS handleLeapInput(bool prerecorded, uint64_t frameCounter)
             LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
         }
         leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay);
-        if (leap_record_session)
-        {
-            if ((leap_status == LEAP_STATUS::LEAP_NEWFRAME) && (bones_to_world_left.size() > 0))
-            {
-                std::string savepath(std::string("../../debug/recordings/"));
-                fs::path bones_left(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
-                fs::path timestamps(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
-                // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
-                // fs::path joints(savepath + tmp_filename.filename().string() + std::string("_joints.npy"));
-                // fs::path session(savepath + tmp_filename.filename().string() + std::string("_session.npz"));
-                // cnpy::npy_save(session.string().c_str(), "joints", &skeleton_vertices[0].x, {skeleton_vertices.size(), 3}, "a");
-                // cnpy::npy_save(session.string().c_str(), "bones_left", &bones_to_world_left[0][0].x, {bones_to_world_left.size(), 4, 4}, "a");
-                // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
-                cnpy::npy_save(bones_left.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
-                cnpy::npy_save(timestamps.string().c_str(), &curFrameTimeStamp, {1}, "a");
-                // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
-                // cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
-            }
-        }
     }
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
@@ -4239,13 +4267,12 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Video", &operation_mode, 1))
+            if (ImGui::RadioButton("User Study", &operation_mode, 1))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 use_mls = false;
-                exposure = 1850.0f; // max exposure allowing for max fps
-                camera.set_exposure_time(exposure);
+                debug_mode = false;
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Camera", &operation_mode, 2))
@@ -4274,6 +4301,15 @@ void openIMGUIFrame()
                 // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
                 exposure = 10000.0f;
                 camera.set_exposure_time(exposure);
+                debug_mode = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Simulation", &operation_mode, 5))
+            {
+                projector.kill();
+                use_projector = false;
+                leap.setImageMode(false);
+                leap.setPollMode(false);
                 debug_mode = false;
             }
             ImGui::TreePop();
@@ -4849,9 +4885,11 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Leap Local Bone Scale", &leap_bone_local_scaler, 0.001f, 0.1f);
             ImGui::SliderFloat("Leap Palm Scale", &leap_palm_local_scaler, 0.001f, 0.1f);
             ImGui::SliderFloat("Leap Arm Scale", &leap_arm_local_scaler, 0.001f, 0.1f);
-
-            ImGui::SeparatorText("Record & Playback");
-            ImGui::Checkbox("Record Session", &leap_record_session);
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Record & Playback"))
+        {
+            ImGui::Checkbox("Record Session", &record_session);
             if (ImGui::Checkbox("Run User Study", &run_user_study))
             {
                 if (run_user_study)

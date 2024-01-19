@@ -106,10 +106,11 @@ enum class LeapMarkSettings
 enum class OperationMode
 {
     NORMAL = 0,
-    VIDEO = 1,
+    USER_STUDY = 1,
     CAMERA = 2,
     COAXIAL = 3,
     LEAP = 4,
+    SIMULATION = 5,
 };
 enum class MotionModel
 {
