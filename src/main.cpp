@@ -57,9 +57,10 @@ namespace fs = std::filesystem;
 
 /* forward declarations */
 void openIMGUIFrame();
-void handleCameraInput(CGrabResultPtr ptrGrabResult);
-LEAP_STATUS handleLeapInput(bool prerecorded = false, uint64_t frameCounter = 0);
-void recordSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp);
+void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat simulatedImage);
+LEAP_STATUS handleLeapInput();
+void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp);
+bool loadSimulation(std::string loadpath);
 void handlePostProcess(SkinnedModel &leftHandModel,
                        SkinnedModel &rightHandModel,
                        Texture &camTexture,
@@ -84,6 +85,7 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           bool flipHorizontal,
                           bool projSingleChannel);
 void handleMLS(Shader &gridShader);
+void handleFilteredMLS(Shader &gridShader);
 void handleDebugMode(SkinningShader &skinnedShader,
                      Shader &textureShader,
                      Shader &vcolorShader,
@@ -110,9 +112,11 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp, int magic_time_delay);
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     std::vector<glm::mat4> &bones_to_world_right,
-                                    uint64_t frameCounter);
+                                    uint64_t frameCounter,
+                                    uint64_t totalFrameCount,
+                                    const std::vector<glm::mat4> &session);
 bool loadPrerecordedSession();
-bool loadVideo();
+bool loadImagesFromFolder(std::string loadpath);
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
                SkinnedModel &leftHandModel,
                Text &text,
@@ -175,8 +179,6 @@ unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
 int64_t totalFrameCount = 0;
-int64_t videoFrameCount = 0;
-float videoFrameCountCont = 0.0;
 int64_t maxVideoFrameCount = 0;
 int64_t curFrameID = 0;
 int64_t curFrameTimeStamp = 0;
@@ -235,11 +237,19 @@ bool debug_playback = false;
 float vid_simulated_latency_ms = 1.0f;
 float vid_playback_fps_limiter = 900.0;
 float vid_playback_speed = 6.0f;
+int64_t videoFrameCount = 0;
+float videoFrameCountCont = 0.0;
+int64_t simulationFrameCount = 0;
+float simulationFrameCountCont = 0.0;
 std::string session_name = "all";
 std::string subject_name = "tester1";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool simulation_loaded = false;
+bool run_simulation = false;
+std::string simulation_name = "test";
+std::string loaded_simulation_name = "";
+int total_simulation_time_stamps = 0;
 std::string playback_video_name = "test";
 std::string loaded_playback_video_name = "";
 static uint8_t *pFrameData[400] = {NULL};
@@ -252,6 +262,10 @@ std::vector<glm::mat4> session_bones_left;
 std::vector<glm::mat4> session_bones_right;
 std::vector<float> raw_session_timestamps;
 std::vector<float> session_timestamps;
+std::vector<glm::mat4> raw_simulation_bones_left;
+std::vector<glm::mat4> simulation_bones_left;
+std::vector<float> raw_simulation_timestamps;
+std::vector<float> simulation_timestamps;
 std::string tmp_name = std::tmpnam(nullptr);
 fs::path tmp_filename(tmp_name);
 // leap controls
@@ -965,14 +979,14 @@ int main(int argc, char *argv[])
         {
             /* deal with camera input */
             t_camera.start();
-            handleCameraInput(ptrGrabResult);
+            handleCameraInput(ptrGrabResult, false, cv::Mat());
             t_camera.stop();
 
             /* deal with leap input */
             t_leap.start();
             LEAP_STATUS leap_status = handleLeapInput();
             if (record_session)
-                recordSession(std::string("../../debug/recordings/"), leap_status, totalFrameCount);
+                saveSession(std::string("../../debug/recordings/"), leap_status, totalFrameCount);
             t_leap.stop();
 
             /* skin hand meshes */
@@ -1086,15 +1100,44 @@ int main(int argc, char *argv[])
         {
             if (simulation_loaded)
             {
-                // get current simulated camera image
-                // get current leap information
-                // skin the leap info
-                // perform MLS by using a deformable grid from a kalman filter
-                // the kalman is fed with velocity grid measurements from leap info, and its state is saved until an MP prediction is available
-                // then, grid is rewinded to past, the MP measurement is incorperated, and we propagate the grid to the present.
-                // post process simple effect
-                // render to screen, optionally the predicted grid, estimated grid
-                // get camera input
+                if (run_simulation)
+                {
+                    t_camera.start();
+                    // get current simulated camera image
+                    cv::Mat simulated = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount]).clone();
+                    // set it as camera input
+                    handleCameraInput(ptrGrabResult, true, simulated);
+                    t_camera.stop();
+                    // get current simulated leap info
+                    t_leap.start();
+                    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left);
+                    t_leap.stop();
+                    // skin the mesh
+                    t_skin.start();
+                    handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                    t_skin.stop();
+                    // filtered mls
+                    // a deformation grid is estimated using a kalman filter
+                    // the "continous" input to the filter are 2D grid point velocities (computed from the current and previous control points from leap using MLS)
+                    // but once every several frames, delayed 2d grid point locations are fed (computed from the current and precious MP predcition using MLS)
+                    // so we rewind the filter, to the timestamp of the delayed measurement, and propagate the filter using all exisiting measurements to the current timestamp
+                    // note: requires saving the filter state at each frame
+                    t_mls.start();
+                    handleFilteredMLS(gridShader);
+                    t_mls.stop();
+                    // post process
+                    t_pp.start();
+                    handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+                    t_pp.stop();
+                    // render to screen
+                    glViewport(0, 0, proj_width, proj_height); // set viewport
+                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                    set_texture_shader(&textureShader, false, false, false);
+                    c2p_fbo.getTexture()->bind();
+                    fullScreenQuad.render();
+
+                    simulationFrameCount++;
+                }
             }
             break;
         }
@@ -1164,7 +1207,7 @@ int main(int argc, char *argv[])
         case static_cast<int>(OperationMode::COAXIAL): // calibrate projector <-> camera
         {
             t_camera.start();
-            handleCameraInput(ptrGrabResult);
+            handleCameraInput(ptrGrabResult, false, cv::Mat());
             t_camera.stop();
             std::vector<cv::Point2f> origpts, newpts;
             for (int i = 0; i < 4; ++i)
@@ -2295,43 +2338,39 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
 
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     std::vector<glm::mat4> &bones_to_world_right,
-                                    uint64_t frameCounter)
+                                    uint64_t frameCounter,
+                                    uint64_t totalFrameCount,
+                                    const std::vector<glm::mat4> &session)
 {
-    if (pre_recorded_session_loaded)
+    if (frameCounter < totalFrameCount)
     {
-        if (frameCounter < total_session_time_stamps)
+        bones_to_world_left.clear();
+        bones_to_world_right.clear();
+        // joints_left.clear();
+        // joints_right.clear();
+        for (int i = 0; i < 22; i++)
         {
-            bones_to_world_left.clear();
-            bones_to_world_right.clear();
-            // joints_left.clear();
-            // joints_right.clear();
-            for (int i = 0; i < 22; i++)
-            {
-                bones_to_world_left.push_back(session_bones_left[frameCounter * 22 + i]);
-            }
-            // timestamp = session_timestamps[frameCounter];
-            return LEAP_STATUS::LEAP_NEWFRAME;
+            bones_to_world_left.push_back(session[frameCounter * 22 + i]);
         }
-        else
-        {
-            return LEAP_STATUS::LEAP_NONEWFRAME;
-        }
+        // timestamp = session_timestamps[frameCounter];
+        return LEAP_STATUS::LEAP_NEWFRAME;
     }
     else
     {
-        return LEAP_STATUS::LEAP_FAILED;
+        return LEAP_STATUS::LEAP_NONEWFRAME;
     }
 }
 
-bool loadVideo()
+bool loadImagesFromFolder(std::string loadpath)
 {
-    std::string video("../../debug/video/");
-    fs::path video_path(video);
-    int frame_size = 1024 * 768 * 3;
+    fs::path video_path(loadpath);
+    int frame_size = cam_width * cam_height * 1;
     int counter = 0;
     for (const auto &entry : fs::directory_iterator(video_path))
     {
-        cv::Mat image = cv::imread(entry.path().string(), cv::IMREAD_COLOR);
+        if (counter >= 400)
+            break;
+        cv::Mat image = cv::imread(entry.path().string(), cv::IMREAD_GRAYSCALE);
         pFrameData[counter] = (uint8_t *)malloc(frame_size);
         memcpy((void *)pFrameData[counter], (void *)image.data, frame_size);
         std::cout << entry.path() << std::endl;
@@ -2741,7 +2780,7 @@ bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, 
     return true;
 }
 
-void handleCameraInput(CGrabResultPtr ptrGrabResult)
+void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat simulatedImage)
 {
     // prevFrame = curFrame.clone();
     // if (simulated_camera)
@@ -2752,7 +2791,7 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult)
     // else
     // {
     // std::cout << "before: " << camera_queue.size_approx() << std::endl;
-    if (!simulated_camera)
+    if (!simulatedCam)
     {
         bool sucess = camera.capture_single_image(ptrGrabResult);
         if (!sucess)
@@ -2775,7 +2814,8 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult)
     }
     else
     {
-        camImageOrig = cv::imread("../../resource/hand.png", cv::IMREAD_GRAYSCALE);
+        // camImageOrig = cv::imread("../../resource/hand.png", cv::IMREAD_GRAYSCALE);
+        camImageOrig = simulatedImage;
         camTexture.load((uint8_t *)camImageOrig.data, true, cam_buffer_format);
     }
     // camera_queue.wait_dequeue(ptrGrabResult);
@@ -2784,7 +2824,48 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult)
     // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
 }
 
-void recordSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp)
+bool loadSimulation(std::string loadpath)
+{
+    // load raw session data (hand poses n x 22 x 4 x 4, and timestamps n x 1)
+    fs::path bones_left_path(loadpath + session_name + std::string("_bones_left.npy"));
+    fs::path timestamps_path(loadpath + session_name + std::string("_timestamps.npy"));
+    cnpy::NpyArray bones_left_npy, timestamps_npy;
+    if (fs::exists(bones_left_path))
+    {
+        raw_simulation_bones_left.clear();
+        bones_left_npy = cnpy::npy_load(bones_left_path.string());
+        std::vector<float> raw_data = bones_left_npy.as_vec<float>();
+        for (int i = 0; i < raw_data.size(); i += 16)
+        {
+            raw_simulation_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
+        }
+    }
+    else
+    {
+        return false;
+    }
+    if (fs::exists(timestamps_path))
+    {
+        raw_simulation_timestamps.clear();
+        timestamps_npy = cnpy::npy_load(timestamps_path.string());
+        std::vector<uint64_t> raw_data = timestamps_npy.as_vec<uint64_t>();
+        // todo: convert to std iterators
+        uint64_t first_timestamp = raw_data[0];
+        for (int i = 0; i < raw_data.size(); i++)
+        {
+            raw_simulation_timestamps.push_back((raw_data[i] - first_timestamp) / 1000.0f);
+        }
+    }
+    else
+    {
+        return false;
+    }
+    total_simulation_time_stamps = session_timestamps.size();
+    simulation_bones_left = raw_session_bones_left;
+    simulation_timestamps = raw_session_timestamps;
+    return loadImagesFromFolder(loadpath);
+}
+void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp)
 {
     if (leap_global_scaler != 1.0f)
     {
@@ -2811,23 +2892,16 @@ void recordSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image
         cv::imwrite(savepath + tmp_filename.filename().string() + std::format("{:06d}", image_timestamp) + std::string("_cam.png"), camImageOrig);
     }
 }
-LEAP_STATUS handleLeapInput(bool prerecorded, uint64_t frameCounter)
+LEAP_STATUS handleLeapInput()
 {
     LEAP_STATUS leap_status;
-    if (prerecorded)
+    if (!leap_poll_mode)
     {
-        leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, frameCounter);
+        // sync leap clock
+        std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+        LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
     }
-    else
-    {
-        if (!leap_poll_mode)
-        {
-            // sync leap clock
-            std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-            LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-        }
-        leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay);
-    }
+    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay);
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
@@ -3415,6 +3489,11 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
     }
 }
 
+void handleFilteredMLS(Shader &gridShader)
+{
+    // todo
+}
+
 void handleMLS(Shader &gridShader)
 {
     if (use_mls) // todo: support two hands, currently prioritizes right if both hands are in frame
@@ -3688,17 +3767,17 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
     float interp2 = session_timestamps[interp_index];
     float interp_factor = (required_time - interp1) / (interp2 - interp1);
     // get pre-recorded leap info (current frame, will be rendered)
-    LEAP_STATUS leap_status = handleLeapInput(true, videoFrameCount);
+    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, videoFrameCount, total_session_time_stamps, session_bones_left);
     std::vector<glm::mat4> bones_to_world_left_interp1, bones_to_world_left_interp2;
     if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
         return false;
     // get pre-recorded leap info (some future frame, will be used as camera input)
     bones_to_world_current = bones_to_world_left;
-    leap_status = handleLeapInput(true, interp_index - 1);
+    leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, interp_index - 1, total_session_time_stamps, session_bones_left);
     if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
         return false;
     bones_to_world_left_interp1 = bones_to_world_left;
-    leap_status = handleLeapInput(true, interp_index);
+    leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, interp_index, total_session_time_stamps, session_bones_left);
     if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
         return false;
     bones_to_world_left_interp2 = bones_to_world_left;
@@ -4890,6 +4969,28 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Record & Playback"))
         {
             ImGui::Checkbox("Record Session", &record_session);
+            if (ImGui::Checkbox("Run Simulation", &run_simulation))
+            {
+                if (run_simulation)
+                {
+                    if (simulation_name != loaded_simulation_name)
+                    {
+                        if (loadSimulation(std::string("../../debug/recordings/")))
+                        {
+                            simulation_loaded = true;
+                            loaded_simulation_name = simulation_name;
+                        }
+                        else
+                        {
+                            std::cout << "Failed to load simulation: " << simulation_name << std::endl;
+                        }
+                    }
+                    simulationFrameCount = 0;
+                    simulationFrameCountCont = 0.0f;
+                    use_coaxial_calib = false;
+                    texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+                }
+            }
             if (ImGui::Checkbox("Run User Study", &run_user_study))
             {
                 if (run_user_study)
