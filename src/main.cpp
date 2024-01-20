@@ -85,7 +85,11 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           bool flipHorizontal,
                           bool projSingleChannel);
 void handleMLS(Shader &gridShader);
-void handleFilteredMLS(Shader &gridShader);
+void handleFilteredMLS(Shader &gridShader, bool rewind);
+cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
+                               std::vector<cv::Point2f> &Q,
+                               int deformation_mode, float alpha,
+                               Grid &grid);
 void handleDebugMode(SkinningShader &skinnedShader,
                      Shader &textureShader,
                      Shader &vcolorShader,
@@ -111,10 +115,11 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::vec3> &joints_right,
                          bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp, int magic_time_delay);
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
-                                    std::vector<glm::mat4> &bones_to_world_right,
+                                    std::vector<glm::vec3> &joints_left,
                                     uint64_t frameCounter,
                                     uint64_t totalFrameCount,
-                                    const std::vector<glm::mat4> &session);
+                                    const std::vector<glm::mat4> &bones_session,
+                                    const std::vector<glm::vec3> &joints_session);
 bool loadPrerecordedSession();
 bool loadImagesFromFolder(std::string loadpath);
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
@@ -240,6 +245,7 @@ float vid_playback_speed = 6.0f;
 int64_t videoFrameCount = 0;
 float videoFrameCountCont = 0.0;
 int64_t simulationFrameCount = 0;
+int simulationMPDelay = 8;
 float simulationFrameCountCont = 0.0;
 std::string session_name = "all";
 std::string subject_name = "tester1";
@@ -259,7 +265,9 @@ int total_session_time_stamps = 0;
 bool record_session = false;
 std::vector<glm::mat4> raw_session_bones_left;
 std::vector<glm::mat4> session_bones_left;
-std::vector<glm::mat4> session_bones_right;
+std::vector<glm::vec3> session_joints_left;
+std::vector<glm::vec3> raw_simulation_joints_left;
+std::vector<glm::vec3> simulation_joints_left;
 std::vector<float> raw_session_timestamps;
 std::vector<float> session_timestamps;
 std::vector<glm::mat4> raw_simulation_bones_left;
@@ -426,6 +434,7 @@ float mls_alpha = 0.5f;
 Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
+std::vector<cv::Point2f> prev_leap_keypoints;
 std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec2> ControlPointsP_input_tmp;
 std::vector<glm::vec2> ControlPointsP_input_glm;
@@ -447,7 +456,8 @@ float mp_kalman_measurement_noise = 0.01f;
 float mp_kalman_error = 1.0f;
 float mls_depth_threshold = 215.0f;
 bool mls_depth_test = false;
-std::vector<Kalman2D> kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+std::vector<Kalman2DXY> kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+std::vector<Kalman2D> grid_kalman = std::vector<Kalman2D>(1600, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
 int kalman_lookahead = 0;
 int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 
@@ -1110,20 +1120,18 @@ int main(int argc, char *argv[])
                     t_camera.stop();
                     // get current simulated leap info
                     t_leap.start();
-                    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left);
+                    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
                     t_leap.stop();
                     // skin the mesh
                     t_skin.start();
                     handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
                     t_skin.stop();
                     // filtered mls
-                    // a deformation grid is estimated using a kalman filter
-                    // the "continous" input to the filter are 2D grid point velocities (computed from the current and previous control points from leap using MLS)
-                    // but once every several frames, delayed 2d grid point locations are fed (computed from the current and precious MP predcition using MLS)
-                    // so we rewind the filter, to the timestamp of the delayed measurement, and propagate the filter using all exisiting measurements to the current timestamp
-                    // note: requires saving the filter state at each frame
                     t_mls.start();
-                    handleFilteredMLS(gridShader);
+                    if (simulationFrameCount % simulationMPDelay == 0)
+                        handleFilteredMLS(gridShader, true);
+                    else
+                        handleFilteredMLS(gridShader, false);
                     t_mls.stop();
                     // post process
                     t_pp.start();
@@ -2337,22 +2345,27 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
 }
 
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
-                                    std::vector<glm::mat4> &bones_to_world_right,
+                                    std::vector<glm::vec3> &joints_left,
                                     uint64_t frameCounter,
                                     uint64_t totalFrameCount,
-                                    const std::vector<glm::mat4> &session)
+                                    const std::vector<glm::mat4> &bones_session,
+                                    const std::vector<glm::vec3> &joints_session)
 {
     if (frameCounter < totalFrameCount)
     {
         bones_to_world_left.clear();
-        bones_to_world_right.clear();
-        // joints_left.clear();
-        // joints_right.clear();
+        joints_left.clear();
         for (int i = 0; i < 22; i++)
         {
-            bones_to_world_left.push_back(session[frameCounter * 22 + i]);
+            bones_to_world_left.push_back(bones_session[frameCounter * 22 + i]);
         }
-        // timestamp = session_timestamps[frameCounter];
+        if (joints_session.size() > 0) // the session might not have joints saved
+        {
+            for (int i = 0; i < 42; i++)
+            {
+                joints_left.push_back(joints_session[frameCounter * 42 + i]);
+            }
+        }
         return LEAP_STATUS::LEAP_NEWFRAME;
     }
     else
@@ -2826,10 +2839,11 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
 
 bool loadSimulation(std::string loadpath)
 {
-    // load raw session data (hand poses n x 22 x 4 x 4, and timestamps n x 1)
+    // load raw session data (hand poses n x 22 x 4 x 4, joints n x 42 x 3, timestamps n x 1)
     fs::path bones_left_path(loadpath + session_name + std::string("_bones_left.npy"));
+    fs::path joints_left_path(loadpath + session_name + std::string("_joints_left.npy"));
     fs::path timestamps_path(loadpath + session_name + std::string("_timestamps.npy"));
-    cnpy::NpyArray bones_left_npy, timestamps_npy;
+    cnpy::NpyArray bones_left_npy, joints_left_npy, timestamps_npy;
     if (fs::exists(bones_left_path))
     {
         raw_simulation_bones_left.clear();
@@ -2838,6 +2852,20 @@ bool loadSimulation(std::string loadpath)
         for (int i = 0; i < raw_data.size(); i += 16)
         {
             raw_simulation_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
+        }
+    }
+    else
+    {
+        return false;
+    }
+    if (fs::exists(joints_left_path))
+    {
+        raw_simulation_joints_left.clear();
+        joints_left_npy = cnpy::npy_load(joints_left_path.string());
+        std::vector<float> raw_data = joints_left_npy.as_vec<float>();
+        for (int i = 0; i < raw_data.size(); i += 3)
+        {
+            raw_simulation_joints_left.push_back(glm::make_vec3(raw_data.data() + i));
         }
     }
     else
@@ -2862,6 +2890,7 @@ bool loadSimulation(std::string loadpath)
     }
     total_simulation_time_stamps = session_timestamps.size();
     simulation_bones_left = raw_session_bones_left;
+    simulation_joints_left = raw_simulation_joints_left;
     simulation_timestamps = raw_session_timestamps;
     return loadImagesFromFolder(loadpath);
 }
@@ -2875,16 +2904,17 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
     if ((leap_status == LEAP_STATUS::LEAP_NEWFRAME) && (bones_to_world_left.size() > 0))
     {
         // save leap frame
-        fs::path bones_left(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
-        fs::path timestamps(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
+        fs::path bones_left_path(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
         // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
-        // fs::path joints(savepath + tmp_filename.filename().string() + std::string("_joints.npy"));
+        fs::path joints_left_path(savepath + tmp_filename.filename().string() + std::string("_joints_left.npy"));
+        fs::path timestamps_path(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
         // fs::path session(savepath + tmp_filename.filename().string() + std::string("_session.npz"));
         // cnpy::npy_save(session.string().c_str(), "joints", &skeleton_vertices[0].x, {skeleton_vertices.size(), 3}, "a");
         // cnpy::npy_save(session.string().c_str(), "bones_left", &bones_to_world_left[0][0].x, {bones_to_world_left.size(), 4, 4}, "a");
         // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
-        cnpy::npy_save(bones_left.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
-        cnpy::npy_save(timestamps.string().c_str(), &curFrameTimeStamp, {1}, "a");
+        cnpy::npy_save(bones_left_path.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
+        cnpy::npy_save(joints_left_path.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
+        cnpy::npy_save(timestamps_path.string().c_str(), &curFrameTimeStamp, {1}, "a");
         // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
         // cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
 
@@ -3489,9 +3519,166 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
     }
 }
 
-void handleFilteredMLS(Shader &gridShader)
+cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
+                               std::vector<cv::Point2f> &Q,
+                               int deformation_mode, float alpha,
+                               Grid &grid)
 {
-    // todo
+    // todo: can refactor control points to avoid this part
+    cv::Mat p = cv::Mat::zeros(2, P.size(), CV_32F);
+    cv::Mat q = cv::Mat::zeros(2, Q.size(), CV_32F);
+    for (int i = 0; i < P.size(); i++)
+    {
+        p.at<float>(0, i) = (P.at(i)).x;
+        p.at<float>(1, i) = (P.at(i)).y;
+    }
+    for (int i = 0; i < Q.size(); i++)
+    {
+        q.at<float>(0, i) = (Q.at(i)).x;
+        q.at<float>(1, i) = (Q.at(i)).y;
+    }
+    // compute deformation
+    cv::Mat fv;
+    cv::Mat w = MLSprecomputeWeights(p, grid.getM(), alpha);
+    switch (deformation_mode)
+    {
+    case static_cast<int>(DeformationMode::AFFINE):
+    {
+        cv::Mat A = MLSprecomputeAffine(p, grid.getM(), w);
+        fv = MLSPointsTransformAffine(w, A, q);
+        break;
+    }
+    case static_cast<int>(DeformationMode::SIMILARITY):
+    {
+        std::vector<_typeA> A = MLSprecomputeSimilar(p, grid.getM(), w);
+        fv = MLSPointsTransformSimilar(w, A, q);
+        break;
+    }
+    case static_cast<int>(DeformationMode::RIGID):
+    {
+        typeRigid A = MLSprecomputeRigid(p, grid.getM(), w);
+        fv = MLSPointsTransformRigid(w, A, q);
+        break;
+    }
+    default:
+    {
+        cv::Mat A = MLSprecomputeAffine(p, grid.getM(), w);
+        fv = MLSPointsTransformAffine(w, A, q);
+        break;
+    }
+    }
+    return fv;
+}
+void handleFilteredMLS(Shader &gridShader, bool rewind)
+{
+    // a deformation grid is estimated using a kalman filter
+    // the "continous" input to the filter are 2D grid point velocities (computed from the current and previous control points from leap using MLS)
+    // but once every several frames, delayed 2d grid point locations are fed (computed from the current and precious MP predcition using MLS)
+    // so we rewind the filter, to the timestamp of the delayed measurement, and propagate the filter using all exisiting measurements to the current timestamp
+    // note: requires saving the filter state at each frame
+    if (use_mls)
+    {
+        bool isRightHand = joints_right.size() > 0;
+        // compute velocity deformation grid
+        std::vector<glm::vec3> to_project = joints_left;
+        std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+        std::vector<cv::Point2f> cur_leap_keypoints = Helpers::glm2opencv(projected);
+        cv::Mat x = deformationGrid.getM();
+        prev_leap_keypoints = cur_leap_keypoints;
+        cv::Mat filtered = x.clone();
+        if (!rewind)
+        {
+            for (int i = 0; i < leap_selection_vector.size(); i++)
+            {
+                ControlPointsP.push_back(cur_leap_keypoints[leap_selection_vector[i]]);
+                ControlPointsQ.push_back(prev_leap_keypoints[leap_selection_vector[i]]);
+            }
+            cv::Mat x_new = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
+            cv::Mat v = x_new - x;
+            // predict and update kalman filter with grid from leap
+            for (int i = 0; i < x_new.cols; i++)
+            {
+                cv::Mat pred = grid_kalman[i].predict();
+                cv::Mat measurement(4, 1, CV_32F);
+                measurement.at<float>(0) = pred.at<float>(0, i);
+                measurement.at<float>(1) = pred.at<float>(1, i);
+                measurement.at<float>(2) = v.at<float>(0, i);
+                measurement.at<float>(3) = v.at<float>(1, i);
+                cv::Mat corr = kalman_filters[i].correct(measurement, true);
+                filtered.at<float>(0, i) = corr.at<float>(0);
+                filtered.at<float>(1, i) = corr.at<float>(1);
+                // cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
+                // if (i == 0)
+                // {
+                //     std::cout << "pred: " << pred << std::endl;
+                //     std::cout << "meas: " << measurement << std::endl;
+                //     std::cout << "corr: " << corr << std::endl;
+                // std::cout << "forecast: " << forecast << std::endl;
+                // }
+                // kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
+                // pred_glm = kalman_forecast;
+            }
+        }
+        else
+        {
+            // get leap prediction from the past
+            LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, simulationFrameCount - simulationMPDelay, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+            // run MP
+            std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
+            if (mp_predict(camImageOrig, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
+            {
+                if (isRightHand)
+                {
+                    if (cur_pred_glm_right.size() > 0)
+                    {
+                        cur_pred_glm = cur_pred_glm_right;
+                    }
+                    else
+                    {
+                        mls_running = false;
+                        // return;
+                    }
+                }
+                else
+                {
+                    if (cur_pred_glm_left.size() > 0)
+                    {
+                        cur_pred_glm = cur_pred_glm_left;
+                    }
+                    else
+                    {
+                        mls_running = false;
+                        // return;
+                    }
+                }
+            }
+            std::vector<cv::Point2f> cur_mp_keypoints = Helpers::glm2opencv(cur_pred_glm);
+            for (int i = 0; i < leap_selection_vector.size(); i++)
+            {
+                ControlPointsP.push_back(cur_leap_keypoints[leap_selection_vector[i]]);
+                ControlPointsQ.push_back(cur_mp_keypoints[mp_selection_vector[i]]);
+            }
+            // compute grid using the two measurements
+            cv::Mat x_new = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
+            for (int i = 0; i < x_new.cols; i++)
+            {
+                // rewind kalman filter to MP timestamp
+                grid_kalman[i].rewindToCheckpoint();
+                // fast forward with all measurements to current timestamp
+                cv::Mat new_measurement(4, 1, CV_32F);
+                new_measurement.at<float>(0) = x_new.at<float>(0, i);
+                new_measurement.at<float>(1) = x_new.at<float>(1, i);
+                new_measurement.at<float>(2) = grid_kalman[i].getCheckpointMeasurement().at<float>(0, i);
+                new_measurement.at<float>(3) = grid_kalman[i].getCheckpointMeasurement().at<float>(1, i);
+                cv::Mat result = grid_kalman[i].fastforward(new_measurement);
+                filtered.at<float>(0, i) = result.at<float>(0);
+                filtered.at<float>(1, i) = result.at<float>(1);
+                // save kalman state as checkpoint
+                grid_kalman[i].saveCheckpoint();
+            }
+        }
+        deformationGrid.constructDeformedGridSmooth(filtered, mls_cp_smooth_window);
+    }
 }
 
 void handleMLS(Shader &gridShader)
@@ -3655,56 +3842,17 @@ void handleMLS(Shader &gridShader)
                             // deform grid using control points
                             if (ControlPointsP.size() > 0)
                             {
-                                // todo: can refactor control points to avoid this part
-                                cv::Mat p = cv::Mat::zeros(2, ControlPointsP.size(), CV_32F);
-                                cv::Mat q = cv::Mat::zeros(2, ControlPointsQ.size(), CV_32F);
-                                for (int i = 0; i < ControlPointsP.size(); i++)
-                                {
-                                    p.at<float>(0, i) = (ControlPointsP.at(i)).x;
-                                    p.at<float>(1, i) = (ControlPointsP.at(i)).y;
-                                }
-                                for (int i = 0; i < ControlPointsQ.size(); i++)
-                                {
-                                    q.at<float>(0, i) = (ControlPointsQ.at(i)).x;
-                                    q.at<float>(1, i) = (ControlPointsQ.at(i)).y;
-                                }
                                 // compute deformation
-                                cv::Mat fv;
-                                cv::Mat w = MLSprecomputeWeights(p, deformationGrid.getM(), mls_alpha);
-                                switch (deformation_mode)
-                                {
-                                case static_cast<int>(DeformationMode::AFFINE):
-                                {
-                                    cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
-                                    fv = MLSPointsTransformAffine(w, A, q);
-                                    break;
-                                }
-                                case static_cast<int>(DeformationMode::SIMILARITY):
-                                {
-                                    std::vector<_typeA> A = MLSprecomputeSimilar(p, deformationGrid.getM(), w);
-                                    fv = MLSPointsTransformSimilar(w, A, q);
-                                    break;
-                                }
-                                case static_cast<int>(DeformationMode::RIGID):
-                                {
-                                    typeRigid A = MLSprecomputeRigid(p, deformationGrid.getM(), w);
-                                    fv = MLSPointsTransformRigid(w, A, q);
-                                    break;
-                                }
-                                default:
-                                {
-                                    cv::Mat A = MLSprecomputeAffine(p, deformationGrid.getM(), w);
-                                    fv = MLSPointsTransformAffine(w, A, q);
-                                    break;
-                                }
-                                }
-                                // update grid
-                                deformationGrid.constructDeformedGridSmooth(fv, mls_grid_smooth_window);
+                                cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
+                                // update grid points for render
+                                deformationGrid.constructDeformedGridSmooth(fv, mls_cp_smooth_window);
                             }
                             else
                             {
+                                // update grid points for render
                                 deformationGrid.constructGrid();
                             }
+
                             mls_succeed = true;
                         }
                     }
@@ -3767,17 +3915,17 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
     float interp2 = session_timestamps[interp_index];
     float interp_factor = (required_time - interp1) / (interp2 - interp1);
     // get pre-recorded leap info (current frame, will be rendered)
-    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, videoFrameCount, total_session_time_stamps, session_bones_left);
+    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, videoFrameCount, total_session_time_stamps, session_bones_left, session_joints_left);
     std::vector<glm::mat4> bones_to_world_left_interp1, bones_to_world_left_interp2;
     if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
         return false;
     // get pre-recorded leap info (some future frame, will be used as camera input)
     bones_to_world_current = bones_to_world_left;
-    leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, interp_index - 1, total_session_time_stamps, session_bones_left);
+    leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index - 1, total_session_time_stamps, session_bones_left, session_joints_left);
     if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
         return false;
     bones_to_world_left_interp1 = bones_to_world_left;
-    leap_status = getLeapFramePreRecorded(bones_to_world_left, bones_to_world_right, interp_index, total_session_time_stamps, session_bones_left);
+    leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index, total_session_time_stamps, session_bones_left, session_joints_left);
     if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
         return false;
     bones_to_world_left_interp2 = bones_to_world_left;
@@ -4912,19 +5060,19 @@ void openIMGUIFrame()
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+                kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
             }
             ImGui::SliderFloat("Kalman Mnoise", &mp_kalman_measurement_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+                kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
             }
             ImGui::SliderFloat("Kalman err", &mp_kalman_error, 0.01f, 10.0f);
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2D>(21, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+                kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
             }
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);

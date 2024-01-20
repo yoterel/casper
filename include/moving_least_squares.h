@@ -23,7 +23,7 @@ inline cv::Mat MLSprecomputeWeights(cv::Mat p, cv::Mat v, double a)
 {
 	// p: 2 x n_control
 	// v: 2 x n_grid
-	cv::Mat w = cv::Mat::zeros(p.cols, v.cols, CV_32F);
+	cv::Mat w = cv::Mat::zeros(p.cols, v.cols, CV_32F); // n_control x n_grid
 	cv::Mat p_resize;
 	cv::Mat norms = cv::Mat::zeros(2, v.cols, CV_32F);
 	cv::Mat norms_a;
