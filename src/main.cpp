@@ -433,6 +433,7 @@ Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, gri
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
 std::vector<cv::Point2f> prev_leap_keypoints;
+cv::Mat x_prev;
 std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec2> ControlPointsP_input_tmp;
 std::vector<glm::vec2> ControlPointsP_input_glm;
@@ -449,7 +450,7 @@ int mls_cp_smooth_window = 0;
 int mls_grid_smooth_window = 0;
 bool use_mp_kalman = false;
 bool mls_forecast = true;
-float mp_kalman_process_noise = 0.01f;
+float mp_kalman_process_noise = 0.0001f;
 float mp_kalman_measurement_noise = 0.01f;
 float mp_kalman_error = 1.0f;
 float mls_depth_threshold = 215.0f;
@@ -1141,6 +1142,7 @@ int main(int argc, char *argv[])
                             grid_kalman[i].setInitialState(state);
                             grid_kalman[i].saveCheckpoint();
                         }
+                        x_prev = x.clone();
                     }
                     if ((simulationFrameCount % simulationMPDelay == 0) && (simulationFrameCount != 0))
                         handleFilteredMLS(gridShader, true);
@@ -3628,7 +3630,8 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                 ControlPointsQ.push_back(prev_leap_keypoints[leap_selection_vector[i]]);
             }
             cv::Mat x_new = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
-            cv::Mat v = x_new - x;
+            cv::Mat v = x_new - x_prev;
+            x_prev = x_new;
             // std::cout << "x: " << x.at<float>(0, 0) << x.at<float>(0, 1) << std::endl
             //           << x.at<float>(1, 0) << x.at<float>(1, 1) << std::endl;
             // std::cout << "x_new: " << x_new.at<float>(0, 0) << x_new.at<float>(0, 1) << std::endl
@@ -3643,8 +3646,6 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                 measurement.at<float>(1) = pred.at<float>(1); // 0.0f;
                 measurement.at<float>(2) = v.at<float>(0, i);
                 measurement.at<float>(3) = v.at<float>(1, i);
-                if (i == 800)
-                    std::cout << "measurement: " << measurement << std::endl;
                 cv::Mat measCov = grid_kalman[i].getMeasNoiseCoV();
                 measCov.at<float>(0, 0) = 100000.0f;
                 measCov.at<float>(1, 1) = 100000.0f;
@@ -3654,6 +3655,13 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                 cv::Mat corr = grid_kalman[i].correct(measurement, true);
                 filtered.at<float>(0, i) = corr.at<float>(0);
                 filtered.at<float>(1, i) = corr.at<float>(1);
+                if (i == 800)
+                {
+                    std::cout << "measurement: " << measurement << std::endl;
+                    // std::cout << "measCov before corr: " << measCov << std::endl;
+                    // std::cout << "measCov after corr: " << grid_kalman[i].getMeasNoiseCoV() << std::endl;
+                    std::cout << "state after: " << corr << std::endl;
+                }
                 // cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
                 // if (i == 0)
                 // {
