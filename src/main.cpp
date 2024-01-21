@@ -1132,6 +1132,15 @@ int main(int argc, char *argv[])
                         std::vector<glm::vec3> to_project = joints_left;
                         std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
                         prev_leap_keypoints = Helpers::glm2opencv(projected);
+                        cv::Mat x = deformationGrid.getM();
+                        for (int i = 0; i < grid_x_point_count * grid_y_point_count; i++)
+                        {
+                            cv::Mat state = cv::Mat::zeros(4, 1, CV_32F);
+                            state.at<float>(0) = x.at<float>(0, i);
+                            state.at<float>(1) = x.at<float>(1, i);
+                            grid_kalman[i].setInitialState(state);
+                            grid_kalman[i].saveCheckpoint();
+                        }
                     }
                     if ((simulationFrameCount % simulationMPDelay == 0) && (simulationFrameCount != 0))
                         handleFilteredMLS(gridShader, true);
@@ -1148,8 +1157,12 @@ int main(int argc, char *argv[])
                     set_texture_shader(&textureShader, false, false, false);
                     c2p_fbo.getTexture()->bind();
                     fullScreenQuad.render();
-
-                    simulationFrameCount++;
+                    cur_vid_time = t_app.getElapsedTimeInMilliSec();
+                    if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                    {
+                        prev_vid_time = cur_vid_time;
+                        simulationFrameCount += 1;
+                    }
                     if (simulationFrameCount >= total_simulation_time_stamps)
                     {
                         simulationFrameCount = 0;
@@ -3605,6 +3618,8 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
         std::vector<cv::Point2f> cur_leap_keypoints = Helpers::glm2opencv(projected);
         cv::Mat x = deformationGrid.getM();
         cv::Mat filtered = x.clone();
+        ControlPointsP.clear();
+        ControlPointsQ.clear();
         if (!rewind)
         {
             for (int i = 0; i < leap_selection_vector.size(); i++)
@@ -3614,20 +3629,27 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
             }
             cv::Mat x_new = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
             cv::Mat v = x_new - x;
-            std::cout << "x: " << x.at<float>(0, 0) << x.at<float>(0, 1) << std::endl
-                      << x.at<float>(1, 0) << x.at<float>(1, 1) << std::endl;
-            std::cout << "x_new: " << x_new.at<float>(0, 0) << x_new.at<float>(0, 1) << std::endl
-                      << x_new.at<float>(1, 0) << x_new.at<float>(1, 1) << std::endl;
+            // std::cout << "x: " << x.at<float>(0, 0) << x.at<float>(0, 1) << std::endl
+            //           << x.at<float>(1, 0) << x.at<float>(1, 1) << std::endl;
+            // std::cout << "x_new: " << x_new.at<float>(0, 0) << x_new.at<float>(0, 1) << std::endl
+            //           << x_new.at<float>(1, 0) << x_new.at<float>(1, 1) << std::endl;
             // std::cout << "v: " << v << std::endl;
             // predict and update kalman filter with grid from leap
             for (int i = 0; i < x_new.cols; i++)
             {
                 cv::Mat pred = grid_kalman[i].predict();
                 cv::Mat measurement(4, 1, CV_32F);
-                measurement.at<float>(0) = pred.at<float>(0);
-                measurement.at<float>(1) = pred.at<float>(1);
+                measurement.at<float>(0) = pred.at<float>(0); // 0.0f;
+                measurement.at<float>(1) = pred.at<float>(1); // 0.0f;
                 measurement.at<float>(2) = v.at<float>(0, i);
                 measurement.at<float>(3) = v.at<float>(1, i);
+                if (i == 800)
+                    std::cout << "measurement: " << measurement << std::endl;
+                cv::Mat measCov = grid_kalman[i].getMeasNoiseCoV();
+                measCov.at<float>(0, 0) = 100000.0f;
+                measCov.at<float>(1, 1) = 100000.0f;
+                // std::cout << "measCov: " << measCov << std::endl;
+                grid_kalman[i].setMeasNoiseCoV(measCov);
                 // std::cout << measurement << std::endl;
                 cv::Mat corr = grid_kalman[i].correct(measurement, true);
                 filtered.at<float>(0, i) = corr.at<float>(0);
@@ -3643,8 +3665,8 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                 // kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
                 // pred_glm = kalman_forecast;
             }
-            std::cout << "filtered: " << filtered.at<float>(0, 0) << filtered.at<float>(0, 1) << std::endl
-                      << filtered.at<float>(1, 0) << filtered.at<float>(1, 1) << std::endl;
+            // std::cout << "filtered: " << filtered.at<float>(0, 0) << filtered.at<float>(0, 1) << std::endl
+            //           << filtered.at<float>(1, 0) << filtered.at<float>(1, 1) << std::endl;
             prev_leap_keypoints = cur_leap_keypoints;
         }
         else
@@ -3653,7 +3675,8 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
             LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, simulationFrameCount - simulationMPDelay, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
             // run MP
             std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
-            if (mp_predict(camImageOrig, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
+            cv::Mat pastImage = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount - simulationMPDelay]).clone();
+            if (mp_predict(pastImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
             {
                 if (isRightHand)
                 {
@@ -3663,7 +3686,8 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                     }
                     else
                     {
-                        mls_running = false;
+                        exit(1);
+                        // mls_running = false;
                         // return;
                     }
                 }
@@ -3675,7 +3699,8 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                     }
                     else
                     {
-                        mls_running = false;
+                        exit(1);
+                        // mls_running = false;
                         // return;
                     }
                 }
@@ -3691,14 +3716,26 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
             for (int i = 0; i < x_new.cols; i++)
             {
                 // rewind kalman filter to MP timestamp
-                grid_kalman[i].rewindToCheckpoint();
+                grid_kalman[i].rewindToCheckpoint(i == 800);
                 // fast forward with all measurements to current timestamp
                 cv::Mat new_measurement(4, 1, CV_32F);
-                new_measurement.at<float>(0) = x_new.at<float>(0);
-                new_measurement.at<float>(1) = x_new.at<float>(1);
+                new_measurement.at<float>(0) = x_new.at<float>(0, i);
+                new_measurement.at<float>(1) = x_new.at<float>(1, i);
                 new_measurement.at<float>(2) = grid_kalman[i].getCheckpointMeasurement().at<float>(2);
                 new_measurement.at<float>(3) = grid_kalman[i].getCheckpointMeasurement().at<float>(3);
-                cv::Mat result = grid_kalman[i].fastforward(new_measurement);
+                cv::Mat measCov = grid_kalman[i].getMeasNoiseCoV();
+                measCov.at<float>(0, 0) = 0.001f;
+                measCov.at<float>(1, 1) = 0.001f;
+                grid_kalman[i].setMeasNoiseCoV(measCov);
+                cv::Mat result = grid_kalman[i].fastforward(new_measurement, i == 800);
+                // if (i == 800)
+                // {
+                //     std::cout << "meas: " << new_measurement << std::endl;
+                //     std::cout << "measCov before ff: " << measCov << std::endl;
+                //     std::cout << "measCov after ff: " << grid_kalman[i].getMeasNoiseCoV() << std::endl;
+                //     std::cout << "ff result: " << result << std::endl;
+                //     std::cout << "done ff" << std::endl;
+                // }
                 filtered.at<float>(0, i) = result.at<float>(0);
                 filtered.at<float>(1, i) = result.at<float>(1);
                 // save kalman state as checkpoint
@@ -5240,7 +5277,7 @@ void openIMGUIFrame()
             ImGui::RadioButton("all", &motion_model, 3);
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 1.0f, 50.0f);
             ImGui::SliderFloat("Video playback speed", &vid_playback_speed, 0.1f, 10.0f);
-            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 100.0f, 900.0f);
+            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 1.0f, 900.0f);
             if (ImGui::Checkbox("Debug Playback", &debug_playback))
             {
                 if (debug_playback)

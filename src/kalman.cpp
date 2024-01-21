@@ -4,6 +4,14 @@ Kalman::Kalman(int stateDim, int measDim, int contrDim) : KF(stateDim, measDim, 
 {
 }
 
+void Kalman::setInitialState(float error)
+{
+    // set the initial state
+    randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
+    // set the initial state covariance
+    setIdentity(KF.errorCovPost, cv::Scalar::all(error));
+}
+
 cv::Mat Kalman::predict()
 {
     cv::Mat prediction = KF.predict(); // predict the state (same dims as state)
@@ -13,26 +21,61 @@ cv::Mat Kalman::predict()
 cv::Mat Kalman::correct(cv::Mat measurement, bool saveMeasurement)
 {
     if (saveMeasurement)
-        measurements.push_back(measurement);
+    {
+        measurements.push_back(measurement.clone());
+        measCovs.push_back(KF.measurementNoiseCov.clone());
+        // std::cout << "measureCov: " << KF.measurementNoiseCov << std::endl;
+    }
     KF.correct(measurement); // update using measurement
     return KF.statePost;     // return the corrected state (same dims as state)
 }
 
-void Kalman::rewindToCheckpoint()
+void Kalman::rewindToCheckpoint(bool verbose)
 {
-    KF.statePost = checkpoint_state_post;
-    KF.errorCovPost = checkpoint_cov_post;
+    if (verbose)
+    {
+        std::cout << "before rewind state: " << KF.statePost << std::endl;
+        std::cout << "before rewind state cov : " << KF.errorCovPost << std::endl;
+    }
+    KF.statePost = checkpoint_state_post.clone();
+    KF.errorCovPost = checkpoint_cov_post.clone();
+    if (verbose)
+    {
+        std::cout << "after rewind state: " << KF.statePost << std::endl;
+        std::cout << "after rewind state cov : " << KF.errorCovPost << std::endl;
+    }
+    // std::cout << "rewinded state: " << KF.statePost << std::endl;
+    // std::cout << "rewinded state cov : " << KF.errorCovPost << std::endl;
 }
-cv::Mat Kalman::fastforward(cv::Mat measurement)
+cv::Mat Kalman::fastforward(cv::Mat measurement, bool verbose)
 {
+    if (verbose)
+    {
+        std::cout << "state before ff: " << KF.statePost << std::endl;
+        std::cout << "measurement before ff: " << measurement << std::endl;
+        std::cout << "measureCov before ff: " << KF.measurementNoiseCov << std::endl;
+    }
     predict();
-    correct(measurement, false);
+    cv::Mat test = correct(measurement, false);
+    if (verbose)
+        std::cout << "ff: state after iter 0: " << test << std::endl;
     for (int i = 1; i < measurements.size(); i++)
     {
+        KF.measurementNoiseCov = measCovs[i];
+        if (verbose)
+        {
+            std::cout << "ff measurement: " << measurements[i] << std::endl;
+            std::cout << "ff measureCov: " << measCovs[i] << std::endl;
+        }
         predict();
-        correct(measurements[i], false);
+        test = correct(measurements[i], false);
+        if (verbose)
+            std::cout << "ff: state after iter " << i << ": " << test << std::endl;
     }
     measurements.clear();
+    measCovs.clear();
+    if (verbose)
+        std::cout << "state after ff: " << KF.statePost << std::endl;
     return KF.statePost;
 }
 
@@ -43,8 +86,8 @@ cv::Mat Kalman::getCheckpointMeasurement()
 
 void Kalman::saveCheckpoint()
 {
-    checkpoint_state_post = KF.statePost;
-    checkpoint_cov_post = KF.errorCovPost;
+    checkpoint_state_post = KF.statePost.clone();
+    checkpoint_cov_post = KF.errorCovPost.clone();
 }
 
 cv::Mat Kalman::forecast(int steps)
@@ -87,8 +130,9 @@ Kalman2DXY::Kalman2DXY(float processNoise, float measurementNoise, float error, 
     // measurement noise covariance matrix (R) = 2x2
     setIdentity(KF.measurementNoiseCov, cv::Scalar::all(measurementNoise));
     // todo: do we need to set errorCovPost and statePost?
+    setInitialState(error);
     // setIdentity(KF.errorCovPost, cv::Scalar::all(error));
-    randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
+    // randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
 }
 
 Kalman2D::Kalman2D(float processNoise, float measurementNoise, float error, float dt) : Kalman(4, 4, 0)
@@ -104,9 +148,16 @@ Kalman2D::Kalman2D(float processNoise, float measurementNoise, float error, floa
     // measurement noise covariance matrix (R) = 4x4
     setIdentity(KF.measurementNoiseCov, cv::Scalar::all(measurementNoise));
     // todo: do we need to set errorCovPost and statePost?
-    // setIdentity(KF.errorCovPost, cv::Scalar::all(error));
-    // randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
+    Kalman::setInitialState(error);
     saveCheckpoint();
+}
+
+void Kalman2D::setInitialState(cv::Mat state)
+{
+    // set the initial state
+    KF.statePost = state.clone();
+    // set the initial state covariance ?
+    // ?
 }
 
 Kalman2DAcc::Kalman2DAcc(float processNoise, float measurementNoise, float error, float dt) : Kalman(6, 2, 0)
