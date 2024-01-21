@@ -106,6 +106,7 @@ Kalman2D::Kalman2D(float processNoise, float measurementNoise, float error, floa
     // todo: do we need to set errorCovPost and statePost?
     // setIdentity(KF.errorCovPost, cv::Scalar::all(error));
     // randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
+    saveCheckpoint();
 }
 
 Kalman2DAcc::Kalman2DAcc(float processNoise, float measurementNoise, float error, float dt) : Kalman(6, 2, 0)

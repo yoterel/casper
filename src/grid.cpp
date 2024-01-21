@@ -47,7 +47,7 @@ void Grid::ComputePointCoordinate(int pointIndex,
 cv::Mat Grid::AssembleM()
 {
     // change the size of the grid
-    cv::Mat a = cv::Mat::zeros(2, m_xPointCount * m_yPointCount, CV_32F); // 2 x 1600 x float
+    cv::Mat a = cv::Mat::zeros(2, m_xPointCount * m_yPointCount, CV_32F); // 2 x 1681 x float
     double width = m_xSpacing * (m_xPointCount - 1);                      // 2.0
     double height = m_ySpacing * (m_yPointCount - 1);                     // 2.0
     double minX = -width / 2;

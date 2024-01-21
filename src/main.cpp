@@ -120,7 +120,7 @@ LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     uint64_t totalFrameCount,
                                     const std::vector<glm::mat4> &bones_session,
                                     const std::vector<glm::vec3> &joints_session);
-bool loadPrerecordedSession();
+bool loadSession();
 bool loadImagesFromFolder(std::string loadpath);
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
                SkinnedModel &leftHandModel,
@@ -247,13 +247,11 @@ float videoFrameCountCont = 0.0;
 int64_t simulationFrameCount = 0;
 int simulationMPDelay = 8;
 float simulationFrameCountCont = 0.0;
-std::string session_name = "all";
-std::string subject_name = "tester1";
+std::string recording_name = "test";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool simulation_loaded = false;
 bool run_simulation = false;
-std::string simulation_name = "test";
 std::string loaded_simulation_name = "";
 int total_simulation_time_stamps = 0;
 std::string playback_video_name = "test";
@@ -457,7 +455,7 @@ float mp_kalman_error = 1.0f;
 float mls_depth_threshold = 215.0f;
 bool mls_depth_test = false;
 std::vector<Kalman2DXY> kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
-std::vector<Kalman2D> grid_kalman = std::vector<Kalman2D>(1600, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+std::vector<Kalman2D> grid_kalman = std::vector<Kalman2D>(grid_x_point_count * grid_y_point_count, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
 int kalman_lookahead = 0;
 int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 
@@ -996,7 +994,7 @@ int main(int argc, char *argv[])
             t_leap.start();
             LEAP_STATUS leap_status = handleLeapInput();
             if (record_session)
-                saveSession(std::string("../../debug/recordings/"), leap_status, totalFrameCount);
+                saveSession(std::format("../../debug/recordings/{}", recording_name), leap_status, totalFrameCount);
             t_leap.stop();
 
             /* skin hand meshes */
@@ -1115,6 +1113,7 @@ int main(int argc, char *argv[])
                     t_camera.start();
                     // get current simulated camera image
                     cv::Mat simulated = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount]).clone();
+                    // cv::flip(simulated, simulated, 1);
                     // set it as camera input
                     handleCameraInput(ptrGrabResult, true, simulated);
                     t_camera.stop();
@@ -1128,7 +1127,13 @@ int main(int argc, char *argv[])
                     t_skin.stop();
                     // filtered mls
                     t_mls.start();
-                    if (simulationFrameCount % simulationMPDelay == 0)
+                    if (simulationFrameCount == 0)
+                    {
+                        std::vector<glm::vec3> to_project = joints_left;
+                        std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                        prev_leap_keypoints = Helpers::glm2opencv(projected);
+                    }
+                    if ((simulationFrameCount % simulationMPDelay == 0) && (simulationFrameCount != 0))
                         handleFilteredMLS(gridShader, true);
                     else
                         handleFilteredMLS(gridShader, false);
@@ -1145,6 +1150,11 @@ int main(int argc, char *argv[])
                     fullScreenQuad.render();
 
                     simulationFrameCount++;
+                    if (simulationFrameCount >= total_simulation_time_stamps)
+                    {
+                        simulationFrameCount = 0;
+                        run_simulation = false;
+                    }
                 }
             }
             break;
@@ -2381,6 +2391,8 @@ bool loadImagesFromFolder(std::string loadpath)
     int counter = 0;
     for (const auto &entry : fs::directory_iterator(video_path))
     {
+        if (entry.path().extension() != ".png")
+            continue;
         if (counter >= 400)
             break;
         cv::Mat image = cv::imread(entry.path().string(), cv::IMREAD_GRAYSCALE);
@@ -2393,12 +2405,12 @@ bool loadImagesFromFolder(std::string loadpath)
     return true;
 }
 
-bool loadPrerecordedSession()
+bool loadSession()
 {
     // load raw session data (hand poses n x 22 x 4 x 4, and timestamps n x 1)
     std::string recordings("../../debug/recordings/");
-    fs::path bones_left_path(recordings + session_name + std::string("_bones_left.npy"));
-    fs::path timestamps_path(recordings + session_name + std::string("_timestamps.npy"));
+    fs::path bones_left_path = fs::path(recordings) / fs::path(recording_name) / fs::path(std::string("bones_left.npy"));
+    fs::path timestamps_path = fs::path(recordings) / fs::path(recording_name) / fs::path(std::string("timestamps.npy"));
     cnpy::NpyArray bones_left_npy, timestamps_npy;
     if (fs::exists(bones_left_path))
     {
@@ -2840,9 +2852,9 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
 bool loadSimulation(std::string loadpath)
 {
     // load raw session data (hand poses n x 22 x 4 x 4, joints n x 42 x 3, timestamps n x 1)
-    fs::path bones_left_path(loadpath + session_name + std::string("_bones_left.npy"));
-    fs::path joints_left_path(loadpath + session_name + std::string("_joints_left.npy"));
-    fs::path timestamps_path(loadpath + session_name + std::string("_timestamps.npy"));
+    fs::path bones_left_path = fs::path(loadpath) / fs::path(std::string("bones_left.npy"));
+    fs::path joints_left_path = fs::path(loadpath) / fs::path(std::string("joints_left.npy"));
+    fs::path timestamps_path = fs::path(loadpath) / fs::path(std::string("timestamps.npy"));
     cnpy::NpyArray bones_left_npy, joints_left_npy, timestamps_npy;
     if (fs::exists(bones_left_path))
     {
@@ -2888,14 +2900,19 @@ bool loadSimulation(std::string loadpath)
     {
         return false;
     }
-    total_simulation_time_stamps = session_timestamps.size();
-    simulation_bones_left = raw_session_bones_left;
-    simulation_joints_left = raw_simulation_joints_left;
-    simulation_timestamps = raw_session_timestamps;
+    total_simulation_time_stamps = raw_simulation_timestamps.size();
+    simulation_bones_left = std::move(raw_simulation_bones_left);
+    simulation_joints_left = std::move(raw_simulation_joints_left);
+    simulation_timestamps = std::move(raw_simulation_timestamps);
     return loadImagesFromFolder(loadpath);
 }
 void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp)
 {
+    fs::path savepath_path(savepath);
+    if (!fs::exists(savepath_path))
+    {
+        fs::create_directory(savepath_path);
+    }
     if (leap_global_scaler != 1.0f)
     {
         std::cout << "cannot record session with global scale transform" << std::endl;
@@ -2904,22 +2921,25 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
     if ((leap_status == LEAP_STATUS::LEAP_NEWFRAME) && (bones_to_world_left.size() > 0))
     {
         // save leap frame
-        fs::path bones_left_path(savepath + tmp_filename.filename().string() + std::string("_bones_left.npy"));
+        fs::path bones_left_path = savepath_path / fs::path(std::string("bones_left.npy"));
+        fs::path joints_left_path = savepath_path / fs::path(std::string("joints_left.npy"));
+        fs::path timestamps_path = savepath_path / fs::path(std::string("timestamps.npy"));
         // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
-        fs::path joints_left_path(savepath + tmp_filename.filename().string() + std::string("_joints_left.npy"));
-        fs::path timestamps_path(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
+        // fs::path joints_left_path(savepath + tmp_filename.filename().string() + std::string("_joints_left.npy"));
+        // fs::path timestamps_path(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
         // fs::path session(savepath + tmp_filename.filename().string() + std::string("_session.npz"));
         // cnpy::npy_save(session.string().c_str(), "joints", &skeleton_vertices[0].x, {skeleton_vertices.size(), 3}, "a");
         // cnpy::npy_save(session.string().c_str(), "bones_left", &bones_to_world_left[0][0].x, {bones_to_world_left.size(), 4, 4}, "a");
         // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
-        cnpy::npy_save(bones_left_path.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
-        cnpy::npy_save(joints_left_path.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
+        cnpy::npy_save(joints_left_path.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
+        cnpy::npy_save(bones_left_path.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
         cnpy::npy_save(timestamps_path.string().c_str(), &curFrameTimeStamp, {1}, "a");
         // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
         // cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
 
         // also save the current camera image
-        cv::imwrite(savepath + tmp_filename.filename().string() + std::format("{:06d}", image_timestamp) + std::string("_cam.png"), camImageOrig);
+        fs::path image_path = savepath_path / fs::path(std::format("{:06d}", image_timestamp) + std::string("_cam.png"));
+        cv::imwrite(image_path.string(), camImageOrig);
     }
 }
 LEAP_STATUS handleLeapInput()
@@ -3584,7 +3604,6 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
         std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
         std::vector<cv::Point2f> cur_leap_keypoints = Helpers::glm2opencv(projected);
         cv::Mat x = deformationGrid.getM();
-        prev_leap_keypoints = cur_leap_keypoints;
         cv::Mat filtered = x.clone();
         if (!rewind)
         {
@@ -3595,16 +3614,22 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
             }
             cv::Mat x_new = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
             cv::Mat v = x_new - x;
+            std::cout << "x: " << x.at<float>(0, 0) << x.at<float>(0, 1) << std::endl
+                      << x.at<float>(1, 0) << x.at<float>(1, 1) << std::endl;
+            std::cout << "x_new: " << x_new.at<float>(0, 0) << x_new.at<float>(0, 1) << std::endl
+                      << x_new.at<float>(1, 0) << x_new.at<float>(1, 1) << std::endl;
+            // std::cout << "v: " << v << std::endl;
             // predict and update kalman filter with grid from leap
             for (int i = 0; i < x_new.cols; i++)
             {
                 cv::Mat pred = grid_kalman[i].predict();
                 cv::Mat measurement(4, 1, CV_32F);
-                measurement.at<float>(0) = pred.at<float>(0, i);
-                measurement.at<float>(1) = pred.at<float>(1, i);
+                measurement.at<float>(0) = pred.at<float>(0);
+                measurement.at<float>(1) = pred.at<float>(1);
                 measurement.at<float>(2) = v.at<float>(0, i);
                 measurement.at<float>(3) = v.at<float>(1, i);
-                cv::Mat corr = kalman_filters[i].correct(measurement, true);
+                // std::cout << measurement << std::endl;
+                cv::Mat corr = grid_kalman[i].correct(measurement, true);
                 filtered.at<float>(0, i) = corr.at<float>(0);
                 filtered.at<float>(1, i) = corr.at<float>(1);
                 // cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
@@ -3618,6 +3643,9 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                 // kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
                 // pred_glm = kalman_forecast;
             }
+            std::cout << "filtered: " << filtered.at<float>(0, 0) << filtered.at<float>(0, 1) << std::endl
+                      << filtered.at<float>(1, 0) << filtered.at<float>(1, 1) << std::endl;
+            prev_leap_keypoints = cur_leap_keypoints;
         }
         else
         {
@@ -3666,10 +3694,10 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
                 grid_kalman[i].rewindToCheckpoint();
                 // fast forward with all measurements to current timestamp
                 cv::Mat new_measurement(4, 1, CV_32F);
-                new_measurement.at<float>(0) = x_new.at<float>(0, i);
-                new_measurement.at<float>(1) = x_new.at<float>(1, i);
-                new_measurement.at<float>(2) = grid_kalman[i].getCheckpointMeasurement().at<float>(0, i);
-                new_measurement.at<float>(3) = grid_kalman[i].getCheckpointMeasurement().at<float>(1, i);
+                new_measurement.at<float>(0) = x_new.at<float>(0);
+                new_measurement.at<float>(1) = x_new.at<float>(1);
+                new_measurement.at<float>(2) = grid_kalman[i].getCheckpointMeasurement().at<float>(2);
+                new_measurement.at<float>(3) = grid_kalman[i].getCheckpointMeasurement().at<float>(3);
                 cv::Mat result = grid_kalman[i].fastforward(new_measurement);
                 filtered.at<float>(0, i) = result.at<float>(0);
                 filtered.at<float>(1, i) = result.at<float>(1);
@@ -3678,6 +3706,22 @@ void handleFilteredMLS(Shader &gridShader, bool rewind)
             }
         }
         deformationGrid.constructDeformedGridSmooth(filtered, mls_cp_smooth_window);
+        // std::cout << filtered << std::endl;
+        // std::cout <<
+        deformationGrid.updateGLBuffers();
+        mls_fbo.bind();
+        glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
+        if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
+            uv_fbo.getTexture()->bind();
+        else
+            hands_fbo.getTexture()->bind();
+        gridShader.use();
+        gridShader.setBool("flipVer", false);
+        deformationGrid.render();
+        // gridColorShader.use();
+        // deformationGrid.renderGridLines();
+        mls_fbo.unbind(); // mls_fbo
+        glEnable(GL_CULL_FACE);
     }
 }
 
@@ -5117,20 +5161,21 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Record & Playback"))
         {
             ImGui::Checkbox("Record Session", &record_session);
+            ImGui::InputText("Recording Name", &recording_name);
             if (ImGui::Checkbox("Run Simulation", &run_simulation))
             {
                 if (run_simulation)
                 {
-                    if (simulation_name != loaded_simulation_name)
+                    if (recording_name != loaded_simulation_name)
                     {
-                        if (loadSimulation(std::string("../../debug/recordings/")))
+                        if (loadSimulation(std::format("../../debug/recordings/{}", recording_name)))
                         {
                             simulation_loaded = true;
-                            loaded_simulation_name = simulation_name;
+                            loaded_simulation_name = recording_name;
                         }
                         else
                         {
-                            std::cout << "Failed to load simulation: " << simulation_name << std::endl;
+                            std::cout << "Failed to load recording: " << recording_name << std::endl;
                         }
                     }
                     simulationFrameCount = 0;
@@ -5148,31 +5193,31 @@ void openIMGUIFrame()
                     switch (motion_model)
                     {
                     case static_cast<int>(MotionModel::TRANSLATION):
-                        session_name = "translation";
+                        recording_name = "translation";
                         break;
                     case static_cast<int>(MotionModel::ROTATION):
-                        session_name = "rotation";
+                        recording_name = "rotation";
                         break;
                     case static_cast<int>(MotionModel::DEFORMATION):
-                        session_name = "deformation";
+                        recording_name = "deformation";
                         break;
                     case static_cast<int>(MotionModel::ALL):
-                        session_name = "all";
+                        recording_name = "all";
                         break;
                     default:
-                        session_name = "all";
+                        recording_name = "all";
                         break;
                     }
-                    if (session_name != loaded_session_name)
+                    if (recording_name != loaded_session_name)
                     {
-                        if (loadPrerecordedSession())
+                        if (loadSession())
                         {
                             pre_recorded_session_loaded = true;
-                            loaded_session_name = session_name;
+                            loaded_session_name = recording_name;
                         }
                         else
                         {
-                            std::cout << "Failed to load prerecorded session: " << session_name << std::endl;
+                            std::cout << "Failed to load recording: " << recording_name << std::endl;
                         }
                     }
                     videoFrameCount = 0;
@@ -5193,8 +5238,6 @@ void openIMGUIFrame()
             ImGui::RadioButton("deformation", &motion_model, 2);
             ImGui::SameLine();
             ImGui::RadioButton("all", &motion_model, 3);
-            ImGui::InputText("Session Name", &session_name);
-            ImGui::InputText("Subject Name", &subject_name);
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 1.0f, 50.0f);
             ImGui::SliderFloat("Video playback speed", &vid_playback_speed, 0.1f, 10.0f);
             ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 100.0f, 900.0f);
@@ -5205,31 +5248,31 @@ void openIMGUIFrame()
                     switch (motion_model)
                     {
                     case static_cast<int>(MotionModel::TRANSLATION):
-                        session_name = "translation";
+                        recording_name = "translation";
                         break;
                     case static_cast<int>(MotionModel::ROTATION):
-                        session_name = "rotation";
+                        recording_name = "rotation";
                         break;
                     case static_cast<int>(MotionModel::DEFORMATION):
-                        session_name = "deformation";
+                        recording_name = "deformation";
                         break;
                     case static_cast<int>(MotionModel::ALL):
-                        session_name = "all";
+                        recording_name = "all";
                         break;
                     default:
-                        session_name = "all";
+                        recording_name = "all";
                         break;
                     }
-                    if (session_name != loaded_session_name)
+                    if (recording_name != loaded_session_name)
                     {
-                        if (loadPrerecordedSession())
+                        if (loadSession())
                         {
                             pre_recorded_session_loaded = true;
-                            loaded_session_name = session_name;
+                            loaded_session_name = recording_name;
                         }
                         else
                         {
-                            std::cout << "Failed to load prerecorded session: " << session_name << std::endl;
+                            std::cout << "Failed to load recording: " << recording_name << std::endl;
                         }
                     }
                     videoFrameCount = 0;
