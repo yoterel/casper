@@ -247,8 +247,10 @@ int64_t videoFrameCount = 0;
 int64_t prevVideoFrameCount = -1;
 float videoFrameCountCont = 0.0;
 int64_t simulationFrameCount = 0;
+float prevSimlationTime = 0.0f;
 int64_t prevSimulationFrameCount = -1;
-int simulationMPDelay = 0;
+int64_t savedSimulationFrameCount = 0;
+float simulationMPDelay = 0.0f;
 float simulationFrameCountCont = 0.0;
 bool recordImages = false;
 std::string recording_name = "test";
@@ -256,6 +258,7 @@ std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool simulation_loaded = false;
 bool run_simulation = false;
+int simulation_mode = static_cast<int>(SimulationMode::KALMAN);
 std::string loaded_simulation_name = "";
 int total_simulation_time_stamps = 0;
 std::string playback_video_name = "test";
@@ -323,7 +326,7 @@ bool leap_calib_use_ransac = false;
 int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-int operation_mode = static_cast<int>(OperationMode::NORMAL);
+int operation_mode = static_cast<int>(OperationMode::SIMULATION);
 int n_points_leap_calib = 2000;
 int n_points_cam_calib = 30;
 std::vector<double> calib_cam_matrix;
@@ -350,7 +353,8 @@ cv::Mat camera_intrinsics_cv, camera_distortion_cv;
 std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_green = {{0.0f, 1.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
-std::vector<glm::vec3> screen_verts_magenta = {{1.0f, 0.0f, 1.0f}};
+std::vector<glm::vec3> screen_verts_color_magenta = {{1.0f, 0.0f, 1.0f}};
+std::vector<glm::vec3> screen_verts_color_white = {{1.0f, 1.0f, 1.0f}};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                        {-1.0f, -1.0f},
                                        {1.0f, -1.0f},
@@ -1121,78 +1125,178 @@ int main(int argc, char *argv[])
             {
                 if (run_simulation)
                 {
-                    t_camera.start();
-                    // get current simulated camera image
-                    cv::Mat simulated = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount]).clone();
-                    // cv::flip(simulated, simulated, 1);
-                    // set it as camera input
-                    handleCameraInput(ptrGrabResult, true, simulated);
-                    t_camera.stop();
-                    // get current simulated leap info
-                    t_leap.start();
-                    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-                    t_leap.stop();
-                    // skin the mesh
-                    t_skin.start();
-                    handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
-                    t_skin.stop();
-                    // filtered mls
-                    t_mls.start();
-                    if (prevSimulationFrameCount != simulationFrameCount)
+                    switch (simulation_mode)
                     {
-                        handleMLSSync(gridShader);
-                        // if (simulationFrameCount == 0)
-                        // {
-                        //     std::vector<glm::vec3> to_project = joints_left;
-                        //     std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                        //     prev_leap_keypoints = Helpers::glm2opencv(projected);
-                        //     cv::Mat x = deformationGrid.getM();
-                        //     for (int i = 0; i < grid_x_point_count * grid_y_point_count; i++)
-                        //     {
-                        //         cv::Mat state = cv::Mat::zeros(4, 1, CV_32F);
-                        //         state.at<float>(0) = x.at<float>(0, i);
-                        //         state.at<float>(1) = x.at<float>(1, i);
-                        //         grid_kalman[i].setInitialState(state);
-                        //         grid_kalman[i].saveCheckpoint();
-                        //     }
-                        //     x_prev = x.clone();
-                        // }
-                        // cv::Mat vel_grid, pred_grid;
-                        // if ((simulationFrameCount % simulationMPDelay == 0) && (simulationFrameCount != 0))
-                        //     handleFilteredMLS(gridShader, false, vel_grid, pred_grid);
-                        // else
-                        //     handleFilteredMLS(gridShader, false, vel_grid, pred_grid);
+                    case static_cast<int>(SimulationMode::KALMAN):
+                    {
+                        // get current simulated leap info
+                        t_leap.start();
+                        std::vector<glm::vec3> cur_joints, next_joints;
+                        std::vector<glm::mat4> ignore;
+                        LEAP_STATUS status = getLeapFramePreRecorded(ignore, next_joints, simulationFrameCount + 1, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+                        if (status != LEAP_STATUS::LEAP_NEWFRAME)
+                        {
+                            run_simulation = false;
+                            break;
+                        }
+                        getLeapFramePreRecorded(bones_to_world_left, cur_joints, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+                        std::vector<glm::vec2> projected_cur = Helpers::project_points(cur_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                        std::vector<glm::vec2> projected_next = Helpers::project_points(next_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                        std::vector<glm::vec2> filtered_cur, filtered_next;
+                        for (int i = 0; i < leap_selection_vector.size(); i++)
+                        {
+                            filtered_cur.push_back(projected_cur[leap_selection_vector[i]]);
+                            filtered_next.push_back(projected_next[leap_selection_vector[i]]);
+                        }
+                        std::vector<glm::vec2> kalman_forecast;
+                        for (int i = 0; i < filtered_cur.size(); i++)
+                        {
+                            cv::Mat pred = kalman_filters[i].predict();
+                            cv::Mat measurement(2, 1, CV_32F);
+                            measurement.at<float>(0) = filtered_cur[i].x;
+                            measurement.at<float>(1) = filtered_cur[i].y;
+                            cv::Mat corr = kalman_filters[i].correct(measurement);
+                            cv::Mat forecast = kalman_filters[i].forecast(1);
+                            // if (i == 0)
+                            // {
+                            //     std::cout << "pred: " << pred << std::endl;
+                            //     std::cout << "meas: " << measurement << std::endl;
+                            //     std::cout << "corr: " << corr << std::endl;
+                            //     std::cout << "forecast: " << forecast << std::endl;
+                            // }
+                            kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
+                        }
+                        t_leap.stop();
+                        // skin the mesh
+                        t_skin.start();
+                        handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        t_skin.stop();
+                        // post process
+                        t_pp.start();
+                        handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+                        t_pp.stop();
+                        // render to screen
+                        glViewport(0, 0, proj_width, proj_height); // set viewport
+                        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                        set_texture_shader(&textureShader, false, false, false);
+                        c2p_fbo.getTexture()->bind();
+                        fullScreenQuad.render();
+                        vcolorShader.use();
+                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                        PointCloud cloud_cur(filtered_cur, screen_verts_color_red);
+                        // PointCloud cloud_pred(leap_joints_right_filtered, screen_verts_magenta);
+                        PointCloud cloud_pred(kalman_forecast, screen_verts_color_magenta);
+                        PointCloud cloud_next(filtered_next, screen_verts_color_white);
+                        cloud_cur.render(5.0f);
+                        cloud_pred.render(5.0f);
+                        cloud_next.render(5.0f);
+                        prevSimulationFrameCount = simulationFrameCount;
+                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
+                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                        {
+                            prev_vid_time = cur_vid_time;
+                            simulationFrameCount += 1;
+                        }
+                        if (simulationFrameCount >= total_simulation_time_stamps)
+                        {
+                            simulationFrameCount = 0;
+                            prevSimulationFrameCount = -1;
+                        }
+                        break;
                     }
-                    t_mls.stop();
-                    // post process
-                    t_pp.start();
-                    handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
-                    t_pp.stop();
-                    // render to screen
-                    glViewport(0, 0, proj_width, proj_height); // set viewport
-                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                    set_texture_shader(&textureShader, false, false, false);
-                    c2p_fbo.getTexture()->bind();
-                    fullScreenQuad.render();
-                    // std::vector<glm::vec2> origGridVerts = Helpers::flatten_2dgrid(deformationGrid.getM());
-                    // std::vector<glm::vec2> velGridVerts = Helpers::flatten_2dgrid(vel_grid);
-                    // PointCloud originalGrid(origGridVerts, screen_verts_color_green);
-                    // PointCloud velGrid(velGridVerts, screen_verts_color_blue);
-                    // vcolorShader.use();
-                    // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                    // originalGrid.render(5.0f);
-                    // velGrid.render(5.0f);
-                    prevSimulationFrameCount = simulationFrameCount;
-                    cur_vid_time = t_app.getElapsedTimeInMilliSec();
-                    if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                    case static_cast<int>(SimulationMode::AS_REAL_AS_POSSIBLE):
                     {
-                        prev_vid_time = cur_vid_time;
-                        simulationFrameCount += 1;
+                        if (maxVideoFrameCount == 0)
+                        {
+                            std::cout << "Simulation video is empty" << std::endl;
+                            run_simulation = false;
+                            break;
+                        }
+                        t_camera.start();
+                        // get current simulated camera image
+                        cv::Mat simulated = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount]).clone();
+                        // cv::flip(simulated, simulated, 1);
+                        // set it as camera input
+                        handleCameraInput(ptrGrabResult, true, simulated);
+                        t_camera.stop();
+                        // get current simulated leap info
+                        t_leap.start();
+                        LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+                        t_leap.stop();
+                        // skin the mesh
+                        t_skin.start();
+                        handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        t_skin.stop();
+                        // filtered mls
+                        t_mls.start();
+                        if (prevSimulationFrameCount != simulationFrameCount)
+                        {
+                            handleMLSSync(gridShader);
+                            // if (simulationFrameCount == 0)
+                            // {
+                            //     std::vector<glm::vec3> to_project = joints_left;
+                            //     std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                            //     prev_leap_keypoints = Helpers::glm2opencv(projected);
+                            //     cv::Mat x = deformationGrid.getM();
+                            //     for (int i = 0; i < grid_x_point_count * grid_y_point_count; i++)
+                            //     {
+                            //         cv::Mat state = cv::Mat::zeros(4, 1, CV_32F);
+                            //         state.at<float>(0) = x.at<float>(0, i);
+                            //         state.at<float>(1) = x.at<float>(1, i);
+                            //         grid_kalman[i].setInitialState(state);
+                            //         grid_kalman[i].saveCheckpoint();
+                            //     }
+                            //     x_prev = x.clone();
+                            // }
+                            // cv::Mat vel_grid, pred_grid;
+                            // float simulationTime = simulation_timestamps[simulationFrameCount];
+                            // float interval = prevSimlationTime - simulationTime;
+                            // if (interval >= simulationMPDelay)
+                            // {
+                            //     handleFilteredMLS(gridShader, false, vel_grid, pred_grid);
+                            //     prevSimlationTime = simulationTime;
+                            //     savedSimulationFrameCount = simulationFrameCount;
+                            // }
+                            // else
+                            // {
+                            //     handleFilteredMLS(gridShader, false, vel_grid, pred_grid);
+                            // }
+                        }
+                        t_mls.stop();
+                        // post process
+                        t_pp.start();
+                        handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+                        t_pp.stop();
+                        // render to screen
+                        glViewport(0, 0, proj_width, proj_height); // set viewport
+                        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                        set_texture_shader(&textureShader, false, false, false);
+                        c2p_fbo.getTexture()->bind();
+                        fullScreenQuad.render();
+                        // std::vector<glm::vec2> origGridVerts = Helpers::flatten_2dgrid(deformationGrid.getM());
+                        // std::vector<glm::vec2> velGridVerts = Helpers::flatten_2dgrid(vel_grid);
+                        // PointCloud originalGrid(origGridVerts, screen_verts_color_green);
+                        // PointCloud velGrid(velGridVerts, screen_verts_color_blue);
+                        // vcolorShader.use();
+                        // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                        // originalGrid.render(5.0f);
+                        // velGrid.render(5.0f);
+                        prevSimulationFrameCount = simulationFrameCount;
+                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
+                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                        {
+                            prev_vid_time = cur_vid_time;
+                            simulationFrameCount += 1;
+                        }
+                        if (simulationFrameCount >= total_simulation_time_stamps)
+                        {
+                            simulationFrameCount = 0;
+                            prevSimulationFrameCount = -1;
+                        }
+                        break;
                     }
-                    if (simulationFrameCount >= total_simulation_time_stamps)
-                    {
-                        simulationFrameCount = 0;
-                        prevSimulationFrameCount = -1;
+                    default:
+                        break;
                     }
                 }
             }
@@ -2946,7 +3050,8 @@ bool loadSimulation(std::string loadpath)
     simulation_bones_left = std::move(raw_simulation_bones_left);
     simulation_joints_left = std::move(raw_simulation_joints_left);
     simulation_timestamps = std::move(raw_simulation_timestamps);
-    return loadImagesFromFolder(loadpath);
+    loadImagesFromFolder(loadpath);
+    return true;
 }
 void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images)
 {
@@ -2967,6 +3072,7 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
             // save leap frame
             fs::path bones_left_path = savepath_path / fs::path(std::string("bones_left.npy"));
             fs::path timestamps_path = savepath_path / fs::path(std::string("timestamps.npy"));
+            fs::path joints_left_path = savepath_path / fs::path(std::string("joints_left.npy"));
             // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
             // fs::path joints_left_path(savepath + tmp_filename.filename().string() + std::string("_joints_left.npy"));
             // fs::path timestamps_path(savepath + tmp_filename.filename().string() + std::string("_timestamps.npy"));
@@ -2976,13 +3082,12 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
             // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
             cnpy::npy_save(bones_left_path.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
             cnpy::npy_save(timestamps_path.string().c_str(), &curFrameTimeStamp, {1}, "a");
+            cnpy::npy_save(joints_left_path.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
             // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
             // cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
             if (record_images)
             {
                 // also save the current camera image and finger joints
-                fs::path joints_left_path = savepath_path / fs::path(std::string("joints_left.npy"));
-                cnpy::npy_save(joints_left_path.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
                 fs::path image_path = savepath_path / fs::path(std::format("{:06d}", image_timestamp) + std::string("_cam.png"));
                 cv::imwrite(image_path.string(), camImageOrig);
             }
@@ -3202,8 +3307,8 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             vcolorShader->setMat4("MVP", c2p_homography);
         else
             vcolorShader->setMat4("MVP", glm::mat4(1.0f));
-        PointCloud cloud_left(leap_joints_left_filtered, screen_verts_magenta);
-        PointCloud cloud_right(leap_joints_right_filtered, screen_verts_magenta);
+        PointCloud cloud_left(leap_joints_left_filtered, screen_verts_color_magenta);
+        PointCloud cloud_right(leap_joints_right_filtered, screen_verts_color_magenta);
         cloud_left.render(5.0f);
         cloud_right.render(5.0f);
         if (use_mls)
@@ -3727,10 +3832,10 @@ void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat 
         else
         {
             // get leap prediction from the past
-            LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, simulationFrameCount - simulationMPDelay, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+            LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, savedSimulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
             // run MP
             std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
-            cv::Mat pastImage = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount - simulationMPDelay]).clone();
+            cv::Mat pastImage = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[savedSimulationFrameCount]).clone();
             if (mp_predict(pastImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
             {
                 if (isRightHand)
@@ -3821,14 +3926,15 @@ void handleMLSSync(Shader &gridShader)
     // used only in simulation mode
     if (use_mls) // todo: support two hands, currently prioritizes right if both hands are in frame
     {
-        bool do_mls = simulationMPDelay == 0 ? true : ((simulationFrameCount > 0) && (simulationFrameCount % simulationMPDelay == 0));
-        if (do_mls)
+        float simulationTime = simulation_timestamps[simulationFrameCount];
+        float interval = prevSimlationTime - simulationTime;
+        if (interval >= simulationMPDelay)
         {
             bool isRightHand = false;
-            cv::Mat past_image = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount - simulationMPDelay]).clone();
+            cv::Mat past_image = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[savedSimulationFrameCount]).clone();
             std::vector<glm::vec3> cur_joints, past_joints;
             std::vector<glm::mat4> ignore;
-            getLeapFramePreRecorded(ignore, past_joints, simulationFrameCount - simulationMPDelay, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+            getLeapFramePreRecorded(ignore, past_joints, savedSimulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
             getLeapFramePreRecorded(ignore, cur_joints, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
             if (past_joints.size() > 0)
             {
@@ -3978,7 +4084,9 @@ void handleMLSSync(Shader &gridShader)
                     mls_succeed = true;
                 }
             } // if (skeleton_vertices.size() > 0)
-        }
+            prevSimlationTime = simulationTime;
+            savedSimulationFrameCount = simulationFrameCount;
+        } // if do_mls
         if (mls_succeed)
         {
             deformationGrid.updateGLBuffers();
@@ -5529,6 +5637,7 @@ void openIMGUIFrame()
                         else
                         {
                             std::cout << "Failed to load recording: " << recording_name << std::endl;
+                            loaded_simulation_name = recording_name;
                         }
                     }
                     simulationFrameCount = 0;
@@ -5538,7 +5647,10 @@ void openIMGUIFrame()
                     texture_mode = static_cast<int>(TextureMode::ORIGINAL);
                 }
             }
-            ImGui::SliderInt("Simulation MP delay [frames]", &simulationMPDelay, 0, 20);
+            ImGui::SliderFloat("Simulation MP delay [ms]", &simulationMPDelay, 0.0, 20.0f);
+            ImGui::RadioButton("As real as possible", &simulation_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Kalman", &simulation_mode, 1);
             ImGui::TreePop();
         }
     }

@@ -113,6 +113,11 @@ enum class OperationMode
     LEAP = 4,
     SIMULATION = 5,
 };
+enum class SimulationMode
+{
+    AS_REAL_AS_POSSIBLE = 0,
+    KALMAN = 1,
+};
 enum class MotionModel
 {
     TRANSLATION = 0,
