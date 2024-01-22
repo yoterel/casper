@@ -127,6 +127,16 @@ std::vector<double> Helpers::flatten_cv(std::vector<cv::Point> vec)
     return flat_vec;
 }
 
+std::vector<glm::vec2> Helpers::flatten_2dgrid(cv::Mat grid)
+{
+    std::vector<glm::vec2> flat_vec;
+    for (int i = 0; i < grid.cols; i++)
+    {
+        flat_vec.push_back(glm::vec2(grid.at<float>(0, i), grid.at<float>(1, i)));
+    }
+    return flat_vec;
+}
+
 std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point2f> vec)
 {
     std::vector<glm::vec2> glm_vec;
