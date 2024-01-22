@@ -167,10 +167,16 @@ void UserStudy::trial(bool successfullHuman)
 void UserStudy::printStats()
 {
     std::cout << "JND: " << jnd << std::endl;
+
     std::cout << "Latencies: ";
+    float accumulator_last_five = 0.0f;
     for (int i = 0; i < latencies.size(); i++)
     {
         std::cout << latencies[i] << " ";
+        if (i >= latencies.size() - 5)
+        {
+            accumulator_last_five += latencies[i];
+        }
     }
-    std::cout << std::endl;
+    std::cout << "JND, last 5: " << accumulator_last_five / 5 << std::endl;
 }
