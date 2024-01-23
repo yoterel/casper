@@ -211,14 +211,14 @@ target_link_libraries(ahand PRIVATE Python::Python Python::NumPy)
 # target_link_libraries(deformation_example PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
 
 ####################################### kalman filter example
-add_executable(kalman_example
-    src/kalman_example.cpp
-    src/kalman.cpp
-    src/timer.cpp
-)
-target_include_directories(kalman_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# opencv
-target_link_libraries(kalman_example PRIVATE ${OpenCV_LIBS})
+# add_executable(kalman_example
+#     src/kalman_example.cpp
+#     src/kalman.cpp
+#     src/timer.cpp
+# )
+# target_include_directories(kalman_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# # opencv
+# target_link_libraries(kalman_example PRIVATE ${OpenCV_LIBS})
 ####################################### ONYX example
 # add_executable(onyx_example
 #     src/onyx_example.cpp

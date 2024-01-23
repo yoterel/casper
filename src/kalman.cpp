@@ -5,7 +5,7 @@ Kalman::Kalman(int stateDim, int measDim, int contrDim) : KF(stateDim, measDim, 
 {
 }
 
-void Kalman::setInitialState(cv::Mat state)
+void Kalman::setState(cv::Mat state)
 {
     // set the initial state
     KF.statePost = state.clone();
@@ -108,7 +108,7 @@ Kalman1D::Kalman1D(float processNoise, float measurementNoise, float error, floa
     randn(KF.statePost, cv::Scalar::all(0), cv::Scalar::all(0.1));
 }
 
-Kalman2D_ConstantV::Kalman2D_ConstantV(float processNoise, float measurementNoise, float velocity) : Kalman(4, 2, 0)
+Kalman2D_ConstantV::Kalman2D_ConstantV(float processNoise, float measurementNoise) : Kalman(4, 2, 0)
 {
     // transition Matrix (F) = [1, 0, 1, 0; 0, 1, 0, 1; 0, 0, 1, 0; 0, 0, 0, 1] 4x4
     // where state is 4x1 vector [x, y, dx, dy] (xn+1 = F * xn + process noise)
@@ -125,10 +125,10 @@ Kalman2D_ConstantV::Kalman2D_ConstantV(float processNoise, float measurementNois
     KF.processNoiseCov.at<float>(3, 3) = processNoise; //* 100.0f;
     // measurement noise covariance matrix (R) = 2x2
     setIdentity(KF.measurementNoiseCov, cv::Scalar::all(measurementNoise));
-    cv::Mat initialState = cv::Mat::zeros(4, 1, CV_32F);
-    initialState.at<float>(2) = velocity;
-    initialState.at<float>(3) = velocity;
-    setInitialState(initialState);
+    // cv::Mat initialState = cv::Mat::zeros(4, 1, CV_32F);
+    // initialState.at<float>(2) = velocity;
+    // initialState.at<float>(3) = velocity;
+    // setInitialState(initialState);
 }
 
 cv::Mat Kalman2D_ConstantV::predict(float dt)
@@ -144,13 +144,13 @@ cv::Mat Kalman2D_ConstantV::forecast(float dt)
     KF.transitionMatrix.at<float>(2) = dt;
     KF.transitionMatrix.at<float>(7) = dt;
     cv::Mat new_state = cv::Mat(KF.transitionMatrix * KF.statePost);
-    std::vector<float> before = HelpersCV::flatten_cv(KF.statePost);
-    std::vector<float> after = HelpersCV::flatten_cv(new_state);
-    std::vector<float> transMat = HelpersCV::flatten_cv(KF.transitionMatrix);
+    // std::vector<float> before = HelpersCV::flatten_cv(KF.statePost);
+    // std::vector<float> after = HelpersCV::flatten_cv(new_state);
+    // std::vector<float> transMat = HelpersCV::flatten_cv(KF.transitionMatrix);
     return new_state;
 }
 
-Kalman2D_ConstantV2::Kalman2D_ConstantV2(float processNoise, float measurementNoise, float velocity) : Kalman(4, 4, 0)
+Kalman2D_ConstantV2::Kalman2D_ConstantV2(float processNoise, float measurementNoise) : Kalman(4, 4, 0)
 {
     // transition Matrix (F) = [1, 0, 1, 0; 0, 1, 0, 1; 0, 0, 1, 0; 0, 0, 0, 1] 4x4
     // where state is 4x1 vector [x, y, dx, dy] (xn+1 = F * xn + process noise)
@@ -167,11 +167,10 @@ Kalman2D_ConstantV2::Kalman2D_ConstantV2(float processNoise, float measurementNo
     KF.processNoiseCov.at<float>(3, 3) = processNoise * 10;
     // measurement noise covariance matrix (R) = 4x4
     cv::setIdentity(KF.measurementNoiseCov, cv::Scalar::all(measurementNoise));
-    // todo: do we need to set errorCovPost and statePost?
-    cv::Mat initialState = cv::Mat::zeros(4, 1, CV_32F);
-    initialState.at<float>(2) = velocity;
-    initialState.at<float>(3) = velocity;
-    setInitialState(initialState);
+    // cv::Mat initialState = cv::Mat::zeros(4, 1, CV_32F);
+    // initialState.at<float>(2) = velocity;
+    // initialState.at<float>(3) = velocity;
+    // setInitialState(initialState);
     saveCheckpoint();
 }
 
@@ -191,7 +190,7 @@ cv::Mat Kalman2D_ConstantV2::forecast(float dt)
     return new_state;
 }
 
-void Kalman2D_ConstantV2::setInitialState(cv::Mat state)
+void Kalman2D_ConstantV2::setState(cv::Mat state)
 {
     // set the initial state
     KF.statePost = state.clone();

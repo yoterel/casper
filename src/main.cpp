@@ -467,14 +467,8 @@ float kalman_measurement_noise = 0.0001f;
 float kalman_speed = 0.005f;
 float mls_depth_threshold = 215.0f;
 bool mls_depth_test = false;
-std::vector<Kalman2D_ConstantV> kalman_filters = std::vector<Kalman2D_ConstantV>(16,
-                                                                                 Kalman2D_ConstantV(kalman_process_noise,
-                                                                                                    kalman_measurement_noise,
-                                                                                                    kalman_speed));
-std::vector<Kalman2D_ConstantV2> grid_kalman = std::vector<Kalman2D_ConstantV2>(grid_x_point_count * grid_y_point_count,
-                                                                                Kalman2D_ConstantV2(kalman_process_noise,
-                                                                                                    kalman_measurement_noise,
-                                                                                                    kalman_speed));
+std::vector<Kalman2D_ConstantV> kalman_filters = std::vector<Kalman2D_ConstantV>(16);
+std::vector<Kalman2D_ConstantV2> grid_kalman = std::vector<Kalman2D_ConstantV2>(grid_x_point_count * grid_y_point_count);
 int kalman_lookahead = 0;
 int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 
@@ -1175,13 +1169,6 @@ int main(int argc, char *argv[])
                                 measurement.at<float>(1) = filtered_cur[i].y;
                                 cv::Mat corr = kalman_filters[i].correct(measurement);
                                 cv::Mat forecast = kalman_filters[i].forecast(forecast_interval);
-                                // if (i == 0)
-                                // {
-                                //     std::cout << "pred: " << pred << std::endl;
-                                //     std::cout << "meas: " << measurement << std::endl;
-                                //     std::cout << "corr: " << corr << std::endl;
-                                //     std::cout << "forecast: " << forecast << std::endl;
-                                // }
                                 kalman_pred.push_back(glm::vec2(pred.at<float>(0), pred.at<float>(1)));
                                 kalman_corrected.push_back(glm::vec2(corr.at<float>(0), corr.at<float>(1)));
                                 kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
@@ -5532,19 +5519,31 @@ void openIMGUIFrame()
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2D_ConstantV>(21, Kalman2D_ConstantV(kalman_process_noise, kalman_measurement_noise, kalman_speed));
+                for (int i = 0; i < 16; i++)
+                {
+                    kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                kalman_measurement_noise));
+                }
             }
             ImGui::SliderFloat("Kalman Mnoise", &kalman_measurement_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2D_ConstantV>(21, Kalman2D_ConstantV(kalman_process_noise, kalman_measurement_noise, kalman_speed));
+                for (int i = 0; i < 16; i++)
+                {
+                    kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                kalman_measurement_noise));
+                }
             }
             ImGui::SliderFloat("Kalman speed", &kalman_speed, 0.0001f, 1.0f);
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2D_ConstantV>(21, Kalman2D_ConstantV(kalman_process_noise, kalman_measurement_noise, kalman_speed));
+                for (int i = 0; i < 16; i++)
+                {
+                    kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                kalman_measurement_noise));
+                }
             }
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
@@ -5655,6 +5654,12 @@ void openIMGUIFrame()
             {
                 if (run_simulation)
                 {
+                    kalman_filters.clear();
+                    for (int i = 0; i < 16; i++)
+                    {
+                        kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                    kalman_measurement_noise));
+                    }
                     if (recording_name != loaded_simulation_name)
                     {
                         if (loadSimulation(std::format("../../debug/recordings/{}", recording_name)))

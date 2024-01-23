@@ -7,7 +7,7 @@ class Kalman
 public:
     // see https://github.com/opencv/opencv/blob/4.x/modules/video/src/kalman.cpp
     Kalman(int stateDim, int measDim, int contrDim = 0);
-    virtual void setInitialState(cv::Mat state = cv::Mat::zeros(4, 1, CV_32F));
+    virtual void setState(cv::Mat state = cv::Mat::zeros(4, 1, CV_32F));
     virtual cv::Mat predict(float dt = 1.0f);
     virtual cv::Mat forecast(float dt = 1.0f);
     cv::Mat correct(cv::Mat measurement, bool saveMeasurement = false);
@@ -57,7 +57,7 @@ public:
 class Kalman2D_ConstantV : public Kalman
 {
 public:
-    Kalman2D_ConstantV(float processNoise = 1e-5, float measurementNoise = 1e-1, float velocity = 0.001f);
+    Kalman2D_ConstantV(float processNoise = 1e-5, float measurementNoise = 1e-1);
     virtual cv::Mat predict(float dt) override;
     virtual cv::Mat forecast(float dt) override;
 
@@ -68,8 +68,8 @@ private:
 class Kalman2D_ConstantV2 : public Kalman
 {
 public:
-    Kalman2D_ConstantV2(float processNoise = 1e-5, float measurementNoise = 1e-1, float velocity = 0.001f);
-    virtual void setInitialState(cv::Mat state = cv::Mat::zeros(4, 1, CV_32F)) override;
+    Kalman2D_ConstantV2(float processNoise = 1e-5, float measurementNoise = 1e-1);
+    virtual void setState(cv::Mat state = cv::Mat::zeros(4, 1, CV_32F)) override;
     virtual cv::Mat predict(float dt) override;
     virtual cv::Mat forecast(float dt) override;
 
