@@ -5,11 +5,12 @@
 class Kalman
 {
 public:
+    // see https://github.com/opencv/opencv/blob/4.x/modules/video/src/kalman.cpp
     Kalman(int stateDim, int measDim, int contrDim = 0);
-    void setInitialState(float error);
-    cv::Mat predict();
+    virtual void setInitialState(cv::Mat state = cv::Mat::zeros(4, 1, CV_32F));
+    virtual cv::Mat predict(float dt = 1.0f);
+    virtual cv::Mat forecast(float dt = 1.0f);
     cv::Mat correct(cv::Mat measurement, bool saveMeasurement = false);
-    cv::Mat forecast(int steps);
     void rewindToCheckpoint(bool verbose = false);
     cv::Mat fastforward(cv::Mat measurement, bool verbose = false);
     cv::Mat getCheckpointMeasurement();
@@ -53,22 +54,32 @@ public:
     Kalman1D(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f, float dt = 0.01f);
 };
 
-class Kalman2DXY : public Kalman
+class Kalman2D_ConstantV : public Kalman
 {
 public:
-    Kalman2DXY(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f, float dt = 0.01f);
+    Kalman2D_ConstantV(float processNoise = 1e-5, float measurementNoise = 1e-1, float velocity = 0.001f);
+    virtual cv::Mat predict(float dt) override;
+    virtual cv::Mat forecast(float dt) override;
+
+private:
+    float m_velocity;
 };
 
-class Kalman2D : public Kalman
+class Kalman2D_ConstantV2 : public Kalman
 {
 public:
-    Kalman2D(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f, float dt = 0.01f);
-    void setInitialState(cv::Mat state);
+    Kalman2D_ConstantV2(float processNoise = 1e-5, float measurementNoise = 1e-1, float velocity = 0.001f);
+    virtual void setInitialState(cv::Mat state = cv::Mat::zeros(4, 1, CV_32F)) override;
+    virtual cv::Mat predict(float dt) override;
+    virtual cv::Mat forecast(float dt) override;
+
+private:
+    float m_velocity;
 };
 
-class Kalman2DAcc : public Kalman
+class Kalman2D_ConstantA : public Kalman
 {
 public:
-    Kalman2DAcc(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f, float dt = 0.01f);
+    Kalman2D_ConstantA(float processNoise = 1e-5, float measurementNoise = 1e-1, float error = 1.0f, float dt = 0.01f);
 };
 #endif // KALMAN_H

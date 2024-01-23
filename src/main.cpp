@@ -249,9 +249,9 @@ float videoFrameCountCont = 0.0;
 int64_t simulationFrameCount = 0;
 float prevSimlationTime = 0.0f;
 int64_t prevSimulationFrameCount = -1;
+std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_corrected, kalman_forecast;
 int64_t savedSimulationFrameCount = 0;
 float simulationMPDelay = 0.0f;
-float simulationFrameCountCont = 0.0;
 bool recordImages = false;
 std::string recording_name = "test";
 std::string loaded_session_name = "";
@@ -354,6 +354,7 @@ std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_green = {{0.0f, 1.0f, 0.0f}};
 std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
 std::vector<glm::vec3> screen_verts_color_magenta = {{1.0f, 0.0f, 1.0f}};
+std::vector<glm::vec3> screen_verts_color_cyan = {{0.0f, 1.0f, 1.0f}};
 std::vector<glm::vec3> screen_verts_color_white = {{1.0f, 1.0f, 1.0f}};
 std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                        {-1.0f, -1.0f},
@@ -461,13 +462,19 @@ int mls_cp_smooth_window = 0;
 int mls_grid_smooth_window = 0;
 bool use_mp_kalman = false;
 bool mls_forecast = true;
-float mp_kalman_process_noise = 0.0001f;
-float mp_kalman_measurement_noise = 0.01f;
-float mp_kalman_error = 1.0f;
+float kalman_process_noise = 0.01f;
+float kalman_measurement_noise = 0.0001f;
+float kalman_speed = 0.005f;
 float mls_depth_threshold = 215.0f;
 bool mls_depth_test = false;
-std::vector<Kalman2DXY> kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
-std::vector<Kalman2D> grid_kalman = std::vector<Kalman2D>(grid_x_point_count * grid_y_point_count, Kalman2D(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+std::vector<Kalman2D_ConstantV> kalman_filters = std::vector<Kalman2D_ConstantV>(16,
+                                                                                 Kalman2D_ConstantV(kalman_process_noise,
+                                                                                                    kalman_measurement_noise,
+                                                                                                    kalman_speed));
+std::vector<Kalman2D_ConstantV2> grid_kalman = std::vector<Kalman2D_ConstantV2>(grid_x_point_count * grid_y_point_count,
+                                                                                Kalman2D_ConstantV2(kalman_process_noise,
+                                                                                                    kalman_measurement_noise,
+                                                                                                    kalman_speed));
 int kalman_lookahead = 0;
 int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 
@@ -1129,44 +1136,59 @@ int main(int argc, char *argv[])
                     {
                     case static_cast<int>(SimulationMode::KALMAN):
                     {
-                        // get current simulated leap info
-                        t_leap.start();
-                        std::vector<glm::vec3> cur_joints, next_joints;
-                        std::vector<glm::mat4> ignore;
-                        LEAP_STATUS status = getLeapFramePreRecorded(ignore, next_joints, simulationFrameCount + 1, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-                        if (status != LEAP_STATUS::LEAP_NEWFRAME)
+                        if (prevSimulationFrameCount != simulationFrameCount)
                         {
-                            run_simulation = false;
-                            break;
+                            filtered_cur.clear();
+                            filtered_next.clear();
+                            kalman_pred.clear();
+                            kalman_corrected.clear();
+                            kalman_forecast.clear();
+                            // get current simulated leap info
+                            t_leap.start();
+                            std::vector<glm::vec3> cur_joints, next_joints;
+                            std::vector<glm::mat4> ignore;
+                            LEAP_STATUS status = getLeapFramePreRecorded(ignore, next_joints, simulationFrameCount + 1, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+                            if (status != LEAP_STATUS::LEAP_NEWFRAME)
+                            {
+                                run_simulation = false;
+                                break;
+                            }
+                            getLeapFramePreRecorded(bones_to_world_left, cur_joints, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+                            std::vector<glm::vec2> projected_cur = Helpers::project_points(cur_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                            std::vector<glm::vec2> projected_next = Helpers::project_points(next_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+
+                            for (int i = 0; i < leap_selection_vector.size(); i++)
+                            {
+                                filtered_cur.push_back(projected_cur[leap_selection_vector[i]]);
+                                filtered_next.push_back(projected_next[leap_selection_vector[i]]);
+                            }
+
+                            float curSimulationTime = simulation_timestamps[simulationFrameCount];
+                            float nextSimulationTime = simulation_timestamps[simulationFrameCount + 1];
+                            float interval = curSimulationTime - prevSimlationTime;
+                            float forecast_interval = nextSimulationTime - curSimulationTime;
+                            for (int i = 0; i < filtered_cur.size(); i++)
+                            {
+                                cv::Mat pred = kalman_filters[i].predict(interval);
+                                cv::Mat measurement(2, 1, CV_32F);
+                                measurement.at<float>(0) = filtered_cur[i].x;
+                                measurement.at<float>(1) = filtered_cur[i].y;
+                                cv::Mat corr = kalman_filters[i].correct(measurement);
+                                cv::Mat forecast = kalman_filters[i].forecast(forecast_interval);
+                                // if (i == 0)
+                                // {
+                                //     std::cout << "pred: " << pred << std::endl;
+                                //     std::cout << "meas: " << measurement << std::endl;
+                                //     std::cout << "corr: " << corr << std::endl;
+                                //     std::cout << "forecast: " << forecast << std::endl;
+                                // }
+                                kalman_pred.push_back(glm::vec2(pred.at<float>(0), pred.at<float>(1)));
+                                kalman_corrected.push_back(glm::vec2(corr.at<float>(0), corr.at<float>(1)));
+                                kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
+                            }
+                            prevSimlationTime = curSimulationTime;
+                            t_leap.stop();
                         }
-                        getLeapFramePreRecorded(bones_to_world_left, cur_joints, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-                        std::vector<glm::vec2> projected_cur = Helpers::project_points(cur_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                        std::vector<glm::vec2> projected_next = Helpers::project_points(next_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                        std::vector<glm::vec2> filtered_cur, filtered_next;
-                        for (int i = 0; i < leap_selection_vector.size(); i++)
-                        {
-                            filtered_cur.push_back(projected_cur[leap_selection_vector[i]]);
-                            filtered_next.push_back(projected_next[leap_selection_vector[i]]);
-                        }
-                        std::vector<glm::vec2> kalman_forecast;
-                        for (int i = 0; i < filtered_cur.size(); i++)
-                        {
-                            cv::Mat pred = kalman_filters[i].predict();
-                            cv::Mat measurement(2, 1, CV_32F);
-                            measurement.at<float>(0) = filtered_cur[i].x;
-                            measurement.at<float>(1) = filtered_cur[i].y;
-                            cv::Mat corr = kalman_filters[i].correct(measurement);
-                            cv::Mat forecast = kalman_filters[i].forecast(1);
-                            // if (i == 0)
-                            // {
-                            //     std::cout << "pred: " << pred << std::endl;
-                            //     std::cout << "meas: " << measurement << std::endl;
-                            //     std::cout << "corr: " << corr << std::endl;
-                            //     std::cout << "forecast: " << forecast << std::endl;
-                            // }
-                            kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
-                        }
-                        t_leap.stop();
                         // skin the mesh
                         t_skin.start();
                         handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
@@ -1183,13 +1205,16 @@ int main(int argc, char *argv[])
                         fullScreenQuad.render();
                         vcolorShader.use();
                         vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                        PointCloud cloud_cur(filtered_cur, screen_verts_color_red);
-                        // PointCloud cloud_pred(leap_joints_right_filtered, screen_verts_magenta);
-                        PointCloud cloud_pred(kalman_forecast, screen_verts_color_magenta);
+                        PointCloud cloud_cur(filtered_cur, screen_verts_color_blue);
+                        PointCloud cloud_pred(kalman_pred, screen_verts_color_red);
+                        PointCloud cloud_corr(kalman_corrected, screen_verts_color_green);
                         PointCloud cloud_next(filtered_next, screen_verts_color_white);
-                        cloud_cur.render(5.0f);
-                        cloud_pred.render(5.0f);
+                        PointCloud cloud_fore(kalman_forecast, screen_verts_color_cyan);
+                        // cloud_cur.render(5.0f);
                         cloud_next.render(5.0f);
+                        cloud_pred.render(5.0f);
+                        cloud_corr.render(5.0f);
+                        cloud_fore.render(5.0f);
                         prevSimulationFrameCount = simulationFrameCount;
                         cur_vid_time = t_app.getElapsedTimeInMilliSec();
                         if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
@@ -1200,7 +1225,9 @@ int main(int argc, char *argv[])
                         if (simulationFrameCount >= total_simulation_time_stamps)
                         {
                             simulationFrameCount = 0;
+                            prevSimlationTime = 0.0f;
                             prevSimulationFrameCount = -1;
+                            run_simulation = false;
                         }
                         break;
                     }
@@ -1292,6 +1319,7 @@ int main(int argc, char *argv[])
                         {
                             simulationFrameCount = 0;
                             prevSimulationFrameCount = -1;
+                            prevSimlationTime = 0.0f;
                         }
                         break;
                     }
@@ -3792,7 +3820,7 @@ void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat 
             // predict and update kalman filter with grid from leap
             for (int i = 0; i < x_new.cols; i++)
             {
-                cv::Mat pred = grid_kalman[i].predict();
+                cv::Mat pred = grid_kalman[i].predict(1.0f);
                 cv::Mat measurement(4, 1, CV_32F);
                 measurement.at<float>(0) = pred.at<float>(0); // 0.0f;
                 measurement.at<float>(1) = pred.at<float>(1); // 0.0f;
@@ -3995,7 +4023,7 @@ void handleMLSSync(Shader &gridShader)
                     {
                         for (int i = 0; i < pred_glm.size(); i++)
                         {
-                            cv::Mat pred = kalman_filters[i].predict();
+                            cv::Mat pred = kalman_filters[i].predict(1.0f);
                             cv::Mat measurement(2, 1, CV_32F);
                             measurement.at<float>(0) = pred_glm[i].x;
                             measurement.at<float>(1) = pred_glm[i].y;
@@ -4196,7 +4224,7 @@ void handleMLSAsync(Shader &gridShader)
                             {
                                 for (int i = 0; i < pred_glm.size(); i++)
                                 {
-                                    cv::Mat pred = kalman_filters[i].predict();
+                                    cv::Mat pred = kalman_filters[i].predict(1.0f);
                                     cv::Mat measurement(2, 1, CV_32F);
                                     measurement.at<float>(0) = pred_glm[i].x;
                                     measurement.at<float>(1) = pred_glm[i].y;
@@ -5500,23 +5528,23 @@ void openIMGUIFrame()
             ImGui::SliderInt("MLS Leap Prediction [us]", &magic_leap_time_delay_mls, -50000, 50000);
             ImGui::Checkbox("Kalman Filter", &use_mp_kalman);
             ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 100);
-            ImGui::SliderFloat("Kalman Pnoise", &mp_kalman_process_noise, 0.00001f, 1.0f, "%.6f");
+            ImGui::SliderFloat("Kalman Pnoise", &kalman_process_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+                kalman_filters = std::vector<Kalman2D_ConstantV>(21, Kalman2D_ConstantV(kalman_process_noise, kalman_measurement_noise, kalman_speed));
             }
-            ImGui::SliderFloat("Kalman Mnoise", &mp_kalman_measurement_noise, 0.00001f, 1.0f, "%.6f");
+            ImGui::SliderFloat("Kalman Mnoise", &kalman_measurement_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+                kalman_filters = std::vector<Kalman2D_ConstantV>(21, Kalman2D_ConstantV(kalman_process_noise, kalman_measurement_noise, kalman_speed));
             }
-            ImGui::SliderFloat("Kalman err", &mp_kalman_error, 0.01f, 10.0f);
+            ImGui::SliderFloat("Kalman speed", &kalman_speed, 0.0001f, 1.0f);
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 kalman_filters.clear();
-                kalman_filters = std::vector<Kalman2DXY>(21, Kalman2DXY(mp_kalman_process_noise, mp_kalman_measurement_noise, mp_kalman_error));
+                kalman_filters = std::vector<Kalman2D_ConstantV>(21, Kalman2D_ConstantV(kalman_process_noise, kalman_measurement_noise, kalman_speed));
             }
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
@@ -5642,7 +5670,7 @@ void openIMGUIFrame()
                     }
                     simulationFrameCount = 0;
                     prevSimulationFrameCount = -1;
-                    simulationFrameCountCont = 0.0f;
+                    prevSimlationTime = 0.0f;
                     use_coaxial_calib = false;
                     texture_mode = static_cast<int>(TextureMode::ORIGINAL);
                 }

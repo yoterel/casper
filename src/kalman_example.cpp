@@ -92,7 +92,7 @@ void mouse_example()
     cv::namedWindow("Kalman", 1);
     cv::setMouseCallback("Kalman", CallBackFunc, NULL);
     int past_state_memory = 5;
-    Kalman2D kalman = Kalman2D(1e-3, 1e-1, 1.0f, 1.0f);
+    Kalman2D_ConstantV kalman = Kalman2D_ConstantV(1e-3, 1e-3);
     cv::Mat past_state(4, 1, CV_32F);                   /* actual state: (x,y,dx,dy) */
     cv::Mat measurement = cv::Mat::zeros(2, 1, CV_32F); /* actual measurements: (x, y) */
     char code = (char)-1;
@@ -119,13 +119,15 @@ void mouse_example()
             float statey = past_state.at<float>(1);
             cv::Point statePt = cv::Point(statex, statey);
             // perform prediction step of Kalman filter (just by taking into account the dynamic model)
-            cv::Mat prediction = kalman.predict();
+            cv::Mat prediction = kalman.predict(1.0f);
             float predictx = prediction.at<float>(0);
             float predicty = prediction.at<float>(1);
             cv::Point predictPt = cv::Point(predictx, predicty);
             // generate measurement, assumes the kalman measurement noise cov is exactly the g.t. measurement noise cov (rarely true in practice)
             // randn(measurement, cv::Scalar::all(0), cv::Scalar::all(kalman.getMeasNoiseCoV().at<float>(0)));
-            measurement = kalman.getMeasurementMatrix() * past_state; // 2x4 * 4x1 = 2x1
+            // measurement = kalman.getMeasurementMatrix() * past_state; // 2x4 * 4x1 = 2x1
+            measurement.at<float>(0) = x_mouse_pos[x_mouse_pos.size() - past_state_memory];
+            measurement.at<float>(1) = y_mouse_pos[x_mouse_pos.size() - past_state_memory];
             // double measAngle = measurement.at<float>(0);
             // cv::Point measPt = calcPoint(center, R, measAngle);
             // correct the state estimates based on measurements
@@ -142,7 +144,7 @@ void mouse_example()
             drawMarker(img, improvedPt, cv::Scalar(0, 255, 0), cv::MARKER_SQUARE, 5, 2);
             drawMarker(img, statePt, cv::Scalar(255, 255, 255), cv::MARKER_STAR, 10, 1);
             // forecast some steps
-            cv::Mat forecast = kalman.forecast(4);
+            cv::Mat forecast = kalman.forecast(100.0f);
             float forecastx = forecast.at<float>(0);
             float forecasty = forecast.at<float>(1);
             cv::Point forecastPt = cv::Point(forecastx, forecasty);
