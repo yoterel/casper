@@ -100,7 +100,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                      SkinnedModel &leftHandModel,
                      Text &text);
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current);
-bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right);
+bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &detected_left, bool &detected_right);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
 bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
@@ -326,7 +326,7 @@ bool leap_calib_use_ransac = false;
 int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-int operation_mode = static_cast<int>(OperationMode::SIMULATION);
+int operation_mode = static_cast<int>(OperationMode::NORMAL);
 int n_points_leap_calib = 2000;
 int n_points_cam_calib = 30;
 std::vector<double> calib_cam_matrix;
@@ -447,12 +447,12 @@ std::vector<cv::Point2f> ControlPointsQ;
 std::vector<cv::Point2f> prev_leap_keypoints;
 cv::Mat x_prev;
 std::vector<glm::vec2> ControlPointsP_glm;
-std::vector<glm::vec2> ControlPointsP_input_tmp;
-std::vector<glm::vec2> ControlPointsP_input_glm;
+std::vector<glm::vec2> ControlPointsP_input_left, ControlPointsP_input_right;
+std::vector<glm::vec2> ControlPointsP_input_glm_left, ControlPointsP_input_glm_right;
 std::vector<glm::vec2> ControlPointsQ_glm;
 std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
 std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
-std::vector<std::vector<glm::vec2>> prev_pred_glm;
+std::vector<std::vector<glm::vec2>> prev_pred_glm_left, prev_pred_glm_right;
 bool mls_succeed = false;
 bool mls_running = false;
 bool use_mls = true;
@@ -461,15 +461,18 @@ bool show_mls_grid = false;
 int mls_cp_smooth_window = 0;
 int mls_grid_smooth_window = 0;
 bool use_mp_kalman = false;
+float prev_mls_time = 0.0f;
 bool mls_forecast = true;
 float kalman_process_noise = 0.01f;
 float kalman_measurement_noise = 0.0001f;
 float kalman_speed = 0.005f;
 float mls_depth_threshold = 215.0f;
 bool mls_depth_test = false;
-std::vector<Kalman2D_ConstantV> kalman_filters = std::vector<Kalman2D_ConstantV>(16);
+std::vector<Kalman2D_ConstantV> kalman_filters_left = std::vector<Kalman2D_ConstantV>(16);
+std::vector<Kalman2D_ConstantV> kalman_filters_right = std::vector<Kalman2D_ConstantV>(16);
+// std::vector<Kalman2D_ConstantV> kalman_filters = std::vector<Kalman2D_ConstantV>(16);
 std::vector<Kalman2D_ConstantV2> grid_kalman = std::vector<Kalman2D_ConstantV2>(grid_x_point_count * grid_y_point_count);
-int kalman_lookahead = 0;
+float kalman_lookahead = 17.0f;
 int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 
 /* main */
@@ -1163,12 +1166,12 @@ int main(int argc, char *argv[])
                             float forecast_interval = nextSimulationTime - curSimulationTime;
                             for (int i = 0; i < filtered_cur.size(); i++)
                             {
-                                cv::Mat pred = kalman_filters[i].predict(interval);
+                                cv::Mat pred = kalman_filters_left[i].predict(interval);
                                 cv::Mat measurement(2, 1, CV_32F);
                                 measurement.at<float>(0) = filtered_cur[i].x;
                                 measurement.at<float>(1) = filtered_cur[i].y;
-                                cv::Mat corr = kalman_filters[i].correct(measurement);
-                                cv::Mat forecast = kalman_filters[i].forecast(forecast_interval);
+                                cv::Mat corr = kalman_filters_left[i].correct(measurement);
+                                cv::Mat forecast = kalman_filters_left[i].forecast(forecast_interval);
                                 kalman_pred.push_back(glm::vec2(pred.at<float>(0), pred.at<float>(1)));
                                 kalman_corrected.push_back(glm::vec2(corr.at<float>(0), corr.at<float>(1)));
                                 kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
@@ -2894,7 +2897,7 @@ glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &le
     return point_3d;
 }
 
-bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right)
+bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected)
 {
     cv::Mat image;
     cv::flip(origImage, image, 1);
@@ -2922,17 +2925,19 @@ bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, 
         return false;
         // exit(1);
     }
-    int n_hands = 0;
     PyObject *pyLeftLandmarks, *pyRightLandmarks;
-    if (!PyArg_ParseTuple(myResult, "OOi", &pyLeftLandmarks, &pyRightLandmarks, &n_hands))
+    int left_, right_;
+    if (!PyArg_ParseTuple(myResult, "OOii", &pyLeftLandmarks, &pyRightLandmarks, &left_, &right_))
     {
         std::cout << "Parse failed!" << std::endl;
         PyErr_Print();
         return false;
         // exit(1);
     }
+    left_detected = static_cast<bool>(left_);
+    right_detected = static_cast<bool>(right_);
     std::vector<glm::vec2> data_vec;
-    if (n_hands == 0)
+    if ((!left_detected) && (!right_detected))
         return false;
     // PyObject* myResult = PyObject_CallFunction(myprofile, "O", image_object);
     PyArrayObject *leftNumpyArray = reinterpret_cast<PyArrayObject *>(pyLeftLandmarks);
@@ -3322,16 +3327,18 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             vcolorShader->setMat4("MVP", c2p_homography);
         else
             vcolorShader->setMat4("MVP", glm::mat4(1.0f));
-        PointCloud cloud_left(leap_joints_left_filtered, screen_verts_color_magenta);
-        PointCloud cloud_right(leap_joints_right_filtered, screen_verts_color_magenta);
+        PointCloud cloud_left(leap_joints_left_filtered, screen_verts_color_white);
+        PointCloud cloud_right(leap_joints_right_filtered, screen_verts_color_white);
         cloud_left.render(5.0f);
         cloud_right.render(5.0f);
         if (use_mls)
         {
-            PointCloud cloud_src_input(ControlPointsP_input_glm, screen_verts_color_blue);
-            PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
-            PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
-            cloud_src_input.render(5.0f);
+            PointCloud cloud_src_input_left(ControlPointsP_input_left, screen_verts_color_red);
+            PointCloud cloud_src_input_right(ControlPointsP_input_right, screen_verts_color_red);
+            PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);
+            PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta);
+            cloud_src_input_left.render(5.0f);
+            cloud_src_input_right.render(5.0f);
             cloud_src.render(5.0f);
             cloud_dst.render(5.0f);
         }
@@ -3851,7 +3858,8 @@ void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat 
             // run MP
             std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
             cv::Mat pastImage = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[savedSimulationFrameCount]).clone();
-            if (mp_predict(pastImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
+            bool mp_detected_left, mp_detected_right;
+            if (mp_predict(pastImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right, mp_detected_left, mp_detected_right))
             {
                 if (isRightHand)
                 {
@@ -3968,11 +3976,12 @@ void handleMLSSync(Shader &gridShader)
                 }
                 camImage = past_image.clone();
                 std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                ControlPointsP_input_tmp = projected;
+                ControlPointsP_input_left = projected;
                 std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
                 std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
                 std::vector<glm::vec2> projected_diff(projected.size(), glm::vec2(0.0f, 0.0f));
-                if (mp_predict(camImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
+                bool mp_detected_left, mp_detected_right;
+                if (mp_predict(camImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right, mp_detected_left, mp_detected_right))
                 {
                     if (isRightHand)
                     {
@@ -3997,32 +4006,25 @@ void handleMLSSync(Shader &gridShader)
                         }
                     }
                     // perform smoothing over control points (when mls_cp_smooth_window > 0)
-                    prev_pred_glm.push_back(cur_pred_glm);
-                    pred_glm = Helpers::accumulate(prev_pred_glm);
-                    int diff = prev_pred_glm.size() - mls_cp_smooth_window;
+                    prev_pred_glm_left.push_back(cur_pred_glm);
+                    pred_glm = Helpers::accumulate(prev_pred_glm_left);
+                    int diff = prev_pred_glm_left.size() - mls_cp_smooth_window;
                     if (diff > 0)
                     {
                         for (int i = 0; i < diff; i++)
-                            prev_pred_glm.erase(prev_pred_glm.begin());
+                            prev_pred_glm_left.erase(prev_pred_glm_left.begin());
                     }
                     // possibly use kalman to filter/predict the measurements, since mp takes ~17ms to run
                     if (use_mp_kalman)
                     {
                         for (int i = 0; i < pred_glm.size(); i++)
                         {
-                            cv::Mat pred = kalman_filters[i].predict(1.0f);
+                            cv::Mat pred = kalman_filters_left[i].predict(1.0f);
                             cv::Mat measurement(2, 1, CV_32F);
                             measurement.at<float>(0) = pred_glm[i].x;
                             measurement.at<float>(1) = pred_glm[i].y;
-                            cv::Mat corr = kalman_filters[i].correct(measurement);
-                            cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
-                            if (i == 0)
-                            {
-                                std::cout << "pred: " << pred << std::endl;
-                                std::cout << "meas: " << measurement << std::endl;
-                                std::cout << "corr: " << corr << std::endl;
-                                std::cout << "forecast: " << forecast << std::endl;
-                            }
+                            cv::Mat corr = kalman_filters_left[i].correct(measurement);
+                            cv::Mat forecast = kalman_filters_left[i].forecast(kalman_lookahead);
                             kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
                             pred_glm = kalman_forecast;
                         }
@@ -4108,11 +4110,6 @@ void handleMLSSync(Shader &gridShader)
             mls_succeed = false;
             ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
             ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
-            ControlPointsP_input_glm.clear();
-            for (int i = 0; i < leap_selection_vector.size(); i++)
-            {
-                ControlPointsP_input_glm.push_back(ControlPointsP_input_tmp[leap_selection_vector[i]]);
-            }
         }
         // render as post process
         mls_fbo.bind();
@@ -4138,99 +4135,179 @@ void handleMLSSync(Shader &gridShader)
 }
 void handleMLSAsync(Shader &gridShader)
 {
-    if (use_mls) // todo: support two hands, currently prioritizes right if both hands are in frame
+    if (use_mls) // todo: support two hands, currently prioritizes left if both hands are in frame
     {
         if (!mls_running && !mls_succeed)
         {
             if (joints_left.size() > 0 || joints_right.size() > 0)
             {
-                bool isRightHand = joints_right.size() > 0;
                 t_mls_thread.start();
-                std::vector<glm::vec3> to_project = isRightHand ? joints_right : joints_left;
-                bool any_visible = false;
-                std::vector<float> rendered_depths;
-                std::vector<glm::vec3> projected_with_depth;
+                bool isRightHandVis = joints_right.size() > 0;
+                bool isLeftHandVis = joints_left.size() > 0;
+                // std::vector<glm::vec3> joints = isRightHand ? joints_right : joints_left;
+                std::vector<glm::vec3> to_project_left;
+                std::vector<glm::vec3> to_project_right;
+                // use only selected control points
+                if (isLeftHandVis)
+                {
+                    for (int i = 0; i < leap_selection_vector.size(); i++)
+                    {
+                        to_project_left.push_back(joints_left[leap_selection_vector[i]]);
+                    }
+                }
+                if (isRightHandVis)
+                {
+                    for (int i = 0; i < leap_selection_vector.size(); i++)
+                    {
+                        to_project_right.push_back(joints_right[leap_selection_vector[i]]);
+                    }
+                }
+                std::vector<float> rendered_depths_left, rendered_depths_right;
+                std::vector<glm::vec3> projected_with_depth_left, projected_with_depth_right;
+                std::vector<glm::vec2> screen_space;
                 if (mls_depth_test)
                 {
-                    projected_with_depth = Helpers::project_points_w_depth(to_project,
-                                                                           glm::mat4(1.0f),
-                                                                           gl_camera.getViewMatrix(),
-                                                                           gl_camera.getProjectionMatrix());
-                    std::vector<glm::vec2> screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth), dst_width, dst_height, false);
-                    rendered_depths = hands_fbo.sampleDepthBuffer(screen_space); // todo: make async
+                    projected_with_depth_left = Helpers::project_points_w_depth(to_project_left,
+                                                                                glm::mat4(1.0f),
+                                                                                gl_camera.getViewMatrix(),
+                                                                                gl_camera.getProjectionMatrix());
+                    screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth_left), dst_width, dst_height, false);
+                    rendered_depths_left = hands_fbo.sampleDepthBuffer(screen_space); // todo: make async
+                    projected_with_depth_right = Helpers::project_points_w_depth(to_project_right,
+                                                                                 glm::mat4(1.0f),
+                                                                                 gl_camera.getViewMatrix(),
+                                                                                 gl_camera.getProjectionMatrix());
+                    screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth_right), dst_width, dst_height, false);
+                    rendered_depths_right = hands_fbo.sampleDepthBuffer(screen_space); // todo: make async
                 }
                 if (run_mls.joinable())
                     run_mls.join();
                 mls_running = true;
                 camImage = camImageOrig.clone();
-                run_mls = std::thread([to_project, rendered_depths, projected_with_depth, isRightHand]() { // send (forecasted) leap joints to MP
+                run_mls = std::thread([to_project_left, projected_with_depth_left, rendered_depths_left, isLeftHandVis,
+                                       to_project_right, projected_with_depth_right, rendered_depths_right, isRightHandVis]() { // send (forecasted) leap joints to MP
                     try
                     {
-                        std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                        ControlPointsP_input_tmp = projected;
-                        std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
-                        std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
-                        std::vector<glm::vec2> projected_diff(projected.size(), glm::vec2(0.0f, 0.0f));
-                        if (mp_predict(camImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right))
+                        bool useRightHand = isRightHandVis;
+                        bool useLeftHand = isLeftHandVis;
+                        std::vector<glm::vec2> projected_left = Helpers::project_points(to_project_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                        std::vector<glm::vec2> projected_right = Helpers::project_points(to_project_right, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                        ControlPointsP_input_glm_left = projected_left;
+                        ControlPointsP_input_glm_right = projected_right;
+                        std::vector<glm::vec2> mp_glm_left, mp_glm_right;
+                        std::vector<glm::vec2> cur_pred_glm_left, cur_pred_glm_right;
+                        std::vector<glm::vec2> pred_glm_left, pred_glm_right, kalman_forecast_left, kalman_forecast_right; // todo preallocate
+                        std::vector<glm::vec2> projected_diff_left(projected_left.size(), glm::vec2(0.0f, 0.0f));
+                        std::vector<glm::vec2> projected_diff_right(projected_right.size(), glm::vec2(0.0f, 0.0f));
+                        bool mp_detected_left, mp_detected_right;
+                        if (mp_predict(camImage, totalFrameCount, mp_glm_left, mp_glm_right, mp_detected_left, mp_detected_right))
                         {
-                            if (isRightHand)
+                            if (useRightHand)
                             {
-                                if (cur_pred_glm_right.size() > 0)
+                                if (mp_detected_right)
                                 {
-                                    cur_pred_glm = cur_pred_glm_right;
+                                    for (int i = 0; i < mp_selection_vector.size(); i++)
+                                    {
+                                        cur_pred_glm_right.push_back(mp_glm_right[mp_selection_vector[i]]);
+                                    }
                                 }
                                 else
                                 {
-                                    mls_running = false;
-                                    return;
+                                    useRightHand = false;
+                                    // mls_running = false;
+                                    // return;
+                                }
+                            }
+                            if (useLeftHand)
+                            {
+                                if (mp_detected_left)
+                                {
+                                    for (int i = 0; i < mp_selection_vector.size(); i++)
+                                    {
+                                        cur_pred_glm_left.push_back(mp_glm_left[mp_selection_vector[i]]);
+                                    }
+                                }
+                                else
+                                {
+                                    useLeftHand = false;
+                                    // return;
+                                }
+                            }
+                            if (mls_cp_smooth_window > 0)
+                            {
+                                int diff;
+                                prev_pred_glm_left.push_back(cur_pred_glm_left);
+                                pred_glm_left = Helpers::accumulate(prev_pred_glm_left);
+                                diff = prev_pred_glm_left.size() - mls_cp_smooth_window;
+                                if (diff > 0)
+                                {
+                                    for (int i = 0; i < diff; i++)
+                                        prev_pred_glm_left.erase(prev_pred_glm_left.begin());
+                                }
+                                prev_pred_glm_right.push_back(cur_pred_glm_right);
+                                pred_glm_right = Helpers::accumulate(prev_pred_glm_right);
+                                diff = prev_pred_glm_right.size() - mls_cp_smooth_window;
+                                if (diff > 0)
+                                {
+                                    for (int i = 0; i < diff; i++)
+                                        prev_pred_glm_right.erase(prev_pred_glm_right.begin());
                                 }
                             }
                             else
                             {
-                                if (cur_pred_glm_left.size() > 0)
-                                {
-                                    cur_pred_glm = cur_pred_glm_left;
-                                }
-                                else
-                                {
-                                    mls_running = false;
-                                    return;
-                                }
+                                pred_glm_left = std::move(cur_pred_glm_left);
+                                pred_glm_right = std::move(cur_pred_glm_right);
                             }
                             // perform smoothing over control points (when mls_cp_smooth_window > 0)
-                            prev_pred_glm.push_back(cur_pred_glm);
-                            pred_glm = Helpers::accumulate(prev_pred_glm);
-                            int diff = prev_pred_glm.size() - mls_cp_smooth_window;
-                            if (diff > 0)
-                            {
-                                for (int i = 0; i < diff; i++)
-                                    prev_pred_glm.erase(prev_pred_glm.begin());
-                            }
+
                             // possibly use kalman to filter/predict the measurements, since mp takes ~17ms to run
                             if (use_mp_kalman)
                             {
-                                for (int i = 0; i < pred_glm.size(); i++)
+                                // get the time passed since the last frame
+                                float cur_mls_time = t_app.getElapsedTimeInMilliSec();
+                                float dt = cur_mls_time - prev_mls_time;
+                                for (int i = 0; i < pred_glm_left.size(); i++)
                                 {
-                                    cv::Mat pred = kalman_filters[i].predict(1.0f);
+                                    cv::Mat pred = kalman_filters_left[i].predict(dt);
                                     cv::Mat measurement(2, 1, CV_32F);
-                                    measurement.at<float>(0) = pred_glm[i].x;
-                                    measurement.at<float>(1) = pred_glm[i].y;
-                                    cv::Mat corr = kalman_filters[i].correct(measurement);
-                                    cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
-                                    if (i == 0)
-                                    {
-                                        std::cout << "pred: " << pred << std::endl;
-                                        std::cout << "meas: " << measurement << std::endl;
-                                        std::cout << "corr: " << corr << std::endl;
-                                        std::cout << "forecast: " << forecast << std::endl;
-                                    }
-                                    kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
-                                    pred_glm = kalman_forecast;
+                                    measurement.at<float>(0) = pred_glm_left[i].x;
+                                    measurement.at<float>(1) = pred_glm_left[i].y;
+                                    cv::Mat corr = kalman_filters_left[i].correct(measurement);
+                                    cv::Mat forecast = kalman_filters_left[i].forecast(kalman_lookahead);
+                                    // if (i == 0)
+                                    // {
+                                    //     std::cout << "pred: " << pred << std::endl;
+                                    //     std::cout << "meas: " << measurement << std::endl;
+                                    //     std::cout << "corr: " << corr << std::endl;
+                                    //     std::cout << "forecast: " << forecast << std::endl;
+                                    // }
+                                    kalman_forecast_left.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
                                 }
+                                pred_glm_left = std::move(kalman_forecast_left);
+                                for (int i = 0; i < pred_glm_right.size(); i++)
+                                {
+                                    cv::Mat pred = kalman_filters_right[i].predict(dt);
+                                    cv::Mat measurement(2, 1, CV_32F);
+                                    measurement.at<float>(0) = pred_glm_right[i].x;
+                                    measurement.at<float>(1) = pred_glm_right[i].y;
+                                    cv::Mat corr = kalman_filters_right[i].correct(measurement);
+                                    cv::Mat forecast = kalman_filters_right[i].forecast(kalman_lookahead);
+                                    // if (i == 0)
+                                    // {
+                                    //     std::cout << "pred: " << pred << std::endl;
+                                    //     std::cout << "meas: " << measurement << std::endl;
+                                    //     std::cout << "corr: " << corr << std::endl;
+                                    //     std::cout << "forecast: " << forecast << std::endl;
+                                    // }
+                                    kalman_forecast_right.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
+                                }
+                                pred_glm_right = std::move(kalman_forecast_right);
+                                prev_mls_time = cur_mls_time;
                                 // pred_glm = kalman_forecast;
                             }
-                            std::vector<cv::Point2f> leap_keypoints, diff_keypoints, mp_keypoints;
-                            // possibly, instead of filtering, use current leap info to move mp keypoints
+                            std::vector<cv::Point2f> leap_keypoints_left, diff_keypoints_left, mp_keypoints_left,
+                                mp_keypoints_right, leap_keypoints_right, diff_keypoints_right;
+                            // possibly, use current leap info to move mp/leap keypoints
                             if (mls_forecast)
                             {
                                 // sync leap clock
@@ -4239,41 +4316,74 @@ void handleMLSAsync(Shader &gridShader)
                                 std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
                                 LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                 std::vector<glm::mat4> cur_left_bones, cur_right_bones;
-                                std::vector<glm::vec3> cur_verts, cur_vertices_left, cur_vertices_right;
+                                std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
                                 LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay_mls);
-                                if (isRightHand)
-                                    cur_verts = std::move(cur_vertices_right);
-                                else
-                                    cur_verts = std::move(cur_vertices_left);
-                                if (status == LEAP_STATUS::LEAP_NEWFRAME && cur_verts.size() > 0)
+                                if (status == LEAP_STATUS::LEAP_NEWFRAME)
                                 {
-                                    std::vector<glm::vec2> projected_new = Helpers::project_points(cur_verts, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                                    for (int i = 0; i < projected_new.size(); i++)
+                                    if ((cur_vertices_left.size() > 0) && (useLeftHand))
                                     {
-                                        projected_diff[i] += projected_new[i] - projected[i];
+                                        std::vector<glm::vec2> projected_new, projected_new_all;
+                                        projected_new_all = Helpers::project_points(cur_vertices_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                                        // use only selected control points
+                                        for (int i = 0; i < leap_selection_vector.size(); i++)
+                                        {
+                                            projected_new.push_back(projected_new_all[leap_selection_vector[i]]);
+                                        }
+                                        for (int i = 0; i < projected_new.size(); i++)
+                                        {
+                                            projected_diff_left[i] += projected_new[i] - projected_left[i];
+                                        }
+                                        leap_keypoints_left = Helpers::glm2opencv(projected_new);
                                     }
-                                    leap_keypoints = Helpers::glm2opencv(projected_new);
+                                    else
+                                    {
+                                        leap_keypoints_left = Helpers::glm2opencv(projected_left);
+                                    }
+                                    if ((cur_vertices_right.size() > 0) && (useRightHand))
+                                    {
+                                        std::vector<glm::vec2> projected_new, projected_new_all;
+                                        projected_new_all = Helpers::project_points(cur_vertices_right, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                                        // use only selected control points
+                                        for (int i = 0; i < leap_selection_vector.size(); i++)
+                                        {
+                                            projected_new.push_back(projected_new_all[leap_selection_vector[i]]);
+                                        }
+                                        for (int i = 0; i < projected_new.size(); i++)
+                                        {
+                                            projected_diff_right[i] += projected_new[i] - projected_right[i];
+                                        }
+                                        leap_keypoints_right = Helpers::glm2opencv(projected_new);
+                                    }
+                                    else
+                                    {
+                                        leap_keypoints_left = Helpers::glm2opencv(projected_left);
+                                    }
                                 }
                                 else
                                 {
-                                    leap_keypoints = Helpers::glm2opencv(projected);
+                                    leap_keypoints_left = Helpers::glm2opencv(projected_left);
+                                    leap_keypoints_right = Helpers::glm2opencv(projected_right);
                                 }
                             }
                             else
                             {
-                                leap_keypoints = Helpers::glm2opencv(projected);
+                                leap_keypoints_left = Helpers::glm2opencv(projected_left);
+                                leap_keypoints_right = Helpers::glm2opencv(projected_right);
                             }
-                            diff_keypoints = Helpers::glm2opencv(projected_diff);
-                            mp_keypoints = Helpers::glm2opencv(pred_glm);
+                            diff_keypoints_left = Helpers::glm2opencv(projected_diff_left);
+                            diff_keypoints_right = Helpers::glm2opencv(projected_diff_right);
+                            mp_keypoints_left = Helpers::glm2opencv(pred_glm_left);
+                            mp_keypoints_right = Helpers::glm2opencv(pred_glm_right);
                             ControlPointsP.clear();
                             ControlPointsQ.clear();
-                            std::vector<bool> visible_landmarks(leap_keypoints.size(), true);
+                            std::vector<bool> visible_landmarks_left(leap_keypoints_left.size(), true);
+                            std::vector<bool> visible_landmarks_right(leap_keypoints_right.size(), true);
                             // if mls_depth_test was on, we need to filter out control points that are occluded
-                            for (int i = 0; i < projected_with_depth.size(); i++)
+                            for (int i = 0; i < projected_with_depth_left.size(); i++)
                             {
                                 // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
-                                float rendered_depth = rendered_depths[i];
-                                float projected_depth = projected_with_depth[i].z;
+                                float rendered_depth = rendered_depths_left[i];
+                                float projected_depth = projected_with_depth_left[i].z;
                                 float cam_near = 1.0f;
                                 float cam_far = 1500.0f;
                                 rendered_depth = (2.0 * rendered_depth) - 1.0; // logarithmic NDC
@@ -4282,18 +4392,44 @@ void handleMLSAsync(Shader &gridShader)
                                 projected_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (projected_depth * (cam_far - cam_near)));
                                 if ((std::abs(rendered_depth - projected_depth) <= mls_depth_threshold) && (i != 1)) // always include wrist
                                 {
-                                    visible_landmarks[i] = false;
+                                    visible_landmarks_left[i] = false;
+                                }
+                            }
+                            for (int i = 0; i < projected_with_depth_right.size(); i++)
+                            {
+                                // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
+                                float rendered_depth = rendered_depths_right[i];
+                                float projected_depth = projected_with_depth_right[i].z;
+                                float cam_near = 1.0f;
+                                float cam_far = 1500.0f;
+                                rendered_depth = (2.0 * rendered_depth) - 1.0; // logarithmic NDC
+                                rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near)));
+                                projected_depth = (2.0 * projected_depth) - 1.0; // logarithmic NDC
+                                projected_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (projected_depth * (cam_far - cam_near)));
+                                if ((std::abs(rendered_depth - projected_depth) <= mls_depth_threshold) && (i != 1)) // always include wrist
+                                {
+                                    visible_landmarks_right[i] = false;
                                 }
                             }
                             // final control points computation
-                            for (int i = 0; i < leap_selection_vector.size(); i++)
-                            {
-                                if (visible_landmarks[leap_selection_vector[i]])
+                            if (useLeftHand)
+                                for (int i = 0; i < visible_landmarks_left.size(); i++)
                                 {
-                                    ControlPointsP.push_back(leap_keypoints[leap_selection_vector[i]]);
-                                    ControlPointsQ.push_back(mp_keypoints[mp_selection_vector[i]] + diff_keypoints[mp_selection_vector[i]]);
+                                    if (visible_landmarks_left[i])
+                                    {
+                                        ControlPointsP.push_back(leap_keypoints_left[i]);
+                                        ControlPointsQ.push_back(mp_keypoints_left[i]); //  + diff_keypoints[i]
+                                    }
                                 }
-                            }
+                            if (useRightHand)
+                                for (int i = 0; i < visible_landmarks_right.size(); i++)
+                                {
+                                    if (visible_landmarks_right[i])
+                                    {
+                                        ControlPointsP.push_back(leap_keypoints_right[i]);
+                                        ControlPointsQ.push_back(mp_keypoints_right[i]); //  + diff_keypoints[i]
+                                    }
+                                }
                             // deform grid using control points
                             if (ControlPointsP.size() > 0)
                             {
@@ -4325,11 +4461,8 @@ void handleMLSAsync(Shader &gridShader)
             mls_succeed = false;
             ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
             ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
-            ControlPointsP_input_glm.clear();
-            for (int i = 0; i < leap_selection_vector.size(); i++)
-            {
-                ControlPointsP_input_glm.push_back(ControlPointsP_input_tmp[leap_selection_vector[i]]);
-            }
+            ControlPointsP_input_left = std::move(ControlPointsP_input_glm_left);
+            ControlPointsP_input_right = std::move(ControlPointsP_input_glm_right);
             if (run_mls.joinable())
                 run_mls.join();
             t_mls_thread.stop();
@@ -5513,38 +5646,74 @@ void openIMGUIFrame()
             ImGui::SliderInt("MLS cp smooth window", &mls_cp_smooth_window, 0, 10);
             ImGui::SliderInt("MLS grid smooth window", &mls_grid_smooth_window, 0, 10);
             ImGui::SliderInt("MLS Leap Prediction [us]", &magic_leap_time_delay_mls, -50000, 50000);
-            ImGui::Checkbox("Kalman Filter", &use_mp_kalman);
-            ImGui::SliderInt("Kalman lookahead", &kalman_lookahead, 0, 100);
+            if (ImGui::Checkbox("Kalman Filter", &use_mp_kalman))
+            {
+                if (use_mp_kalman)
+                {
+                    kalman_filters_left.clear();
+                    kalman_filters_right.clear();
+                    for (int i = 0; i < 16; i++)
+                    {
+                        kalman_filters_left.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                         kalman_measurement_noise));
+                    }
+                    for (int i = 0; i < 16; i++)
+                    {
+                        kalman_filters_right.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                          kalman_measurement_noise));
+                    }
+                }
+            }
+
+            ImGui::SliderFloat("Kalman lookahead [ms]", &kalman_lookahead, 0.0f, 200.0f);
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                kalman_filters_left.clear();
+                kalman_filters_right.clear();
+                for (int i = 0; i < 16; i++)
+                {
+                    kalman_filters_left.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                     kalman_measurement_noise));
+                }
+                for (int i = 0; i < 16; i++)
+                {
+                    kalman_filters_right.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                      kalman_measurement_noise));
+                }
+            }
             ImGui::SliderFloat("Kalman Pnoise", &kalman_process_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
-                kalman_filters.clear();
+                kalman_filters_left.clear();
+                kalman_filters_right.clear();
                 for (int i = 0; i < 16; i++)
                 {
-                    kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
-                                                                kalman_measurement_noise));
+                    kalman_filters_left.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                     kalman_measurement_noise));
+                }
+                for (int i = 0; i < 16; i++)
+                {
+                    kalman_filters_right.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                      kalman_measurement_noise));
                 }
             }
             ImGui::SliderFloat("Kalman Mnoise", &kalman_measurement_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
-                kalman_filters.clear();
+                kalman_filters_left.clear();
+                kalman_filters_right.clear();
                 for (int i = 0; i < 16; i++)
                 {
-                    kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
-                                                                kalman_measurement_noise));
+                    kalman_filters_left.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                     kalman_measurement_noise));
                 }
-            }
-            ImGui::SliderFloat("Kalman speed", &kalman_speed, 0.0001f, 1.0f);
-            if (ImGui::IsItemDeactivatedAfterEdit())
-            {
-                kalman_filters.clear();
                 for (int i = 0; i < 16; i++)
                 {
-                    kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
-                                                                kalman_measurement_noise));
+                    kalman_filters_right.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                      kalman_measurement_noise));
                 }
             }
+
             ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
             // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
             ImGui::Checkbox("MLS depth test", &mls_depth_test);
@@ -5654,11 +5823,11 @@ void openIMGUIFrame()
             {
                 if (run_simulation)
                 {
-                    kalman_filters.clear();
+                    kalman_filters_left.clear();
                     for (int i = 0; i < 16; i++)
                     {
-                        kalman_filters.push_back(Kalman2D_ConstantV(kalman_process_noise,
-                                                                    kalman_measurement_noise));
+                        kalman_filters_left.push_back(Kalman2D_ConstantV(kalman_process_noise,
+                                                                         kalman_measurement_noise));
                     }
                     if (recording_name != loaded_simulation_name)
                     {

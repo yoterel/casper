@@ -60,7 +60,7 @@ base_options = python.BaseOptions(
 )
 options = vision.HandLandmarkerOptions(
     base_options=base_options,
-    num_hands=1,
+    num_hands=2,
     running_mode=VisionRunningMode.VIDEO,  # , running_mode=VisionRunningMode.VIDEO
 )
 detector = vision.HandLandmarker.create_from_options(options)
@@ -105,10 +105,11 @@ def predict_video(image_orig, i):
         mp_image, i
     )  # detect_for_video(mp_image, i), detect(mp_image)
     if len(detection_result.hand_landmarks) == 0:
-        return np.zeros(1), np.zeros(1), 0
+        return np.zeros(1), np.zeros(1), False, False
     right_landmarks = np.zeros((21, 2), dtype=np.float32)
     left_landmarks = np.zeros((21, 2), dtype=np.float32)
-    handness = np.zeros(2, dtype=bool)
+    right_detected = False
+    left_detected = False
     for j in range(len(detection_result.hand_landmarks)):
         handness = detection_result.handedness[j][0].display_name == "Right"
         landmarks = np.array(
@@ -121,13 +122,15 @@ def predict_video(image_orig, i):
         landmarks[:, 1] = -landmarks[:, 1]  # flip y
         if handness:
             right_landmarks = landmarks
+            right_detected = True
         else:
             left_landmarks = landmarks
+            left_detected = True
     # else:
     #     mp_np = np.zeros(1)
     # print(mp_np.dtype)
     # print(mp_np.shape)
-    return left_landmarks, right_landmarks, len(detection_result.hand_landmarks)
+    return left_landmarks, right_landmarks, left_detected, right_detected
 
 
 def predict_video_aprox(image_orig, i, my_detector):
