@@ -60,7 +60,7 @@ base_options = python.BaseOptions(
 )
 options = vision.HandLandmarkerOptions(
     base_options=base_options,
-    num_hands=2,
+    num_hands=1,
     running_mode=VisionRunningMode.VIDEO,  # , running_mode=VisionRunningMode.VIDEO
 )
 detector = vision.HandLandmarker.create_from_options(options)
