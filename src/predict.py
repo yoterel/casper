@@ -66,20 +66,20 @@ options = vision.HandLandmarkerOptions(
 detector = vision.HandLandmarker.create_from_options(options)
 
 
-def init_detector(video=False):
+def init_detector(video=False, n_hands=1):
     my_base_options = python.BaseOptions(
         model_asset_path="../../resource/models/hand_landmarker.task"
     )
     if video:
         my_options = vision.HandLandmarkerOptions(
             base_options=my_base_options,
-            num_hands=2,
+            num_hands=n_hands,
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
         )
     else:
         my_options = vision.HandLandmarkerOptions(
             base_options=my_base_options,
-            num_hands=2,
+            num_hands=n_hands,
         )
     my_detector = vision.HandLandmarker.create_from_options(my_options)
     return my_detector
@@ -159,9 +159,11 @@ def predict_video_aprox(image_orig, i, my_detector):
         mp_image, i
     )  # detect_for_video(mp_image, i), detect(mp_image)
     if len(detection_result.hand_landmarks) == 0:
-        return np.zeros(1), np.zeros(1), 0
+        return np.zeros(1), np.zeros(1), False, False
     right_landmarks = np.zeros((21, 2), dtype=np.float32)
     left_landmarks = np.zeros((21, 2), dtype=np.float32)
+    right_detected = False
+    left_detected = False
     for j in range(len(detection_result.hand_landmarks)):
         handness = detection_result.handedness[j][0].display_name == "Right"
         landmarks = np.array(
@@ -174,13 +176,15 @@ def predict_video_aprox(image_orig, i, my_detector):
         landmarks[:, 1] = -landmarks[:, 1]  # flip y
         if handness:
             right_landmarks = landmarks
+            right_detected = True
         else:
             left_landmarks = landmarks
+            left_detected = True
     # else:
     #     mp_np = np.zeros(1)
     # print(mp_np.dtype)
     # print(mp_np.shape)
-    return left_landmarks, right_landmarks, len(detection_result.hand_landmarks)
+    return left_landmarks, right_landmarks, left_detected, right_detected
 
 
 def predict_single(image_orig, my_detector=None, verbose=False):
@@ -322,14 +326,18 @@ if __name__ == "__main__":
         times = []
         failures = 0
         my_video_detector = init_detector(True)
-        _, _, n_hands = predict_video_aprox(image, 0, my_video_detector)  # warmup
-        if n_hands == 0:
+        _, _, left_detected, right_detected = predict_video_aprox(
+            image, 0, my_video_detector
+        )  # warmup
+        if not left_detected and not right_detected:
             failures += 1
         for i in range(1, long_iters):
             start = time.time()
-            _, _, n_hands = predict_video_aprox(image, i, my_video_detector)
+            _, _, left_detected, right_detected = predict_video_aprox(
+                image, i, my_video_detector
+            )
             times.append(time.time() - start)
-            if n_hands == 0:
+            if not left_detected and not right_detected:
                 failures += 1
             # print(times[-1])
         video_avg = np.array(times).mean()
