@@ -310,6 +310,7 @@ std::vector<glm::vec3> joints_left;
 std::vector<glm::vec3> joints_right;
 std::vector<glm::mat4> bones_to_world_left;
 std::vector<glm::mat4> bones_to_world_right;
+std::vector<glm::mat4> required_pose_bones_to_world;
 std::vector<glm::mat4> bones_to_world_right_bake;
 std::vector<glm::mat4> bones_to_world_left_bake;
 std::vector<glm::mat4> bones_to_world_left_interp;
@@ -1020,6 +1021,8 @@ int main(int argc, char *argv[])
             LEAP_STATUS leap_status = handleLeapInput();
             if (record_session)
                 saveSession(std::format("../../debug/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
+            if (required_pose_bones_to_world.size() == 0)
+                required_pose_bones_to_world = bones_to_world_right;
             t_leap.stop();
 
             /* skin hand meshes */
@@ -2073,11 +2076,13 @@ std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_t
     std::vector<float> distances;
     for (int i = 0; i < bones_to_world.size(); i++)
     {
-        glm::mat3 bone_to_world_rot = glm::mat3(bones_to_world[i]);
-        glm::mat3 required_bone_to_world_rot = glm::mat3(required_pose_bones_to_world[i]);
-        glm::mat4 diff = bone_to_world_rot * glm::transpose(required_bone_to_world_rot);
+        glm::mat4 bone_to_world_rot = glm::scale(bones_to_world[i], glm::vec3(1 / magic_leap_scale_factor));
+        glm::mat4 required_bone_to_world_rot = glm::scale(required_pose_bones_to_world[i], glm::vec3(1 / magic_leap_scale_factor));
+        glm::mat3 diff = glm::mat3(bone_to_world_rot) * glm::transpose(glm::mat3(required_bone_to_world_rot));
         float trace = diff[0][0] + diff[1][1] + diff[2][2];
-        float angle = acos((trace - 1.0f) / 2.0f);
+        float angle = glm::acos((trace - 1.0f) / 2.0f);
+        if (std::isnan(angle))
+            angle = 0.0f;
         distances.push_back(angle);
     }
     return distances;
@@ -3548,9 +3553,12 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             skinnedShader->setBool("useProjector", false);
             skinnedShader->setBool("useMetric", true);
             skinnedShader->setBool("useMetric", true);
-            // std::vector<float> weights(50, 1.0f);
-            std::vector<glm::mat4> required_pose_bones_to_world = bones_to_world;
-            std::vector<float> weights = computeDistanceFromPose(bones_to_world, required_pose_bones_to_world);
+            std::vector<float> weights;
+            if (required_pose_bones_to_world.size() > 0)
+                weights = computeDistanceFromPose(bones_to_world, required_pose_bones_to_world);
+            else
+                weights = std::vector<float>(50, 1.0f);
+            // todo: map leap bones to mesh bones before uploading to shader
             skinnedShader->setFloatArray("gBoneMetric", weights, weights.size());
             handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
             break;
