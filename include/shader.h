@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <vector>
 // #include <filesystem>
 
 class Shader
@@ -126,6 +127,14 @@ public:
     void setFloat(const std::string &name, float value) const
     {
         glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
+    }
+    void setFloatArray(const std::string &name, const float *array, int size) const
+    {
+        glUniform1fv(glGetUniformLocation(ID, name.c_str()), size, array);
+    }
+    void setFloatArray(const std::string &name, const std::vector<float> &array, int size) const
+    {
+        glUniform1fv(glGetUniformLocation(ID, name.c_str()), size, array.data());
     }
     // ------------------------------------------------------------------------
     void setVec2(const std::string &name, const glm::vec2 &value) const

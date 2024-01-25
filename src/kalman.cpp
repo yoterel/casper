@@ -17,6 +17,7 @@ void Kalman::setState(cv::Mat state)
 cv::Mat Kalman::predict(float dt)
 {
     cv::Mat prediction = KF.predict(); // predict the state (same dims as state)
+    cur_dt = dt;
     return prediction;
 }
 
@@ -26,6 +27,7 @@ cv::Mat Kalman::correct(cv::Mat measurement, bool saveMeasurement)
     {
         measurements.push_back(measurement.clone());
         measCovs.push_back(KF.measurementNoiseCov.clone());
+        dts.push_back(cur_dt);
         // std::cout << "measureCov: " << KF.measurementNoiseCov << std::endl;
     }
     // update using measurement, and return the corrected state
@@ -46,44 +48,33 @@ void Kalman::rewindToCheckpoint(bool verbose)
         std::cout << "after rewind state: " << KF.statePost << std::endl;
         std::cout << "after rewind state cov : " << KF.errorCovPost << std::endl;
     }
-    // std::cout << "rewinded state: " << KF.statePost << std::endl;
-    // std::cout << "rewinded state cov : " << KF.errorCovPost << std::endl;
 }
 cv::Mat Kalman::fastforward(cv::Mat measurement, bool verbose)
 {
     if (verbose)
-    {
-        std::cout << "state before ff: " << KF.statePost << std::endl;
-        std::cout << "measurement before ff: " << measurement << std::endl;
-        std::cout << "measureCov before ff: " << KF.measurementNoiseCov << std::endl;
-    }
-    predict();
+        std::cout << "fastforward: " << measurements.size() << std::endl;
+    predict(dts[0]);
     cv::Mat test = correct(measurement, false);
-    if (verbose)
-        std::cout << "ff: state after iter 0: " << test << std::endl;
     for (int i = 1; i < measurements.size(); i++)
     {
         KF.measurementNoiseCov = measCovs[i];
-        if (verbose)
-        {
-            std::cout << "ff measurement: " << measurements[i] << std::endl;
-            std::cout << "ff measureCov: " << measCovs[i] << std::endl;
-        }
-        predict();
+        predict(dts[i]);
         test = correct(measurements[i], false);
-        if (verbose)
-            std::cout << "ff: state after iter " << i << ": " << test << std::endl;
     }
     measurements.clear();
     measCovs.clear();
-    if (verbose)
-        std::cout << "state after ff: " << KF.statePost << std::endl;
+    dts.clear();
     return KF.statePost;
 }
 
-cv::Mat Kalman::getCheckpointMeasurement()
+bool Kalman::getCheckpointMeasurement(cv::Mat &measurement)
 {
-    return measurements[0];
+    if (measurements.size() > 0)
+    {
+        measurement = measurements[0].clone();
+        return true;
+    }
+    return false;
 }
 
 void Kalman::saveCheckpoint()
@@ -133,6 +124,7 @@ Kalman2D_ConstantV::Kalman2D_ConstantV(float processNoise, float measurementNois
 
 cv::Mat Kalman2D_ConstantV::predict(float dt)
 {
+    cur_dt = dt;
     KF.transitionMatrix.at<float>(2) = dt;
     KF.transitionMatrix.at<float>(7) = dt;
     cv::Mat prediction = KF.predict(); // predict the state (same dims as state)
@@ -144,9 +136,6 @@ cv::Mat Kalman2D_ConstantV::forecast(float dt)
     KF.transitionMatrix.at<float>(2) = dt;
     KF.transitionMatrix.at<float>(7) = dt;
     cv::Mat new_state = cv::Mat(KF.transitionMatrix * KF.statePost);
-    // std::vector<float> before = HelpersCV::flatten_cv(KF.statePost);
-    // std::vector<float> after = HelpersCV::flatten_cv(new_state);
-    // std::vector<float> transMat = HelpersCV::flatten_cv(KF.transitionMatrix);
     return new_state;
 }
 
@@ -161,10 +150,10 @@ Kalman2D_ConstantV2::Kalman2D_ConstantV2(float processNoise, float measurementNo
     cv::setIdentity(KF.measurementMatrix);
     // process noise covariance matrix (Q) = 4x4
     cv::setIdentity(KF.processNoiseCov);
-    KF.processNoiseCov.at<float>(0, 0) = processNoise;
-    KF.processNoiseCov.at<float>(1, 1) = processNoise;
-    KF.processNoiseCov.at<float>(2, 2) = processNoise * 10;
-    KF.processNoiseCov.at<float>(3, 3) = processNoise * 10;
+    KF.processNoiseCov.at<float>(0, 0) = 0.0f;
+    KF.processNoiseCov.at<float>(1, 1) = 0.0f;
+    KF.processNoiseCov.at<float>(2, 2) = processNoise;
+    KF.processNoiseCov.at<float>(3, 3) = processNoise;
     // measurement noise covariance matrix (R) = 4x4
     cv::setIdentity(KF.measurementNoiseCov, cv::Scalar::all(measurementNoise));
     // cv::Mat initialState = cv::Mat::zeros(4, 1, CV_32F);
@@ -176,6 +165,7 @@ Kalman2D_ConstantV2::Kalman2D_ConstantV2(float processNoise, float measurementNo
 
 cv::Mat Kalman2D_ConstantV2::predict(float dt)
 {
+    cur_dt = dt;
     KF.transitionMatrix.at<float>(2) = dt;
     KF.transitionMatrix.at<float>(7) = dt;
     cv::Mat prediction = KF.predict(); // predict the state (same dims as state)

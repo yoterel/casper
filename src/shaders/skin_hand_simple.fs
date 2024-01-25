@@ -7,6 +7,7 @@ in vec2 TexCoord0;
 in vec3 ProjTexCoord;
 in vec3 Normal0;
 in vec3 LocalPos0;
+in vec3 metricColor;
 // flat in ivec4 BoneIDs00;
 // flat in ivec2 BoneIDs11;
 // in vec4 Weights00;
@@ -71,6 +72,7 @@ uniform bool flipTexVertically = false;
 uniform bool flipTexHorizontally = false;
 uniform bool useGGX = false;
 uniform bool renderUV = false;
+uniform bool useMetric = false;
 
 vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 projectiveColor)
 {
@@ -143,87 +145,94 @@ vec4 CalcSpotLight(SpotLight l, vec3 Normal)
 
 void main()
 {
-    if (useGGX)
+    if (useMetric)
     {
-        vec4 projColor = vec4(1.0, 1.0, 1.0, 1.0);
-        if (useProjector)
-        {
-            float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
-            float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
-            if (flipTexVertically)
-            {
-                v = 1.0 - v;
-            }
-            if (flipTexHorizontally)
-            {
-                u = 1.0 - u;
-            }
-            
-            if (projectorIsSingleChannel)
-            {
-                projColor = texture(projector, vec2(u, v)).rrrr;
-            }
-            else
-            {
-                projColor = texture(projector, vec2(u, v)).rgba;
-            }
-        }
-        vec3 Normal = normalize(Normal0);
-        vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
-
-        for (int i = 0 ;i < gNumPointLights ;i++) {
-            TotalLight += CalcPointLight(gPointLights[i], Normal);
-        }
-
-        for (int i = 0 ;i < gNumSpotLights ;i++) {
-            TotalLight += CalcSpotLight(gSpotLights[i], Normal);
-        }
-        FragColor = texture2D(src, TexCoord0.xy) * TotalLight;
+        FragColor = vec4(metricColor, 1.0);
     }
     else
     {
-        if (useProjector)
+        if (useGGX)
         {
-            float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
-            float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
-            if (flipTexVertically)
+            vec4 projColor = vec4(1.0, 1.0, 1.0, 1.0);
+            if (useProjector)
             {
-                v = 1.0 - v;
+                float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
+                float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
+                if (flipTexVertically)
+                {
+                    v = 1.0 - v;
+                }
+                if (flipTexHorizontally)
+                {
+                    u = 1.0 - u;
+                }
+                
+                if (projectorIsSingleChannel)
+                {
+                    projColor = texture(projector, vec2(u, v)).rrrr;
+                }
+                else
+                {
+                    projColor = texture(projector, vec2(u, v)).rgba;
+                }
             }
-            if (flipTexHorizontally)
-            {
-                u = 1.0 - u;
+            vec3 Normal = normalize(Normal0);
+            vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
+
+            for (int i = 0 ;i < gNumPointLights ;i++) {
+                TotalLight += CalcPointLight(gPointLights[i], Normal);
             }
-            vec3 projColor;
-            if (projectorIsSingleChannel)
-            {
-                projColor = texture(projector, vec2(u, v)).rrr;
+
+            for (int i = 0 ;i < gNumSpotLights ;i++) {
+                TotalLight += CalcSpotLight(gSpotLights[i], Normal);
             }
-            else
-            {
-                projColor = texture(projector, vec2(u, v)).rgb;
-            }
-            if (projectorOnly)
-            {
-                FragColor = vec4(projColor, 1.0);
-            }
-            else
-            {
-                vec3 diffuse_color = texture(src, TexCoord0).rgb;
-                vec3 ambient_color = diffuse_color * 0.5;
-                FragColor = vec4(ambient_color * projColor, 1.0);
-            }
+            FragColor = texture2D(src, TexCoord0.xy) * TotalLight;
         }
         else
         {
-            if (renderUV)
+            if (useProjector)
             {
-                FragColor = vec4(TexCoord0.xy, 0.0, 1.0);
+                float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
+                float v = (ProjTexCoord.y / ProjTexCoord.z + 1.0) * 0.5;
+                if (flipTexVertically)
+                {
+                    v = 1.0 - v;
+                }
+                if (flipTexHorizontally)
+                {
+                    u = 1.0 - u;
+                }
+                vec3 projColor;
+                if (projectorIsSingleChannel)
+                {
+                    projColor = texture(projector, vec2(u, v)).rrr;
+                }
+                else
+                {
+                    projColor = texture(projector, vec2(u, v)).rgb;
+                }
+                if (projectorOnly)
+                {
+                    FragColor = vec4(projColor, 1.0);
+                }
+                else
+                {
+                    vec3 diffuse_color = texture(src, TexCoord0).rgb;
+                    vec3 ambient_color = diffuse_color * 0.5;
+                    FragColor = vec4(ambient_color * projColor, 1.0);
+                }
             }
             else
             {
-                vec4 diffuse_color = texture(src, TexCoord0);
-                FragColor = diffuse_color;
+                if (renderUV)
+                {
+                    FragColor = vec4(TexCoord0.xy, 0.0, 1.0);
+                }
+                else
+                {
+                    vec4 diffuse_color = texture(src, TexCoord0);
+                    FragColor = diffuse_color;
+                }
             }
         }
     }

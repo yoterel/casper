@@ -18,15 +18,17 @@ out vec3 LocalPos0;
 //flat out ivec2 BoneIDs11;
 //out vec4 Weights00;
 //out vec2 Weights11;
-//out vec3 ourColor;
+out vec3 metricColor;
 const int MAX_BONES = 50;
 
 uniform mat4 gTransform;
 uniform mat4 gWorld;
 uniform mat4 projTransform;
 uniform mat4 gBones[MAX_BONES];
-//uniform int gDisplayBoneIndex;
+uniform float gBoneMetric[MAX_BONES];
 uniform bool bake = false;
+uniform bool useMetric = false;
+
 void main()
 {
     mat4 BoneTransform = gBones[BoneIDs0[0]] * Weights0[0];
@@ -50,6 +52,47 @@ void main()
     Normal0 = Normal;
     LocalPos0 = Position;   
     TexCoord0 = TexCoord;
+    if (useMetric)
+    {
+        // I am ashamed of this code. sorry glsl.
+        int selectedBoneID = BoneIDs0[0];
+        int maxIndex = 0;
+        if (Weights0[1] > Weights0[maxIndex])
+        {
+            selectedBoneID = BoneIDs0[1];
+            maxIndex = 1;
+        }
+        if (Weights0[2] > Weights0[maxIndex])
+        {
+            selectedBoneID = BoneIDs0[2];
+            maxIndex = 2;
+        }
+        if (Weights0[3] > Weights0[maxIndex])
+        {
+            selectedBoneID = BoneIDs0[3];
+            maxIndex = 3;
+        }
+        if (Weights1[0] > Weights0[maxIndex])
+        {
+            selectedBoneID = BoneIDs1[0];
+            maxIndex = 4;
+        }
+        if (maxIndex == 4)
+        {
+            if (Weights1[1] > Weights1[0])
+            {
+                selectedBoneID = BoneIDs1[1];
+            }
+        }
+        else
+        {
+            if (Weights1[1] > Weights0[maxIndex])
+            {
+                selectedBoneID = BoneIDs1[1];
+            }
+        }
+        metricColor = vec3(1.0, 1-gBoneMetric[selectedBoneID], 0.0);        
+    }
     //BoneIDs00 = BoneIDs0;
     //BoneIDs11 = BoneIDs1;
     //Weights00 = Weights0;

@@ -13,39 +13,41 @@ public:
     cv::Mat correct(cv::Mat measurement, bool saveMeasurement = false);
     void rewindToCheckpoint(bool verbose = false);
     cv::Mat fastforward(cv::Mat measurement, bool verbose = false);
-    cv::Mat getCheckpointMeasurement();
+    bool getCheckpointMeasurement(cv::Mat &measurement);
     void saveCheckpoint();
     cv::Mat getProcNoiseCoV()
     {
-        return KF.processNoiseCov;
+        return KF.processNoiseCov.clone();
     };
     cv::Mat getMeasNoiseCoV()
     {
-        return KF.measurementNoiseCov;
+        return KF.measurementNoiseCov.clone();
     };
     void setMeasNoiseCoV(cv::Mat measNoiseCov)
     {
-        KF.measurementNoiseCov = measNoiseCov;
+        KF.measurementNoiseCov = measNoiseCov.clone();
     };
     cv::Mat getStatePost()
     {
-        return KF.statePost;
+        return KF.statePost.clone();
     };
     cv::Mat getMeasurementMatrix() // maps bewteen state and measurement
     {
-        return KF.measurementMatrix;
+        return KF.measurementMatrix.clone();
     };
     cv::Mat getTransitionMatrix()
     {
-        return KF.transitionMatrix;
+        return KF.transitionMatrix.clone();
     };
 
 protected:
     cv::KalmanFilter KF;
     std::vector<cv::Mat> measurements;
     std::vector<cv::Mat> measCovs;
+    std::vector<float> dts;
     cv::Mat checkpoint_state_post;
     cv::Mat checkpoint_cov_post;
+    float cur_dt;
 };
 
 class Kalman1D : public Kalman

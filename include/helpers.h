@@ -68,6 +68,7 @@ enum class MaterialMode
     DIFFUSE = 0,
     GGX = 1,
     SKELETON = 2,
+    PER_BONE_SCALAR = 3,
 };
 enum class PostProcessMode
 {
@@ -130,5 +131,12 @@ enum class DeformationMode
     RIGID = 0,
     SIMILARITY = 1,
     AFFINE = 2,
+};
+
+enum class MLSMode
+{
+    CONTROL_POINTS1 = 0,
+    CONTROL_POINTS2 = 1,
+    GRID = 2,
 };
 #endif // HELPERS_H
