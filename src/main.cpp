@@ -2081,7 +2081,7 @@ std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_t
         glm::mat3 diff = glm::mat3(bone_to_world_rot) * glm::transpose(glm::mat3(required_bone_to_world_rot));
         float trace = diff[0][0] + diff[1][1] + diff[2][2];
         float angle = glm::acos((trace - 1.0f) / 2.0f);
-        if (std::isnan(angle))
+        if (std::isnan(angle)) // because the rotations are not exactly orthogonal acos can return nan
             angle = 0.0f;
         distances.push_back(angle);
     }
