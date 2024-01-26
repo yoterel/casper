@@ -83,7 +83,8 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           glm::mat4 cam_projection_transform,
                           bool flipVertical,
                           bool flipHorizontal,
-                          bool projSingleChannel);
+                          bool projSingleChannel,
+                          bool ignoreGlobalScale);
 void handleMLSAsync(Shader &gridShader);
 void handleMLSSync(Shader &gridShader);
 void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat &grid2);
@@ -148,6 +149,13 @@ void set_texture_shader(Shader *textureShader,
                         glm::mat4 model = glm::mat4(1.0f),
                         glm::mat4 projection = glm::mat4(1.0f),
                         glm::mat4 view = glm::mat4(1.0f));
+void set_skinned_shader(SkinningShader *skinnedShader,
+                        glm::mat4 transform,
+                        bool flipVer = false, bool flipHor = false,
+                        bool useGGX = false, bool renderUV = false,
+                        bool bake = false, bool useProjector = false, bool projOnly = true, bool projIsSingleC = false,
+                        glm::mat4 projTransform = glm::mat4(1.0f),
+                        bool useMetric = false, std::vector<float> scalarPerBone = std::vector<float>(), int src = 0);
 void initKalmanFilters();
 std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_to_world, const std::vector<glm::mat4> &required_pose_bones_to_world);
 /* global engine state */
@@ -310,7 +318,7 @@ std::vector<glm::vec3> joints_left;
 std::vector<glm::vec3> joints_right;
 std::vector<glm::mat4> bones_to_world_left;
 std::vector<glm::mat4> bones_to_world_right;
-std::vector<glm::mat4> required_pose_bones_to_world;
+std::vector<glm::mat4> required_pose_bones_to_world_left;
 std::vector<glm::mat4> bones_to_world_right_bake;
 std::vector<glm::mat4> bones_to_world_left_bake;
 std::vector<glm::mat4> bones_to_world_left_interp;
@@ -1021,8 +1029,8 @@ int main(int argc, char *argv[])
             LEAP_STATUS leap_status = handleLeapInput();
             if (record_session)
                 saveSession(std::format("../../debug/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
-            if (required_pose_bones_to_world.size() == 0)
-                required_pose_bones_to_world = bones_to_world_right;
+            if (required_pose_bones_to_world_left.size() == 0)
+                required_pose_bones_to_world_left = bones_to_world_left;
             t_leap.stop();
 
             /* skin hand meshes */
@@ -2923,6 +2931,31 @@ void set_texture_shader(Shader *textureShader, bool flipVer, bool flipHor, bool 
     textureShader->setInt("src", src);
 }
 
+void set_skinned_shader(SkinningShader *skinnedShader,
+                        glm::mat4 transform,
+                        bool flipVer, bool flipHor,
+                        bool useGGX, bool renderUV,
+                        bool bake, bool useProjector, bool projOnly, bool projIsSingleC,
+                        glm::mat4 projTransform,
+                        bool useMetric, std::vector<float> scalarPerBone, int src)
+{
+    skinnedShader->use();
+    skinnedShader->SetWorldTransform(transform);
+    skinnedShader->setBool("flipTexVertically", flipVer);
+    skinnedShader->setBool("flipTexHorizontally", flipHor);
+    skinnedShader->setBool("useGGX", useGGX);
+    skinnedShader->setBool("renderUV", renderUV);
+    skinnedShader->setBool("bake", bake);
+    skinnedShader->setBool("useProjector", useProjector);
+    skinnedShader->setBool("projectorOnly", projOnly);
+    skinnedShader->setBool("projectorIsSingleChannel", projIsSingleC);
+    skinnedShader->setMat4("projTransform", projTransform);
+    skinnedShader->setBool("useMetric", useMetric);
+    if (scalarPerBone.size() != 0)
+        skinnedShader->setFloatArray("gBoneMetric", scalarPerBone, scalarPerBone.size());
+    skinnedShader->setInt("src", src);
+}
+
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2)
 {
     // leap image plane is x right, and y up like opengl...
@@ -3419,49 +3452,34 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
         case static_cast<int>(MaterialMode::DIFFUSE):
         {
             /* render skinned mesh to fbo, in camera space*/
-            skinnedShader->use();
-            skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-            skinnedShader->setBool("bake", false);
-            skinnedShader->setBool("flipTexVertically", false);
-            skinnedShader->setBool("flipTexHorizontally", false);
-            skinnedShader->setBool("projectorIsSingleChannel", false);
-            skinnedShader->setInt("src", 0);
-            skinnedShader->setBool("useGGX", false);
-            skinnedShader->setBool("renderUV", false);
-            skinnedShader->setBool("projectorOnly", true);
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL): // original texture loaded with mesh
-                skinnedShader->setBool("useProjector", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             case static_cast<int>(TextureMode::BAKED): // a baked texture from a bake operation
-                skinnedShader->setBool("useProjector", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 if (isRightHand)
                     handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
                 else
                     handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader->setBool("useProjector", true);
-                skinnedShader->setBool("projectorOnly", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
+                                   false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader->setBool("useProjector", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture);
                 break;
-            case static_cast<int>(TextureMode::CAMERA):
-                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader->setBool("useProjector", true);
-                skinnedShader->setBool("projectorOnly", true);
-                skinnedShader->setBool("flipTexVertically", true);
-                skinnedShader->setBool("flipTexHorizontally", true);
-                skinnedShader->setBool("projectorIsSingleChannel", true);
+            case static_cast<int>(TextureMode::CAMERA): // project camera input onto mesh
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
+                                   true, true, false, false, false, true, true, true, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
-            default:
-                skinnedShader->setBool("useProjector", false); // original texture loaded with mesh
+            default: // original texture loaded with mesh
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             }
@@ -3470,14 +3488,6 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
         case static_cast<int>(MaterialMode::GGX): // uses GGX material with the original diffuse texture loaded with mesh
         {
             skinnedShader->use();
-            skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-            skinnedShader->setBool("bake", false);
-            skinnedShader->setBool("flipTexVertically", false);
-            skinnedShader->setBool("flipTexHorizontally", false);
-            skinnedShader->setBool("projectorIsSingleChannel", false);
-            skinnedShader->setInt("src", 0);
-            skinnedShader->setBool("useGGX", true);
-            skinnedShader->setBool("renderUV", false);
             dirLight.calcLocalDirection(bones_to_world[0]);
             skinnedShader->SetDirectionalLight(dirLight);
             glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
@@ -3485,36 +3495,32 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL):
-                skinnedShader->setBool("useProjector", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             case static_cast<int>(TextureMode::BAKED):
-                skinnedShader->setBool("useProjector", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
                 if (isRightHand)
                     handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
                 else
                     handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader->setBool("useProjector", true);
-                skinnedShader->setBool("projectorOnly", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true, false,
+                                   false, true, false, false, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
-                skinnedShader->setBool("useProjector", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture);
                 break;
             case static_cast<int>(TextureMode::CAMERA):
-                skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform);
-                skinnedShader->setBool("useProjector", true);
-                skinnedShader->setBool("flipTexVertically", true);
-                skinnedShader->setBool("flipTexHorizontally", true);
-                skinnedShader->setBool("projectorIsSingleChannel", true);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, true, true, true, false, false,
+                                   true, true, true, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
                 break;
             default:
-                skinnedShader->setBool("useProjector", false);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 break;
             }
@@ -3540,26 +3546,17 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
         }
         case static_cast<int>(MaterialMode::PER_BONE_SCALAR):
         {
-            skinnedShader->use();
-            skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-            skinnedShader->setBool("bake", false);
-            skinnedShader->setBool("flipTexVertically", false);
-            skinnedShader->setBool("flipTexHorizontally", false);
-            skinnedShader->setBool("projectorIsSingleChannel", false);
-            skinnedShader->setInt("src", 0);
-            skinnedShader->setBool("useGGX", false);
-            skinnedShader->setBool("renderUV", false);
-            skinnedShader->setBool("projectorOnly", true);
-            skinnedShader->setBool("useProjector", false);
-            skinnedShader->setBool("useMetric", true);
-            skinnedShader->setBool("useMetric", true);
-            std::vector<float> weights;
-            if (required_pose_bones_to_world.size() > 0)
-                weights = computeDistanceFromPose(bones_to_world, required_pose_bones_to_world);
+            std::vector<float> weights_leap, weights_mesh;
+            if (required_pose_bones_to_world_left.size() > 0)
+            {
+                weights_leap = computeDistanceFromPose(bones_to_world, required_pose_bones_to_world_left);
+                weights_mesh = handModel.scalarLeapBoneToMeshBone(weights_leap);
+            }
+
             else
-                weights = std::vector<float>(50, 1.0f);
-            // todo: map leap bones to mesh bones before uploading to shader
-            skinnedShader->setFloatArray("gBoneMetric", weights, weights.size());
+                weights_mesh = std::vector<float>(50, 1.0f);
+            set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
+                               false, false, false, false, false, false, false, false, glm::mat4(1.0f), true, weights_mesh);
             handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
             break;
         }
@@ -3577,17 +3574,7 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
             {
                 uv_fbo.bind();
-                skinnedShader->use();
-                skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale);
-                skinnedShader->setBool("bake", false);
-                skinnedShader->setBool("flipTexVertically", false);
-                skinnedShader->setBool("flipTexHorizontally", false);
-                skinnedShader->setBool("projectorIsSingleChannel", false);
-                skinnedShader->setInt("src", 0);
-                skinnedShader->setBool("useGGX", false);
-                skinnedShader->setBool("renderUV", true);
-                skinnedShader->setBool("useProjector", false);
-                skinnedShader->setBool("projectorOnly", true);
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, false, true);
                 handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
                 uv_fbo.unbind();
             }
@@ -3604,7 +3591,8 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           glm::mat4 cam_projection_transform,
                           bool flipVertical,
                           bool flipHorizontal,
-                          bool projSingleChannel)
+                          bool projSingleChannel,
+                          bool ignoreGlobalScale)
 {
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
     Shader *uvDilateShader = shader_map["uvDilateShader"];
@@ -3612,18 +3600,18 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     pre_bake_fbo.bind();
     glDisable(GL_CULL_FACE); // todo: why disbale backface ? doesn't this mean bake will reach the back of the hand ?
     glEnable(GL_DEPTH_TEST);
-    skinnedShader->use();
-    skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_right);
-    skinnedShader->setBool("useProjector", true);
-    skinnedShader->setBool("bake", true);
-    skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
-    skinnedShader->setBool("flipTexVertically", flipVertical);
-    skinnedShader->setBool("flipTexHorizontally", flipHorizontal);
-    skinnedShader->setBool("projectorIsSingleChannel", projSingleChannel);
-    skinnedShader->setBool("renderUV", false);
-    skinnedShader->setBool("useGGX", false);
-    skinnedShader->setBool("projectorOnly", true);
-    skinnedShader->setInt("src", 0);
+    if (ignoreGlobalScale)
+    {
+        set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform,
+                           flipVertical, flipHorizontal, false, false, true, true, true, projSingleChannel,
+                           cam_projection_transform * cam_view_transform);
+    }
+    else
+    {
+        set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale_right,
+                           flipVertical, flipHorizontal, false, false, true, true, true, projSingleChannel,
+                           cam_projection_transform * cam_view_transform * global_scale_right);
+    }
     rightHandModel.Render(*skinnedShader, bones_to_world_right_bake, rotx, false, nullptr, &texture);
     pre_bake_fbo.unbind();
     // finally, dilate the baked texture
@@ -3637,18 +3625,18 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     bake_fbo_right.unbind();
     /* left hand baking */
     pre_bake_fbo.bind(); // we bake into right hand fbo, and post process into left hand fbo
-    skinnedShader->use();
-    skinnedShader->SetWorldTransform(cam_projection_transform * cam_view_transform * global_scale_left);
-    skinnedShader->setBool("useProjector", true);
-    skinnedShader->setBool("bake", true);
-    skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
-    skinnedShader->setBool("flipTexVertically", flipVertical);
-    skinnedShader->setBool("flipTexHorizontally", flipHorizontal);
-    skinnedShader->setBool("projectorIsSingleChannel", projSingleChannel);
-    skinnedShader->setBool("renderUV", false);
-    skinnedShader->setBool("useGGX", false);
-    skinnedShader->setBool("projectorOnly", true);
-    skinnedShader->setInt("src", 0);
+    if (ignoreGlobalScale)
+    {
+        set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform,
+                           flipVertical, flipHorizontal, false, false, true, true, true, projSingleChannel,
+                           cam_projection_transform * cam_view_transform);
+    }
+    else
+    {
+        set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale_left,
+                           flipVertical, flipHorizontal, false, false, true, true, true, projSingleChannel,
+                           cam_projection_transform * cam_view_transform * global_scale_left);
+    }
     leftHandModel.Render(*skinnedShader, bones_to_world_left_bake, rotx, false, nullptr, &texture);
     pre_bake_fbo.unbind();
     // finally, dilate the baked texture
@@ -3660,15 +3648,7 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     pre_bake_fbo.getTexture()->bind();
     fullScreenQuad.render();
     bake_fbo_left.unbind();
-    /* debug points */
-    // vcolorShader.use();
-    // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-    // std::vector<glm::vec2> points;
-    // rightHandModel.getUnrolledTexCoords(points);
-    // Helpers::UV2NDC(points);
-    // std::vector<glm::vec3> screen_vert_color = {{1.0f, 0.0f, 0.0f}};
-    // PointCloud cloud(points, screen_vert_color);
-    // cloud.render();
+
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     if (saveIntermed)
@@ -3765,7 +3745,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                 dynamicTexture->init(sd_outwidth, sd_outheight, 3);
                 dynamicTexture->load(img2img_data.data(), true, GL_RGB);
                 // bake dynamic texture
-                handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, false);
                 bake_preproc_succeed = false;
                 run_sd.join();
             }
@@ -3779,7 +3759,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                 bones_to_world_left_bake = bones_to_world_left;
                 Texture tmp(inputBakeFile.c_str(), GL_TEXTURE_2D);
                 tmp.init_from_file(GL_LINEAR, GL_CLAMP_TO_BORDER);
-                handleBakingInternal(shader_map, tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false);
+                handleBakingInternal(shader_map, tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, false);
                 bakeRequest = false;
             }
             break;
@@ -3790,7 +3770,18 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
             {
                 bones_to_world_right_bake = bones_to_world_right;
                 bones_to_world_left_bake = bones_to_world_left;
-                handleBakingInternal(shader_map, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true);
+                handleBakingInternal(shader_map, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true, false);
+                bakeRequest = false;
+            }
+            break;
+        }
+        case static_cast<int>(BakeMode::POSE):
+        {
+            if (bakeRequest)
+            {
+                bones_to_world_right_bake = bones_to_world_right;
+                bones_to_world_left_bake = bones_to_world_left;
+                handleBakingInternal(shader_map, *hands_fbo.getTexture(), leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, true);
                 bakeRequest = false;
             }
             break;
@@ -5082,13 +5073,8 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 {
                 case static_cast<int>(TextureMode::ORIGINAL):
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_right);
-                    skinnedShader.setBool("useProjector", false);
-                    skinnedShader.setBool("bake", false);
-                    skinnedShader.setBool("useGGX", false);
-                    skinnedShader.setBool("renderUV", false);
-                    skinnedShader.setInt("src", 0);
+                    set_skinned_shader(&skinnedShader,
+                                       flycam_projection_transform * flycam_view_transform * global_scale_right);
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
                     break;
                 }
@@ -5098,33 +5084,19 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 }
                 case static_cast<int>(TextureMode::PROJECTIVE):
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_right);
-                    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_right);
-                    skinnedShader.setBool("useProjector", true);
-                    skinnedShader.setBool("projectorOnly", false);
-                    skinnedShader.setBool("bake", false);
-                    skinnedShader.setBool("useGGX", false);
-                    skinnedShader.setBool("renderUV", false);
-                    skinnedShader.setBool("flipTexVertically", false);
-                    skinnedShader.setBool("flipTexHorizontally", false);
-                    skinnedShader.setBool("projectorIsSingleChannel", false);
-                    skinnedShader.setInt("src", 0);
+                    set_skinned_shader(&skinnedShader,
+                                       flycam_projection_transform * flycam_view_transform * global_scale_right,
+                                       false, false, false, false, false, true, false, false,
+                                       cam_projection_transform * cam_view_transform * global_scale_right);
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture, projectiveTexture);
                     break;
                 }
                 case static_cast<int>(TextureMode::BAKED):
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_right);
-                    skinnedShader.setBool("useProjector", false);
-                    skinnedShader.setBool("bake", false);
-                    skinnedShader.setBool("useGGX", false);
-                    skinnedShader.setBool("renderUV", false);
-                    skinnedShader.setBool("flipTexVertically", false);
-                    skinnedShader.setBool("flipTexHorizontally", false);
-                    skinnedShader.setBool("projectorIsSingleChannel", false);
-                    skinnedShader.setInt("src", 0);
+                    set_skinned_shader(&skinnedShader,
+                                       flycam_projection_transform * flycam_view_transform * global_scale_right,
+                                       false, false, false, false, false, false, false, false,
+                                       cam_projection_transform * cam_view_transform * global_scale_right);
                     rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo_right.getTexture());
                     break;
                 }
@@ -5952,11 +5924,13 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Bake"))
         {
             ImGui::SeparatorText("Bake Mode");
-            ImGui::RadioButton("Stable Diffusion", &bake_mode, 0);
+            ImGui::RadioButton("Stable Diffusion", &bake_mode, static_cast<int>(BakeMode::SD));
             ImGui::SameLine();
-            ImGui::RadioButton("From File", &bake_mode, 1);
+            ImGui::RadioButton("From File", &bake_mode, static_cast<int>(BakeMode::FILE));
             ImGui::SameLine();
-            ImGui::RadioButton("Camera", &bake_mode, 2);
+            ImGui::RadioButton("Camera", &bake_mode, static_cast<int>(BakeMode::CAMERA));
+            ImGui::SameLine();
+            ImGui::RadioButton("Pose", &bake_mode, static_cast<int>(BakeMode::POSE));
             if (bake_mode == static_cast<int>(BakeMode::FILE))
             {
                 ImGui::InputText("Input file", &inputBakeFile);

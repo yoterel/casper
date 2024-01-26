@@ -22,7 +22,6 @@ out vec3 metricColor;
 const int MAX_BONES = 50;
 
 uniform mat4 gTransform;
-uniform mat4 gWorld;
 uniform mat4 projTransform;
 uniform mat4 gBones[MAX_BONES];
 uniform float gBoneMetric[MAX_BONES];

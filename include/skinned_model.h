@@ -137,7 +137,6 @@ public:
                 Texture *customDiffuseTexture = nullptr, Texture *customProjectiveTexture = nullptr);
     const Material &GetMaterial();
     void GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> &leap_bone_transforms, const glm::mat4 &local_to_world, const bool use_bones = false);
-    void GetBoneTransformsHack(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> bones_to_world);
     glm::vec3 getCenterOfMass();
     std::string getBoneName(unsigned int index);
     unsigned int NumBones() const
@@ -147,6 +146,7 @@ public:
     void GetLocalToBoneTransforms(std::vector<glm::mat4> &transforms, bool inverse = false, bool only_leap_bones = false);
     void GetBoneFinalTransforms(std::vector<glm::mat4> &transforms);
     void GetBoneTransformRelativeToParent(std::vector<glm::mat4> &transforms);
+    std::vector<float> scalarLeapBoneToMeshBone(const std::vector<float> &leap_bones);
     FBO m_fbo;
 
 private:

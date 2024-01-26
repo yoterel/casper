@@ -62,6 +62,7 @@ enum class BakeMode
     SD = 0,
     FILE = 1,
     CAMERA = 2,
+    POSE = 3,
 };
 enum class MaterialMode
 {
