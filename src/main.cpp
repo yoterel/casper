@@ -5593,13 +5593,13 @@ void openIMGUIFrame()
                 {
                     for (int i = 0; i < 10; i++)
                     {
-                        std::random_device rd;
-                        std::mt19937 gen(rd());
-                        std::uniform_int_distribution<> distr(0, total_simulation_time_stamps - 1);
-                        int index = distr(gen);
+                        // std::random_device rd;
+                        // std::mt19937 gen(rd());
+                        // std::uniform_int_distribution<> distr(0, total_simulation_time_stamps - 1);
+                        // int index = distr(gen);
                         std::vector<glm::vec3> ignore;
                         std::vector<glm::mat4> bones;
-                        LEAP_STATUS status = getLeapFramePreRecorded(bones, ignore, index, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+                        LEAP_STATUS status = getLeapFramePreRecorded(bones, ignore, i, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
                         poses.push_back(bones);
                     }
                 }
