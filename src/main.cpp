@@ -6205,7 +6205,10 @@ void openIMGUIFrame()
             ImGui::Checkbox("Record images", &recordImages);
             ImGui::SameLine();
             ImGui::Checkbox("Record every frame", &record_every_frame);
-            ImGui::Button("Record Single Pose", &record_single_pose);
+            if (ImGui::Button("Record Single Pose"))
+            {
+                record_single_pose = true;
+            }
             ImGui::InputText("Recording Name", &recording_name);
             ImGui::SeparatorText("Playback");
             if (ImGui::Checkbox("Run User Study", &run_user_study))
