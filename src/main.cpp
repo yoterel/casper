@@ -33,6 +33,7 @@
 #include "imgui_impl_opengl3.h"
 #include "diffuse.h"
 #include "user_study.h"
+#include "game.h"
 #include "MidiControllerAPI.h"
 #ifdef _DEBUG
 #undef _DEBUG
@@ -242,6 +243,7 @@ std::vector<std::string> animals{
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
+Game game = Game();
 int humanChoice = 1;
 bool video_reached_end = true;
 bool is_first_in_video_pair = true;
@@ -1338,6 +1340,81 @@ int main(int argc, char *argv[])
                     }
                 }
             }
+            break;
+        }
+        case static_cast<int>(OperationMode::GAME):
+        {
+            // pseudo code for game logic
+            // 1. wait until user left hand is visible, then countdown 3 seconds
+            // 2. start game by showing countdon texture from 3 .. 2 .. 1 .. GO
+            // 3. get pose from game, and display texture according to distance from pose
+            // 4. record best score, and continue until all poses are done
+            // 5. display best score
+            int state = game.getState();
+            switch (state)
+            {
+            case static_cast<int>(GameState::WAIT_FOR_USER):
+            {
+                // set appropriate textures
+                game.setBonesVisible(bones_to_world_left.size() > 0);
+                break;
+            }
+            case static_cast<int>(GameState::COUNTDOWN):
+            {
+                // set appropriate textures
+                break;
+            }
+            case static_cast<int>(GameState::PLAY):
+            {
+                // set appropriate textures
+                std::vector<glm::mat4> required_pose = game.getPose();
+                std::vector<float> weights_leap = computeDistanceFromPose(bones_to_world_left, required_pose);
+                std::vector<float> scores = leftHandModel.scalarLeapBoneToMeshBone(weights_leap);
+                float avgScore = 0.0f;
+                for (int i = 0; i < scores.size(); i++)
+                    avgScore += scores[i];
+                avgScore /= scores.size();
+                game.setScore(avgScore);
+                break;
+            }
+            case static_cast<int>(GameState::END):
+            {
+                break;
+            }
+            default:
+                break;
+            }
+
+            /* deal with camera input */
+            t_camera.start();
+            handleCameraInput(ptrGrabResult, false, cv::Mat());
+            t_camera.stop();
+
+            /* deal with leap input */
+            t_leap.start();
+            LEAP_STATUS leap_status = handleLeapInput();
+            t_leap.stop();
+
+            /* skin hand meshes */
+            t_skin.start();
+            handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+            t_skin.stop();
+
+            /* run MLS on MP prediction to reduce bias */
+            t_mls.start();
+            handleMLSAsync(gridShader);
+            t_mls.stop();
+
+            /* post process fbo using camera input */
+            t_pp.start();
+            handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+            /* render final output to screen */
+            glViewport(0, 0, proj_width, proj_height); // set viewport
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            set_texture_shader(&textureShader, false, false, false);
+            c2p_fbo.getTexture()->bind();
+            fullScreenQuad.render();
+            t_pp.stop();
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera
@@ -5418,7 +5495,7 @@ void openIMGUIFrame()
     ImGuiWindowFlags window_flags = 0;
     window_flags |= ImGuiWindowFlags_NoNav;
     window_flags |= ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("augmented hands", NULL, window_flags);
+    ImGui::Begin("Augmented Hands", NULL, window_flags);
     if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen))
     {
         if (ImGui::TreeNode("General"))
@@ -5449,7 +5526,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::Checkbox("PBO", &use_pbo);
             ImGui::SeparatorText("Operation Mode");
-            if (ImGui::RadioButton("Normal", &operation_mode, 0))
+            if (ImGui::RadioButton("Normal", &operation_mode, static_cast<int>(OperationMode::NORMAL)))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
@@ -5457,7 +5534,7 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("User Study", &operation_mode, 1))
+            if (ImGui::RadioButton("User Study", &operation_mode, static_cast<int>(OperationMode::USER_STUDY)))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
@@ -5465,20 +5542,20 @@ void openIMGUIFrame()
                 debug_mode = false;
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Camera", &operation_mode, 2))
+            if (ImGui::RadioButton("Camera", &operation_mode, static_cast<int>(OperationMode::CAMERA)))
             {
                 leap.setImageMode(false);
                 exposure = 10000.0f;
                 camera.set_exposure_time(exposure);
             }
-            if (ImGui::RadioButton("Coaxial Calibration", &operation_mode, 3))
+            if (ImGui::RadioButton("Coaxial Calibration", &operation_mode, static_cast<int>(OperationMode::COAXIAL)))
             {
                 debug_mode = false;
                 leap.setImageMode(false);
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
-            if (ImGui::RadioButton("Leap Calibration", &operation_mode, 4))
+            if (ImGui::RadioButton("Leap Calibration", &operation_mode, static_cast<int>(OperationMode::LEAP)))
             {
                 projector.kill();
                 use_projector = false;
@@ -5494,13 +5571,41 @@ void openIMGUIFrame()
                 debug_mode = false;
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Simulation", &operation_mode, 5))
+            if (ImGui::RadioButton("Simulation", &operation_mode, static_cast<int>(OperationMode::SIMULATION)))
             {
                 projector.kill();
                 use_projector = false;
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 debug_mode = false;
+            }
+            if (ImGui::RadioButton("Game", &operation_mode, static_cast<int>(OperationMode::GAME)))
+            {
+                std::vector<std::vector<glm::mat4>> poses;
+                if (!loadSimulation(std::format("../../debug/recordings/{}", recording_name)))
+                {
+                    std::cout << "Failed to load recording: " << recording_name << std::endl;
+                }
+                else
+                {
+                    for (int i = 0; i < 10; i++)
+                    {
+                        std::random_device rd;
+                        std::mt19937 gen(rd());
+                        std::uniform_int_distribution<> distr(0, total_simulation_time_stamps - 1);
+                        int index = distr(gen);
+                        std::vector<glm::vec3> ignore;
+                        std::vector<glm::mat4> bones;
+                        LEAP_STATUS status = getLeapFramePreRecorded(bones, ignore, index, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
+                        poses.push_back(bones);
+                    }
+                }
+                game.setPoses(poses);
+                leap.setImageMode(false);
+                leap.setPollMode(false);
+                material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
+                exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(exposure);
             }
             ImGui::TreePop();
         }

@@ -1,3 +1,6 @@
+#ifndef USER_STUDY_H
+#define USER_STUDY_H
+
 #include <vector>
 class UserStudy
 {
@@ -28,3 +31,4 @@ private:
     float jnd;
     std::vector<float> latencies;
 };
+#endif // USER_STUDY_H
