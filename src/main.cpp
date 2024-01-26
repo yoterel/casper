@@ -281,6 +281,7 @@ bool playback_video_loaded = false;
 int total_raw_session_time_stamps = 0;
 int total_session_time_stamps = 0;
 bool record_session = false;
+bool record_single_pose = false;
 bool record_every_frame = false;
 std::vector<glm::mat4> raw_session_bones_left;
 std::vector<glm::mat4> session_bones_left;
@@ -1031,8 +1032,11 @@ int main(int argc, char *argv[])
             LEAP_STATUS leap_status = handleLeapInput();
             if (record_session)
                 saveSession(std::format("../../debug/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
-            if (required_pose_bones_to_world_left.size() == 0)
-                required_pose_bones_to_world_left = bones_to_world_left;
+            if (record_single_pose)
+            {
+                saveSession(std::format("../../debug/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
+                record_single_pose = false;
+            }
             t_leap.stop();
 
             /* skin hand meshes */
@@ -1344,12 +1348,6 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(OperationMode::GAME):
         {
-            // pseudo code for game logic
-            // 1. wait until user left hand is visible, then countdown 3 seconds
-            // 2. start game by showing countdon texture from 3 .. 2 .. 1 .. GO
-            // 3. get pose from game, and display texture according to distance from pose
-            // 4. record best score, and continue until all poses are done
-            // 5. display best score
             int state = game.getState();
             switch (state)
             {
@@ -3633,9 +3631,10 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
                 weights_leap = computeDistanceFromPose(bones_to_world, required_pose_bones_to_world_left);
                 weights_mesh = handModel.scalarLeapBoneToMeshBone(weights_leap);
             }
-
             else
+            {
                 weights_mesh = std::vector<float>(50, 1.0f);
+            }
             set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                                false, false, false, false, false, false, false, false, glm::mat4(1.0f), true, weights_mesh);
             handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
@@ -6206,6 +6205,7 @@ void openIMGUIFrame()
             ImGui::Checkbox("Record images", &recordImages);
             ImGui::SameLine();
             ImGui::Checkbox("Record every frame", &record_every_frame);
+            ImGui::Button("Record Single Pose", &record_single_pose);
             ImGui::InputText("Recording Name", &recording_name);
             ImGui::SeparatorText("Playback");
             if (ImGui::Checkbox("Run User Study", &run_user_study))
