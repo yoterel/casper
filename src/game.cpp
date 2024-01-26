@@ -58,8 +58,22 @@ int Game::getState()
     {
         if (!countDownInProgress)
         {
-            countDownInProgress = true;
-            timer.start();
+            if (bonesVisible)
+            {
+                countDownInProgress = true;
+                timer.start();
+            }
+        }
+        else
+        {
+            if (!bonesVisible)
+            {
+                timer.stop();
+            }
+            else
+            {
+                timer.resume();
+            }
         }
         if (timer.getElapsedTimeInSec() >= 10)
         {

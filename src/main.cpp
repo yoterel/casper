@@ -1367,14 +1367,18 @@ int main(int argc, char *argv[])
             case static_cast<int>(GameState::PLAY):
             {
                 // set appropriate textures
-                std::vector<glm::mat4> required_pose = game.getPose();
-                std::vector<float> weights_leap = computeDistanceFromPose(bones_to_world_left, required_pose);
-                std::vector<float> scores = leftHandModel.scalarLeapBoneToMeshBone(weights_leap);
-                float avgScore = 0.0f;
-                for (int i = 0; i < scores.size(); i++)
-                    avgScore += scores[i];
-                avgScore /= scores.size();
-                game.setScore(avgScore);
+                game.setBonesVisible(bones_to_world_left.size() > 0);
+                required_pose_bones_to_world_left = game.getPose();
+                if (bones_to_world_left.size() > 0)
+                {
+                    std::vector<float> weights_leap = computeDistanceFromPose(bones_to_world_left, required_pose_bones_to_world_left);
+                    std::vector<float> scores = leftHandModel.scalarLeapBoneToMeshBone(weights_leap);
+                    float avgScore = 0.0f;
+                    for (int i = 0; i < scores.size(); i++)
+                        avgScore += scores[i];
+                    avgScore /= scores.size();
+                    game.setScore(avgScore);
+                }
                 break;
             }
             case static_cast<int>(GameState::END):
