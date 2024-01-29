@@ -298,6 +298,7 @@ std::string tmp_name = std::tmpnam(nullptr);
 fs::path tmp_filename(tmp_name);
 // leap controls
 bool leap_poll_mode = false;
+bool leap_use_arm = false;
 int leap_tracking_mode = eLeapTrackingMode_HMD;
 uint64_t leap_cur_frame_id = 0;
 uint32_t leap_width = 640;
@@ -311,6 +312,7 @@ float leap_arm_local_scaler = 0.019f;
 float leap_palm_local_scaler = 0.011f;
 float leap_bone_local_scaler = 0.05f;
 float magic_wrist_offset = -65.0f;
+float magic_arm_offset = -140.0f;
 float magic_arm_forward_offset = -170.0f;
 float leap_binary_threshold = 0.3f;
 bool leap_threshold_flag = false;
@@ -450,11 +452,11 @@ PyObject *predict_video;
 PyObject *init_detector;
 PyObject *single_detector;
 // mls controls
-const int grid_x_point_count = 41;
-const int grid_y_point_count = 41;
-const float grid_x_spacing = 0.05;
-const float grid_y_spacing = 0.05;
-float mls_alpha = 0.5f;
+const int grid_x_point_count = 21;
+const int grid_y_point_count = 21;
+const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
+const float grid_y_spacing = 2.0f / static_cast<float>(grid_y_point_count - 1);
+float mls_alpha = 0.8f; // emperically best: 0.8f for rigid, 0.5f for affine
 Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
@@ -661,11 +663,11 @@ int main(int argc, char *argv[])
     icp2_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
-    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights.fbx",
+    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm.fbx",
                                userTextureFile,
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
-    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights.fbx",
+    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm.fbx",
                                 userTextureFile,
                                 proj_width, proj_height,
                                 cam_width, cam_height,
@@ -2855,13 +2857,13 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         std::vector<glm::mat4> bones_to_world;
         std::vector<glm::vec3> joints;
         // palm
-        glm::vec3 palm_pos = glm::vec3(hand->palm.position.x,
-                                       hand->palm.position.y,
-                                       hand->palm.position.z);
+        glm::vec3 palm_pos_raw = glm::vec3(hand->palm.position.x,
+                                           hand->palm.position.y,
+                                           hand->palm.position.z);
         glm::vec3 towards_hand_tips = glm::vec3(hand->palm.direction.x, hand->palm.direction.y, hand->palm.direction.z);
         towards_hand_tips = glm::normalize(towards_hand_tips);
         // we offset the palm to coincide with wrist, as a real hand has a wrist joint that needs to be controlled
-        palm_pos = palm_pos + towards_hand_tips * magic_wrist_offset;
+        glm::vec3 palm_pos = palm_pos_raw + towards_hand_tips * magic_wrist_offset;
         glm::mat4 palm_orientation = glm::toMat4(glm::quat(hand->palm.orientation.w,
                                                            hand->palm.orientation.x,
                                                            hand->palm.orientation.y,
@@ -2884,24 +2886,36 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         LEAP_VECTOR arm_j2 = hand->arm.next_joint;
         joints.push_back(glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
         joints.push_back(glm::vec3(arm_j2.x, arm_j2.y, arm_j2.z));
-        glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
-                                                  hand->arm.rotation.x,
-                                                  hand->arm.rotation.y,
-                                                  hand->arm.rotation.z));
-        // arm_rot = glm::rotate(arm_rot, glm::radians(debug_vec.x), glm::vec3(arm_rot[0][0], arm_rot[0][1], arm_rot[0][2]));
-        glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
-        // translate arm joint in the local x direction to shorten the arm
-        glm::vec3 xforward = glm::normalize(glm::vec3(arm_rot[2][0], arm_rot[2][1], arm_rot[2][2])); // 3rd column of rotation matrix is local x
-        xforward *= magic_arm_forward_offset;
-        arm_translate = glm::translate(arm_translate, xforward);
-        if (useFingerWidth)
+        if (leap_use_arm)
         {
-            glm::mat4 local_scaler = glm::scale(glm::mat4(1.0f), hand->arm.width * glm::vec3(leap_arm_local_scaler, leap_arm_local_scaler, leap_arm_local_scaler));
-            bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar * local_scaler);
+            /* <using the arm bone (very inaccurate)> */
+            glm::mat4 arm_rot = glm::toMat4(glm::quat(hand->arm.rotation.w,
+                                                      hand->arm.rotation.x,
+                                                      hand->arm.rotation.y,
+                                                      hand->arm.rotation.z));
+            // arm_rot = glm::rotate(arm_rot, glm::radians(debug_vec.x), glm::vec3(arm_rot[0][0], arm_rot[0][1], arm_rot[0][2]));
+            glm::mat4 arm_translate = glm::translate(glm::mat4(1.0f), glm::vec3(arm_j1.x, arm_j1.y, arm_j1.z));
+            // translate arm joint in the local x direction to shorten the arm
+            glm::vec3 xforward = glm::normalize(glm::vec3(arm_rot[2][0], arm_rot[2][1], arm_rot[2][2])); // 3rd column of rotation matrix is local x
+            xforward *= magic_arm_forward_offset;
+            arm_translate = glm::translate(arm_translate, xforward);
+            if (useFingerWidth)
+            {
+                glm::mat4 local_scaler = glm::scale(glm::mat4(1.0f), hand->arm.width * glm::vec3(leap_arm_local_scaler, leap_arm_local_scaler, leap_arm_local_scaler));
+                bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar * local_scaler);
+            }
+            else
+            {
+                bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
+            }
+            /* end <using the arm bone (very inaccurate)>*/
         }
         else
         {
-            bones_to_world.push_back(arm_translate * arm_rot * chirality * magic_leap_basis_fix * scalar);
+            /* <using the palm bone (accurate, but slightly too rigid)>*/
+            palm_pos = palm_pos_raw + towards_hand_tips * magic_arm_offset;
+            bones_to_world.push_back(glm::translate(glm::mat4(1.0f), palm_pos) * palm_orientation);
+            /* <using the palm bone (accurate, but slightly too rigid)>*/
         }
         // fingers
         for (uint32_t f = 0; f < 5; f++)
@@ -4076,7 +4090,7 @@ void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat 
                 grid_kalman[i].saveCheckpoint();
             }
         }
-        deformationGrid.constructDeformedGridSmooth(filtered, mls_cp_smooth_window);
+        deformationGrid.constructDeformedGridSmooth(filtered, mls_grid_smooth_window);
         // std::cout << filtered << std::endl;
         // std::cout <<
         deformationGrid.updateGLBuffers();
@@ -4242,7 +4256,7 @@ void handleMLSSync(Shader &gridShader)
                         // compute deformation
                         cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
                         // update grid points for render
-                        deformationGrid.constructDeformedGridSmooth(fv, mls_cp_smooth_window);
+                        deformationGrid.constructDeformedGridSmooth(fv, mls_grid_smooth_window);
                     }
                     else
                     {
@@ -4594,7 +4608,7 @@ void handleMLSAsync(Shader &gridShader)
                                     // compute deformation
                                     cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
                                     // update grid points for render
-                                    deformationGrid.constructDeformedGridSmooth(fv, mls_cp_smooth_window);
+                                    deformationGrid.constructDeformedGridSmooth(fv, mls_grid_smooth_window);
                                 }
                                 else
                                 {
@@ -4919,7 +4933,7 @@ void handleMLSAsync(Shader &gridShader)
                 // compute deformation
                 cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
                 // update grid points for render
-                deformationGrid.constructDeformedGridSmooth(fv, mls_cp_smooth_window);
+                deformationGrid.constructDeformedGridSmooth(fv, mls_grid_smooth_window);
             }
             else
             {
@@ -6187,11 +6201,14 @@ void openIMGUIFrame()
                 leap.setTrackingMode(eLeapTrackingMode_HMD);
             }
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
+            ImGui::SameLine();
+            ImGui::Checkbox("Use Arm Bone", &leap_use_arm);
             ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, -50000, 50000);
             ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
             ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
-            ImGui::SliderFloat("Leap Arm Offset", &magic_arm_forward_offset, -300.0f, 200.0f);
+            ImGui::SliderFloat("Leap Arm Offset (from palm)", &magic_arm_offset, -200.0f, 200.0f);
+            ImGui::SliderFloat("Leap Arm Offset (from elbow)", &magic_arm_forward_offset, -300.0f, 200.0f);
             ImGui::SliderFloat("Leap Local Bone Scale", &leap_bone_local_scaler, 0.001f, 0.1f);
             ImGui::SliderFloat("Leap Palm Scale", &leap_palm_local_scaler, 0.001f, 0.1f);
             ImGui::SliderFloat("Leap Arm Scale", &leap_arm_local_scaler, 0.001f, 0.1f);

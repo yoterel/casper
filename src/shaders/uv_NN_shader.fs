@@ -36,7 +36,11 @@ void main()
         // step2: calculate new uv based on reflection
         vec2 reflection_uv = texture(uv, reflection / resolution).xy; // get uv of reflection point (0:1)
         vec2 seed_uv = texture(uv, loc.xy / resolution).xy; // get uv of nearest seed point (0:1)
-        vec2 new_uv = 2*seed_uv - reflection_uv; // compute new uv based on reflection
+        vec2 new_uv;
+        if (distance(reflection_uv, seed_uv) > 0.1) // if reflection point is too far from seed, use seed uv, we dont want jumps across seams
+            new_uv = seed_uv;
+        else
+            new_uv = 2*seed_uv - reflection_uv; // compute new uv based on reflection
         // step3: sample unwrapped texture using the new uv
         // vec2 new_uv = texture(uv, reflection).xy; // get uv of reflection point
         FragColor = texture(unwrapped, new_uv);
