@@ -103,6 +103,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                      Text &text);
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current);
 bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &detected_left, bool &detected_right);
+bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
 bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
@@ -215,6 +216,7 @@ Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_deb
 std::thread producer, consumer, run_sd, run_mls;
 // bake/sd controls
 bool bakeRequest = false;
+bool deformedBaking = false;
 bool bake_preproc_succeed = false;
 bool sd_running = false;
 int sd_mode = static_cast<int>(SDMode::PROMPT);
@@ -3076,6 +3078,66 @@ glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &le
     return point_3d;
 }
 
+bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected)
+{
+    cv::Mat image;
+    cv::flip(origImage, image, 1);
+    cv::cvtColor(image, image, cv::COLOR_GRAY2RGB);
+    npy_intp dimensions[3] = {image.rows, image.cols, image.channels()};
+    PyObject *image_object = PyArray_SimpleNewFromData(image.dims + 1, (npy_intp *)&dimensions, NPY_UINT8, image.data);
+    PyObject *myResult = PyObject_CallFunction(predict_single, "(O,O)", image_object, single_detector);
+    if (!myResult)
+    {
+        std::cout << "Call failed!" << std::endl;
+        PyErr_Print();
+        return false;
+        // exit(1);
+    }
+    PyObject *pyLeftLandmarks, *pyRightLandmarks;
+    int left_, right_;
+    if (!PyArg_ParseTuple(myResult, "OOii", &pyLeftLandmarks, &pyRightLandmarks, &left_, &right_))
+    {
+        std::cout << "Parse failed!" << std::endl;
+        PyErr_Print();
+        return false;
+        // exit(1);
+    }
+    left_detected = static_cast<bool>(left_);
+    right_detected = static_cast<bool>(right_);
+    std::vector<glm::vec2> data_vec;
+    if ((!left_detected) && (!right_detected))
+        return false;
+    // PyObject* myResult = PyObject_CallFunction(myprofile, "O", image_object);
+    PyArrayObject *leftNumpyArray = reinterpret_cast<PyArrayObject *>(pyLeftLandmarks);
+    glm::vec2 *leftData = (glm::vec2 *)PyArray_DATA(leftNumpyArray);
+    std::vector<glm::vec2> raw_left(leftData, leftData + PyArray_SIZE(leftNumpyArray) / 2);
+    left = std::move(raw_left);
+    PyArrayObject *rightNumpyArray = reinterpret_cast<PyArrayObject *>(pyRightLandmarks);
+    glm::vec2 *rightData = (glm::vec2 *)PyArray_DATA(rightNumpyArray);
+    std::vector<glm::vec2> raw_right(rightData, rightData + PyArray_SIZE(rightNumpyArray) / 2);
+    right = std::move(raw_right);
+    // for (int j = 0; j < data_vec.size(); j+=2)
+    // {
+    //   std::cout << data_vec[j] << data_vec[j+1] << std::endl;
+    // }
+    // npy_intp* arrDims = PyArray_SHAPE( myNumpyArray );
+    // int nDims = PyArray_NDIM( myNumpyArray ); // number of dimensions
+    // std:: cout << nDims << std::endl;
+    // for (int i = 0; i < nDims; i++)
+    // {
+    //   std::cout << arrDims[i] << std::endl;
+    // }
+
+    // cv::Mat python_result = cv::Mat(image.rows, image.cols, CV_8UC3, PyArray_DATA(myNumpyArray));
+    // cv::imshow("result", python_result);
+    // cv::waitKey(0);
+    // double* array_pointer = reinterpret_cast<double*>( PyArray_DATA( your_numpy_array ) );
+    // Py_XDECREF(myModule);
+    // Py_XDECREF(myObject);
+    // Py_XDECREF(myFunction);
+    // Py_XDECREF(myResult);
+    return true;
+}
 bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected)
 {
     cv::Mat image;
@@ -3827,6 +3889,22 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                 cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
                                 cv::imwrite("../../resource/sd_result.png", img2img_result);
                             }
+                            if (deformedBaking)
+                            {
+                                std::vector<glm::vec2> mp_left, mp_right;
+                                bool mp_detected_left, mp_detected_right;
+                                if (mp_predict_single(camImage, mp_left, mp_right, mp_detected_left, mp_detected_right))
+                                {
+                                    if (mp_detected_left && bones_to_world_left_bake.size() > 0)
+                                    {
+                                        // construct a deformation grid from MP to leap joints
+                                    }
+                                    if (mp_detected_right && bones_to_world_right_bake.size() > 0)
+                                    {
+                                        // construct a deformation grid from MP to leap joints
+                                    }
+                                }
+                            }
                             bake_preproc_succeed = true;
                         }
                         catch (const std::exception &e)
@@ -3846,7 +3924,15 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                 dynamicTexture->init(sd_outwidth, sd_outheight, 3);
                 dynamicTexture->load(img2img_data.data(), true, GL_RGB);
                 // bake dynamic texture
-                handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, false);
+                if (deformedBaking)
+                {
+                    // first deform the texture using the deformation grid
+                    handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, false);
+                }
+                else
+                {
+                    handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, false);
+                }
                 bake_preproc_succeed = false;
                 run_sd.join();
             }

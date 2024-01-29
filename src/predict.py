@@ -188,23 +188,8 @@ def predict_video_aprox(image_orig, i, my_detector):
 
 
 def predict_single(image_orig, my_detector=None, verbose=False):
-    # print(image_orig.shape)
-    # if len(image_orig.shape) == 2:
-    #     # duplicate the image to make it 3 channel
-    #     image = image_orig[:, :, np.newaxis].repeat(3, axis=2).copy()
-    # elif image_orig.shape[-1] == 1:
-    #     # duplicate the image to make it 3 channel
-    #     image = image_orig.repeat(3, axis=2).copy()
-    # elif image_orig.shape[-1] == 4:
-    #     image = image_orig[:, :, :3].copy()
-    # else:
-    if verbose:
-        print("copying image")
     image = image_orig.copy()
-    # image = image_orig
     if my_detector is None:
-        if verbose:
-            print("initializing detector")
         single_base_options = python.BaseOptions(
             model_asset_path="../../resource/models/hand_landmarker.task"
         )
@@ -212,44 +197,38 @@ def predict_single(image_orig, my_detector=None, verbose=False):
             base_options=single_base_options, num_hands=1
         )
         my_detector = vision.HandLandmarker.create_from_options(single_options)
-    if verbose:
-        print("setting image format")
+
     if image.shape[-1] == 1 or len(image.shape) == 2:
         image_format = mp.ImageFormat.GRAY8
-        if verbose:
-            print("GRAY8")
     elif image.shape[-1] == 4:
         image_format = mp.ImageFormat.SRGBA
-        if verbose:
-            print("SRGBA")
     else:
         image_format = mp.ImageFormat.SRGB
-        if verbose:
-            print("SRGB")
     mp_image = mp.Image(image_format=image_format, data=image)
-    if verbose:
-        print("detection")
     detection_result = my_detector.detect(mp_image)
-    if verbose:
-        print("detection done")
-    if len(detection_result.hand_landmarks) > 0:
-        if verbose:
-            print("detection sucess, converting to numpy")
-        mp_np = np.array(
+    if len(detection_result.hand_landmarks) == 0:
+        return np.zeros(1), np.zeros(1), False, False
+    right_landmarks = np.zeros((21, 2), dtype=np.float32)
+    left_landmarks = np.zeros((21, 2), dtype=np.float32)
+    right_detected = False
+    left_detected = False
+    for j in range(len(detection_result.hand_landmarks)):
+        handness = detection_result.handedness[j][0].display_name == "Right"
+        landmarks = np.array(
             [
                 [landmark.x, landmark.y]
-                for landmark in detection_result.hand_landmarks[0]
+                for landmark in detection_result.hand_landmarks[j]
             ]
         ).astype(np.float32)
-        mp_np = (mp_np * 2) - 1  # 0:1 to -1:1
-        mp_np[:, 1] = -mp_np[:, 1]  # flip y
-    else:
-        if verbose:
-            print("detection failed")
-        mp_np = np.zeros(1)
-    # print(mp_np.dtype)
-    # print(mp_np.shape)
-    return mp_np
+        landmarks = (landmarks * 2) - 1  # 0:1 to -1:1
+        landmarks[:, 1] = -landmarks[:, 1]  # flip y
+        if handness:
+            right_landmarks = landmarks
+            right_detected = True
+        else:
+            left_landmarks = landmarks
+            left_detected = True
+    return left_landmarks, right_landmarks, left_detected, right_detected
 
 
 def myprint(x):
@@ -298,14 +277,16 @@ if __name__ == "__main__":
         # image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         # image = cv2.resize(image, (512, 512))
         my_detector = init_detector(False)
-        test = predict_single(image, my_detector)  # warmup
+        _, _, left_detected, right_detected = predict_single(
+            image, my_detector
+        )  # warmup
         times = []
         failures = 0
         for i in range(0, short_iters):
             start = time.time()
-            test = predict_single(image, my_detector)
+            _, _, left_detected, right_detected = predict_single(image, my_detector)
             times.append(time.time() - start)
-            if test.shape == (1,):
+            if not left_detected and not right_detected:
                 failures += 1
             # print(times[-1])
         single_avg_with_detector = np.array(times).mean()
@@ -315,9 +296,9 @@ if __name__ == "__main__":
         failures = 0
         for i in range(0, short_iters):
             start = time.time()
-            test = predict_single(image)
+            _, _, left_detected, right_detected = predict_single(image)
             times.append(time.time() - start)
-            if test.shape == (1,):
+            if not left_detected and not right_detected:
                 failures += 1
             # print(times[-1])
         single_avg_no_detector = np.array(times).mean()
