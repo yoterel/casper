@@ -186,6 +186,8 @@ int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
+float distance_threshold = 50.0f;
+float seam_threshold = 0.1f;
 glm::vec3 mask_bg_color(0.0f, 0.0f, 0.0f);
 glm::vec3 mask_missing_info_color(0.26, 0.43, 0.376);
 glm::vec3 mask_unused_info_color(0.485f, 0.331f, 0.485f);
@@ -3411,9 +3413,14 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     case static_cast<int>(PostProcessMode::JUMP_FLOOD):
     {
         if (use_mls)
-            postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+            postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
+                                   mls_fbo.getTexture()->getTexture(), camTexture.getTexture(),
+                                   &postprocess_fbo, masking_threshold, distance_threshold);
         else
-            postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader, hands_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
+            postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
+                                   hands_fbo.getTexture()->getTexture(),
+                                   camTexture.getTexture(),
+                                   &postprocess_fbo, masking_threshold, distance_threshold);
         break;
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
@@ -3423,12 +3430,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
                                       leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
-                                      &postprocess_fbo, masking_threshold);
+                                      &postprocess_fbo, masking_threshold, distance_threshold, seam_threshold);
         else
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, uv_fbo.getTexture()->getTexture(),
                                       leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
-                                      &postprocess_fbo, masking_threshold);
+                                      &postprocess_fbo, masking_threshold, distance_threshold, seam_threshold);
         break;
     }
     case static_cast<int>(PostProcessMode::ICP):
@@ -6126,6 +6133,8 @@ void openIMGUIFrame()
             {
                 threshold_flag = false;
             }
+            ImGui::SliderFloat("JFA distance threshold", &distance_threshold, 0.0f, 100.0f);
+            ImGui::SliderFloat("JFA seam threshold", &seam_threshold, 0.0f, 1.0f);
             ImGui::ColorEdit3("bg color", &mask_bg_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("missing info color", &mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("unused info color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);

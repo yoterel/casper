@@ -476,7 +476,9 @@ void PostProcess::mask(Shader *mask_shader, unsigned int renderedSceneTexture, u
     target_fbo->unbind();
 }
 
-void PostProcess::jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shader, unsigned int uvTexture, unsigned int uvUnwrappedTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
+void PostProcess::jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shader,
+                                unsigned int uvTexture, unsigned int uvUnwrappedTexture, unsigned int camTexture, FBO *target_fbo,
+                                const float threshold, const float distance_threshold, const float seam_threshold)
 {
     // jfaInit determines seeds for jump flood (everywhere there is information will be a seed)
     // distances / nearest neighbors / etc will be calculated from these seeds (but not for the seeds themselves)
@@ -539,6 +541,8 @@ void PostProcess::jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shad
     uv_NN_shader.setInt("mask", 2);
     uv_NN_shader.setInt("unwrapped", 3);
     uv_NN_shader.setFloat("threshold", threshold);
+    uv_NN_shader.setFloat("distThreshold", distance_threshold);
+    uv_NN_shader.setFloat("seamThreshold", seam_threshold);
     uv_NN_shader.setBool("flipVer", false);
     uv_NN_shader.setBool("maskIsGray", true);
     uv_NN_shader.setBool("flipMaskVer", true);
@@ -551,7 +555,9 @@ void PostProcess::jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shad
     }
 }
 
-void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo, const float threshold)
+void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader,
+                             unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo,
+                             const float threshold, const float distance_threshold)
 {
     // init jump flood seeds
     glActiveTexture(GL_TEXTURE0);
@@ -610,6 +616,7 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, un
     NN_shader.setInt("jfa", 1);
     NN_shader.setInt("mask", 2);
     NN_shader.setFloat("threshold", threshold);
+    NN_shader.setFloat("distThreshold", distance_threshold);
     NN_shader.setBool("flipVer", false);
     NN_shader.setBool("maskIsGray", true);
     NN_shader.setBool("flipMaskVer", true);

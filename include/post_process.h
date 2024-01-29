@@ -14,8 +14,12 @@ public:
     PostProcess(unsigned int srcWidth, unsigned int srcHeight,
                 unsigned int dstWidth, unsigned int dstHeight);
     void mask(Shader *mask_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo, const float threshold = 0.01f);
-    void jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader, unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo = NULL, const float threshold = 0.01f);
-    void jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shader, unsigned int uvTexture, unsigned int uvUnwrappedTexture, unsigned int camTexture, FBO *target_fbo, const float threshold);
+    void jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader,
+                    unsigned int renderedSceneTexture, unsigned int camTexture, FBO *target_fbo = NULL,
+                    const float threshold = 0.01f, const float distance_threshold = 50.0f);
+    void jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shader,
+                       unsigned int uvTexture, unsigned int uvUnwrappedTexture, unsigned int camTexture, FBO *target_fbo,
+                       const float threshold, const float distance_threshold = 50.0f, const float seam_threshold = 0.1f);
     static glm::mat4 findHomography(std::vector<glm::vec2> screen_verts);
     void bake(Shader &uvShader, unsigned int textureToBake, unsigned int TextureUV, const std::string &filepath);
     void saveColorToFile(std::string filepath, unsigned int fbo_id);
