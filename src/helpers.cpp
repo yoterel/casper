@@ -137,7 +137,7 @@ std::vector<glm::vec2> Helpers::flatten_2dgrid(cv::Mat grid)
     return flat_vec;
 }
 
-std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point2f> vec)
+std::vector<glm::vec2> Helpers::cv2glm(std::vector<cv::Point2f> vec)
 {
     std::vector<glm::vec2> glm_vec;
     for (int i = 0; i < vec.size(); i++)
@@ -147,7 +147,7 @@ std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point2f> vec)
     return glm_vec;
 }
 
-std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point> vec)
+std::vector<glm::vec2> Helpers::cv2glm(std::vector<cv::Point> vec)
 {
     std::vector<glm::vec2> glm_vec;
     for (int i = 0; i < vec.size(); i++)
@@ -157,7 +157,7 @@ std::vector<glm::vec2> Helpers::opencv2glm(std::vector<cv::Point> vec)
     return glm_vec;
 }
 
-std::vector<glm::vec3> Helpers::opencv2glm(std::vector<cv::Point3f> vec)
+std::vector<glm::vec3> Helpers::cv2glm(std::vector<cv::Point3f> vec)
 {
     std::vector<glm::vec3> glm_vec;
     for (int i = 0; i < vec.size(); i++)
@@ -167,7 +167,7 @@ std::vector<glm::vec3> Helpers::opencv2glm(std::vector<cv::Point3f> vec)
     return glm_vec;
 }
 
-std::vector<cv::Point2f> Helpers::glm2opencv(std::vector<glm::vec2> glm_vec)
+std::vector<cv::Point2f> Helpers::glm2cv(std::vector<glm::vec2> glm_vec)
 {
     std::vector<cv::Point2f> cv_vec;
     for (int i = 0; i < glm_vec.size(); i++)
@@ -175,6 +175,27 @@ std::vector<cv::Point2f> Helpers::glm2opencv(std::vector<glm::vec2> glm_vec)
         cv_vec.push_back(cv::Point2f(glm_vec[i].x, glm_vec[i].y));
     }
     return cv_vec;
+}
+
+cv::Point2f Helpers::glm2cv(glm::vec2 glm_vec)
+{
+    return cv::Point2f(glm_vec.x, glm_vec.y);
+}
+
+glm::vec2 Helpers::project_point(glm::vec3 point, glm::mat4 mvp)
+{
+    glm::vec4 point4 = glm::vec4(point, 1.0f);
+    point4 = mvp * point4;
+    point4 /= point4.w;
+    return glm::vec2(point4.x, point4.y);
+}
+
+glm::vec2 Helpers::project_point(glm::vec3 point, glm::mat4 model, glm::mat4 view, glm::mat4 projection)
+{
+    glm::vec4 point4 = glm::vec4(point, 1.0f);
+    point4 = projection * view * model * point4;
+    point4 /= point4.w;
+    return glm::vec2(point4.x, point4.y);
 }
 
 std::vector<glm::vec2> Helpers::project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection)

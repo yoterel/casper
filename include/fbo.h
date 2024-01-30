@@ -21,7 +21,7 @@ public:
     void saveColorToFile(std::string filepath, bool flip_vertically = true);
     void saveDepthToFile(std::string filepath, bool flip_vertically = true);
     std::vector<float> sampleDepthBuffer(std::vector<glm::vec2> sample_locations);
-    std::vector<uchar> getBuffer(int n_channels);
+    std::vector<uint8_t> getBuffer(int n_channels);
     Texture *getTexture() { return &m_texture; };
 
 private:

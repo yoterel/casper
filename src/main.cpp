@@ -323,13 +323,11 @@ bool leap_threshold_flag = false;
 int64_t targetFrameTime = 0;
 double whole = 0.0;
 LEAP_CLOCK_REBASER clockSynchronizer;
-std::vector<glm::vec3> joints_left;
-std::vector<glm::vec3> joints_right;
-std::vector<glm::mat4> bones_to_world_left;
-std::vector<glm::mat4> bones_to_world_right;
+std::vector<glm::vec3> joints_left, joints_right;
+std::vector<glm::mat4> bones_to_world_left, bones_to_world_right;
 std::vector<glm::mat4> required_pose_bones_to_world_left;
-std::vector<glm::mat4> bones_to_world_right_bake;
-std::vector<glm::mat4> bones_to_world_left_bake;
+std::vector<glm::mat4> bones_to_world_left_bake, bones_to_world_right_bake;
+std::vector<glm::vec3> bake_joints_left, bake_joints_right;
 std::vector<glm::mat4> bones_to_world_left_interp;
 glm::mat4 global_scale_right = glm::mat4(1.0f);
 glm::mat4 global_scale_left = glm::mat4(1.0f);
@@ -430,6 +428,7 @@ FBO mls_fbo(dst_width, dst_height, 4, false);
 FBO bake_fbo_right(1024, 1024, 4, false);
 FBO bake_fbo_left(1024, 1024, 4, false);
 FBO pre_bake_fbo(1024, 1024, 4, false);
+FBO deformed_bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
@@ -462,6 +461,7 @@ const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
 const float grid_y_spacing = 2.0f / static_cast<float>(grid_y_point_count - 1);
 float mls_alpha = 0.8f; // emperically best: 0.8f for rigid, 0.5f for affine
 Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
+Grid bakeGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
 std::vector<cv::Point2f> prev_leap_keypoints;
@@ -618,6 +618,7 @@ int main(int argc, char *argv[])
     std::cout << "  GLSL Version : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << std::endl;
     deformationGrid.initGLBuffers();
+    bakeGrid.initGLBuffers();
     glfwSwapInterval(0);                       // do not sync to monitor
     glViewport(0, 0, proj_width, proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -661,6 +662,7 @@ int main(int argc, char *argv[])
     bake_fbo_right.init();
     bake_fbo_left.init();
     pre_bake_fbo.init();
+    deformed_bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
     icp_fbo.init();
@@ -1285,7 +1287,7 @@ int main(int argc, char *argv[])
                             // {
                             //     std::vector<glm::vec3> to_project = joints_left;
                             //     std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                            //     prev_leap_keypoints = Helpers::glm2opencv(projected);
+                            //     prev_leap_keypoints = Helpers::glm2cv(projected);
                             //     cv::Mat x = deformationGrid.getM();
                             //     for (int i = 0; i < grid_x_point_count * grid_y_point_count; i++)
                             //     {
@@ -1770,10 +1772,10 @@ int main(int argc, char *argv[])
                 std::vector<cv::Point2f> reprojected_cv, reprojected_inliers_cv;
                 cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
                 cv::projectPoints(points_3d_inliers_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_inliers_cv);
-                points_2d_reprojected = Helpers::opencv2glm(reprojected_cv);
-                points_2d_inliers_reprojected = Helpers::opencv2glm(reprojected_inliers_cv);
-                points_2d_inliners = Helpers::opencv2glm(points_2d_inliers_cv);
-                std::vector<glm::vec3> points_3d_inliers = Helpers::opencv2glm(points_3d_inliers_cv);
+                points_2d_reprojected = Helpers::cv2glm(reprojected_cv);
+                points_2d_inliers_reprojected = Helpers::cv2glm(reprojected_inliers_cv);
+                points_2d_inliners = Helpers::cv2glm(points_2d_inliers_cv);
+                std::vector<glm::vec3> points_3d_inliers = Helpers::cv2glm(points_3d_inliers_cv);
                 float mse = Helpers::MSE(points_2d, points_2d_reprojected);
                 float mse_inliers = Helpers::MSE(points_2d_inliners, points_2d_inliers_reprojected);
                 std::cout << "avg reprojection error: " << mse << std::endl;
@@ -1888,7 +1890,7 @@ int main(int argc, char *argv[])
                                 std::vector<cv::Point3f> points_3d_cv{cv::Point3f(cur_3d_point.x, cur_3d_point.y, cur_3d_point.z)};
                                 std::vector<cv::Point2f> reprojected_cv;
                                 cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
-                                std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
+                                std::vector<glm::vec2> reprojected = Helpers::cv2glm(reprojected_cv);
                                 reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
                                 ////
                                 vcolorShader.use();
@@ -2004,7 +2006,7 @@ int main(int argc, char *argv[])
                         // points_3d_cv.push_back(cv::Point3f(joints_right[mark_bone_index].x, joints_right[mark_bone_index].y, joints_right[mark_bone_index].z));
                         std::vector<cv::Point2f> reprojected_cv;
                         cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
-                        std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
+                        std::vector<glm::vec2> reprojected = Helpers::cv2glm(reprojected_cv);
                         // glm::vec2 reprojected = glm::vec2(reprojected_cv[0].x, reprojected_cv[0].y);
                         reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
                         std::vector<glm::vec2> pc = {reprojected};
@@ -2030,7 +2032,7 @@ int main(int argc, char *argv[])
                         points_3d_cv.push_back(cv::Point3f(joints_right[mark_bone_index].x, joints_right[mark_bone_index].y, joints_right[mark_bone_index].z));
                         std::vector<cv::Point2f> reprojected_cv;
                         cv::projectPoints(points_3d_cv, rvec_calib, tvec_calib, camera_intrinsics_cv, camera_distortion_cv, reprojected_cv);
-                        std::vector<glm::vec2> reprojected = Helpers::opencv2glm(reprojected_cv);
+                        std::vector<glm::vec2> reprojected = Helpers::cv2glm(reprojected_cv);
                         // glm::vec2 reprojected = glm::vec2(reprojected_cv[0].x, reprojected_cv[0].y);
                         reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
                         std::vector<glm::vec2> pc = {reprojected};
@@ -3081,8 +3083,8 @@ glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &le
 bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected)
 {
     cv::Mat image;
-    cv::flip(origImage, image, 1);
-    cv::cvtColor(image, image, cv::COLOR_GRAY2RGB);
+    // cv::flip(origImage, image, 1);
+    cv::cvtColor(origImage, image, cv::COLOR_GRAY2RGB);
     npy_intp dimensions[3] = {image.rows, image.cols, image.channels()};
     PyObject *image_object = PyArray_SimpleNewFromData(image.dims + 1, (npy_intp *)&dimensions, NPY_UINT8, image.data);
     PyObject *myResult = PyObject_CallFunction(predict_single, "(O,O)", image_object, single_detector);
@@ -3588,6 +3590,16 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             cloud_src.render(5.0f);
             cloud_dst.render(5.0f);
         }
+        else
+        {
+            if (deformedBaking)
+            {
+                PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);
+                PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta);
+                cloud_src.render(5.0f);
+                cloud_dst.render(5.0f);
+            }
+        }
     }
     c2p_fbo.unbind();
 }
@@ -3777,7 +3789,7 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     }
     rightHandModel.Render(*skinnedShader, bones_to_world_right_bake, rotx, false, nullptr, &texture);
     pre_bake_fbo.unbind();
-    // finally, dilate the baked texture
+    // dilate the baked texture
     bake_fbo_right.bind();
     uvDilateShader->use();
     uvDilateShader->setMat4("mvp", glm::mat4(1.0f));
@@ -3787,7 +3799,7 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     fullScreenQuad.render();
     bake_fbo_right.unbind();
     /* left hand baking */
-    pre_bake_fbo.bind(); // we bake into right hand fbo, and post process into left hand fbo
+    pre_bake_fbo.bind();
     if (ignoreGlobalScale)
     {
         set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform,
@@ -3802,7 +3814,7 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     }
     leftHandModel.Render(*skinnedShader, bones_to_world_left_bake, rotx, false, nullptr, &texture);
     pre_bake_fbo.unbind();
-    // finally, dilate the baked texture
+    // dilate the baked texture
     bake_fbo_left.bind();
     uvDilateShader->use();
     uvDilateShader->setMat4("mvp", glm::mat4(1.0f));
@@ -3811,7 +3823,6 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     pre_bake_fbo.getTexture()->bind();
     fullScreenQuad.render();
     bake_fbo_left.unbind();
-
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     if (saveIntermed)
@@ -3827,6 +3838,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   glm::mat4 cam_projection_transform)
 {
     Shader *textureShader = shader_map["textureShader"];
+    Shader *gridShader = shader_map["gridShader"];
     if ((bones_to_world_right.size() > 0) || (bones_to_world_left.size() > 0))
     {
         switch (bake_mode)
@@ -3840,16 +3852,19 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     sd_running = true;
                     bones_to_world_right_bake = bones_to_world_right;
                     bones_to_world_left_bake = bones_to_world_left;
+                    bake_joints_left = joints_left;
+                    bake_joints_right = joints_right;
                     // launch thread etc.
-                    // download camera image to cpu (resizing to 1024x1024)
+                    // download camera image to cpu (resizing to 1024x1024 will occur)
                     sd_fbo.bind(true);
                     set_texture_shader(textureShader, false, true, true, false);
                     camTexture.bind();
                     fullScreenQuad.render();
                     sd_fbo.unbind();
                     if (saveIntermed)
-                        sd_fbo.saveColorToFile("../../resource/camera_image.png", false);
+                        sd_fbo.saveColorToFile("../../resource/sd_image.png", false);
                     std::vector<uint8_t> buf = sd_fbo.getBuffer(1);
+                    cv::Mat cam_cv = cv::Mat(1024, 1024, CV_8UC1, buf.data()).clone();
                     // download camera image thresholded to cpu (todo: consider doing all this on CPU)
                     sd_fbo.bind(true);
                     set_texture_shader(textureShader, false, true, true, true, masking_threshold);
@@ -3857,9 +3872,9 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     fullScreenQuad.render();
                     sd_fbo.unbind();
                     if (saveIntermed)
-                        sd_fbo.saveColorToFile("../../resource/camera_mask.png", false);
+                        sd_fbo.saveColorToFile("../../resource/sd_mask.png", false);
                     std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
-                    run_sd = std::thread([buf, buf_mask]() { // send camera image to stable diffusion
+                    run_sd = std::thread([buf, buf_mask, cam_cv]() { // send camera image to stable diffusion
                         std::string myprompt;
                         std::vector<std::string> random_animal;
                         switch (sd_mode)
@@ -3887,21 +3902,42 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                             {
                                 cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
                                 cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
-                                cv::imwrite("../../resource/sd_result.png", img2img_result);
+                                cv::imwrite("../../resource/sd.png", img2img_result);
                             }
                             if (deformedBaking)
                             {
                                 std::vector<glm::vec2> mp_left, mp_right;
                                 bool mp_detected_left, mp_detected_right;
-                                if (mp_predict_single(camImage, mp_left, mp_right, mp_detected_left, mp_detected_right))
+                                std::vector<cv::Point2f> BakeCPP, BakeCPQ;
+                                cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
+                                if (mp_predict_single(cam_cv, mp_left, mp_right, mp_detected_left, mp_detected_right))
                                 {
                                     if (mp_detected_left && bones_to_world_left_bake.size() > 0)
                                     {
-                                        // construct a deformation grid from MP to leap joints
+                                        for (int i = 0; i < leap_selection_vector.size(); i++)
+                                        {
+                                            BakeCPP.push_back(Helpers::glm2cv(mp_left[mp_selection_vector[i]]));
+                                            BakeCPQ.push_back(Helpers::glm2cv(Helpers::project_point(bake_joints_left[leap_selection_vector[i]],
+                                                                                                     gl_camera.getProjectionMatrix() * gl_camera.getViewMatrix())));
+                                        }
                                     }
                                     if (mp_detected_right && bones_to_world_right_bake.size() > 0)
                                     {
-                                        // construct a deformation grid from MP to leap joints
+                                        for (int i = 0; i < leap_selection_vector.size(); i++)
+                                        {
+                                            BakeCPP.push_back(Helpers::glm2cv(mp_right[mp_selection_vector[i]]));
+                                            BakeCPQ.push_back(Helpers::glm2cv(Helpers::project_point(bake_joints_right[leap_selection_vector[i]],
+                                                                                                     gl_camera.getProjectionMatrix() * gl_camera.getViewMatrix())));
+                                        }
+                                    }
+                                    if (BakeCPP.size() > 0)
+                                    {
+                                        cv::Mat fv = computeGridDeformation(BakeCPP, BakeCPQ, deformation_mode, mls_alpha, bakeGrid);
+                                        bakeGrid.constructDeformedGridSmooth(fv, 0);
+                                    }
+                                    else
+                                    {
+                                        bakeGrid.constructGrid();
                                     }
                                 }
                             }
@@ -3926,13 +3962,25 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                 // bake dynamic texture
                 if (deformedBaking)
                 {
+                    bakeGrid.updateGLBuffers();
+                    deformed_bake_fbo.bind();
+                    glDisable(GL_CULL_FACE);
+                    dynamicTexture->bind();
+                    gridShader->use();
+                    gridShader->setBool("flipVer", false);
+                    bakeGrid.render();
+                    deformed_bake_fbo.unbind(); // mls_fbo
+                    glEnable(GL_CULL_FACE);
                     // first deform the texture using the deformation grid
-                    handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, false);
+                    if (saveIntermed)
+                        deformed_bake_fbo.saveColorToFile("../../resource/sd_deformed.png", false);
+                    handleBakingInternal(shader_map, *deformed_bake_fbo.getTexture(), leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
                 }
                 else
                 {
-                    handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, false, false, false, false);
+                    handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
                 }
+                // use_mls = true;
                 bake_preproc_succeed = false;
                 run_sd.join();
             }
@@ -3957,7 +4005,66 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
             {
                 bones_to_world_right_bake = bones_to_world_right;
                 bones_to_world_left_bake = bones_to_world_left;
-                handleBakingInternal(shader_map, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true, false);
+                bake_joints_left = joints_left;
+                bake_joints_right = joints_right;
+                if (deformedBaking)
+                {
+                    std::vector<glm::vec2> mp_left, mp_right;
+                    bool mp_detected_left, mp_detected_right;
+                    std::vector<cv::Point2f> BakeCPP, BakeCPQ;
+                    cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
+                    cv::Mat cam_cv;
+                    cv::flip(camImageOrig, cam_cv, 1);
+                    if (mp_predict_single(cam_cv, mp_left, mp_right, mp_detected_left, mp_detected_right))
+                    {
+                        if (mp_detected_left && bones_to_world_left_bake.size() > 0)
+                        {
+                            for (int i = 0; i < leap_selection_vector.size(); i++)
+                            {
+                                BakeCPP.push_back(Helpers::glm2cv(mp_left[mp_selection_vector[i]]));
+                                BakeCPQ.push_back(Helpers::glm2cv(Helpers::project_point(bake_joints_left[leap_selection_vector[i]],
+                                                                                         gl_camera.getProjectionMatrix() * gl_camera.getViewMatrix())));
+                            }
+                        }
+                        if (mp_detected_right && bones_to_world_right_bake.size() > 0)
+                        {
+                            for (int i = 0; i < leap_selection_vector.size(); i++)
+                            {
+                                BakeCPP.push_back(Helpers::glm2cv(mp_right[mp_selection_vector[i]]));
+                                BakeCPQ.push_back(Helpers::glm2cv(Helpers::project_point(bake_joints_right[leap_selection_vector[i]],
+                                                                                         gl_camera.getProjectionMatrix() * gl_camera.getViewMatrix())));
+                            }
+                        }
+                        if (BakeCPP.size() > 0)
+                        {
+                            cv::Mat fv = computeGridDeformation(BakeCPP, BakeCPQ, deformation_mode, mls_alpha, bakeGrid);
+                            bakeGrid.constructDeformedGridSmooth(fv, 0);
+                            ControlPointsP_glm = Helpers::cv2glm(BakeCPP);
+                            ControlPointsQ_glm = Helpers::cv2glm(BakeCPQ);
+                        }
+                        else
+                        {
+                            bakeGrid.constructGrid();
+                        }
+                    }
+                    bakeGrid.updateGLBuffers();
+                    deformed_bake_fbo.bind();
+                    glDisable(GL_CULL_FACE);
+                    camTexture.bind();
+                    gridShader->use();
+                    gridShader->setBool("flipVer", false);
+                    bakeGrid.render();
+                    deformed_bake_fbo.unbind(); // mls_fbo
+                    glEnable(GL_CULL_FACE);
+                    // first deform the texture using the deformation grid
+                    if (saveIntermed)
+                        deformed_bake_fbo.saveColorToFile("../../resource/deformed_camera_image.png", false);
+                    handleBakingInternal(shader_map, *deformed_bake_fbo.getTexture(), leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, false, false);
+                }
+                else
+                {
+                    handleBakingInternal(shader_map, camTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true, false);
+                }
                 bakeRequest = false;
             }
             break;
@@ -4044,7 +4151,7 @@ void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat 
         // compute velocity deformation grid
         std::vector<glm::vec3> to_project = joints_left;
         std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-        std::vector<cv::Point2f> cur_leap_keypoints = Helpers::glm2opencv(projected);
+        std::vector<cv::Point2f> cur_leap_keypoints = Helpers::glm2cv(projected);
         cv::Mat x = deformationGrid.getM();
         cv::Mat filtered = x.clone();
         ControlPointsP.clear();
@@ -4142,7 +4249,7 @@ void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat 
                     }
                 }
             }
-            std::vector<cv::Point2f> cur_mp_keypoints = Helpers::glm2opencv(cur_pred_glm);
+            std::vector<cv::Point2f> cur_mp_keypoints = Helpers::glm2cv(cur_pred_glm);
             for (int i = 0; i < leap_selection_vector.size(); i++)
             {
                 ControlPointsP.push_back(cur_leap_keypoints[leap_selection_vector[i]]);
@@ -4301,19 +4408,19 @@ void handleMLSSync(Shader &gridShader)
                             {
                                 projected_diff[i] += projected_new[i] - projected[i];
                             }
-                            leap_keypoints = Helpers::glm2opencv(projected_new);
+                            leap_keypoints = Helpers::glm2cv(projected_new);
                         }
                         else
                         {
-                            leap_keypoints = Helpers::glm2opencv(projected);
+                            leap_keypoints = Helpers::glm2cv(projected);
                         }
                     }
                     else
                     {
-                        leap_keypoints = Helpers::glm2opencv(projected);
+                        leap_keypoints = Helpers::glm2cv(projected);
                     }
-                    diff_keypoints = Helpers::glm2opencv(projected_diff);
-                    mp_keypoints = Helpers::glm2opencv(pred_glm);
+                    diff_keypoints = Helpers::glm2cv(projected_diff);
+                    mp_keypoints = Helpers::glm2cv(pred_glm);
                     ControlPointsP.clear();
                     ControlPointsQ.clear();
                     std::vector<bool> visible_landmarks(leap_keypoints.size(), true);
@@ -4366,8 +4473,8 @@ void handleMLSSync(Shader &gridShader)
         {
             deformationGrid.updateGLBuffers();
             mls_succeed = false;
-            ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
-            ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
+            ControlPointsP_glm = Helpers::cv2glm(ControlPointsP);
+            ControlPointsQ_glm = Helpers::cv2glm(ControlPointsQ);
         }
         // render as post process
         mls_fbo.bind();
@@ -4597,11 +4704,11 @@ void handleMLSAsync(Shader &gridShader)
                                             {
                                                 projected_diff_left[i] += projected_new[i] - projected_left[i];
                                             }
-                                            leap_keypoints_left = Helpers::glm2opencv(projected_new);
+                                            leap_keypoints_left = Helpers::glm2cv(projected_new);
                                         }
                                         else
                                         {
-                                            leap_keypoints_left = Helpers::glm2opencv(projected_left);
+                                            leap_keypoints_left = Helpers::glm2cv(projected_left);
                                         }
                                         if ((cur_vertices_right.size() > 0) && (useRightHand))
                                         {
@@ -4616,28 +4723,28 @@ void handleMLSAsync(Shader &gridShader)
                                             {
                                                 projected_diff_right[i] += projected_new[i] - projected_right[i];
                                             }
-                                            leap_keypoints_right = Helpers::glm2opencv(projected_new);
+                                            leap_keypoints_right = Helpers::glm2cv(projected_new);
                                         }
                                         else
                                         {
-                                            leap_keypoints_right = Helpers::glm2opencv(projected_right);
+                                            leap_keypoints_right = Helpers::glm2cv(projected_right);
                                         }
                                     }
                                     else
                                     {
-                                        leap_keypoints_left = Helpers::glm2opencv(projected_left);
-                                        leap_keypoints_right = Helpers::glm2opencv(projected_right);
+                                        leap_keypoints_left = Helpers::glm2cv(projected_left);
+                                        leap_keypoints_right = Helpers::glm2cv(projected_right);
                                     }
                                 }
                                 else
                                 {
-                                    leap_keypoints_left = Helpers::glm2opencv(projected_left);
-                                    leap_keypoints_right = Helpers::glm2opencv(projected_right);
+                                    leap_keypoints_left = Helpers::glm2cv(projected_left);
+                                    leap_keypoints_right = Helpers::glm2cv(projected_right);
                                 }
-                                diff_keypoints_left = Helpers::glm2opencv(projected_diff_left);
-                                diff_keypoints_right = Helpers::glm2opencv(projected_diff_right);
-                                mp_keypoints_left = Helpers::glm2opencv(pred_glm_left);
-                                mp_keypoints_right = Helpers::glm2opencv(pred_glm_right);
+                                diff_keypoints_left = Helpers::glm2cv(projected_diff_left);
+                                diff_keypoints_right = Helpers::glm2cv(projected_diff_right);
+                                mp_keypoints_left = Helpers::glm2cv(pred_glm_left);
+                                mp_keypoints_right = Helpers::glm2cv(pred_glm_right);
                                 ControlPointsP.clear();
                                 ControlPointsQ.clear();
                                 std::vector<bool> visible_landmarks_left(leap_keypoints_left.size(), true);
@@ -4725,8 +4832,8 @@ void handleMLSAsync(Shader &gridShader)
             {
                 deformationGrid.updateGLBuffers();
                 mls_succeed = false;
-                ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
-                ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
+                ControlPointsP_glm = Helpers::cv2glm(ControlPointsP);
+                ControlPointsQ_glm = Helpers::cv2glm(ControlPointsQ);
                 ControlPointsP_input_left = std::move(ControlPointsP_input_glm_left);
                 ControlPointsP_input_right = std::move(ControlPointsP_input_glm_right);
                 // if (run_mls.joinable())
@@ -4855,11 +4962,11 @@ void handleMLSAsync(Shader &gridShader)
                 //     }
                 //     if (projected_left.size() > 0)
                 //     {
-                //         ControlPointsP = Helpers::glm2opencv(projected_left);
+                //         ControlPointsP = Helpers::glm2cv(projected_left);
                 //     }
                 //     else
                 //     {
-                //         ControlPointsP = Helpers::glm2opencv(projected_left_prev);
+                //         ControlPointsP = Helpers::glm2cv(projected_left_prev);
                 //     }
                 // }
                 if (mp_keypoints_right_result.size() > 0)
@@ -4922,13 +5029,13 @@ void handleMLSAsync(Shader &gridShader)
                     }
                     if (projected_right.size() > 0)
                     {
-                        ControlPointsP = Helpers::glm2opencv(projected_right);
+                        ControlPointsP = Helpers::glm2cv(projected_right);
                         projected_right_prev = std::move(projected_right);
                         prev_mls_time = cur_mls_time;
                     }
                     else
                     {
-                        ControlPointsP = Helpers::glm2opencv(projected_right_prev);
+                        ControlPointsP = Helpers::glm2cv(projected_right_prev);
                     }
                 }
                 mls_succeed = false;
@@ -4962,7 +5069,7 @@ void handleMLSAsync(Shader &gridShader)
                 //         ControlPointsQ.push_back(cv::Point2f(Q.at<float>(0), Q.at<float>(1)));
                 //     }
                 //     // define ControlPointsP as filtered joints_left
-                //     ControlPointsP = Helpers::glm2opencv(projected_left);
+                //     ControlPointsP = Helpers::glm2cv(projected_left);
                 //     projected_left_prev = std::move(projected_left);
                 // }
                 // else
@@ -4973,7 +5080,7 @@ void handleMLSAsync(Shader &gridShader)
                 //         ControlPointsQ.push_back(cv::Point2f(Q.at<float>(0), Q.at<float>(1)));
                 //     }
                 //     // define ControlPointsP as previous known joints_left
-                //     ControlPointsP = Helpers::glm2opencv(projected_left_prev);
+                //     ControlPointsP = Helpers::glm2cv(projected_left_prev);
                 // }
                 if (projected_right.size() > 0)
                 {
@@ -5003,7 +5110,7 @@ void handleMLSAsync(Shader &gridShader)
                         ControlPointsQ.push_back(cv::Point2f(Q.at<float>(0), Q.at<float>(1)));
                     }
                     // define ControlPointsP as filtered joints_left
-                    ControlPointsP = Helpers::glm2opencv(projected_right);
+                    ControlPointsP = Helpers::glm2cv(projected_right);
                     projected_right_prev = std::move(projected_right);
                     prev_mls_time = cur_mls_time;
                 }
@@ -5015,7 +5122,7 @@ void handleMLSAsync(Shader &gridShader)
                         ControlPointsQ.push_back(cv::Point2f(Q.at<float>(0), Q.at<float>(1)));
                     }
                     // define ControlPointsP as previous known joints_left
-                    ControlPointsP = Helpers::glm2opencv(projected_right_prev);
+                    ControlPointsP = Helpers::glm2cv(projected_right_prev);
                 }
                 // t_profile.stop();
                 // std::cout << "profile vel: " << t_profile.getElapsedTimeInMilliSec() << std::endl;
@@ -5035,8 +5142,8 @@ void handleMLSAsync(Shader &gridShader)
             }
             deformationGrid.updateGLBuffers();
             mls_succeed = false;
-            ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
-            ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
+            ControlPointsP_glm = Helpers::cv2glm(ControlPointsP);
+            ControlPointsQ_glm = Helpers::cv2glm(ControlPointsQ);
             ControlPointsP_input_left = std::move(ControlPointsP_input_glm_left);
             ControlPointsP_input_right = std::move(ControlPointsP_input_glm_right);
             break;
@@ -6172,6 +6279,14 @@ void openIMGUIFrame()
             }
             ImGui::SameLine();
             ImGui::Checkbox("Save Intermediate Outputs", &saveIntermed);
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Deformed Baking", &deformedBaking))
+            {
+                if (deformedBaking)
+                {
+                    use_mls = false;
+                }
+            }
             ImGui::SeparatorText("Stable Diffusion");
             ImGui::InputInt("Diffuse Seed", &diffuse_seed);
             ImGui::InputText("Prompt", &sd_prompt);

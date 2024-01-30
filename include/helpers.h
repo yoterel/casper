@@ -24,10 +24,13 @@ public:
     static std::vector<float> flatten_glm(std::vector<glm::vec3> vec);
     static std::vector<double> flatten_cv(std::vector<cv::Point> vec);
     static std::vector<glm::vec2> flatten_2dgrid(cv::Mat grid);
-    static std::vector<cv::Point2f> glm2opencv(std::vector<glm::vec2> glm_vec);
-    static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point2f> vec);
-    static std::vector<glm::vec2> opencv2glm(std::vector<cv::Point> vec);
-    static std::vector<glm::vec3> opencv2glm(std::vector<cv::Point3f> vec);
+    static cv::Point2f glm2cv(glm::vec2 glm_vec);
+    static std::vector<cv::Point2f> glm2cv(std::vector<glm::vec2> glm_vec);
+    static std::vector<glm::vec2> cv2glm(std::vector<cv::Point2f> vec);
+    static std::vector<glm::vec2> cv2glm(std::vector<cv::Point> vec);
+    static std::vector<glm::vec3> cv2glm(std::vector<cv::Point3f> vec);
+    static glm::vec2 project_point(glm::vec3 point, glm::mat4 mvp);
+    static glm::vec2 project_point(glm::vec3 point, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static std::vector<glm::vec2> project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static std::vector<glm::vec3> project_points_w_depth(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);

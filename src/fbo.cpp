@@ -163,7 +163,7 @@ std::vector<float> FBO::sampleDepthBuffer(std::vector<glm::vec2> sample_location
 // Return the rendered texture as a vector of floats
 // n_channels is the number of channels in output.
 // width and height are determined by framebuffer size.
-std::vector<uchar> FBO::getBuffer(int n_channels)
+std::vector<uint8_t> FBO::getBuffer(int n_channels)
 {
     int texFormat;
     switch (n_channels)
@@ -184,7 +184,7 @@ std::vector<uchar> FBO::getBuffer(int n_channels)
         std::cout << "FBO ERROR: Unsupported texture format." << std::endl;
         exit(1);
     }
-    std::vector<uchar> buffer(m_width * m_height * n_channels);
+    std::vector<uint8_t> buffer(m_width * m_height * n_channels);
     this->bind(false);
     // glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadBuffer(GL_COLOR_ATTACHMENT0);

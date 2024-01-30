@@ -312,11 +312,11 @@ int main(int argc, char *argv[])
   // ------------------------------
   std::vector<glm::vec2> leap_glm;
   loadkeypoints(leap_glm);
-  std::vector<cv::Point2f> keypoints = Helpers::glm2opencv(leap_glm);
+  std::vector<cv::Point2f> keypoints = Helpers::glm2cv(leap_glm);
   Py_Initialize();
   import_array();
   std::vector<glm::vec2> mp_glm = mp_predict(0);
-  std::vector<cv::Point2f> destination = Helpers::glm2opencv(mp_glm);
+  std::vector<cv::Point2f> destination = Helpers::glm2cv(mp_glm);
   Py_Finalize();
   ControlPointsP.clear();
   ControlPointsQ.clear();
@@ -364,8 +364,8 @@ int main(int argc, char *argv[])
   // ControlPointsQ.push_back(destination[11]);
   // ControlPointsQ.push_back(destination[15]);
   // ControlPointsQ.push_back(destination[19]);
-  std::vector<glm::vec2> ControlPointsP_glm = Helpers::opencv2glm(ControlPointsP);
-  std::vector<glm::vec2> ControlPointsQ_glm = Helpers::opencv2glm(ControlPointsQ);
+  std::vector<glm::vec2> ControlPointsP_glm = Helpers::cv2glm(ControlPointsP);
+  std::vector<glm::vec2> ControlPointsQ_glm = Helpers::cv2glm(ControlPointsQ);
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
