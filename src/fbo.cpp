@@ -125,18 +125,28 @@ void FBO::saveColorToFile(std::string filepath, bool flip_vertically)
 }
 
 // saves the entire depth buffer to file
-void FBO::saveDepthToFile(std::string filepath, bool flip_vertically)
+// near and far are used to linearize the depth buffer
+// depth is converted to 8bit and saved as a grayscale image (visualization purposes)
+void FBO::saveDepthToFile(std::string filepath, bool flip_vertically, float near, float far)
 {
-    std::vector<float> buffer(m_width * m_height);
+    std::vector<float> raw_depth_buffer(m_width * m_height);
     GLsizei stride = m_width;
     this->bind(false);
     glReadBuffer(GL_DEPTH_ATTACHMENT);
-    glReadPixels(0, 0, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, &buffer);
+    glReadPixels(0, 0, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, raw_depth_buffer.data());
     if (flip_vertically)
         stbi_flip_vertically_on_write(true);
     else
         stbi_flip_vertically_on_write(false);
-    stbi_write_png(filepath.c_str(), m_width, m_height, 1, buffer.data(), stride);
+    std::vector<uint8_t> buffer_uint8(m_width * m_height);
+    for (int i = 0; i < raw_depth_buffer.size(); i++)
+    {
+        float ndc = raw_depth_buffer[i] * 2.0 - 1.0;
+        float linearDepth = (2.0 * near * far) / (far + near - ndc * (far - near));
+        float normalizedLinearDepth = (linearDepth - near) / (far - near);
+        buffer_uint8[i] = static_cast<uint8_t>((1 - normalizedLinearDepth) * 255);
+    }
+    stbi_write_png(filepath.c_str(), m_width, m_height, 1, buffer_uint8.data(), stride);
     this->unbind();
 }
 

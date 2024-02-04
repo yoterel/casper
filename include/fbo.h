@@ -19,7 +19,7 @@ public:
     void bind(bool clear = true);
     void unbind();
     void saveColorToFile(std::string filepath, bool flip_vertically = true);
-    void saveDepthToFile(std::string filepath, bool flip_vertically = true);
+    void saveDepthToFile(std::string filepath, bool flip_vertically = true, float near = 1.0f, float far = 1500.0f);
     std::vector<float> sampleDepthBuffer(std::vector<glm::vec2> sample_locations);
     std::vector<uint8_t> getBuffer(int n_channels);
     Texture *getTexture() { return &m_texture; };

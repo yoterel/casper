@@ -3967,6 +3967,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     glDisable(GL_CULL_FACE);
                     dynamicTexture->bind();
                     gridShader->use();
+                    gridShader->setInt("src", 0);
                     gridShader->setBool("flipVer", false);
                     bakeGrid.render();
                     deformed_bake_fbo.unbind(); // mls_fbo
@@ -4012,7 +4013,6 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     std::vector<glm::vec2> mp_left, mp_right;
                     bool mp_detected_left, mp_detected_right;
                     std::vector<cv::Point2f> BakeCPP, BakeCPQ;
-                    cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
                     cv::Mat cam_cv;
                     cv::flip(camImageOrig, cam_cv, 1);
                     if (mp_predict_single(cam_cv, mp_left, mp_right, mp_detected_left, mp_detected_right))
@@ -4052,6 +4052,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     glDisable(GL_CULL_FACE);
                     camTexture.bind();
                     gridShader->use();
+                    gridShader->setInt("src", 0);
                     gridShader->setBool("flipVer", false);
                     bakeGrid.render();
                     deformed_bake_fbo.unbind(); // mls_fbo
@@ -4059,7 +4060,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     // first deform the texture using the deformation grid
                     if (saveIntermed)
                         deformed_bake_fbo.saveColorToFile("../../resource/deformed_camera_image.png", false);
-                    handleBakingInternal(shader_map, *deformed_bake_fbo.getTexture(), leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, false, false);
+                    handleBakingInternal(shader_map, *deformed_bake_fbo.getTexture(), leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, true, true, false);
                 }
                 else
                 {
@@ -4301,6 +4302,7 @@ void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat 
         else
             hands_fbo.getTexture()->bind();
         gridShader.use();
+        gridShader.setInt("src", 0);
         gridShader.setBool("flipVer", false);
         deformationGrid.render();
         // gridColorShader.use();
@@ -4490,6 +4492,7 @@ void handleMLSSync(Shader &gridShader)
         else
             hands_fbo.getTexture()->bind();
         gridShader.use();
+        gridShader.setInt("src", 0);
         gridShader.setBool("flipVer", false);
         deformationGrid.render();
         // gridColorShader.use();
@@ -5164,6 +5167,7 @@ void handleMLSAsync(Shader &gridShader)
         else
             hands_fbo.getTexture()->bind();
         gridShader.use();
+        gridShader.setInt("src", 0);
         gridShader.setBool("flipVer", false);
         deformationGrid.render();
         // gridColorShader.use();
@@ -6098,32 +6102,43 @@ void openIMGUIFrame()
                 // std::cout << "unique file name: " << filename.filename().string() << std::endl;
                 fs::path raw_image(savepath + filename.filename().string() + std::string("_raw_cam.png"));
                 fs::path mask_path(savepath + filename.filename().string() + std::string("_mask.png"));
-                fs::path render(savepath + filename.filename().string() + std::string("_render.png"));
+                fs::path render_color(savepath + filename.filename().string() + std::string("_render_color.png"));
+                fs::path render_depth(savepath + filename.filename().string() + std::string("_render_depth.png"));
                 fs::path uv(savepath + filename.filename().string() + std::string("_uv.png"));
                 fs::path mls(savepath + filename.filename().string() + std::string("_mls_fbo.png"));
                 fs::path pp(savepath + filename.filename().string() + std::string("_pp.png"));
                 fs::path coax(savepath + filename.filename().string() + std::string("_coax.png"));
-                fs::path keypoints(savepath + filename.filename().string() + std::string("_keypoints.npy"));
+                fs::path joints_left_path(savepath + filename.filename().string() + std::string("_joints_left.npy"));
+                fs::path joints_left_projected_path(savepath + filename.filename().string() + std::string("_joints_2d_left.npy"));
+                fs::path bones_left_path(savepath + filename.filename().string() + std::string("_bones_left.npy"));
+                fs::path joints_right_path(savepath + filename.filename().string() + std::string("_joints_right.npy"));
+                fs::path joints_right_projected_path(savepath + filename.filename().string() + std::string("_joints_2d_right.npy"));
+                fs::path bones_right_path(savepath + filename.filename().string() + std::string("_bones_right.npy"));
                 cv::Mat tmp, mask;
                 cv::flip(camImageOrig, tmp, 1); // flip horizontally
                 cv::resize(tmp, tmp, cv::Size(proj_width, proj_height));
                 cv::threshold(tmp, mask, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
                 cv::imwrite(raw_image.string(), tmp);
                 cv::imwrite(mask_path.string(), mask);
-                hands_fbo.saveColorToFile(render.string());
+                hands_fbo.saveColorToFile(render_color.string());
+                hands_fbo.saveDepthToFile(render_depth.string(), true, 1.0f, 1500.0f);
                 uv_fbo.saveColorToFile(uv.string());
                 mls_fbo.saveColorToFile(mls.string());
                 postprocess_fbo.saveColorToFile(pp.string());
                 c2p_fbo.saveColorToFile(coax.string());
                 if (joints_right.size() > 0)
                 {
+                    cnpy::npy_save(joints_right_path.string().c_str(), &joints_right[0].x, {joints_right.size(), 3}, "w");
+                    cnpy::npy_save(bones_right_path.string().c_str(), &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "w");
                     std::vector<glm::vec2> projected = Helpers::project_points(joints_right, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                    cnpy::npy_save(keypoints.string().c_str(), &projected[0].x, {projected.size(), 2}, "w");
+                    cnpy::npy_save(joints_right_projected_path.string().c_str(), &projected[0].x, {projected.size(), 2}, "w");
                 }
                 if (joints_left.size() > 0)
                 {
+                    cnpy::npy_save(joints_left_path.string().c_str(), &joints_left[0].x, {joints_left.size(), 3}, "w");
+                    cnpy::npy_save(bones_left_path.string().c_str(), &bones_to_world_left[0][0].x, {bones_to_world_left.size(), 4, 4}, "w");
                     std::vector<glm::vec2> projected = Helpers::project_points(joints_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                    cnpy::npy_save(keypoints.string().c_str(), &projected[0].x, {projected.size(), 2}, "w");
+                    cnpy::npy_save(joints_left_projected_path.string().c_str(), &projected[0].x, {projected.size(), 2}, "w");
                 }
             }
             ImGui::SameLine();
