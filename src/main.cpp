@@ -62,6 +62,7 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
 LEAP_STATUS handleLeapInput();
 void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images);
 bool loadSimulation(std::string loadpath);
+bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &poses);
 void handlePostProcess(SkinnedModel &leftHandModel,
                        SkinnedModel &rightHandModel,
                        Texture &camTexture,
@@ -1361,18 +1362,15 @@ int main(int argc, char *argv[])
             {
             case static_cast<int>(GameState::WAIT_FOR_USER):
             {
-                // set appropriate textures
                 game.setBonesVisible(bones_to_world_left.size() > 0);
                 break;
             }
             case static_cast<int>(GameState::COUNTDOWN):
             {
-                // set appropriate textures
                 break;
             }
             case static_cast<int>(GameState::PLAY):
             {
-                // set appropriate textures
                 game.setBonesVisible(bones_to_world_left.size() > 0);
                 required_pose_bones_to_world_left = game.getPose();
                 if (bones_to_world_left.size() > 0)
@@ -3258,6 +3256,28 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
     // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
 }
 
+bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &poses)
+{
+    for (const auto &entry : fs::directory_iterator(loadPath))
+    {
+        if (entry.path().extension() != ".npy")
+            continue;
+        if (entry.path().string().find("bones_left") != std::string::npos)
+        {
+            std::vector<glm::mat4> raw_game_bones_left;
+            cnpy::NpyArray bones_left_npy;
+            bones_left_npy = cnpy::npy_load(entry.path().string());
+            std::vector<float> raw_data = bones_left_npy.as_vec<float>();
+            for (int i = 0; i < raw_data.size(); i += 16)
+            {
+                raw_game_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
+            }
+            poses.push_back(raw_game_bones_left);
+        }
+    }
+    return true;
+}
+
 bool loadSimulation(std::string loadpath)
 {
     // load raw session data (hand poses n x 22 x 4 x 4, joints n x 42 x 3, timestamps n x 1)
@@ -3861,8 +3881,8 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     camTexture.bind();
                     fullScreenQuad.render();
                     sd_fbo.unbind();
-                    if (saveIntermed)
-                        sd_fbo.saveColorToFile("../../resource/sd_image.png", false);
+                    // if (saveIntermed)
+                    //     sd_fbo.saveColorToFile("../../resource/sd_image.png", false);
                     std::vector<uint8_t> buf = sd_fbo.getBuffer(1);
                     cv::Mat cam_cv = cv::Mat(1024, 1024, CV_8UC1, buf.data()).clone();
                     // download camera image thresholded to cpu (todo: consider doing all this on CPU)
@@ -3871,8 +3891,8 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     camTexture.bind();
                     fullScreenQuad.render();
                     sd_fbo.unbind();
-                    if (saveIntermed)
-                        sd_fbo.saveColorToFile("../../resource/sd_mask.png", false);
+                    // if (saveIntermed)
+                    //     sd_fbo.saveColorToFile("../../resource/sd_mask.png", false);
                     std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
                     run_sd = std::thread([buf, buf_mask, cam_cv]() { // send camera image to stable diffusion
                         std::string myprompt;
@@ -5802,24 +5822,11 @@ void openIMGUIFrame()
             }
             if (ImGui::RadioButton("Game", &operation_mode, static_cast<int>(OperationMode::GAME)))
             {
+                recording_name = "game";
                 std::vector<std::vector<glm::mat4>> poses;
-                if (!loadSimulation(std::format("../../debug/recordings/{}", recording_name)))
+                if (!loadGamePoses(std::format("../../debug/recordings/{}", recording_name), poses))
                 {
                     std::cout << "Failed to load recording: " << recording_name << std::endl;
-                }
-                else
-                {
-                    for (int i = 0; i < 10; i++)
-                    {
-                        // std::random_device rd;
-                        // std::mt19937 gen(rd());
-                        // std::uniform_int_distribution<> distr(0, total_simulation_time_stamps - 1);
-                        // int index = distr(gen);
-                        std::vector<glm::vec3> ignore;
-                        std::vector<glm::mat4> bones;
-                        LEAP_STATUS status = getLeapFramePreRecorded(bones, ignore, i, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-                        poses.push_back(bones);
-                    }
                 }
                 game.setPoses(poses);
                 leap.setImageMode(false);
