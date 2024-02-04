@@ -13,6 +13,7 @@ public:
     void setBonesVisible(bool visible) { bonesVisible = visible; };
     // bool isCountingDown() { return countDownInProgress; };
     int getState();
+    int getCountdownTime();
     std::vector<glm::mat4> getPose();
     void setScore(float score);
     void printScore();

@@ -415,6 +415,12 @@ std::string userTextureFile("../../resource/uv.png");
 std::string curMeshTextureFile("../../resource/left_hand_uvunwrapped_skin.png");
 std::string curProjectiveTextureFile("../../resource/uv.png");
 std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
+std::vector<std::string> textureFiles{
+    "../../resource/1.png",
+    "../../resource/2.png",
+    "../../resource/3.png",
+};
+std::vector<Texture *> texturePack;
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *bakedTextureLeft = nullptr;
@@ -683,6 +689,12 @@ int main(int argc, char *argv[])
     projectiveTexture = new Texture(curProjectiveTextureFile.c_str(), GL_TEXTURE_2D);
     dynamicTexture->init_from_file();
     projectiveTexture->init_from_file();
+    for (int i = 0; i < textureFiles.size(); i++)
+    {
+        Texture *t = new Texture(textureFiles[i].c_str(), GL_TEXTURE_2D);
+        t->init_from_file();
+        texturePack.push_back(t);
+    }
     const fs::path bakeFileLeftPath{bakeFileLeft};
     const fs::path bakeFileRightPath{bakeFileRight};
     if (fs::exists(bakeFileLeftPath))
@@ -1367,10 +1379,34 @@ int main(int argc, char *argv[])
             }
             case static_cast<int>(GameState::COUNTDOWN):
             {
+                material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+                texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                int cd_time = game.getCountdownTime();
+                switch (cd_time)
+                {
+                case 0:
+                {
+                    dynamicTexture = texturePack[2];
+                    break;
+                }
+                case 1:
+                {
+                    dynamicTexture = texturePack[1];
+                    break;
+                }
+                case 2:
+                {
+                    dynamicTexture = texturePack[0];
+                    break;
+                }
+                default:
+                    break;
+                }
                 break;
             }
             case static_cast<int>(GameState::PLAY):
             {
+                material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
                 game.setBonesVisible(bones_to_world_left.size() > 0);
                 required_pose_bones_to_world_left = game.getPose();
                 if (bones_to_world_left.size() > 0)
@@ -5832,6 +5868,11 @@ void openIMGUIFrame()
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
+                if (dynamicTexture != nullptr)
+                {
+                    delete dynamicTexture;
+                    dynamicTexture = nullptr;
+                }
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }

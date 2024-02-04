@@ -106,6 +106,10 @@ int Game::getState()
     return curState;
 }
 
+int Game::getCountdownTime()
+{
+    return static_cast<int>(timer.getElapsedTimeInSec());
+}
 std::vector<glm::mat4> Game::getPose()
 {
     if (curPoseIndex >= poses.size())
