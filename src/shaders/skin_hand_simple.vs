@@ -90,7 +90,7 @@ void main()
                 selectedBoneID = BoneIDs1[1];
             }
         }
-        metricColor = vec3(1.0, 1-gBoneMetric[selectedBoneID], 0.0);        
+        metricColor = vec3(1.0 - gBoneMetric[selectedBoneID], gBoneMetric[selectedBoneID], 0.0);        
     }
     //BoneIDs00 = BoneIDs0;
     //BoneIDs11 = BoneIDs1;

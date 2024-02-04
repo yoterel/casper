@@ -56,39 +56,87 @@ int Game::getState()
     }
     case static_cast<int>(GameState::PLAY):
     {
-        if (!countDownInProgress)
+        switch (gameMode)
         {
-            if (bonesVisible)
-            {
-                countDownInProgress = true;
-                timer.start();
-            }
-        }
-        else
+        case static_cast<int>(GameMode::AVG_SCORE_OVER_DURATION):
         {
-            if (!bonesVisible)
+            if (!countDownInProgress)
             {
-                timer.stop();
+                if (bonesVisible)
+                {
+                    countDownInProgress = true;
+                    timer.start();
+                }
             }
             else
             {
-                timer.resume();
+                if (!bonesVisible)
+                {
+                    timer.stop();
+                }
+                else
+                {
+                    timer.resume();
+                }
             }
-        }
-        if (timer.getElapsedTimeInSec() >= 10)
-        {
-            countDownInProgress = false;
-            timer.stop();
-            curPoseIndex += 1;
-            float avgScore = 0.0f;
-            for (auto score : cur_scores)
+            if (timer.getElapsedTimeInSec() >= 10)
             {
-                avgScore += score;
+                countDownInProgress = false;
+                timer.stop();
+                curPoseIndex += 1;
+                float avgScore = 0.0f;
+                for (auto score : cur_scores)
+                {
+                    avgScore += score;
+                }
+                avgScore /= cur_scores.size();
+                score_per_pose.push_back(avgScore);
+                cur_scores.clear();
             }
-            avgScore /= cur_scores.size();
-            score_per_pose.push_back(avgScore);
-            cur_scores.clear();
+            break;
         }
+        case static_cast<int>(GameMode::TIME_UNTIL_THRESHOLD):
+        {
+            if (!countDownInProgress)
+            {
+                if (bonesVisible)
+                {
+                    countDownInProgress = true;
+                    timer.start();
+                }
+            }
+            else
+            {
+                if (!bonesVisible)
+                {
+                    timer.stop();
+                }
+                else
+                {
+                    timer.resume();
+                }
+            }
+            bool passedTreashold = false;
+            float threshold = 0.8f;
+            for (int i = 0; i < cur_scores.size(); i++)
+            {
+                if (cur_scores[i] >= threshold)
+                {
+                    float time_until_threshold = static_cast<float>(timer.getElapsedTimeInSec());
+                    countDownInProgress = false;
+                    score_per_pose.push_back(time_until_threshold);
+                    curPoseIndex += 1;
+                    setState(static_cast<int>(GameState::COUNTDOWN));
+                    break;
+                }
+            }
+            cur_scores.clear();
+            break;
+        }
+        default:
+            break;
+        }
+
         if (curPoseIndex >= poses.size())
         {
             printScore();
@@ -98,6 +146,8 @@ int Game::getState()
     }
     case static_cast<int>(GameState::END):
     {
+        reset();
+        setState(static_cast<int>(GameState::WAIT_FOR_USER));
         break;
     }
     default:
@@ -130,7 +180,8 @@ void Game::reset()
     bonesVisible = false;
     cur_scores.clear();
     score_per_pose.clear();
-    poses.clear();
+    // poses.clear();
+    gameMode = 1;
 }
 
 void Game::printScore()

@@ -488,15 +488,15 @@ int mls_mode = static_cast<int>(MLSMode::CONTROL_POINTS1);
 bool show_landmarks = false;
 bool show_mls_grid = false;
 int mls_cp_smooth_window = 0;
-int mls_grid_smooth_window = 0;
-bool use_mp_kalman = false;
+int mls_grid_smooth_window = 5;
+bool use_mp_kalman = true;
 float prev_mls_time = 0.0f;
 bool mls_forecast = true;
 float kalman_process_noise = 0.01f;
 float kalman_measurement_noise = 0.0001f;
 float kalman_speed = 0.005f;
 float mls_depth_threshold = 215.0f;
-bool mls_depth_test = false;
+bool mls_depth_test = true;
 std::vector<Kalman2D_ConstantV> kalman_filters_left = std::vector<Kalman2D_ConstantV>(16);
 std::vector<Kalman2D_ConstantV> kalman_filters_right = std::vector<Kalman2D_ConstantV>(16);
 std::vector<Kalman2D_ConstantV2> kalman_filters_vleft = std::vector<Kalman2D_ConstantV2>(16);
@@ -1413,11 +1413,18 @@ int main(int argc, char *argv[])
                 {
                     std::vector<float> weights_leap = computeDistanceFromPose(bones_to_world_left, required_pose_bones_to_world_left);
                     std::vector<float> scores = leftHandModel.scalarLeapBoneToMeshBone(weights_leap);
-                    float avgScore = 0.0f;
+                    float minScore = 1.0f;
                     for (int i = 0; i < scores.size(); i++)
-                        avgScore += scores[i];
-                    avgScore /= scores.size();
-                    game.setScore(avgScore);
+                    {
+                        if ((scores[i] < minScore) && (scores[i] > 0.0f))
+                            minScore = scores[i];
+                    }
+                    game.setScore(minScore);
+                    // float avgScore = 0.0f;
+                    // for (int i = 0; i < scores.size(); i++)
+                    //     avgScore += scores[i];
+                    // avgScore /= scores.size();
+                    // game.setScore(avgScore);
                 }
                 break;
             }
@@ -2212,6 +2219,9 @@ std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_t
         float angle = glm::acos((trace - 1.0f) / 2.0f);
         if (std::isnan(angle)) // because the rotations are not exactly orthogonal acos can return nan
             angle = 0.0f;
+        // normalize to 01
+        angle = angle / glm::pi<float>();
+        angle = 1.0f - angle;
         distances.push_back(angle);
     }
     return distances;

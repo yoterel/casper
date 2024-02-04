@@ -29,6 +29,7 @@ private:
     std::vector<std::vector<glm::mat4>> poses;
     std::vector<float> cur_scores;
     std::vector<float> score_per_pose;
+    int gameMode;
 };
 
 enum class GameState
@@ -37,6 +38,12 @@ enum class GameState
     COUNTDOWN = 1,
     PLAY = 2,
     END = 3,
+};
+
+enum class GameMode
+{
+    AVG_SCORE_OVER_DURATION = 0,
+    TIME_UNTIL_THRESHOLD = 1,
 };
 
 #endif // GAME_H
