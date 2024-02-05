@@ -88,8 +88,6 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           bool projSingleChannel,
                           bool ignoreGlobalScale);
 void handleMLSAsync(Shader &gridShader);
-void handleMLSSync(Shader &gridShader);
-void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat &grid2);
 cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
                                std::vector<cv::Point2f> &Q,
                                int deformation_mode, float alpha,
@@ -466,7 +464,7 @@ const int grid_x_point_count = 21;
 const int grid_y_point_count = 21;
 const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
 const float grid_y_spacing = 2.0f / static_cast<float>(grid_y_point_count - 1);
-float mls_alpha = 0.8f; // emperically best: 0.8f for rigid, 0.5f for affine
+float mls_alpha = 0.2f; // emperically best: 0.8f for rigid, 0.5f for affine
 Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 Grid bakeGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 std::vector<cv::Point2f> ControlPointsP;
@@ -489,9 +487,10 @@ bool show_landmarks = false;
 bool show_mls_grid = false;
 int mls_cp_smooth_window = 0;
 int mls_grid_smooth_window = 5;
-bool use_mp_kalman = true;
+bool use_mp_kalman = false;
 float prev_mls_time = 0.0f;
-bool mls_forecast = true;
+bool mls_forecast = false;
+float mls_grid_shader_threshold = 1.0f;
 float kalman_process_noise = 0.01f;
 float kalman_measurement_noise = 0.0001f;
 float mls_depth_threshold = 30.0f;
@@ -1294,7 +1293,7 @@ int main(int argc, char *argv[])
                         t_mls.start();
                         if (prevSimulationFrameCount != simulationFrameCount)
                         {
-                            handleMLSSync(gridShader);
+                            // handleMLSSync(gridShader);
                             // if (simulationFrameCount == 0)
                             // {
                             //     std::vector<glm::vec3> to_project = joints_left;
@@ -4204,368 +4203,7 @@ cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
     }
     return fv;
 }
-void handleFilteredMLS(Shader &gridShader, bool rewind, cv::Mat &grid1, cv::Mat &grid2)
-{
-    // a deformation grid is estimated using a kalman filter
-    // the "continous" input to the filter are 2D grid point velocities (computed from the current and previous control points from leap using MLS)
-    // but once every several frames, delayed 2d grid point locations are fed (computed from the current and precious MP predcition using MLS)
-    // so we rewind the filter, to the timestamp of the delayed measurement, and propagate the filter using all exisiting measurements to the current timestamp
-    // note: requires saving the filter state at each frame
-    if (use_mls)
-    {
-        bool isRightHand = joints_right.size() > 0;
-        // compute velocity deformation grid
-        std::vector<glm::vec3> to_project = joints_left;
-        std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-        std::vector<cv::Point2f> cur_leap_keypoints = Helpers::glm2cv(projected);
-        cv::Mat x = deformationGrid.getM();
-        cv::Mat filtered = x.clone();
-        ControlPointsP.clear();
-        ControlPointsQ.clear();
-        if (!rewind)
-        {
-            for (int i = 0; i < leap_selection_vector.size(); i++)
-            {
-                ControlPointsP.push_back(cur_leap_keypoints[leap_selection_vector[i]]);
-                ControlPointsQ.push_back(prev_leap_keypoints[leap_selection_vector[i]]);
-            }
-            cv::Mat x_new = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
-            cv::Mat v = x_new - x_prev;
-            grid1 = x_new.clone();
-            x_prev = x_new;
-            // std::cout << "x: " << x.at<float>(0, 0) << x.at<float>(0, 1) << std::endl
-            //           << x.at<float>(1, 0) << x.at<float>(1, 1) << std::endl;
-            // std::cout << "x_new: " << x_new.at<float>(0, 0) << x_new.at<float>(0, 1) << std::endl
-            //           << x_new.at<float>(1, 0) << x_new.at<float>(1, 1) << std::endl;
-            // std::cout << "v: " << v << std::endl;
-            // predict and update kalman filter with grid from leap
-            for (int i = 0; i < x_new.cols; i++)
-            {
-                cv::Mat pred = grid_kalman[i].predict(1.0f);
-                cv::Mat measurement(4, 1, CV_32F);
-                measurement.at<float>(0) = pred.at<float>(0); // 0.0f;
-                measurement.at<float>(1) = pred.at<float>(1); // 0.0f;
-                measurement.at<float>(2) = v.at<float>(0, i);
-                measurement.at<float>(3) = v.at<float>(1, i);
-                cv::Mat measCov = grid_kalman[i].getMeasNoiseCoV();
-                measCov.at<float>(0, 0) = 100000.0f;
-                measCov.at<float>(1, 1) = 100000.0f;
-                // std::cout << "measCov: " << measCov << std::endl;
-                grid_kalman[i].setMeasNoiseCoV(measCov);
-                // std::cout << measurement << std::endl;
-                cv::Mat corr = grid_kalman[i].correct(measurement, true);
-                filtered.at<float>(0, i) = corr.at<float>(0);
-                filtered.at<float>(1, i) = corr.at<float>(1);
-                if (i == 800)
-                {
-                    std::cout << "measurement: " << measurement << std::endl;
-                    // std::cout << "measCov before corr: " << measCov << std::endl;
-                    // std::cout << "measCov after corr: " << grid_kalman[i].getMeasNoiseCoV() << std::endl;
-                    std::cout << "state after: " << corr << std::endl;
-                }
-                // cv::Mat forecast = kalman_filters[i].forecast(kalman_lookahead);
-                // if (i == 0)
-                // {
-                //     std::cout << "pred: " << pred << std::endl;
-                //     std::cout << "meas: " << measurement << std::endl;
-                //     std::cout << "corr: " << corr << std::endl;
-                // std::cout << "forecast: " << forecast << std::endl;
-                // }
-                // kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
-                // pred_glm = kalman_forecast;
-            }
-            // std::cout << "filtered: " << filtered.at<float>(0, 0) << filtered.at<float>(0, 1) << std::endl
-            //           << filtered.at<float>(1, 0) << filtered.at<float>(1, 1) << std::endl;
-            prev_leap_keypoints = cur_leap_keypoints;
-        }
-        else
-        {
-            // get leap prediction from the past
-            LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, savedSimulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-            // run MP
-            std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
-            cv::Mat pastImage = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[savedSimulationFrameCount]).clone();
-            bool mp_detected_left, mp_detected_right;
-            if (mp_predict(pastImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right, mp_detected_left, mp_detected_right))
-            {
-                if (isRightHand)
-                {
-                    if (cur_pred_glm_right.size() > 0)
-                    {
-                        cur_pred_glm = cur_pred_glm_right;
-                    }
-                    else
-                    {
-                        exit(1);
-                        // mls_running = false;
-                        // return;
-                    }
-                }
-                else
-                {
-                    if (cur_pred_glm_left.size() > 0)
-                    {
-                        cur_pred_glm = cur_pred_glm_left;
-                    }
-                    else
-                    {
-                        exit(1);
-                        // mls_running = false;
-                        // return;
-                    }
-                }
-            }
-            std::vector<cv::Point2f> cur_mp_keypoints = Helpers::glm2cv(cur_pred_glm);
-            for (int i = 0; i < leap_selection_vector.size(); i++)
-            {
-                ControlPointsP.push_back(cur_leap_keypoints[leap_selection_vector[i]]);
-                ControlPointsQ.push_back(cur_mp_keypoints[mp_selection_vector[i]]);
-            }
-            // compute grid using the two measurements
-            cv::Mat x_new = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
-            for (int i = 0; i < x_new.cols; i++)
-            {
-                // rewind kalman filter to MP timestamp
-                grid_kalman[i].rewindToCheckpoint(i == 800);
-                // fast forward with all measurements to current timestamp
-                cv::Mat new_measurement(4, 1, CV_32F);
-                new_measurement.at<float>(0) = x_new.at<float>(0, i);
-                new_measurement.at<float>(1) = x_new.at<float>(1, i);
-                cv::Mat checkpointMeasurement(4, 1, CV_32F);
-                checkpointMeasurement.at<float>(2) = 0.0f;
-                checkpointMeasurement.at<float>(3) = 0.0f;
-                kalman_filters_vright[i].getCheckpointMeasurement(checkpointMeasurement);
-                new_measurement.at<float>(2) = checkpointMeasurement.at<float>(2);
-                new_measurement.at<float>(3) = checkpointMeasurement.at<float>(3);
-                cv::Mat measCov = grid_kalman[i].getMeasNoiseCoV();
-                measCov.at<float>(0, 0) = 0.001f;
-                measCov.at<float>(1, 1) = 0.001f;
-                grid_kalman[i].setMeasNoiseCoV(measCov);
-                cv::Mat result = grid_kalman[i].fastforward(new_measurement, i == 800);
-                // if (i == 800)
-                // {
-                //     std::cout << "meas: " << new_measurement << std::endl;
-                //     std::cout << "measCov before ff: " << measCov << std::endl;
-                //     std::cout << "measCov after ff: " << grid_kalman[i].getMeasNoiseCoV() << std::endl;
-                //     std::cout << "ff result: " << result << std::endl;
-                //     std::cout << "done ff" << std::endl;
-                // }
-                filtered.at<float>(0, i) = result.at<float>(0);
-                filtered.at<float>(1, i) = result.at<float>(1);
-                // save kalman state as checkpoint
-                grid_kalman[i].saveCheckpoint();
-            }
-        }
-        deformationGrid.constructDeformedGridSmooth(filtered, mls_grid_smooth_window);
-        // std::cout << filtered << std::endl;
-        // std::cout <<
-        deformationGrid.updateGLBuffers();
-        mls_fbo.bind();
-        glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
-        if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
-            uv_fbo.getTexture()->bind();
-        else
-            hands_fbo.getTexture()->bind();
-        gridShader.use();
-        gridShader.setInt("src", 0);
-        gridShader.setBool("flipVer", false);
-        deformationGrid.render();
-        // gridColorShader.use();
-        // deformationGrid.renderGridLines();
-        mls_fbo.unbind(); // mls_fbo
-        glEnable(GL_CULL_FACE);
-    }
-}
-void handleMLSSync(Shader &gridShader)
-{
-    // used only in simulation mode
-    if (use_mls) // todo: support two hands, currently prioritizes right if both hands are in frame
-    {
-        float simulationTime = simulation_timestamps[simulationFrameCount];
-        float interval = prevSimlationTime - simulationTime;
-        if (interval >= simulationMPDelay)
-        {
-            bool isRightHand = false;
-            cv::Mat past_image = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[savedSimulationFrameCount]).clone();
-            std::vector<glm::vec3> cur_joints, past_joints;
-            std::vector<glm::mat4> ignore;
-            getLeapFramePreRecorded(ignore, past_joints, savedSimulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-            getLeapFramePreRecorded(ignore, cur_joints, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-            if (past_joints.size() > 0)
-            {
-                std::vector<glm::vec3> to_project = past_joints;
-                bool any_visible = false;
-                std::vector<float> rendered_depths;
-                std::vector<glm::vec3> projected_with_depth;
-                if (mls_depth_test)
-                {
-                    projected_with_depth = Helpers::project_points_w_depth(to_project,
-                                                                           glm::mat4(1.0f),
-                                                                           gl_camera.getViewMatrix(),
-                                                                           gl_camera.getProjectionMatrix());
-                    std::vector<glm::vec2> screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth), dst_width, dst_height, false);
-                    rendered_depths = hands_fbo.sampleDepthBuffer(screen_space);
-                }
-                camImage = past_image.clone();
-                std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                ControlPointsP_input_left = projected;
-                std::vector<glm::vec2> cur_pred_glm, cur_pred_glm_left, cur_pred_glm_right;
-                std::vector<glm::vec2> pred_glm, kalman_forecast; // todo preallocate
-                std::vector<glm::vec2> projected_diff(projected.size(), glm::vec2(0.0f, 0.0f));
-                bool mp_detected_left, mp_detected_right;
-                if (mp_predict(camImage, totalFrameCount, cur_pred_glm_left, cur_pred_glm_right, mp_detected_left, mp_detected_right))
-                {
-                    if (isRightHand)
-                    {
-                        if (cur_pred_glm_right.size() > 0)
-                        {
-                            cur_pred_glm = cur_pred_glm_right;
-                        }
-                        else
-                        {
-                            exit(1);
-                        }
-                    }
-                    else
-                    {
-                        if (cur_pred_glm_left.size() > 0)
-                        {
-                            cur_pred_glm = cur_pred_glm_left;
-                        }
-                        else
-                        {
-                            exit(1);
-                        }
-                    }
-                    // perform smoothing over control points (when mls_cp_smooth_window > 0)
-                    prev_pred_glm_left.push_back(cur_pred_glm);
-                    pred_glm = Helpers::accumulate(prev_pred_glm_left);
-                    int diff = prev_pred_glm_left.size() - mls_cp_smooth_window;
-                    if (diff > 0)
-                    {
-                        for (int i = 0; i < diff; i++)
-                            prev_pred_glm_left.erase(prev_pred_glm_left.begin());
-                    }
-                    // possibly use kalman to filter/predict the measurements, since mp takes ~17ms to run
-                    if (use_mp_kalman)
-                    {
-                        for (int i = 0; i < pred_glm.size(); i++)
-                        {
-                            cv::Mat pred = kalman_filters_left[i].predict(1.0f);
-                            cv::Mat measurement(2, 1, CV_32F);
-                            measurement.at<float>(0) = pred_glm[i].x;
-                            measurement.at<float>(1) = pred_glm[i].y;
-                            cv::Mat corr = kalman_filters_left[i].correct(measurement);
-                            cv::Mat forecast = kalman_filters_left[i].forecast(kalman_lookahead);
-                            kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
-                            pred_glm = kalman_forecast;
-                        }
-                        // pred_glm = kalman_forecast;
-                    }
-                    std::vector<cv::Point2f> leap_keypoints, diff_keypoints, mp_keypoints;
-                    // possibly, instead of filtering, use current leap info to move mp keypoints
-                    if (mls_forecast)
-                    {
 
-                        std::vector<glm::vec3> cur_verts = cur_joints;
-                        if (cur_verts.size() > 0)
-                        {
-                            std::vector<glm::vec2> projected_new = Helpers::project_points(cur_verts, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                            for (int i = 0; i < projected_new.size(); i++)
-                            {
-                                projected_diff[i] += projected_new[i] - projected[i];
-                            }
-                            leap_keypoints = Helpers::glm2cv(projected_new);
-                        }
-                        else
-                        {
-                            leap_keypoints = Helpers::glm2cv(projected);
-                        }
-                    }
-                    else
-                    {
-                        leap_keypoints = Helpers::glm2cv(projected);
-                    }
-                    diff_keypoints = Helpers::glm2cv(projected_diff);
-                    mp_keypoints = Helpers::glm2cv(pred_glm);
-                    ControlPointsP.clear();
-                    ControlPointsQ.clear();
-                    std::vector<bool> visible_landmarks(leap_keypoints.size(), true);
-                    // if mls_depth_test was on, we need to filter out control points that are occluded
-                    for (int i = 0; i < projected_with_depth.size(); i++)
-                    {
-                        // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
-                        float rendered_depth = rendered_depths[i];
-                        float projected_depth = projected_with_depth[i].z;
-                        float cam_near = 1.0f;
-                        float cam_far = 1500.0f;
-                        rendered_depth = (2.0 * rendered_depth) - 1.0; // logarithmic NDC
-                        rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near)));
-                        projected_depth = (2.0 * projected_depth) - 1.0; // logarithmic NDC
-                        projected_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (projected_depth * (cam_far - cam_near)));
-                        if ((std::abs(rendered_depth - projected_depth) <= mls_depth_threshold) && (i != 1)) // always include wrist
-                        {
-                            visible_landmarks[i] = false;
-                        }
-                    }
-                    // final control points computation
-                    for (int i = 0; i < leap_selection_vector.size(); i++)
-                    {
-                        if (visible_landmarks[leap_selection_vector[i]])
-                        {
-                            ControlPointsP.push_back(leap_keypoints[leap_selection_vector[i]]);
-                            ControlPointsQ.push_back(mp_keypoints[mp_selection_vector[i]] + diff_keypoints[mp_selection_vector[i]]);
-                        }
-                    }
-                    // deform grid using control points
-                    if (ControlPointsP.size() > 0)
-                    {
-                        // compute deformation
-                        cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, deformation_mode, mls_alpha, deformationGrid);
-                        // update grid points for render
-                        deformationGrid.constructDeformedGridSmooth(fv, mls_grid_smooth_window);
-                    }
-                    else
-                    {
-                        // update grid points for render
-                        deformationGrid.constructGrid();
-                    }
-                    mls_succeed = true;
-                }
-            } // if (skeleton_vertices.size() > 0)
-            prevSimlationTime = simulationTime;
-            savedSimulationFrameCount = simulationFrameCount;
-        } // if do_mls
-        if (mls_succeed)
-        {
-            deformationGrid.updateGLBuffers();
-            mls_succeed = false;
-            ControlPointsP_glm = Helpers::cv2glm(ControlPointsP);
-            ControlPointsQ_glm = Helpers::cv2glm(ControlPointsQ);
-        }
-        // render as post process
-        mls_fbo.bind();
-        // PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_red);
-        // PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_green);
-        // vcolorShader.use();
-        // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-        // cloud_src.render();
-        // cloud_dst.render();
-        glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
-        if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
-            uv_fbo.getTexture()->bind();
-        else
-            hands_fbo.getTexture()->bind();
-        gridShader.use();
-        gridShader.setInt("src", 0);
-        gridShader.setBool("flipVer", false);
-        deformationGrid.render();
-        // gridColorShader.use();
-        // deformationGrid.renderGridLines();
-        mls_fbo.unbind(); // mls_fbo
-        glEnable(GL_CULL_FACE);
-    }
-}
 void handleMLSAsync(Shader &gridShader)
 {
     if (use_mls)
@@ -5231,6 +4869,7 @@ void handleMLSAsync(Shader &gridShader)
             hands_fbo.getTexture()->bind();
         gridShader.use();
         gridShader.setInt("src", 0);
+        gridShader.setFloat("threshold", mls_grid_shader_threshold);
         gridShader.setBool("flipVer", false);
         deformationGrid.render();
         // gridColorShader.use();
@@ -5874,6 +5513,7 @@ void openIMGUIFrame()
                 game.setPoses(poses);
                 leap.setImageMode(false);
                 leap.setPollMode(false);
+                // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in gamee mode...
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
                 if (dynamicTexture != nullptr)
                 {
