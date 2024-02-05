@@ -2163,6 +2163,8 @@ int main(int argc, char *argv[])
     // }
     if (run_mls.joinable())
         run_mls.join();
+    if (run_sd.joinable())
+        run_sd.join();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -3938,6 +3940,8 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     // if (saveIntermed)
                     //     sd_fbo.saveColorToFile("../../resource/sd_mask.png", false);
                     std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
+                    if (run_sd.joinable())
+                        run_sd.join();
                     run_sd = std::thread([buf, buf_mask, cam_cv]() { // send camera image to stable diffusion
                         std::string myprompt;
                         std::vector<std::string> random_animal;
@@ -3962,12 +3966,12 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                             buf, buf_mask, diffuse_seed,
                                                             1024, 1024, 1,
                                                             512, 512, false, false, sd_mask_mode);
-                            if (saveIntermed)
-                            {
-                                cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
-                                cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
-                                cv::imwrite("../../resource/sd.png", img2img_result);
-                            }
+                            // if (saveIntermed)
+                            // {
+                            //     cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
+                            //     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
+                            //     cv::imwrite("../../resource/sd.png", img2img_result);
+                            // }
                             if (deformedBaking)
                             {
                                 std::vector<glm::vec2> mp_left, mp_right;
@@ -4018,36 +4022,38 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
             }
             if (bake_preproc_succeed)
             {
-                if (dynamicTexture != nullptr)
-                    delete dynamicTexture;
-                dynamicTexture = new Texture(GL_TEXTURE_2D);
-                dynamicTexture->init(sd_outwidth, sd_outheight, 3);
-                dynamicTexture->load(img2img_data.data(), true, GL_RGB);
-                // bake dynamic texture
-                if (deformedBaking)
+                if (img2img_data.size() > 0)
                 {
-                    bakeGrid.updateGLBuffers();
-                    deformed_bake_fbo.bind();
-                    glDisable(GL_CULL_FACE);
-                    dynamicTexture->bind();
-                    gridShader->use();
-                    gridShader->setInt("src", 0);
-                    gridShader->setBool("flipVer", false);
-                    bakeGrid.render();
-                    deformed_bake_fbo.unbind(); // mls_fbo
-                    glEnable(GL_CULL_FACE);
-                    // first deform the texture using the deformation grid
-                    if (saveIntermed)
-                        deformed_bake_fbo.saveColorToFile("../../resource/sd_deformed.png", false);
-                    handleBakingInternal(shader_map, *deformed_bake_fbo.getTexture(), leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
+                    if (dynamicTexture != nullptr)
+                        delete dynamicTexture;
+                    dynamicTexture = new Texture(GL_TEXTURE_2D);
+                    dynamicTexture->init(sd_outwidth, sd_outheight, 3);
+                    dynamicTexture->load(img2img_data.data(), true, GL_RGB);
+                    // bake dynamic texture
+                    if (deformedBaking)
+                    {
+                        bakeGrid.updateGLBuffers();
+                        deformed_bake_fbo.bind();
+                        glDisable(GL_CULL_FACE);
+                        dynamicTexture->bind();
+                        gridShader->use();
+                        gridShader->setInt("src", 0);
+                        gridShader->setBool("flipVer", false);
+                        bakeGrid.render();
+                        deformed_bake_fbo.unbind(); // mls_fbo
+                        glEnable(GL_CULL_FACE);
+                        // first deform the texture using the deformation grid
+                        if (saveIntermed)
+                            deformed_bake_fbo.saveColorToFile("../../resource/sd_deformed.png", false);
+                        handleBakingInternal(shader_map, *deformed_bake_fbo.getTexture(), leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
+                    }
+                    else
+                    {
+                        handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
+                    }
+                    // use_mls = true;
                 }
-                else
-                {
-                    handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
-                }
-                // use_mls = true;
                 bake_preproc_succeed = false;
-                run_sd.join();
             }
             break;
         }
