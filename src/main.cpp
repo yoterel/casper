@@ -494,8 +494,7 @@ float prev_mls_time = 0.0f;
 bool mls_forecast = true;
 float kalman_process_noise = 0.01f;
 float kalman_measurement_noise = 0.0001f;
-float kalman_speed = 0.005f;
-float mls_depth_threshold = 215.0f;
+float mls_depth_threshold = 30.0f;
 bool mls_depth_test = true;
 std::vector<Kalman2D_ConstantV> kalman_filters_left = std::vector<Kalman2D_ConstantV>(16);
 std::vector<Kalman2D_ConstantV> kalman_filters_right = std::vector<Kalman2D_ConstantV>(16);
@@ -4581,7 +4580,6 @@ void handleMLSAsync(Shader &gridShader)
             {
                 if (joints_left.size() > 0 || joints_right.size() > 0)
                 {
-                    t_mls_thread.start();
                     bool isRightHandVis = joints_right.size() > 0;
                     bool isLeftHandVis = joints_left.size() > 0;
                     // std::vector<glm::vec3> joints = isRightHand ? joints_right : joints_left;
@@ -4626,6 +4624,7 @@ void handleMLSAsync(Shader &gridShader)
                     camImage = camImageOrig.clone();
                     run_mls = std::thread([to_project_left, projected_with_depth_left, rendered_depths_left, isLeftHandVis,
                                            to_project_right, projected_with_depth_right, rendered_depths_right, isRightHandVis]() { // send (forecasted) leap joints to MP
+                        t_mls_thread.start();
                         try
                         {
                             bool useRightHand = isRightHandVis;
@@ -4826,11 +4825,9 @@ void handleMLSAsync(Shader &gridShader)
                                     float projected_depth = projected_with_depth_left[i].z;
                                     float cam_near = 1.0f;
                                     float cam_far = 1500.0f;
-                                    rendered_depth = (2.0 * rendered_depth) - 1.0; // logarithmic NDC
-                                    rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near)));
-                                    projected_depth = (2.0 * projected_depth) - 1.0; // logarithmic NDC
-                                    projected_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (projected_depth * (cam_far - cam_near)));
-                                    if ((std::abs(rendered_depth - projected_depth) <= mls_depth_threshold) && (i != 1)) // always include wrist
+                                    rendered_depth = (2.0 * rendered_depth) - 1.0;                                                                // to NDC
+                                    rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near))); // to linear
+                                    if ((std::abs(rendered_depth - projected_depth) > mls_depth_threshold) && (i != 0))                           // always include wrist
                                     {
                                         visible_landmarks_left[i] = false;
                                     }

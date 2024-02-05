@@ -219,9 +219,11 @@ std::vector<glm::vec3> Helpers::project_points_w_depth(std::vector<glm::vec3> po
     for (int i = 0; i < points.size(); i++)
     {
         glm::vec4 point = glm::vec4(points[i], 1.0f);
-        point = projection * view * model * point;
+        point = view * model * point;
+        float point_depth = -point.z;
+        point = projection * point;
         point /= point.w;
-        projected_points.push_back(glm::vec3(point.x, point.y, point.z));
+        projected_points.push_back(glm::vec3(point.x, point.y, point_depth));
     }
     return projected_points;
 }
