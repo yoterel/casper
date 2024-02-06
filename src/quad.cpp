@@ -160,6 +160,17 @@ Quad::Quad(std::string location, float depth, bool autoinit)
             1.0f, -1.0f, depth, 1.0f, 0.0f, // bottom right
             1.0f, 0.0f, depth, 1.0f, 1.0f}; // top right
     }
+    else if (location == "tiny_top_right")
+    {
+        verts = {
+            0.5f, 1.0f, depth, 0.0f, 1.0f, // top left
+            0.5f, 0.5f, depth, 0.0f, 0.0f, // bottom left
+            1.0f, 0.5f, depth, 1.0f, 0.0f, // bottom right
+
+            0.5f, 1.0f, depth, 0.0f, 1.0f,  // top left
+            1.0f, 0.5f, depth, 1.0f, 0.0f,  // bottom right
+            1.0f, 1.0f, depth, 1.0f, 1.0f}; // top right
+    }
     else
     {
         verts = {

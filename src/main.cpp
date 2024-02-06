@@ -67,11 +67,13 @@ void handlePostProcess(SkinnedModel &leftHandModel,
                        SkinnedModel &rightHandModel,
                        Texture &camTexture,
                        std::unordered_map<std::string, Shader *> &shader_map);
-void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
+void handleSkinning(std::vector<glm::mat4> &bones2world,
+                    bool isRightHand,
+                    bool isFirstHand,
+                    std::unordered_map<std::string, Shader *> &shader_map,
                     SkinnedModel &handModel,
                     glm::mat4 cam_view_transform,
-                    glm::mat4 cam_projection_transform,
-                    bool isRightHand);
+                    glm::mat4 cam_projection_transform);
 void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   SkinnedModel &leftHandModel,
                   SkinnedModel &rightHandModel,
@@ -243,6 +245,8 @@ std::vector<std::string> animals{
     "a monkey",
     "a gorilla",
     "a panda"};
+// game controls
+bool showGameHint = false;
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
@@ -712,6 +716,7 @@ int main(int argc, char *argv[])
     Quad topHalfQuad("top_half", 0.0f);
     Quad bottomLeftQuad("bottom_left", 0.0f);
     Quad bottomRightQuad("bottom_right", 0.0f);
+    Quad topRightQuad("tiny_top_right", 0.0f);
     glm::vec3 coa = leftHandModel.getCenterOfMass();
     glm::mat4 coa_transform = glm::translate(glm::mat4(1.0f), -coa);
     glm::mat4 flip_y = glm::mat4(1.0f);
@@ -1060,8 +1065,8 @@ int main(int argc, char *argv[])
 
             /* skin hand meshes */
             t_skin.start();
-            handleSkinning(shaderMap, rightHandModel, cam_view_transform, cam_projection_transform, true);
-            handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+            handleSkinning(bones_to_world_right, true, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+            handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
             t_skin.stop();
 
             /* deal with bake request */
@@ -1226,7 +1231,7 @@ int main(int argc, char *argv[])
                         }
                         // skin the mesh
                         t_skin.start();
-                        handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
                         t_skin.stop();
                         // post process
                         t_pp.start();
@@ -1287,7 +1292,7 @@ int main(int argc, char *argv[])
                         t_leap.stop();
                         // skin the mesh
                         t_skin.start();
-                        handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+                        handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
                         t_skin.stop();
                         // filtered mls
                         t_mls.start();
@@ -1446,7 +1451,7 @@ int main(int argc, char *argv[])
 
             /* skin hand meshes */
             t_skin.start();
-            handleSkinning(shaderMap, leftHandModel, cam_view_transform, cam_projection_transform, false);
+            handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
             t_skin.stop();
 
             /* run MLS on MP prediction to reduce bias */
@@ -1457,13 +1462,23 @@ int main(int argc, char *argv[])
             /* post process fbo using camera input */
             t_pp.start();
             handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+            t_pp.stop();
+
             /* render final output to screen */
-            glViewport(0, 0, proj_width, proj_height); // set viewport
+            glViewport(0, 0, proj_width, proj_height);
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             set_texture_shader(&textureShader, false, false, false);
             c2p_fbo.getTexture()->bind();
             fullScreenQuad.render();
-            t_pp.stop();
+            // material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+            // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+            if (showGameHint)
+            {
+                handleSkinning(required_pose_bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+                set_texture_shader(&textureShader, false, false, false);
+                hands_fbo.getTexture()->bind();
+                topRightQuad.render();
+            }
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera
@@ -3670,19 +3685,21 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     c2p_fbo.unbind();
 }
 
-void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
+void handleSkinning(std::vector<glm::mat4> &bones2world,
+                    bool isRightHand,
+                    bool isFirstHand,
+                    std::unordered_map<std::string, Shader *> &shader_map,
                     SkinnedModel &handModel,
                     glm::mat4 cam_view_transform,
-                    glm::mat4 cam_projection_transform,
-                    bool isRightHand)
+                    glm::mat4 cam_projection_transform)
 {
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
     Shader *vcolorShader = shader_map["vcolorShader"];
-    std::vector<glm::mat4> bones_to_world = isRightHand ? bones_to_world_right : bones_to_world_left;
-    if (bones_to_world.size() > 0)
+    // std::vector<glm::mat4> bones_to_world = isRightHand ? bones_to_world_right : bones_to_world_left;
+    if (bones2world.size() > 0)
     {
         glm::mat4 global_scale = isRightHand ? global_scale_right : global_scale_left;
-        if (isRightHand || bones_to_world_right.size() == 0)
+        if (isFirstHand)
             hands_fbo.bind(true);
         else
             hands_fbo.bind(false);
@@ -3696,31 +3713,31 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             {
             case static_cast<int>(TextureMode::ORIGINAL): // original texture loaded with mesh
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
                 break;
             case static_cast<int>(TextureMode::BAKED): // a baked texture from a bake operation
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 if (isRightHand)
-                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
+                    handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_right.getTexture());
                 else
-                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
+                    handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                                    false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
                 break;
             case static_cast<int>(TextureMode::CAMERA): // project camera input onto mesh
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                                    true, true, false, false, false, true, true, true, cam_projection_transform * cam_view_transform);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr, &camTexture);
             default: // original texture loaded with mesh
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
                 break;
             }
             break;
@@ -3728,7 +3745,7 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
         case static_cast<int>(MaterialMode::GGX): // uses GGX material with the original diffuse texture loaded with mesh
         {
             skinnedShader->use();
-            dirLight.calcLocalDirection(bones_to_world[0]);
+            dirLight.calcLocalDirection(bones2world[0]);
             skinnedShader->SetDirectionalLight(dirLight);
             glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
             skinnedShader->SetCameraLocalPos(camWorldPos);
@@ -3736,32 +3753,32 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             {
             case static_cast<int>(TextureMode::ORIGINAL):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
                 break;
             case static_cast<int>(TextureMode::BAKED):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
                 if (isRightHand)
-                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_right.getTexture());
+                    handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_right.getTexture());
                 else
-                    handModel.Render(*skinnedShader, bones_to_world, rotx, false, bake_fbo_left.getTexture());
+                    handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true, false,
                                    false, true, false, false, cam_projection_transform * cam_view_transform);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture, projectiveTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, dynamicTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
                 break;
             case static_cast<int>(TextureMode::CAMERA):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, true, true, true, false, false,
                                    true, true, true, cam_projection_transform * cam_view_transform);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr, &camTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr, &camTexture);
                 break;
             default:
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
                 break;
             }
             break;
@@ -3789,7 +3806,7 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             std::vector<float> weights_leap, weights_mesh;
             if (required_pose_bones_to_world_left.size() > 0)
             {
-                weights_leap = computeDistanceFromPose(bones_to_world, required_pose_bones_to_world_left);
+                weights_leap = computeDistanceFromPose(bones2world, required_pose_bones_to_world_left);
                 weights_mesh = handModel.scalarLeapBoneToMeshBone(weights_leap);
             }
             else
@@ -3798,7 +3815,7 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             }
             set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                                false, false, false, false, false, false, false, false, glm::mat4(1.0f), true, weights_mesh);
-            handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
+            handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
             break;
         }
         default:
@@ -3816,7 +3833,7 @@ void handleSkinning(std::unordered_map<std::string, Shader *> &shader_map,
             {
                 uv_fbo.bind();
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, false, true);
-                handModel.Render(*skinnedShader, bones_to_world, rotx, false, nullptr);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
                 uv_fbo.unbind();
             }
         }
@@ -5345,7 +5362,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_camera.start();
         bones_to_world_left = bones_to_world_left_interp;
         texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-        handleSkinning(shader_map, leftHandModel, cam_view_transform, cam_projection_transform, false);
+        handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         // convert to gray scale single channel image
         fake_cam_binary_fbo.bind();
         thresholdAlphaShader->use();
@@ -5372,7 +5389,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_skin.start();
         bones_to_world_left = bones_to_world_current;
         texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-        handleSkinning(shader_map, leftHandModel, cam_view_transform, cam_projection_transform, false);
+        handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         t_skin.stop();
         t_pp.start();
         // post process with any required effect
@@ -5484,6 +5501,7 @@ void openIMGUIFrame()
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
+            ImGui::SameLine();
             if (ImGui::RadioButton("Leap Calibration", &operation_mode, static_cast<int>(OperationMode::LEAP)))
             {
                 projector.kill();
@@ -5499,7 +5517,6 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
                 debug_mode = false;
             }
-            ImGui::SameLine();
             if (ImGui::RadioButton("Simulation", &operation_mode, static_cast<int>(OperationMode::SIMULATION)))
             {
                 projector.kill();
@@ -5508,6 +5525,7 @@ void openIMGUIFrame()
                 leap.setPollMode(false);
                 debug_mode = false;
             }
+            ImGui::SameLine();
             if (ImGui::RadioButton("Game", &operation_mode, static_cast<int>(OperationMode::GAME)))
             {
                 recording_name = "game";
@@ -5519,7 +5537,7 @@ void openIMGUIFrame()
                 game.setPoses(poses);
                 leap.setImageMode(false);
                 leap.setPollMode(false);
-                // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in gamee mode...
+                mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
                 if (dynamicTexture != nullptr)
                 {
@@ -5529,6 +5547,7 @@ void openIMGUIFrame()
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
+            ImGui::Checkbox("Show Game Hint", &showGameHint);
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
