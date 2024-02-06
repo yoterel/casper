@@ -147,7 +147,7 @@ void main()
 {
     if (useMetric)
     {
-        FragColor = vec4(metricColor, 0.9);
+        FragColor = vec4(metricColor, 1.0);
     }
     else
     {

@@ -5537,7 +5537,7 @@ void openIMGUIFrame()
                 game.setPoses(poses);
                 leap.setImageMode(false);
                 leap.setPollMode(false);
-                mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
+                // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
                 if (dynamicTexture != nullptr)
                 {
