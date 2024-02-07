@@ -409,27 +409,28 @@ BaslerCamera camera;
 moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
 moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
 // GL controls
-std::string inputBakeFile("../../resource/butterfly.jpg");
+std::string inputBakeFile("../../resource/images/butterfly.png");
 std::string bakeFileLeft("../../resource/baked_left.png");
 std::string bakeFileRight("../../resource/baked_right.png");
 std::string userTextureFile("../../resource/uv.png");
-std::string curMeshTextureFile("../../resource/left_hand_uvunwrapped_skin.png");
-std::string curProjectiveTextureFile("../../resource/uv.png");
+// std::string curMeshTextureFile("../../resource/left_hand_uvunwrapped_skin.png");
+// std::string curProjectiveTextureFile("../../resource/uv.png");
 std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
-std::unordered_map<std::string, std::string> textureFiles
-{
+std::unordered_map<std::string, std::string> textureFiles{
     {"1", "../../resource/1.png"},
     {"2", "../../resource/2.png"},
     {"3", "../../resource/3.png"},
-    {"skin", "../../resource/left_hand_uvunwrapped_skin.png"},
-    {"uv", "../../resource/uv.png"},
-    {"baked_butterfly", "../../resource/baked_textures/baked_left1.png"},
-    {"baked_tattoo1", "../../resource/baked_textures/baked_left2.png"},
-    {"baked_tattoo2", "../../resource/baked_textures/baked_left3.png"},
-    {"baked_rose", "../../resource/baked_textures/baked_left4.png"},
-
+    {"skin", "../../resource/skin.png"},
+    {"uv", userTextureFile},
+    {"baked_left1", "../../resource/baked_textures/baked_left1.png"},
+    {"baked_left2", "../../resource/baked_textures/baked_left2.png"},
+    {"baked_left3", "../../resource/baked_textures/baked_left3.png"},
+    {"baked_left4", "../../resource/baked_textures/baked_left4.png"},
+    {"butterfly", inputBakeFile},
 };
 std::unordered_map<std::string, Texture *> texturePack;
+std::string curSelectedTexture = "uv";
+std::string curSelectedPTexture = "uv";
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *bakedTextureLeft = nullptr;
@@ -648,28 +649,33 @@ int main(int argc, char *argv[])
                                 proj_width, proj_height,
                                 cam_width, cam_height,
                                 false);
-    dynamicTexture = new Texture(curMeshTextureFile.c_str(), GL_TEXTURE_2D);
-    projectiveTexture = new Texture(curProjectiveTextureFile.c_str(), GL_TEXTURE_2D);
-    dynamicTexture->init_from_file();
-    projectiveTexture->init_from_file();
-    for (auto& it: textureFiles)
+    // dynamicTexture = new Texture(curMeshTextureFile.c_str(), GL_TEXTURE_2D);
+    // dynamicTexture->init_from_file();
+    // projectiveTexture->init_from_file();
+    for (auto &it : textureFiles)
     {
         Texture *t = new Texture(it.second.c_str(), GL_TEXTURE_2D);
         t->init_from_file();
         texturePack.insert({it.first, t});
     }
+    projectiveTexture = texturePack["uv"];
+    dynamicTexture = texturePack["uv"];
     const fs::path bakeFileLeftPath{bakeFileLeft};
     const fs::path bakeFileRightPath{bakeFileRight};
     if (fs::exists(bakeFileLeftPath))
+    {
         bakedTextureLeft = new Texture(bakeFileLeft.c_str(), GL_TEXTURE_2D);
+        bakedTextureLeft->init_from_file();
+    }
     else
-        bakedTextureLeft = new Texture(curMeshTextureFile.c_str(), GL_TEXTURE_2D);
+        bakedTextureLeft = texturePack["uv"];
     if (fs::exists(bakeFileRightPath))
+    {
         bakedTextureRight = new Texture(bakeFileRight.c_str(), GL_TEXTURE_2D);
+        bakedTextureRight->init_from_file();
+    }
     else
-        bakedTextureRight = new Texture(curMeshTextureFile.c_str(), GL_TEXTURE_2D);
-    bakedTextureLeft->init_from_file();
-    bakedTextureRight->init_from_file();
+        bakedTextureRight = texturePack["uv"];
     // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
     postProcess.initGLBuffers();
@@ -3647,11 +3653,14 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                     handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
+                projectiveTexture = texturePack[curSelectedPTexture];
+                dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                                    false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
+                dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
                 break;
@@ -3965,18 +3974,16 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
             {
                 if (img2img_data.size() > 0)
                 {
-                    if (dynamicTexture != nullptr)
-                        delete dynamicTexture;
-                    dynamicTexture = new Texture(GL_TEXTURE_2D);
-                    dynamicTexture->init(sd_outwidth, sd_outheight, 3);
-                    dynamicTexture->load(img2img_data.data(), true, GL_RGB);
+                    Texture *tmp = new Texture(GL_TEXTURE_2D);
+                    tmp->init(sd_outwidth, sd_outheight, 3);
+                    tmp->load(img2img_data.data(), true, GL_RGB);
                     // bake dynamic texture
                     if (deformedBaking)
                     {
                         bakeGrid.updateGLBuffers();
                         deformed_bake_fbo.bind();
                         glDisable(GL_CULL_FACE);
-                        dynamicTexture->bind();
+                        tmp->bind();
                         gridShader->use();
                         gridShader->setInt("src", 0);
                         gridShader->setBool("flipVer", false);
@@ -3990,8 +3997,9 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     }
                     else
                     {
-                        handleBakingInternal(shader_map, *dynamicTexture, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
+                        handleBakingInternal(shader_map, *tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
                     }
+                    delete tmp;
                     // use_mls = true;
                 }
                 bake_preproc_succeed = false;
@@ -5313,7 +5321,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_skin.start();
         bones_to_world_left = bones_to_world_current;
         // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-        dynamicTexture = texturePack["baked_butterfly"];
+        dynamicTexture = texturePack[curSelectedTexture];
         handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         t_skin.stop();
         t_pp.start();
@@ -5464,11 +5472,6 @@ void openIMGUIFrame()
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
-                if (dynamicTexture != nullptr)
-                {
-                    delete dynamicTexture;
-                    dynamicTexture = nullptr;
-                }
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
@@ -5862,44 +5865,57 @@ void openIMGUIFrame()
             ImGui::RadioButton("Baked", &texture_mode, 3);
             ImGui::SameLine();
             ImGui::RadioButton("Camera", &texture_mode, 4);
-            ImGui::InputText("Texture File", &userTextureFile);
-            if (ImGui::Button("Load Projective Texture File"))
+            if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {
-                if (curProjectiveTextureFile != userTextureFile)
+                for (auto &it : texturePack)
                 {
-                    fs::path userTextureFilePath{userTextureFile};
+                    const bool is_selected = (curSelectedTexture == it.first);
+                    if (ImGui::Selectable(it.first.c_str(), is_selected))
+                    {
+                        curSelectedTexture = it.first;
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::BeginCombo("Proj. Texture", curSelectedPTexture.c_str(), 0))
+            {
+                for (auto &it : texturePack)
+                {
+                    const bool is_selected = (curSelectedPTexture == it.first);
+                    if (ImGui::Selectable(it.first.c_str(), is_selected))
+                    {
+                        curSelectedPTexture = it.first;
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SeparatorText("Load Texture");
+            if (ImGui::Button("Load Texture"))
+            {
+                fs::path userTextureFilePath{userTextureFile};
+                if (texturePack.find(userTextureFilePath.stem().string()) == texturePack.end())
+                {
                     if (fs::exists(userTextureFilePath))
                     {
                         if (fs::is_regular_file(userTextureFilePath))
                         {
-                            if (dynamicTexture != nullptr)
-                                delete dynamicTexture;
-                            dynamicTexture = new Texture(userTextureFile.c_str(), GL_TEXTURE_2D);
-                            dynamicTexture->init_from_file();
+                            Texture *tmp = new Texture(userTextureFile.c_str(), GL_TEXTURE_2D);
+                            tmp->init_from_file();
+                            texturePack.insert({userTextureFilePath.stem().string(), tmp});
                         }
                     }
-                    curProjectiveTextureFile = userTextureFile;
                 }
             }
             ImGui::SameLine();
-            if (ImGui::Button("Load Mesh Texture File"))
-            {
-                if (curMeshTextureFile != userTextureFile)
-                {
-                    fs::path userTextureFilePath{userTextureFile};
-                    if (fs::exists(userTextureFilePath))
-                    {
-                        if (fs::is_regular_file(userTextureFilePath))
-                        {
-                            if (dynamicTexture != nullptr)
-                                delete dynamicTexture;
-                            dynamicTexture = new Texture(userTextureFile.c_str(), GL_TEXTURE_2D);
-                            dynamicTexture->init_from_file();
-                        }
-                    }
-                    curMeshTextureFile = userTextureFile;
-                }
-            }
+            ImGui::InputText("Texture File", &userTextureFile);
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
