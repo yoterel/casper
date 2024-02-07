@@ -416,12 +416,20 @@ std::string userTextureFile("../../resource/uv.png");
 std::string curMeshTextureFile("../../resource/left_hand_uvunwrapped_skin.png");
 std::string curProjectiveTextureFile("../../resource/uv.png");
 std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
-std::vector<std::string> textureFiles{
-    "../../resource/1.png",
-    "../../resource/2.png",
-    "../../resource/3.png",
+std::unordered_map<std::string, std::string> textureFiles
+{
+    {"1", "../../resource/1.png"},
+    {"2", "../../resource/2.png"},
+    {"3", "../../resource/3.png"},
+    {"skin", "../../resource/left_hand_uvunwrapped_skin.png"},
+    {"uv", "../../resource/uv.png"},
+    {"baked_butterfly", "../../resource/baked_textures/baked_left1.png"},
+    {"baked_tattoo1", "../../resource/baked_textures/baked_left2.png"},
+    {"baked_tattoo2", "../../resource/baked_textures/baked_left3.png"},
+    {"baked_rose", "../../resource/baked_textures/baked_left4.png"},
+
 };
-std::vector<Texture *> texturePack;
+std::unordered_map<std::string, Texture *> texturePack;
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *bakedTextureLeft = nullptr;
@@ -644,11 +652,11 @@ int main(int argc, char *argv[])
     projectiveTexture = new Texture(curProjectiveTextureFile.c_str(), GL_TEXTURE_2D);
     dynamicTexture->init_from_file();
     projectiveTexture->init_from_file();
-    for (int i = 0; i < textureFiles.size(); i++)
+    for (auto& it: textureFiles)
     {
-        Texture *t = new Texture(textureFiles[i].c_str(), GL_TEXTURE_2D);
+        Texture *t = new Texture(it.second.c_str(), GL_TEXTURE_2D);
         t->init_from_file();
-        texturePack.push_back(t);
+        texturePack.insert({it.first, t});
     }
     const fs::path bakeFileLeftPath{bakeFileLeft};
     const fs::path bakeFileRightPath{bakeFileRight};
@@ -1342,17 +1350,17 @@ int main(int argc, char *argv[])
                 {
                 case 0:
                 {
-                    dynamicTexture = texturePack[2];
+                    dynamicTexture = texturePack["2"];
                     break;
                 }
                 case 1:
                 {
-                    dynamicTexture = texturePack[1];
+                    dynamicTexture = texturePack["1"];
                     break;
                 }
                 case 2:
                 {
-                    dynamicTexture = texturePack[0];
+                    dynamicTexture = texturePack["0"];
                     break;
                 }
                 default:
@@ -5277,7 +5285,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         // produce fake camera image (left hand only)
         t_camera.start();
         bones_to_world_left = bones_to_world_left_interp;
-        texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+        dynamicTexture = texturePack["skin"];
         handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         // convert to gray scale single channel image
         fake_cam_binary_fbo.bind();
@@ -5304,7 +5312,8 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         // render the scene as normal
         t_skin.start();
         bones_to_world_left = bones_to_world_current;
-        texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+        // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+        dynamicTexture = texturePack["baked_butterfly"];
         handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         t_skin.stop();
         t_pp.start();
@@ -6136,6 +6145,7 @@ void openIMGUIFrame()
                     videoFrameCount = 0;
                     prevVideoFrameCount = -1;
                     videoFrameCountCont = 0.0f;
+                    texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
             }
             if (ImGui::Checkbox("Run Simulation", &run_simulation))
