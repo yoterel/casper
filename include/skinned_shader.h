@@ -28,12 +28,13 @@ public:
     DirectionalLight(glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f),
                      float ambientIntensity = 0.0f,
                      float diffuseIntensity = 0.0f,
-                     glm::vec3 worldDir = glm::vec3(0.0f, 0.0f, 0.0f)) : BaseLight(color, ambientIntensity, diffuseIntensity),
-                                                                         worldDirection(worldDir)
+                     glm::vec3 worldDir = glm::vec3(0.0f, 0.0f, 0.0f)) : BaseLight(color, ambientIntensity, diffuseIntensity)
     {
+        worldDirection = glm::normalize(worldDir);
         localDirection = glm::vec3(0.0f, 0.0f, 0.0f);
     }
     void calcLocalDirection(const glm::mat4 &localToWorld);
+    void setWorldDirection(const glm::vec3 worldDir) { worldDirection = glm::normalize(worldDir); }
     const glm::vec3 &getWorldDirection() const { return worldDirection; }
     const glm::vec3 &getLocalDirection() const { return localDirection; }
 

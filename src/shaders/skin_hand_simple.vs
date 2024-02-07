@@ -49,7 +49,7 @@ void main()
     vec4 proj_pos = projTransform * pos;
     ProjTexCoord = vec3(proj_pos.x, proj_pos.y, proj_pos.z);
     Normal0 = Normal;
-    LocalPos0 = Position;   
+    LocalPos0 = vec3(pos);  // Position
     TexCoord0 = TexCoord;
     if (useMetric)
     {

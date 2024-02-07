@@ -3678,6 +3678,7 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
         case static_cast<int>(MaterialMode::GGX): // uses GGX material with the original diffuse texture loaded with mesh
         {
             skinnedShader->use();
+            dirLight.setWorldDirection(debug_vec);
             dirLight.calcLocalDirection(bones2world[0]);
             skinnedShader->SetDirectionalLight(dirLight);
             glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
