@@ -1055,10 +1055,10 @@ int main(int argc, char *argv[])
             t_leap.start();
             LEAP_STATUS leap_status = handleLeapInput();
             if (record_session)
-                saveSession(std::format("../../debug/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
+                saveSession(std::format("../../resource/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
             if (record_single_pose)
             {
-                saveSession(std::format("../../debug/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
+                saveSession(std::format("../../resource/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
                 record_single_pose = false;
             }
             t_leap.stop();
@@ -2777,7 +2777,7 @@ bool loadImagesFromFolder(std::string loadpath)
 bool loadSession()
 {
     // load raw session data (hand poses n x 22 x 4 x 4, and timestamps n x 1)
-    std::string recordings("../../debug/recordings/");
+    std::string recordings("../../resource/recordings/");
     fs::path bones_left_path = fs::path(recordings) / fs::path(recording_name) / fs::path(std::string("bones_left.npy"));
     fs::path timestamps_path = fs::path(recordings) / fs::path(recording_name) / fs::path(std::string("timestamps.npy"));
     cnpy::NpyArray bones_left_npy, timestamps_npy;
@@ -5530,7 +5530,7 @@ void openIMGUIFrame()
             {
                 recording_name = "game";
                 std::vector<std::vector<glm::mat4>> poses;
-                if (!loadGamePoses(std::format("../../debug/recordings/{}", recording_name), poses))
+                if (!loadGamePoses(std::format("../../resource/recordings/{}", recording_name), poses))
                 {
                     std::cout << "Failed to load recording: " << recording_name << std::endl;
                 }
