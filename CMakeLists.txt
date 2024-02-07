@@ -7,18 +7,15 @@ set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
 set(ONNXRUNTIME_ROOTDIR "C:/src/onnxruntime-win-x64-gpu-1.16.3")
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")
 set(OPENCV_COMPILER "vc15")
-file(GLOB LIBICP_SOURCES
-     "third-party/libicp/*.cpp"
-)
 # set(OpenCV_DIR "C:/OpenCV_Build/install_debug")
 # set(OPENCV_COMPILER "vc16")
-set(CUDA_EXAMPLES "C:/src/cuda-samples")
-set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64")  # 11.8, 12.2
-set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/")  # 11.8, 12.2
+# set(CUDA_EXAMPLES "C:/src/cuda-samples")
+# set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64")  # 11.8, 12.2
+# set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/")  # 11.8, 12.2
 # set(CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/third-party/opencv" ${CMAKE_PREFIX_PATH})
 cmake_policy(SET CMP0074 NEW)    # respect <PACKAGE>_ROOT variables in "find_package"
 include(CMakePrintHelpers)
-project(augmented_hands VERSION 0.1 LANGUAGES C CXX CUDA)
+project(augmented_hands VERSION 0.1 LANGUAGES C CXX)
 #project(augmented_hands LANGUAGES CUDA CXX)
 find_package(Python 3.9 COMPONENTS Interpreter Development NumPy REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
@@ -106,7 +103,6 @@ add_executable(ahand
     third-party/imgui/backends/imgui_impl_opengl3.cpp
     third-party/imgui/misc/cpp/imgui_stdlib.cpp
     third-party/glad${GLAD_VER}/src/glad.c
-    ${LIBICP_SOURCES}
 )
 # target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
 # target_compile_definitions(ahand PRIVATE CV_IGNORE_DEBUG_BUILD_GUARD)

@@ -23,7 +23,6 @@
 #include "cnpy.h"
 #include "image_process.h"
 #include "stb_image_write.h"
-#include <helper_string.h>
 #include <filesystem>
 #include "helpers.h"
 #include "imgui.h"
@@ -513,52 +512,6 @@ int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 int main(int argc, char *argv[])
 {
     /* parse cmd line options */
-    if (checkCmdLineFlag(argc, (const char **)argv, "debug"))
-    {
-        std::cout << "Debug mode on" << std::endl;
-        debug_mode = true;
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "cam_free"))
-    {
-        std::cout << "Camera free mode on" << std::endl;
-        freecam_mode = true;
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "cuda"))
-    {
-        std::cout << "Using CUDA" << std::endl;
-        use_cuda = true;
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "cam_fake"))
-    {
-        std::cout << "Camera simulator mode on" << std::endl;
-        simulated_camera = true;
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "download_pbo"))
-    {
-        std::cout << "Using PBO for async unpacking" << std::endl;
-        use_pbo = true;
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "proj_on"))
-    {
-        std::cout << "Projector will be used" << std::endl;
-        use_projector = true;
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "no_screen"))
-    {
-        std::cout << "No screen mode is on" << std::endl;
-        use_screen = false;
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "leap_poll"))
-    {
-        std::cout << "Leap poll mode is on" << std::endl;
-        leap_poll_mode = true;
-        leap.setPollMode(leap_poll_mode);
-    }
-    if (checkCmdLineFlag(argc, (const char **)argv, "cam_color"))
-    {
-        std::cout << "Camera in color mode" << std::endl;
-        cam_color_mode = true;
-    }
     t_app.start();
     /* py init */
     Py_Initialize();
@@ -606,7 +559,7 @@ int main(int argc, char *argv[])
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
     GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
     int secondary_screen_x, secondary_screen_y;
-    glfwGetMonitorPos(monitors[1], &secondary_screen_x, &secondary_screen_y);
+    glfwGetMonitorPos(monitors[0], &secondary_screen_x, &secondary_screen_y);
     glfwSetWindowPos(window, secondary_screen_x + 100, secondary_screen_y + 100);
     if (window == NULL)
     {
@@ -3583,43 +3536,6 @@ void handlePostProcess(SkinnedModel &leftHandModel,
                                       &postprocess_fbo, masking_threshold, distance_threshold, seam_threshold);
         break;
     }
-    case static_cast<int>(PostProcessMode::ICP):
-    {
-        // get render in camera space
-        icp_fbo.bind();
-        hands_fbo.getTexture()->bind();
-        set_texture_shader(textureShader, true, false, false, true, masking_threshold);
-        fullScreenQuad.render();
-        icp_fbo.unbind();
-        std::vector<uchar> rendered_data = icp_fbo.getBuffer(1);
-        cv::Mat render_image = cv::Mat(cam_height, cam_width, CV_8UC1, rendered_data.data());
-        // std::vector<uchar> rendered_data = hands_fbo.getBuffer(4);
-        // cv::Mat render_image = cv::Mat(dst_height, dst_width, CV_8UC4, rendered_data.data());
-        // cv::Mat bgra[4];               // destination array
-        // cv::split(render_image, bgra); // split source
-        glm::mat4 transform = glm::mat4(1.0f);
-        cv::Mat debug = postProcess.icp(render_image, camImageOrig, masking_threshold, transform);
-        // postprocess_fbo.bind();
-        icp2_fbo.bind();
-        hands_fbo.getTexture()->bind();
-        if (icp_apply_transform)
-        {
-            // displayTexture.load((uint8_t *)debug.data, true, cam_buffer_format);
-            // displayTexture.bind();
-            set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, transform);
-        }
-        else
-        {
-            // icp_fbo.getTexture()->bind();
-            set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f));
-        }
-        fullScreenQuad.render(false, false, true);
-        icp2_fbo.unbind();
-        postProcess.mask(maskShader, icp2_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
-        // fullScreenQuad.render();
-        // postprocess_fbo.unbind();
-        break;
-    }
     default:
         break;
     }
@@ -6045,20 +5961,14 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Post Process"))
         {
             ImGui::SeparatorText("Post Processing Mode");
-            ImGui::RadioButton("Render Only", &postprocess_mode, 0);
+            ImGui::RadioButton("Render Only", &postprocess_mode, static_cast<int>(PostProcessMode::NONE));
             ImGui::SameLine();
-            ImGui::RadioButton("Camera Feed", &postprocess_mode, 1);
+            ImGui::RadioButton("Camera Feed", &postprocess_mode, static_cast<int>(PostProcessMode::CAM_FEED));
             ImGui::SameLine();
-            ImGui::RadioButton("Overlay", &postprocess_mode, 2);
-            ImGui::RadioButton("Jump Flood", &postprocess_mode, 3);
+            ImGui::RadioButton("Overlay", &postprocess_mode, static_cast<int>(PostProcessMode::OVERLAY));
+            ImGui::RadioButton("Jump Flood", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD));
             ImGui::SameLine();
-            ImGui::RadioButton("Jump Flood UV", &postprocess_mode, 4);
-            ImGui::SameLine();
-            ImGui::RadioButton("ICP", &postprocess_mode, 5);
-            if (postprocess_mode == static_cast<int>(PostProcessMode::ICP))
-            {
-                ImGui::Checkbox("ICP on?", &icp_apply_transform);
-            }
+            ImGui::RadioButton("Jump Flood UV", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD_UV));
             ImGui::Checkbox("Show landmarks", &show_landmarks);
             ImGui::SliderFloat("Masking threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
