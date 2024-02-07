@@ -81,7 +81,6 @@ enum class PostProcessMode
     OVERLAY = 2,
     JUMP_FLOOD = 3,
     JUMP_FLOOD_UV = 4,
-    ICP = 5,
 };
 enum class LeapCalibrationSettings
 {

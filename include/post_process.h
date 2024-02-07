@@ -23,7 +23,6 @@ public:
     static glm::mat4 findHomography(std::vector<glm::vec2> screen_verts);
     void bake(Shader &uvShader, unsigned int textureToBake, unsigned int TextureUV, const std::string &filepath);
     void saveColorToFile(std::string filepath, unsigned int fbo_id);
-    cv::Mat icp(cv::Mat render, cv::Mat gray, float threshold, glm::mat4 &transform);
     cv::Mat findFingers(cv::Mat gray, float threshold,
                         std::vector<cv::Point> &fingers,
                         std::vector<cv::Point> &valleys);
