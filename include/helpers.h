@@ -54,6 +54,7 @@ enum class TextureMode
     PROJECTIVE = 2,
     BAKED = 3,
     CAMERA = 4,
+    SHADER = 5,
 };
 enum class SDMode
 {

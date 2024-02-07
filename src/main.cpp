@@ -438,6 +438,7 @@ Texture *bakedTextureRight = nullptr;
 FBO icp_fbo(cam_width, cam_height, 4, false);
 FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
+FBO game_fbo(dst_width, dst_height, 4, false);
 FBO fake_cam_fbo(dst_width, dst_height, 4, false);
 FBO fake_cam_binary_fbo(dst_width, dst_height, 1, false);
 FBO uv_fbo(dst_width, dst_height, 4, false);
@@ -627,6 +628,7 @@ int main(int argc, char *argv[])
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
+    game_fbo.init();
     fake_cam_fbo.init();
     fake_cam_binary_fbo.init();
     uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
@@ -755,6 +757,7 @@ int main(int argc, char *argv[])
     Shader bakeSimple("../../src/shaders/bake_proj_simple.vs", "../../src/shaders/bake_proj_simple.fs");
     Shader uvDilateShader("../../src/shaders/uv_dilate.vs", "../../src/shaders/uv_dilate.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
+    Shader shaderToyShader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy.fs");
     SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     std::unordered_map<std::string, Shader *> shaderMap = {
         {"NNShader", &NNShader},
@@ -775,7 +778,8 @@ int main(int argc, char *argv[])
         {"bakeSimple", &bakeSimple},
         {"uvDilateShader", &uvDilateShader},
         {"textShader", &textShader},
-        {"skinnedShader", &skinnedShader}};
+        {"skinnedShader", &skinnedShader},
+        {"shaderToyShader", &shaderToyShader}};
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
@@ -1029,7 +1033,6 @@ int main(int argc, char *argv[])
                 record_single_pose = false;
             }
             t_leap.stop();
-
             /* skin hand meshes */
             t_skin.start();
             handleSkinning(bones_to_world_right, true, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
@@ -3642,32 +3645,56 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL): // original texture loaded with mesh
+            {
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
                 break;
+            }
             case static_cast<int>(TextureMode::BAKED): // a baked texture from a bake operation
+            {
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 if (isRightHand)
                     handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_right.getTexture());
                 else
                     handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_left.getTexture());
                 break;
+            }
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
+            {
                 projectiveTexture = texturePack[curSelectedPTexture];
                 dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                                    false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
+            }
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
+            {
                 dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
                 break;
+            }
             case static_cast<int>(TextureMode::CAMERA): // project camera input onto mesh
+            {
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                                    true, true, false, false, false, true, true, true, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr, &camTexture);
+                break;
+            }
+            case static_cast<int>(TextureMode::SHADER):
+            {
+                game_fbo.bind();
+                Shader *shaderToy = shader_map["shaderToyShader"];
+                shaderToy->use();
+                shaderToy->setFloat("iTime", t_app.getElapsedTimeInSec());
+                shaderToy->setVec2("iResolution", glm::vec2(proj_width, proj_height));
+                fullScreenQuad.render();
+                game_fbo.unbind();
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, game_fbo.getTexture());
+                break;
+            }
             default: // original texture loaded with mesh
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
@@ -5858,14 +5885,15 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::RadioButton("Per Bone Scalar", &material_mode, static_cast<int>(MaterialMode::PER_BONE_SCALAR));
             ImGui::SeparatorText("Diffuse Texture Type");
-            ImGui::RadioButton("Original", &texture_mode, 0);
+            ImGui::RadioButton("Original", &texture_mode, static_cast<int>(TextureMode::ORIGINAL));
             ImGui::SameLine();
-            ImGui::RadioButton("From File", &texture_mode, 1);
+            ImGui::RadioButton("From File", &texture_mode, static_cast<int>(TextureMode::FROM_FILE));
             ImGui::SameLine();
-            ImGui::RadioButton("Projective Texture", &texture_mode, 2);
-            ImGui::RadioButton("Baked", &texture_mode, 3);
+            ImGui::RadioButton("Projective Texture", &texture_mode, static_cast<int>(TextureMode::PROJECTIVE));
+            ImGui::RadioButton("Baked", &texture_mode, static_cast<int>(TextureMode::BAKED));
             ImGui::SameLine();
-            ImGui::RadioButton("Camera", &texture_mode, 4);
+            ImGui::RadioButton("Camera", &texture_mode, static_cast<int>(TextureMode::CAMERA));
+            ImGui::RadioButton("Shader", &texture_mode, static_cast<int>(TextureMode::SHADER));
             if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {
                 for (auto &it : texturePack)
