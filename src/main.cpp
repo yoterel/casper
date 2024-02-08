@@ -646,11 +646,11 @@ int main(int argc, char *argv[])
     icp2_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
-    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm_uv3.fbx",
+    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame.fbx",
                                userTextureFile,
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
-    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm_uv3.fbx",
+    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame.fbx",
                                 userTextureFile,
                                 proj_width, proj_height,
                                 cam_width, cam_height,
@@ -763,8 +763,6 @@ int main(int argc, char *argv[])
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     Shader shaderToySea("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
     Shader shaderToyCloud("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
-    Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_MddGzf_BufferA.fs");
-    Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_MddGzf_Image.fs");
     SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     std::unordered_map<std::string, Shader *> shaderMap = {
         {"NNShader", &NNShader},
@@ -787,9 +785,9 @@ int main(int argc, char *argv[])
         {"textShader", &textShader},
         {"skinnedShader", &skinnedShader},
         {"shaderToySea", &shaderToySea},
-        {"shaderToyCloud", &shaderToyCloud},
-        {"shaderToyGameBufferA", &shaderToyGameBufferA},
-        {"shaderToyGameImage", &shaderToyGameImage}};
+        {"shaderToyCloud", &shaderToyCloud}};
+    // {"shaderToyGameBufferA", &shaderToyGameBufferA},
+    // {"shaderToyGameImage", &shaderToyGameImage}};
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
