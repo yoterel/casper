@@ -1,5 +1,6 @@
 #version 330 core
 in vec2 texCoord;
+uniform vec2 iMouse;
 uniform vec2 iResolution;
 uniform float iTime;
 out vec4 fragColor;

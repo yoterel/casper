@@ -439,6 +439,8 @@ FBO icp_fbo(cam_width, cam_height, 4, false);
 FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
 FBO game_fbo(dst_width, dst_height, 4, false);
+FBO game_fbo_aux1(dst_width, dst_height, 4, false);
+FBO game_fbo_aux2(dst_width, dst_height, 4, false);
 FBO fake_cam_fbo(dst_width, dst_height, 4, false);
 FBO fake_cam_binary_fbo(dst_width, dst_height, 1, false);
 FBO uv_fbo(dst_width, dst_height, 4, false);
@@ -629,6 +631,8 @@ int main(int argc, char *argv[])
     initGLBuffers(pbo);
     hands_fbo.init();
     game_fbo.init();
+    game_fbo_aux1.init();
+    game_fbo_aux2.init();
     fake_cam_fbo.init();
     fake_cam_binary_fbo.init();
     uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
@@ -642,11 +646,11 @@ int main(int argc, char *argv[])
     icp2_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
-    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm.fbx",
+    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm_uv3.fbx",
                                userTextureFile,
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
-    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm.fbx",
+    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm_uv3.fbx",
                                 userTextureFile,
                                 proj_width, proj_height,
                                 cam_width, cam_height,
@@ -757,7 +761,10 @@ int main(int argc, char *argv[])
     Shader bakeSimple("../../src/shaders/bake_proj_simple.vs", "../../src/shaders/bake_proj_simple.fs");
     Shader uvDilateShader("../../src/shaders/uv_dilate.vs", "../../src/shaders/uv_dilate.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
-    Shader shaderToyShader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy.fs");
+    Shader shaderToySea("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
+    Shader shaderToyCloud("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
+    Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_MddGzf_BufferA.fs");
+    Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_MddGzf_Image.fs");
     SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     std::unordered_map<std::string, Shader *> shaderMap = {
         {"NNShader", &NNShader},
@@ -779,7 +786,10 @@ int main(int argc, char *argv[])
         {"uvDilateShader", &uvDilateShader},
         {"textShader", &textShader},
         {"skinnedShader", &skinnedShader},
-        {"shaderToyShader", &shaderToyShader}};
+        {"shaderToySea", &shaderToySea},
+        {"shaderToyCloud", &shaderToyCloud},
+        {"shaderToyGameBufferA", &shaderToyGameBufferA},
+        {"shaderToyGameImage", &shaderToyGameImage}};
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
@@ -2148,8 +2158,6 @@ int main(int argc, char *argv[])
     // }
     if (run_mls.joinable())
         run_mls.join();
-    if (run_sd.joinable())
-        run_sd.join();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -3685,14 +3693,68 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
             case static_cast<int>(TextureMode::SHADER):
             {
                 game_fbo.bind();
-                Shader *shaderToy = shader_map["shaderToyShader"];
+                Shader *shaderToy = shader_map["shaderToyCloud"]; // shaderToySea, shaderToyCloud
                 shaderToy->use();
                 shaderToy->setFloat("iTime", t_app.getElapsedTimeInSec());
                 shaderToy->setVec2("iResolution", glm::vec2(proj_width, proj_height));
+                shaderToy->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
                 fullScreenQuad.render();
                 game_fbo.unbind();
+                if (isFirstHand)
+                    hands_fbo.bind(true);
+                else
+                    hands_fbo.bind(false);
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, game_fbo.getTexture());
+                break;
+            }
+            case static_cast<int>(TextureMode::MULTI_BUFFER_SHADER):
+            {
+                Shader *shaderToyBufferA = shader_map["shaderToyGameBufferA"];
+                Shader *shaderToyImage = shader_map["shaderToyGameImage"];
+                FBO *fbo_content;
+                FBO *fbo_texture;
+                if (totalFrameCount % 2 == 0)
+                {
+                    fbo_content = &game_fbo_aux1;
+                    fbo_texture = &game_fbo_aux2;
+                }
+                else
+                {
+                    fbo_content = &game_fbo_aux2;
+                    fbo_texture = &game_fbo_aux1;
+                }
+                fbo_content->bind();
+                fbo_texture->getTexture()->bind();
+                shaderToyBufferA->use();
+                shaderToyBufferA->setFloat("iTime", t_app.getElapsedTimeInSec());
+                shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
+                shaderToyBufferA->setVec2("iResolution", glm::vec2(proj_width, proj_height));
+                shaderToyBufferA->setVec2("iMouse", glm::vec2(250.0f, 300.0f));
+                shaderToyBufferA->setInt("iFrame", totalFrameCount);
+                shaderToyBufferA->setInt("iChannel0", 0);
+                fullScreenQuad.render();
+                fbo_content->unbind();
+                game_fbo.bind();
+                shaderToyImage->use();
+                shaderToyImage->setFloat("iTime", t_app.getElapsedTimeInSec());
+                shaderToyImage->setVec2("iResolution", glm::vec2(proj_width, proj_height));
+                shaderToyImage->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
+                shaderToyImage->setInt("iFrame", totalFrameCount);
+                shaderToyImage->setInt("iChannel0", 0);
+                fbo_content->getTexture()->bind();
+                fullScreenQuad.render();
+                game_fbo.unbind();
+                if (isFirstHand)
+                    hands_fbo.bind(true);
+                else
+                    hands_fbo.bind(false);
+                // set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
+                // handModel.Render(*skinnedShader, bones2world, rotx, false, game_fbo.getTexture());
+                dynamicTexture = texturePack[curSelectedTexture];
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
+                                   false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, game_fbo.getTexture());
                 break;
             }
             default: // original texture loaded with mesh
@@ -5893,7 +5955,12 @@ void openIMGUIFrame()
             ImGui::RadioButton("Baked", &texture_mode, static_cast<int>(TextureMode::BAKED));
             ImGui::SameLine();
             ImGui::RadioButton("Camera", &texture_mode, static_cast<int>(TextureMode::CAMERA));
+            ImGui::SameLine();
             ImGui::RadioButton("Shader", &texture_mode, static_cast<int>(TextureMode::SHADER));
+            if (ImGui::RadioButton("Multi-Shader", &texture_mode, static_cast<int>(TextureMode::MULTI_BUFFER_SHADER)))
+            {
+                totalFrameCount = 0;
+            }
             if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {
                 for (auto &it : texturePack)
