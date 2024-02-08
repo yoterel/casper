@@ -3698,6 +3698,12 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                 shaderToy->setFloat("iTime", t_app.getElapsedTimeInSec());
                 shaderToy->setVec2("iResolution", glm::vec2(proj_width, proj_height));
                 shaderToy->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
+                // std::vector<glm::vec2> quad_verts = {glm::vec2(-1.0f, 0.2f),
+                //                                      glm::vec2(-1.0f, -1.0f),
+                //                                      glm::vec2(0.2f, -1.0f),
+                //                                      glm::vec2(0.2f, 0.2f)};
+                // Quad myquad(quad_verts);
+                // myquad.render();
                 fullScreenQuad.render();
                 game_fbo.unbind();
                 if (isFirstHand)
