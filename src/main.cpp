@@ -1377,17 +1377,17 @@ int main(int argc, char *argv[])
                 {
                 case 0:
                 {
-                    dynamicTexture = texturePack["2"];
+                    curSelectedTexture = "3";
                     break;
                 }
                 case 1:
                 {
-                    dynamicTexture = texturePack["1"];
+                    curSelectedTexture = "2";
                     break;
                 }
                 case 2:
                 {
-                    dynamicTexture = texturePack["0"];
+                    curSelectedTexture = "1";
                     break;
                 }
                 default:
@@ -3315,6 +3315,7 @@ bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &po
         {
             std::vector<glm::mat4> raw_game_bones_left;
             cnpy::NpyArray bones_left_npy;
+            std::cout << "loading: " << entry.path().string() << std::endl;
             bones_left_npy = cnpy::npy_load(entry.path().string());
             std::vector<float> raw_data = bones_left_npy.as_vec<float>();
             for (int i = 0; i < raw_data.size(); i += 16)
@@ -3864,6 +3865,11 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
             {
                 weights_leap = computeDistanceFromPose(bones2world, required_pose_bones_to_world_left);
                 weights_mesh = handModel.scalarLeapBoneToMeshBone(weights_leap);
+                for (int i = 0; i < weights_mesh.size(); i++)
+                {
+                    if (weights_mesh[i] > 0.5f) // clamp bad weights to help user
+                        weights_mesh[i] = 1.0f;
+                }
             }
             else
             {
@@ -5587,6 +5593,7 @@ void openIMGUIFrame()
                     std::cout << "Failed to load recording: " << recording_name << std::endl;
                 }
                 game.setPoses(poses);
+                game.reset(false);
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...

@@ -3,7 +3,8 @@
 
 Game::Game()
 {
-    reset();
+    rng = std::default_random_engine{};
+    // reset();
 }
 
 int Game::getState()
@@ -172,7 +173,12 @@ void Game::setScore(float score)
     cur_scores.push_back(score);
 }
 
-void Game::reset()
+void Game::setPoses(std::vector<std::vector<glm::mat4>> required_poses)
+{
+    poses = required_poses;
+}
+
+void Game::reset(bool shuffle)
 {
     curState = 0;
     curPoseIndex = 0;
@@ -180,6 +186,8 @@ void Game::reset()
     bonesVisible = false;
     cur_scores.clear();
     score_per_pose.clear();
+    if (shuffle)
+        std::shuffle(std::begin(poses), std::end(poses), rng);
     // poses.clear();
     gameMode = 1;
 }

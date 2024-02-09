@@ -4,12 +4,14 @@
 #include <vector>
 #include "timer.h"
 #include <glm/glm.hpp>
+#include <algorithm>
+#include <random>
 
 class Game
 {
 public:
     Game();
-    void setPoses(std::vector<std::vector<glm::mat4>> required_poses) { poses = required_poses; };
+    void setPoses(std::vector<std::vector<glm::mat4>> required_poses);
     void setBonesVisible(bool visible) { bonesVisible = visible; };
     // bool isCountingDown() { return countDownInProgress; };
     int getState();
@@ -17,7 +19,7 @@ public:
     std::vector<glm::mat4> getPose();
     void setScore(float score);
     void printScore();
-    void reset();
+    void reset(bool shuffle = true);
 
 private:
     void setState(int state) { curState = state; };
@@ -30,6 +32,7 @@ private:
     std::vector<float> cur_scores;
     std::vector<float> score_per_pose;
     int gameMode;
+    std::mt19937 rng;
 };
 
 enum class GameState
