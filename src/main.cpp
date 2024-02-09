@@ -1705,9 +1705,9 @@ int main(int argc, char *argv[])
                             PointCloud pointCloud(pc1, screen_verts_color_red);
                             pointCloud.render(5.0f);
                         }
-                        if (joints_right.size() > 0)
+                        if (joints_left.size() > 0)
                         {
-                            glm::vec3 cur_3d_point = joints_right[17]; // index tip
+                            glm::vec3 cur_3d_point = joints_left[17]; // index tip
                             triangulated = cur_3d_point;
                             if (found_centroid)
                             {
@@ -2597,7 +2597,7 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     flipYZ[2][2] = -1.0f;
     cnpy::NpyArray points2d_npy, points3d_npy;
     cnpy::NpyArray w2c_user_npy, w2c_auto_npy;
-    cnpy::npz_t projcam_npz;
+    // cnpy::npz_t projcam_npz;
     cnpy::npz_t cam_npz;
     // bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
     try
@@ -2607,7 +2607,7 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
         const fs::path points2d_path{"../../resource/calibrations/leap_calibration/2dpoints.npy"};
         const fs::path points3d_path{"../../resource/calibrations/leap_calibration/3dpoints.npy"};
         const fs::path cam_calib_path{"../../resource/calibrations/cam_calibration/cam_calibration.npz"};
-        const fs::path projcam_calib_path{"../../resource/calibrations/camproj_calibration/calibration.npz"};
+        // const fs::path projcam_calib_path{"../../resource/calibrations/camproj_calibration/calibration.npz"};
         if (!fs::exists(user_path))
             return false;
         if (!fs::exists(auto_path))
@@ -2618,14 +2618,14 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
             return false;
         if (!fs::exists(cam_calib_path))
             return false;
-        if (!fs::exists(projcam_calib_path))
-            return false;
+        // if (!fs::exists(projcam_calib_path))
+        //     return false;
         w2c_user_npy = cnpy::npy_load(user_path.string());
         w2c_auto_npy = cnpy::npy_load(auto_path.string());
         points2d_npy = cnpy::npy_load(points2d_path.string());
         points3d_npy = cnpy::npy_load(points3d_path.string());
         cam_npz = cnpy::npz_load(cam_calib_path.string());
-        projcam_npz = cnpy::npz_load(projcam_calib_path.string());
+        // projcam_npz = cnpy::npz_load(projcam_calib_path.string());
     }
     catch (std::runtime_error &e)
     {
