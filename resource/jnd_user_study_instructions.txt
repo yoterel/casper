@@ -1,0 +1,21 @@
+launch ahand.exe
+open excel sheet, input subject name, age
+General -> Use Projector
+General -> User Study
+Material -> User Study Texture -> uv / baked_left1 / baked_left2
+Post Process -> Render Only / Jump Flood / Jump Flood UV
+Record & Playback -> Recording Name -> all / translation1 / translation2
+Record & Playback -> Video playback speed -> 1.0 / 2.0 / 3.0
+Record & Playback -> Mixer ratio -> 0.4 / 0.6 / 0.8
+Record & Playback -> Initial Latency -> 40.0f
+
+< SHOW SUBJECT >
+Record & Playback -> Run user study
+< END SHOW SUBJECT >
+
+Record & Playback -> Initial Latency -> 10.0f
+< START EXPERIMENT >
+Record & Playback -> Run user study
+< END EXPERIMENT >
+Write final JND in excel
+repeat from step 6

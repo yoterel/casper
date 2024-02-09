@@ -6,7 +6,7 @@ class UserStudy
 {
 public:
     UserStudy();
-    void reset();
+    void reset(float initialLatency = 10.0f);
     float randomTrial(int humanChoice);
     void trial(bool successfullHuman);
     void printStats();

@@ -260,9 +260,10 @@ double cur_vid_time;
 // record & playback controls
 bool debug_playback = false;
 float vid_simulated_latency_ms = 1.0f;
+float initial_simulated_latency_ms = 40.0f;
 float vid_playback_fps_limiter = 900.0;
-float vid_playback_speed = 6.0f;
-float projection_mix_ratio = 0.7f;
+float vid_playback_speed = 1.0f;
+float projection_mix_ratio = 0.6f;
 int64_t videoFrameCount = 0;
 int64_t prevVideoFrameCount = -1;
 float videoFrameCountCont = 0.0;
@@ -433,6 +434,7 @@ std::unordered_map<std::string, std::string> textureFiles{
 std::unordered_map<std::string, Texture *> texturePack;
 std::string curSelectedTexture = "uv";
 std::string curSelectedPTexture = "uv";
+std::string userStudySelectedTexture = "uv";
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *bakedTextureLeft = nullptr;
@@ -5443,7 +5445,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_skin.start();
         bones_to_world_left = bones_to_world_current;
         // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-        curSelectedTexture = "baked_left1";
+        curSelectedTexture = userStudySelectedTexture;
         handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         t_skin.stop();
         t_pp.start();
@@ -5510,10 +5512,13 @@ void openIMGUIFrame()
                         std::cerr << "Failed to initialize projector\n";
                         use_projector = false;
                     }
+                    c2p_homography = PostProcess::findHomography(cur_screen_verts);
+                    use_coaxial_calib = true;
                 }
                 else
                 {
                     projector.kill();
+                    use_coaxial_calib = false;
                 }
             }
             ImGui::Checkbox("Debug Mode", &debug_mode);
@@ -5570,14 +5575,6 @@ void openIMGUIFrame()
                 // see https://docs.baslerweb.com/pylonapi/cpp/pylon_advanced_topics#grab-strategies
                 exposure = 10000.0f;
                 camera.set_exposure_time(exposure);
-                debug_mode = false;
-            }
-            if (ImGui::RadioButton("Simulation", &operation_mode, static_cast<int>(OperationMode::SIMULATION)))
-            {
-                projector.kill();
-                use_projector = false;
-                leap.setImageMode(false);
-                leap.setPollMode(false);
                 debug_mode = false;
             }
             ImGui::SameLine();
@@ -6024,6 +6021,22 @@ void openIMGUIFrame()
                 }
                 ImGui::EndCombo();
             }
+            if (ImGui::BeginCombo("User Study Texture", userStudySelectedTexture.c_str(), 0))
+            {
+                for (auto &it : texturePack)
+                {
+                    const bool is_selected = (userStudySelectedTexture == it.first);
+                    if (ImGui::Selectable(it.first.c_str(), is_selected))
+                    {
+                        userStudySelectedTexture = it.first;
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
             ImGui::SeparatorText("Load Texture");
             if (ImGui::Button("Load Texture"))
             {
@@ -6138,8 +6151,8 @@ void openIMGUIFrame()
             ImGui::RadioButton("Jump Flood", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD));
             ImGui::SameLine();
             ImGui::RadioButton("Jump Flood UV", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD_UV));
-            ImGui::Checkbox("Show landmarks", &show_landmarks);
-            ImGui::SliderFloat("Masking threshold", &masking_threshold, 0.0f, 1.0f);
+            ImGui::Checkbox("Show Landmarks", &show_landmarks);
+            ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {
                 threshold_flag = true;
@@ -6148,11 +6161,11 @@ void openIMGUIFrame()
             {
                 threshold_flag = false;
             }
-            ImGui::SliderFloat("JFA distance threshold", &distance_threshold, 0.0f, 100.0f);
-            ImGui::SliderFloat("JFA seam threshold", &seam_threshold, 0.0f, 1.0f);
-            ImGui::ColorEdit3("bg color", &mask_bg_color.x, ImGuiColorEditFlags_NoOptions);
-            ImGui::ColorEdit3("missing info color", &mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
-            ImGui::ColorEdit3("unused info color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
+            ImGui::SliderFloat("JFA Distance Threshold", &distance_threshold, 0.0f, 100.0f);
+            ImGui::SliderFloat("JFA Seam Threshold", &seam_threshold, 0.0f, 1.0f);
+            ImGui::ColorEdit3("BG Color", &mask_bg_color.x, ImGuiColorEditFlags_NoOptions);
+            ImGui::ColorEdit3("Missing Info Color", &mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
+            ImGui::ColorEdit3("Unused Info Color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &use_mls);
             ImGui::RadioButton("CP1", &mls_mode, static_cast<int>(MLSMode::CONTROL_POINTS1));
@@ -6168,8 +6181,8 @@ void openIMGUIFrame()
             ImGui::Checkbox("Show MLS grid", &show_mls_grid);
             ImGui::SameLine();
             ImGui::Checkbox("Forecast MP w LEAP", &mls_forecast);
-            ImGui::SliderInt("MLS cp smooth window", &mls_cp_smooth_window, 0, 10);
-            ImGui::SliderInt("MLS grid smooth window", &mls_grid_smooth_window, 0, 10);
+            ImGui::SliderInt("MLS CP Smooth window", &mls_cp_smooth_window, 0, 10);
+            ImGui::SliderInt("MLS Grid Smooth window", &mls_grid_smooth_window, 0, 10);
             ImGui::SliderInt("MLS Leap Prediction [us]", &magic_leap_time_delay_mls, -50000, 50000);
             if (ImGui::Checkbox("Kalman Filter", &use_mp_kalman))
             {
@@ -6179,7 +6192,7 @@ void openIMGUIFrame()
                 }
             }
 
-            ImGui::SliderFloat("Kalman lookahead [ms]", &kalman_lookahead, 0.0f, 200.0f);
+            ImGui::SliderFloat("Kalman Lookahead [ms]", &kalman_lookahead, 0.0f, 200.0f);
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
                 initKalmanFilters();
@@ -6195,11 +6208,11 @@ void openIMGUIFrame()
                 initKalmanFilters();
             }
 
-            ImGui::SliderFloat("MLS alpha", &mls_alpha, 0.01f, 5.0f);
+            ImGui::SliderFloat("MLS Alpha", &mls_alpha, 0.01f, 5.0f);
             // ImGui::SliderFloat("MLS grab threshold", &mls_grab_threshold, -1.0f, 5.0f);
-            ImGui::Checkbox("MLS depth test", &mls_depth_test);
+            ImGui::Checkbox("MLS Depth Test", &mls_depth_test);
             ImGui::SameLine();
-            ImGui::SliderFloat("d. thre", &mls_depth_threshold, 1.0f, 1500.0f, "%.6f");
+            ImGui::SliderFloat("D. thre", &mls_depth_threshold, 1.0f, 1500.0f, "%.6f");
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
@@ -6243,9 +6256,9 @@ void openIMGUIFrame()
             ImGui::SeparatorText("Record");
             ImGui::Checkbox("Record Session", &record_session);
             ImGui::SameLine();
-            ImGui::Checkbox("Record images", &recordImages);
+            ImGui::Checkbox("Record Images", &recordImages);
             ImGui::SameLine();
-            ImGui::Checkbox("Record every frame", &record_every_frame);
+            ImGui::Checkbox("Record Every Frame", &record_every_frame);
             if (ImGui::Button("Record Single Pose"))
             {
                 record_single_pose = true;
@@ -6275,7 +6288,7 @@ void openIMGUIFrame()
                     videoFrameCountCont = 0.0f;
                     use_coaxial_calib = false;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                    user_study.reset();
+                    user_study.reset(initial_simulated_latency_ms);
                 }
                 else
                 {
@@ -6283,8 +6296,9 @@ void openIMGUIFrame()
                 }
             }
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 0.0f, 50.0f);
-            ImGui::SliderFloat("Video playback speed", &vid_playback_speed, 0.1f, 10.0f);
-            ImGui::SliderFloat("Mixer ratio", &projection_mix_ratio, 0.0f, 1.0f);
+            ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);
+            ImGui::SliderFloat("Video Playback Speed", &vid_playback_speed, 0.1f, 10.0f);
+            ImGui::SliderFloat("Mixer Ratio", &projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 1.0f, 900.0f);
             if (ImGui::Checkbox("Debug Playback", &debug_playback))
             {
@@ -6308,35 +6322,6 @@ void openIMGUIFrame()
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
             }
-            if (ImGui::Checkbox("Run Simulation", &run_simulation))
-            {
-                if (run_simulation)
-                {
-                    initKalmanFilters();
-                    if (recording_name != loaded_simulation_name)
-                    {
-                        if (loadSimulation(std::format("../../debug/recordings/{}", recording_name)))
-                        {
-                            simulation_loaded = true;
-                            loaded_simulation_name = recording_name;
-                        }
-                        else
-                        {
-                            std::cout << "Failed to load recording: " << recording_name << std::endl;
-                            loaded_simulation_name = recording_name;
-                        }
-                    }
-                    simulationFrameCount = 0;
-                    prevSimulationFrameCount = -1;
-                    prevSimlationTime = 0.0f;
-                    use_coaxial_calib = false;
-                    texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-                }
-            }
-            ImGui::SliderFloat("Simulation MP delay [ms]", &simulationMPDelay, 0.0, 20.0f);
-            ImGui::RadioButton("As real as possible", &simulation_mode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("Kalman", &simulation_mode, 1);
             ImGui::TreePop();
         }
     }

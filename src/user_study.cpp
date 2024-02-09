@@ -7,7 +7,7 @@ UserStudy::UserStudy()
     reset();
 }
 
-void UserStudy::reset()
+void UserStudy::reset(float initialLatency)
 {
     wasHumanSucessfull = false;
     trialIsBaseline = false;
@@ -16,7 +16,7 @@ void UserStudy::reset()
     baseStep = 1.6f;
     minBaseStep = 0.01f;
     minLatency = 0.1f;
-    curLatency = 10.f;
+    curLatency = initialLatency;
     attempts = 0;
     pair_attempts = 0;
     reversals = 0;
