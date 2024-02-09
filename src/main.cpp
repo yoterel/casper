@@ -273,7 +273,7 @@ std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_correcte
 int64_t savedSimulationFrameCount = 0;
 float simulationMPDelay = 0.0f;
 bool recordImages = false;
-std::string recording_name = "test";
+std::string recording_name = "all";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool simulation_loaded = false;
@@ -281,7 +281,7 @@ bool run_simulation = false;
 int simulation_mode = static_cast<int>(SimulationMode::KALMAN);
 std::string loaded_simulation_name = "";
 int total_simulation_time_stamps = 0;
-std::string playback_video_name = "test";
+std::string playback_video_name = "all";
 std::string loaded_playback_video_name = "";
 const int simulation_max_supported_frames = 2000;
 static uint8_t *pFrameData[simulation_max_supported_frames] = {NULL};
@@ -650,11 +650,11 @@ int main(int argc, char *argv[])
     icp2_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
-    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame2.fbx",
+    SkinnedModel leftHandModel("../../resource/GenericHand_weights_woarm.fbx",
                                userTextureFile,
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
-    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame2.fbx",
+    SkinnedModel rightHandModel("../../resource/GenericHand_weights_woarm.fbx",
                                 userTextureFile,
                                 proj_width, proj_height,
                                 cam_width, cam_height,
@@ -5412,7 +5412,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         // produce fake camera image (left hand only)
         t_camera.start();
         bones_to_world_left = bones_to_world_left_interp;
-        dynamicTexture = texturePack["skin"];
+        curSelectedTexture = "skin";
         handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         // convert to gray scale single channel image
         fake_cam_binary_fbo.bind();
@@ -5440,7 +5440,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_skin.start();
         bones_to_world_left = bones_to_world_current;
         // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-        dynamicTexture = texturePack[curSelectedTexture];
+        curSelectedTexture = "baked_left1";
         handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         t_skin.stop();
         t_pp.start();
