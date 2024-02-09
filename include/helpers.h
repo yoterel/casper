@@ -55,7 +55,7 @@ enum class TextureMode
     BAKED = 3,
     CAMERA = 4,
     SHADER = 5,
-    MULTI_BUFFER_SHADER = 6,
+    MULTI_PASS_SHADER = 6,
 };
 enum class SDMode
 {

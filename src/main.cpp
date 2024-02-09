@@ -93,11 +93,7 @@ cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
                                std::vector<cv::Point2f> &Q,
                                int deformation_mode, float alpha,
                                Grid &grid);
-void handleDebugMode(SkinningShader &skinnedShader,
-                     Shader &textureShader,
-                     Shader &vcolorShader,
-                     Shader &textShader,
-                     Shader &lineShader,
+void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
                      Text &text);
@@ -199,6 +195,7 @@ unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
 int64_t totalFrameCount = 0;
+int64_t gameFrameCount = 0;
 int64_t maxVideoFrameCount = 0;
 int64_t curFrameID = 0;
 int64_t curFrameTimeStamp = 0;
@@ -246,6 +243,11 @@ std::vector<std::string> animals{
     "a panda"};
 // game controls
 bool showGameHint = false;
+float game_corner_loc = 1.0f;
+std::vector<glm::vec2> game_verts = {glm::vec2(-1.0f, game_corner_loc),
+                                     glm::vec2(-1.0f, -1.0f),
+                                     glm::vec2(game_corner_loc, -1.0f),
+                                     glm::vec2(game_corner_loc, game_corner_loc)};
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
@@ -631,8 +633,8 @@ int main(int argc, char *argv[])
     initGLBuffers(pbo);
     hands_fbo.init();
     game_fbo.init();
-    game_fbo_aux1.init();
-    game_fbo_aux2.init();
+    game_fbo_aux1.init(GL_RGBA, GL_RGBA32F);
+    game_fbo_aux2.init(GL_RGBA, GL_RGBA32F);
     fake_cam_fbo.init();
     fake_cam_binary_fbo.init();
     uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
@@ -646,11 +648,11 @@ int main(int argc, char *argv[])
     icp2_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
-    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame.fbx",
+    SkinnedModel leftHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame2.fbx",
                                userTextureFile,
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
-    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame.fbx",
+    SkinnedModel rightHandModel("../../resource/GenericHand_fixed_weights_no_arm_uvgame2.fbx",
                                 userTextureFile,
                                 proj_width, proj_height,
                                 cam_width, cam_height,
@@ -762,7 +764,9 @@ int main(int argc, char *argv[])
     Shader uvDilateShader("../../src/shaders/uv_dilate.vs", "../../src/shaders/uv_dilate.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     Shader shaderToySea("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
-    Shader shaderToyCloud("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
+    // Shader shaderToyCloud("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
+    Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_BufferA.fs");
+    Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_Image.fs");
     SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     std::unordered_map<std::string, Shader *> shaderMap = {
         {"NNShader", &NNShader},
@@ -785,9 +789,13 @@ int main(int argc, char *argv[])
         {"textShader", &textShader},
         {"skinnedShader", &skinnedShader},
         {"shaderToySea", &shaderToySea},
-        {"shaderToyCloud", &shaderToyCloud}};
-    // {"shaderToyGameBufferA", &shaderToyGameBufferA},
-    // {"shaderToyGameImage", &shaderToyGameImage}};
+        // {"shaderToyCloud", &shaderToyCloud},
+        {"shaderToyGameBufferA", &shaderToyGameBufferA},
+        {"shaderToyGameImage", &shaderToyGameImage}};
+    // settings for text shader
+    textShader.use();
+    glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
+    textShader.setMat4("projection", orth_projection_transform);
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
@@ -803,10 +811,6 @@ int main(int argc, char *argv[])
     bake_fbo_left.unbind();
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    // settings for text shader
-    textShader.use();
-    glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
-    textShader.setMat4("projection", orth_projection_transform);
     /* more inits */
     initKalmanFilters();
     double previousAppTime = t_app.getElapsedTimeInSec();
@@ -1073,7 +1077,7 @@ int main(int argc, char *argv[])
 
             /* debug mode */
             t_debug.start();
-            handleDebugMode(skinnedShader, textureShader, vcolorShader, textShader, lineShader, rightHandModel, leftHandModel, text);
+            handleDebugMode(shaderMap, rightHandModel, leftHandModel, text);
             t_debug.stop();
             break;
         }
@@ -2143,6 +2147,10 @@ int main(int argc, char *argv[])
         t_swap.stop();
     }
     // cleanup
+    if (run_mls.joinable())
+        run_mls.join();
+    if (run_sd.joinable())
+        run_sd.join();
     close_signal = true;
     consumer.join();
     if (use_projector)
@@ -2154,8 +2162,6 @@ int main(int argc, char *argv[])
     // {
     //     producer.join();
     // }
-    if (run_mls.joinable())
-        run_mls.join();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -3690,18 +3696,13 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
             }
             case static_cast<int>(TextureMode::SHADER):
             {
+                hands_fbo.unbind();
                 game_fbo.bind();
-                Shader *shaderToy = shader_map["shaderToyCloud"]; // shaderToySea, shaderToyCloud
+                Shader *shaderToy = shader_map["shaderToySea"]; // shaderToySea, shaderToyCloud
                 shaderToy->use();
                 shaderToy->setFloat("iTime", t_app.getElapsedTimeInSec());
                 shaderToy->setVec2("iResolution", glm::vec2(proj_width, proj_height));
                 shaderToy->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
-                // std::vector<glm::vec2> quad_verts = {glm::vec2(-1.0f, 0.2f),
-                //                                      glm::vec2(-1.0f, -1.0f),
-                //                                      glm::vec2(0.2f, -1.0f),
-                //                                      glm::vec2(0.2f, 0.2f)};
-                // Quad myquad(quad_verts);
-                // myquad.render();
                 fullScreenQuad.render();
                 game_fbo.unbind();
                 if (isFirstHand)
@@ -3712,8 +3713,9 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                 handModel.Render(*skinnedShader, bones2world, rotx, false, game_fbo.getTexture());
                 break;
             }
-            case static_cast<int>(TextureMode::MULTI_BUFFER_SHADER):
+            case static_cast<int>(TextureMode::MULTI_PASS_SHADER):
             {
+                hands_fbo.unbind();
                 Shader *shaderToyBufferA = shader_map["shaderToyGameBufferA"];
                 Shader *shaderToyImage = shader_map["shaderToyGameImage"];
                 FBO *fbo_content;
@@ -3731,34 +3733,39 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                 fbo_content->bind();
                 fbo_texture->getTexture()->bind();
                 shaderToyBufferA->use();
-                shaderToyBufferA->setFloat("iTime", t_app.getElapsedTimeInSec());
+                float time = t_app.getElapsedTimeInSec();
+                shaderToyBufferA->setFloat("iTime", time);
                 shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
                 shaderToyBufferA->setVec2("iResolution", glm::vec2(proj_width, proj_height));
-                shaderToyBufferA->setVec2("iMouse", glm::vec2(250.0f, 300.0f));
-                shaderToyBufferA->setInt("iFrame", totalFrameCount);
+                // shaderToyBufferA->setVec2("iMouse", glm::vec2(250.0f, 300.0f));
+                shaderToyBufferA->setInt("iFrame", gameFrameCount);
                 shaderToyBufferA->setInt("iChannel0", 0);
                 fullScreenQuad.render();
                 fbo_content->unbind();
                 game_fbo.bind();
                 shaderToyImage->use();
-                shaderToyImage->setFloat("iTime", t_app.getElapsedTimeInSec());
+                shaderToyImage->setFloat("iTime", time);
+                shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
                 shaderToyImage->setVec2("iResolution", glm::vec2(proj_width, proj_height));
-                shaderToyImage->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
-                shaderToyImage->setInt("iFrame", totalFrameCount);
+                // shaderToyImage->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
+                shaderToyBufferA->setInt("iFrame", gameFrameCount);
                 shaderToyImage->setInt("iChannel0", 0);
                 fbo_content->getTexture()->bind();
-                fullScreenQuad.render();
+                // fullScreenQuad.render();
+                Quad handQuad(game_verts);
+                handQuad.render();
                 game_fbo.unbind();
                 if (isFirstHand)
                     hands_fbo.bind(true);
                 else
                     hands_fbo.bind(false);
-                // set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
-                // handModel.Render(*skinnedShader, bones2world, rotx, false, game_fbo.getTexture());
-                dynamicTexture = texturePack[curSelectedTexture];
-                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
-                                   false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
-                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, game_fbo.getTexture());
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, game_fbo.getTexture());
+                // dynamicTexture = texturePack[curSelectedTexture];
+                // set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
+                //                    false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
+                // handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, game_fbo.getTexture());
+                gameFrameCount++;
                 break;
             }
             default: // original texture loaded with mesh
@@ -4963,15 +4970,16 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
     }
     return true;
 }
-void handleDebugMode(SkinningShader &skinnedShader,
-                     Shader &textureShader,
-                     Shader &vcolorShader,
-                     Shader &textShader,
-                     Shader &lineShader,
+void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
                      Text &text)
 {
+    SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
+    Shader *textureShader = shader_map["textureShader"];
+    Shader *vcolorShader = shader_map["vcolorShader"];
+    Shader *textShader = shader_map["textShader"];
+    Shader *lineShader = shader_map["lineShader"];
     if (debug_mode && operation_mode == static_cast<int>(OperationMode::NORMAL))
     {
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
@@ -5122,9 +5130,9 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 {
                 case static_cast<int>(TextureMode::ORIGINAL):
                 {
-                    set_skinned_shader(&skinnedShader,
+                    set_skinned_shader(skinnedShader,
                                        flycam_projection_transform * flycam_view_transform * global_scale_right);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, nullptr);
+                    rightHandModel.Render(*skinnedShader, bones_to_world_right, rotx, false, nullptr);
                     break;
                 }
                 case static_cast<int>(TextureMode::FROM_FILE):
@@ -5133,20 +5141,20 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 }
                 case static_cast<int>(TextureMode::PROJECTIVE):
                 {
-                    set_skinned_shader(&skinnedShader,
+                    set_skinned_shader(skinnedShader,
                                        flycam_projection_transform * flycam_view_transform * global_scale_right,
                                        false, false, false, false, false, true, false, false,
                                        cam_projection_transform * cam_view_transform * global_scale_right);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, dynamicTexture, projectiveTexture);
+                    rightHandModel.Render(*skinnedShader, bones_to_world_right, rotx, false, dynamicTexture, projectiveTexture);
                     break;
                 }
                 case static_cast<int>(TextureMode::BAKED):
                 {
-                    set_skinned_shader(&skinnedShader,
+                    set_skinned_shader(skinnedShader,
                                        flycam_projection_transform * flycam_view_transform * global_scale_right,
                                        false, false, false, false, false, false, false, false,
                                        cam_projection_transform * cam_view_transform * global_scale_right);
-                    rightHandModel.Render(skinnedShader, bones_to_world_right, rotx, false, bake_fbo_right.getTexture());
+                    rightHandModel.Render(*skinnedShader, bones_to_world_right, rotx, false, bake_fbo_right.getTexture());
                     break;
                 }
                 default:
@@ -5158,7 +5166,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
         {
             // draw bones local coordinates as gizmos
             {
-                vcolorShader.use();
+                vcolorShader->use();
                 std::vector<glm::mat4> BoneToLocalTransforms;
                 leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
                 glBindVertexArray(gizmoVAO);
@@ -5166,13 +5174,13 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
                 {
                     // in bind pose
-                    vcolorShader.setMat4("MVP", flycam_projection_transform * flycam_view_transform * rotx * BoneToLocalTransforms[i]);
+                    vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * rotx * BoneToLocalTransforms[i]);
                     glDrawArrays(GL_LINES, 0, 6);
                 }
                 for (unsigned int i = 0; i < bones_to_world_left.size(); i++)
                 {
                     // in leap motion pose
-                    vcolorShader.setMat4("MVP", flycam_projection_transform * flycam_view_transform * bones_to_world_left[i]);
+                    vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * bones_to_world_left[i]);
                     glDrawArrays(GL_LINES, 0, 6);
                 }
             }
@@ -5182,17 +5190,17 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 {
                 case static_cast<int>(TextureMode::ORIGINAL):
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
-                    skinnedShader.setBool("useProjector", false);
-                    skinnedShader.setBool("bake", false);
-                    skinnedShader.setBool("useGGX", false);
-                    skinnedShader.setBool("renderUV", false);
-                    skinnedShader.setBool("flipTexVertically", false);
-                    skinnedShader.setBool("flipTexHorizontally", false);
-                    skinnedShader.setBool("projectorIsSingleChannel", false);
-                    skinnedShader.setInt("src", 0);
-                    leftHandModel.Render(skinnedShader, bones_to_world_left, rotx);
+                    skinnedShader->use();
+                    skinnedShader->SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
+                    skinnedShader->setBool("useProjector", false);
+                    skinnedShader->setBool("bake", false);
+                    skinnedShader->setBool("useGGX", false);
+                    skinnedShader->setBool("renderUV", false);
+                    skinnedShader->setBool("flipTexVertically", false);
+                    skinnedShader->setBool("flipTexHorizontally", false);
+                    skinnedShader->setBool("projectorIsSingleChannel", false);
+                    skinnedShader->setInt("src", 0);
+                    leftHandModel.Render(*skinnedShader, bones_to_world_left, rotx);
                     break;
                 }
                 case static_cast<int>(TextureMode::FROM_FILE):
@@ -5201,32 +5209,32 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 }
                 case static_cast<int>(TextureMode::PROJECTIVE):
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
-                    skinnedShader.setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
-                    skinnedShader.setBool("useProjector", true);
-                    skinnedShader.setBool("projectorOnly", false);
-                    skinnedShader.setBool("bake", false);
-                    skinnedShader.setBool("useGGX", false);
-                    skinnedShader.setBool("renderUV", false);
-                    skinnedShader.setBool("flipTexVertically", false);
-                    skinnedShader.setBool("flipTexHorizontally", false);
-                    skinnedShader.setBool("projectorIsSingleChannel", false);
-                    skinnedShader.setInt("src", 0);
-                    leftHandModel.Render(skinnedShader, bones_to_world_left, rotx, false, dynamicTexture, projectiveTexture);
+                    skinnedShader->use();
+                    skinnedShader->SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
+                    skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
+                    skinnedShader->setBool("useProjector", true);
+                    skinnedShader->setBool("projectorOnly", false);
+                    skinnedShader->setBool("bake", false);
+                    skinnedShader->setBool("useGGX", false);
+                    skinnedShader->setBool("renderUV", false);
+                    skinnedShader->setBool("flipTexVertically", false);
+                    skinnedShader->setBool("flipTexHorizontally", false);
+                    skinnedShader->setBool("projectorIsSingleChannel", false);
+                    skinnedShader->setInt("src", 0);
+                    leftHandModel.Render(*skinnedShader, bones_to_world_left, rotx, false, dynamicTexture, projectiveTexture);
                     break;
                 }
                 case static_cast<int>(TextureMode::BAKED):
                 {
-                    skinnedShader.use();
-                    skinnedShader.SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
-                    skinnedShader.setBool("useProjector", false);
-                    skinnedShader.setBool("bake", false);
-                    skinnedShader.setBool("useGGX", false);
-                    skinnedShader.setBool("renderUV", false);
-                    skinnedShader.setBool("flipTexVertically", false);
-                    skinnedShader.setInt("src", 0);
-                    leftHandModel.Render(skinnedShader, bones_to_world_left, rotx, false, bake_fbo_left.getTexture());
+                    skinnedShader->use();
+                    skinnedShader->SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
+                    skinnedShader->setBool("useProjector", false);
+                    skinnedShader->setBool("bake", false);
+                    skinnedShader->setBool("useGGX", false);
+                    skinnedShader->setBool("renderUV", false);
+                    skinnedShader->setBool("flipTexVertically", false);
+                    skinnedShader->setInt("src", 0);
+                    leftHandModel.Render(*skinnedShader, bones_to_world_left, rotx, false, bake_fbo_left.getTexture());
                     break;
                 }
                 default:
@@ -5239,11 +5247,11 @@ void handleDebugMode(SkinningShader &skinnedShader,
             if (showCamera)
             {
                 std::vector<glm::vec3> vprojFrustumVerticesData(28);
-                lineShader.use();
-                lineShader.setMat4("projection", flycam_projection_transform);
-                lineShader.setMat4("view", flycam_view_transform);
-                lineShader.setMat4("model", glm::mat4(1.0f));
-                lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
+                lineShader->use();
+                lineShader->setMat4("projection", flycam_projection_transform);
+                lineShader->setMat4("view", flycam_view_transform);
+                lineShader->setMat4("model", glm::mat4(1.0f));
+                lineShader->setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
                 glm::mat4 camUnprojectionMat = glm::inverse(cam_projection_transform * cam_view_transform);
                 for (unsigned int i = 0; i < frustumCornerVertices.size(); i++)
                 {
@@ -5261,11 +5269,11 @@ void handleDebugMode(SkinningShader &skinnedShader,
             if (showProjector)
             {
                 std::vector<glm::vec3> vcamFrustumVerticesData(28);
-                lineShader.use();
-                lineShader.setMat4("projection", flycam_projection_transform);
-                lineShader.setMat4("view", flycam_view_transform);
-                lineShader.setMat4("model", glm::mat4(1.0f));
-                lineShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
+                lineShader->use();
+                lineShader->setMat4("projection", flycam_projection_transform);
+                lineShader->setMat4("view", flycam_view_transform);
+                lineShader->setMat4("model", glm::mat4(1.0f));
+                lineShader->setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f));
                 glm::mat4 projUnprojectionMat = glm::inverse(proj_projection_transform * proj_view_transform);
                 for (int i = 0; i < frustumCornerVertices.size(); ++i)
                 {
@@ -5296,7 +5304,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 Quad camNearQuad(camNearVerts);
                 // Quad camMidQuad(camMidVerts);
                 // directly render camera input or any other texture
-                set_texture_shader(&textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
+                set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                 // camTexture.bind();
                 // glBindTexture(GL_TEXTURE_2D, resTexture);
                 postprocess_fbo.getTexture()->bind();
@@ -5325,7 +5333,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 Quad projNearQuad(projNearVerts);
                 // Quad projMidQuad(projMidVerts);
                 Quad projFarQuad(projFarVerts);
-                set_texture_shader(&textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
+                set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                 c2p_fbo.getTexture()->bind();
                 projNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, projNearQuad);
                 t_warp.stop();
@@ -5348,7 +5356,7 @@ void handleDebugMode(SkinningShader &skinnedShader,
                 std::format("modifiers : shift: {}, ctrl: {}, space: {}", shift_modifier ? "on" : "off", ctrl_modifier ? "on" : "off", space_modifier ? "on" : "off")};
             for (int i = 0; i < texts_to_render.size(); ++i)
             {
-                text.Render(textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
+                text.Render(*textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 0.25f, glm::vec3(1.0f, 1.0f, 1.0f));
             }
         }
     }
@@ -5569,7 +5577,6 @@ void openIMGUIFrame()
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
-            ImGui::Checkbox("Show Game Hint", &showGameHint);
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
@@ -5961,9 +5968,9 @@ void openIMGUIFrame()
             ImGui::RadioButton("Camera", &texture_mode, static_cast<int>(TextureMode::CAMERA));
             ImGui::SameLine();
             ImGui::RadioButton("Shader", &texture_mode, static_cast<int>(TextureMode::SHADER));
-            if (ImGui::RadioButton("Multi-Shader", &texture_mode, static_cast<int>(TextureMode::MULTI_BUFFER_SHADER)))
+            if (ImGui::RadioButton("Multi-Shader", &texture_mode, static_cast<int>(TextureMode::MULTI_PASS_SHADER)))
             {
-                totalFrameCount = 0;
+                gameFrameCount = 0;
             }
             if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {
@@ -6016,6 +6023,23 @@ void openIMGUIFrame()
             }
             ImGui::SameLine();
             ImGui::InputText("Texture File", &userTextureFile);
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Game Controls"))
+        {
+            ImGui::Checkbox("Show Game Hint", &showGameHint);
+            ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);
+            if (ImGui::IsItemActive())
+            {
+            }
+            else
+            {
+                std::vector<glm::vec2> new_game_verts = {glm::vec2(-1.0f, game_corner_loc),
+                                                         glm::vec2(-1.0f, -1.0f),
+                                                         glm::vec2(game_corner_loc, -1.0f),
+                                                         glm::vec2(game_corner_loc, game_corner_loc)};
+                game_verts = new_game_verts;
+            }
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
