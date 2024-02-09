@@ -3795,7 +3795,7 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
         case static_cast<int>(MaterialMode::GGX): // uses GGX material with the original diffuse texture loaded with mesh
         {
             skinnedShader->use();
-            dirLight.setWorldDirection(debug_vec);
+            // dirLight.setWorldDirection(debug_vec);
             dirLight.calcLocalDirection(bones2world[0]);
             skinnedShader->SetDirectionalLight(dirLight);
             glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
@@ -3814,11 +3814,14 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                     handModel.Render(*skinnedShader, bones2world, rotx, false, bake_fbo_left.getTexture());
                 break;
             case static_cast<int>(TextureMode::PROJECTIVE): // a projective texture from the virtual cameras viewpoint
+                projectiveTexture = texturePack[curSelectedPTexture];
+                dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true, false,
                                    false, true, false, false, cam_projection_transform * cam_view_transform);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, projectiveTexture);
                 break;
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
+                dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
                 handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
                 break;
