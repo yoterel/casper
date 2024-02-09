@@ -443,6 +443,7 @@ FBO hands_fbo(dst_width, dst_height, 4, false);
 FBO game_fbo(dst_width, dst_height, 4, false);
 FBO game_fbo_aux1(dst_width, dst_height, 4, false);
 FBO game_fbo_aux2(dst_width, dst_height, 4, false);
+FBO game_fbo_aux3(dst_width, dst_height, 4, false);
 FBO fake_cam_fbo(dst_width, dst_height, 4, false);
 FBO fake_cam_binary_fbo(dst_width, dst_height, 1, false);
 FBO uv_fbo(dst_width, dst_height, 4, false);
@@ -635,6 +636,7 @@ int main(int argc, char *argv[])
     game_fbo.init();
     game_fbo_aux1.init(GL_RGBA, GL_RGBA32F);
     game_fbo_aux2.init(GL_RGBA, GL_RGBA32F);
+    game_fbo_aux3.init(GL_RGBA, GL_RGBA32F);
     fake_cam_fbo.init();
     fake_cam_binary_fbo.init();
     uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
@@ -760,13 +762,15 @@ int main(int argc, char *argv[])
     Shader gridColorShader("../../src/shaders/grid_color.vs", "../../src/shaders/grid_color.fs");
     Shader lineShader("../../src/shaders/line_shader.vs", "../../src/shaders/line_shader.fs");
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
-    Shader bakeSimple("../../src/shaders/bake_proj_simple.vs", "../../src/shaders/bake_proj_simple.fs");
     Shader uvDilateShader("../../src/shaders/uv_dilate.vs", "../../src/shaders/uv_dilate.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
     Shader shaderToySea("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
     // Shader shaderToyCloud("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
-    Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_BufferA.fs");
-    Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_Image.fs");
+    // Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_BufferA.fs");
+    // Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_Image.fs");
+    Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_BufferA.fs");
+    Shader shaderToyGameBufferB("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_BufferB.fs");
+    Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_Image.fs");
     SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
     std::unordered_map<std::string, Shader *> shaderMap = {
         {"NNShader", &NNShader},
@@ -784,13 +788,13 @@ int main(int argc, char *argv[])
         {"gridColorShader", &gridColorShader},
         {"lineShader", &lineShader},
         {"vcolorShader", &vcolorShader},
-        {"bakeSimple", &bakeSimple},
         {"uvDilateShader", &uvDilateShader},
         {"textShader", &textShader},
         {"skinnedShader", &skinnedShader},
         {"shaderToySea", &shaderToySea},
         // {"shaderToyCloud", &shaderToyCloud},
         {"shaderToyGameBufferA", &shaderToyGameBufferA},
+        {"shaderToyGameBufferB", &shaderToyGameBufferB},
         {"shaderToyGameImage", &shaderToyGameImage}};
     // settings for text shader
     textShader.use();
@@ -3717,10 +3721,12 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
             {
                 hands_fbo.unbind();
                 Shader *shaderToyBufferA = shader_map["shaderToyGameBufferA"];
+                Shader *shaderToyBufferB = shader_map["shaderToyGameBufferB"];
                 Shader *shaderToyImage = shader_map["shaderToyGameImage"];
+                // BufferA
                 FBO *fbo_content;
                 FBO *fbo_texture;
-                if (totalFrameCount % 2 == 0)
+                if (gameFrameCount % 2 == 0)
                 {
                     fbo_content = &game_fbo_aux1;
                     fbo_texture = &game_fbo_aux2;
@@ -3731,26 +3737,37 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                     fbo_texture = &game_fbo_aux1;
                 }
                 fbo_content->bind();
-                fbo_texture->getTexture()->bind();
                 shaderToyBufferA->use();
+                fbo_texture->getTexture()->bind(GL_TEXTURE0);
+                game_fbo_aux3.getTexture()->bind(GL_TEXTURE1);
                 float time = t_app.getElapsedTimeInSec();
-                shaderToyBufferA->setFloat("iTime", time);
-                shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
+                // shaderToyBufferA->setFloat("iTime", time);
+                // shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
                 shaderToyBufferA->setVec2("iResolution", glm::vec2(proj_width, proj_height));
                 // shaderToyBufferA->setVec2("iMouse", glm::vec2(250.0f, 300.0f));
                 shaderToyBufferA->setInt("iFrame", gameFrameCount);
                 shaderToyBufferA->setInt("iChannel0", 0);
+                shaderToyBufferA->setInt("iChannel1", 1);
                 fullScreenQuad.render();
                 fbo_content->unbind();
+                // BufferB
+                game_fbo_aux3.bind();
+                fbo_content->getTexture()->bind();
+                shaderToyBufferB->use();
+                shaderToyBufferB->setVec2("iResolution", glm::vec2(proj_width, proj_height));
+                shaderToyBufferB->setInt("iChannel0", 0);
+                fullScreenQuad.render();
+                game_fbo_aux3.unbind();
+                // Image
                 game_fbo.bind();
                 shaderToyImage->use();
-                shaderToyImage->setFloat("iTime", time);
-                shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
                 shaderToyImage->setVec2("iResolution", glm::vec2(proj_width, proj_height));
                 // shaderToyImage->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
-                shaderToyBufferA->setInt("iFrame", gameFrameCount);
+                shaderToyImage->setInt("iFrame", gameFrameCount);
                 shaderToyImage->setInt("iChannel0", 0);
-                fbo_content->getTexture()->bind();
+                shaderToyImage->setInt("iChannel1", 1);
+                fbo_content->getTexture()->bind(GL_TEXTURE0);
+                game_fbo_aux3.getTexture()->bind(GL_TEXTURE1);
                 // fullScreenQuad.render();
                 Quad handQuad(game_verts);
                 handQuad.render();
