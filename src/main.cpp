@@ -977,6 +977,7 @@ int main(int argc, char *argv[])
                 std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
                 std::cout << "mls: " << t_mls.averageLapInMilliSec() << std::endl;
                 std::cout << "mls thread: " << t_mls_thread.averageLapInMilliSec() << std::endl;
+                std::cout << "profile: " << t_profile.averageLapInMilliSec() << std::endl;
                 std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
                 std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
                 std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
@@ -997,6 +998,7 @@ int main(int argc, char *argv[])
             t_pp.reset();
             t_mls.reset();
             t_mls_thread.reset();
+            t_profile.reset();
             t_debug.reset();
         }
         /* deal with user input */
@@ -4325,6 +4327,7 @@ void handleMLSAsync(Shader &gridShader)
                     std::vector<float> rendered_depths_left, rendered_depths_right;
                     std::vector<glm::vec3> projected_with_depth_left, projected_with_depth_right;
                     std::vector<glm::vec2> screen_space;
+                    // t_profile.start();
                     if (mls_depth_test)
                     {
                         projected_with_depth_left = Helpers::project_points_w_depth(to_project_left,
@@ -4340,6 +4343,7 @@ void handleMLSAsync(Shader &gridShader)
                         screen_space = Helpers::NDCtoScreen(Helpers::vec3to2(projected_with_depth_right), dst_width, dst_height, false);
                         rendered_depths_right = hands_fbo.sampleDepthBuffer(screen_space); // todo: make async
                     }
+                    // t_profile.stop();
                     if (run_mls.joinable())
                         run_mls.join();
                     mls_running = true;
