@@ -94,6 +94,7 @@ add_executable(ahand
     src/user_study.cpp
     src/MidiControllerAPI.cpp
     src/game.cpp
+    src/dear_widgets.cpp
     third-party/imgui/imgui.cpp
     third-party/imgui/imgui_draw.cpp
     third-party/imgui/imgui_tables.cpp

@@ -975,8 +975,9 @@ vec3 getBackground( in vec2 uv ) {
 void main() {
     
     // the size of a pixel depends on the resolution
-    pixelSize = floor(iResolution.y / 350.0); // 1 pixel in windowed
-    pixelSize = max(pixelSize, 1.0);
+    // pixelSize = floor(iResolution.y / 350.0); // 1 pixel in windowed
+    // pixelSize = max(pixelSize, 1.0);
+    pixelSize = 2.0;
     // the size of the playing field is a multiple of pixelsize
     vec2 play = vec2(pixelSize * 160.0);
     
@@ -1105,7 +1106,7 @@ void main() {
             uvScore.y -= iResolution.y;
             uvScore /= pixelSize;
             uvScore -= vec2(0, -20);
-            const vec2 scoreBox = vec2(42, 500);
+            const vec2 scoreBox = vec2(42, 800);
             float distScore = box(uvScore, scoreBox);
             
             // add a shadow around the score box

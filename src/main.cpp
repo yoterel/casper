@@ -26,6 +26,7 @@
 #include "stb_image_write.h"
 #include <filesystem>
 #include "helpers.h"
+#include "dear_widgets.h"
 #include "imgui.h"
 #include "kalman.h"
 #include "imgui_stdlib.h"
@@ -252,6 +253,8 @@ float gameTime = 0.0f;
 float gameSpeed = 0.01f; // the lower the faster
 int64_t gameFrameCount = 0;
 int64_t prevGameFrameCount = 0;
+glm::vec2 game_min(-0.63f, -0.72f);
+glm::vec2 game_max(0.63f, 0.93f);
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
@@ -653,7 +656,7 @@ int main(int argc, char *argv[])
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
-    game_fbo.init();
+    game_fbo.init(GL_BGRA, GL_RGBA, GL_LINEAR, GL_CLAMP_TO_EDGE);
     game_fbo_aux1.init(GL_RGBA, GL_RGBA32F);
     game_fbo_aux2.init(GL_RGBA, GL_RGBA32F);
     game_fbo_aux3.init(GL_RGBA, GL_RGBA32F);
@@ -6093,16 +6096,18 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Game Controls"))
         {
             ImGui::Checkbox("Show Game Hint", &showGameHint);
-            ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);
+            ImGui::SeparatorText("Game Quad");
+            ImWidgets::RangeSelect2D("Game Quad", &game_min.x, &game_min.y, &game_max.x, &game_max.y, -1.0f, -1.0f, 1.0f, 1.0f, 0.5f);
+            // ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);
             if (ImGui::IsItemActive())
             {
             }
             else
             {
-                std::vector<glm::vec2> new_game_verts = {glm::vec2(-1.0f, game_corner_loc),
-                                                         glm::vec2(-1.0f, -1.0f),
-                                                         glm::vec2(game_corner_loc, -1.0f),
-                                                         glm::vec2(game_corner_loc, game_corner_loc)};
+                std::vector<glm::vec2> new_game_verts = {glm::vec2(game_min.x, game_max.y),
+                                                         glm::vec2(game_min.x, game_min.y),
+                                                         glm::vec2(game_max.x, game_min.y),
+                                                         glm::vec2(game_max.x, game_max.y)};
                 game_verts = new_game_verts;
             }
             ImGui::TreePop();
