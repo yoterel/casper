@@ -10,8 +10,9 @@
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
             "args": [
-                "-download_pbo",
-                "-cam_free",
+                // "-download_pbo",
+                "--mesh",
+                "../../resource/GenericHand_weights_woarm_uvshader.fbx", // GenericHand_weights_woarm_uvshader.fbx, GenericHand_weights_woarm.fbx
                 // "-leap_poll",
                 // "-proj_on",
             ],

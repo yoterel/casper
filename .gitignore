@@ -9,3 +9,4 @@ resource/calibrations/cam_calibration/*.png
 *.ini
 third-party/imgui/examples
 third-party/imgui/docs
+resource/GenericHand.blend1

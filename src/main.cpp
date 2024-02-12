@@ -8,6 +8,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/normal.hpp>
 #include "readerwritercircularbuffer.h"
+#include "cxxopts.h"
 #include "camera.h"
 #include "gl_camera.h"
 #include "display.h"
@@ -528,8 +529,31 @@ int deformation_mode = static_cast<int>(DeformationMode::RIGID);
 /* main */
 int main(int argc, char *argv[])
 {
-    /* parse cmd line options */
     t_app.start();
+    /* parse cmd line options */
+    cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
+    options.add_options()                                                                                                                                //
+        ("m,mesh", "A .fbx mesh file to use for skinning", cxxopts::value<std::string>()->default_value("../../resource/GenericHand_weights_woarm.fbx")) //
+        ("h,help", "Prints usage")                                                                                                                       //
+        // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                                       //
+        ;
+    std::string meshFile;
+    try
+    {
+        auto result = options.parse(argc, argv);
+        if (result.count("help"))
+        {
+            std::cout << options.help() << std::endl;
+            exit(0);
+        }
+        meshFile = result["mesh"].as<std::string>();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+        std::cout << options.help() << std::endl;
+        exit(0);
+    }
     /* py init */
     Py_Initialize();
     import_array();
@@ -652,11 +676,11 @@ int main(int argc, char *argv[])
     icp2_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
-    SkinnedModel leftHandModel("../../resource/GenericHand_weights_woarm.fbx",
+    SkinnedModel leftHandModel(meshFile,
                                userTextureFile,
                                proj_width, proj_height,
                                cam_width, cam_height); // GenericHand.fbx is a left hand model
-    SkinnedModel rightHandModel("../../resource/GenericHand_weights_woarm.fbx",
+    SkinnedModel rightHandModel(meshFile,
                                 userTextureFile,
                                 proj_width, proj_height,
                                 cam_width, cam_height,
@@ -5367,7 +5391,7 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 Quad projFarQuad(projFarVerts);
                 set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                 c2p_fbo.getTexture()->bind();
-                projNearQuad.render(); // canvas.renderTexture(skinnedModel.m_fbo.getTexture() /*tex*/, textureShader, projNearQuad);
+                projNearQuad.render();
                 t_warp.stop();
             }
         }

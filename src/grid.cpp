@@ -15,9 +15,12 @@ Grid::Grid(const GLuint xPointCount, const GLuint yPointCount, const GLfloat xSp
 
 Grid::~Grid()
 {
-    glDeleteVertexArrays(1, &Grid_VAO);
-    glDeleteBuffers(1, &Grid_VBO);
-    glDeleteBuffers(1, &Grid_EBO);
+    if (Grid_VAO != 0)
+        glDeleteVertexArrays(1, &Grid_VAO);
+    if (Grid_VBO != 0)
+        glDeleteBuffers(1, &Grid_VBO);
+    if (Grid_EBO != 0)
+        glDeleteBuffers(1, &Grid_EBO);
 }
 
 GLfloat *Grid::ComputePointCoordinates(GLuint pointIndex)
