@@ -196,7 +196,6 @@ unsigned int fps = 0;
 float ms_per_frame = 0;
 unsigned int displayBoneIndex = 0;
 int64_t totalFrameCount = 0;
-int64_t gameFrameCount = 0;
 int64_t maxVideoFrameCount = 0;
 int64_t curFrameID = 0;
 int64_t curFrameTimeStamp = 0;
@@ -249,6 +248,10 @@ std::vector<glm::vec2> game_verts = {glm::vec2(-1.0f, game_corner_loc),
                                      glm::vec2(-1.0f, -1.0f),
                                      glm::vec2(game_corner_loc, -1.0f),
                                      glm::vec2(game_corner_loc, game_corner_loc)};
+float gameTime = 0.0f;
+float gameSpeed = 0.01f; // the lower the faster
+int64_t gameFrameCount = 0;
+int64_t prevGameFrameCount = 0;
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
@@ -440,8 +443,6 @@ Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *bakedTextureLeft = nullptr;
 Texture *bakedTextureRight = nullptr;
-FBO icp_fbo(cam_width, cam_height, 4, false);
-FBO icp2_fbo(dst_width, dst_height, 4, false);
 FBO hands_fbo(dst_width, dst_height, 4, false);
 FBO game_fbo(dst_width, dst_height, 4, false);
 FBO game_fbo_aux1(dst_width, dst_height, 4, false);
@@ -554,7 +555,7 @@ int main(int argc, char *argv[])
         std::cout << options.help() << std::endl;
         exit(0);
     }
-    /* py init */
+    /* embedded python init */
     Py_Initialize();
     import_array();
     myModule = PyImport_ImportModule("predict");
@@ -648,13 +649,6 @@ int main(int argc, char *argv[])
     /* setup global GL buffers */
     Helpers::setupSkeletonBuffers(skeletonVAO, skeletonVBO);
     Helpers::setupGizmoBuffers(gizmoVAO, gizmoVBO);
-    unsigned int cubeVAO = 0;
-    unsigned int cubeVBO = 0;
-    Helpers::setupCubeBuffers(cubeVAO, cubeVBO);
-    unsigned int tcubeVAO = 0;
-    unsigned int tcubeVBO1 = 0;
-    unsigned int tcubeVBO2 = 0;
-    Helpers::setupCubeTexturedBuffers(tcubeVAO, tcubeVBO1, tcubeVBO2);
     Helpers::setupFrustrumBuffers(frustrumVAO, frustrumVBO);
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
@@ -672,8 +666,6 @@ int main(int argc, char *argv[])
     deformed_bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
-    icp_fbo.init();
-    icp2_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
     SkinnedModel leftHandModel(meshFile,
@@ -685,9 +677,6 @@ int main(int argc, char *argv[])
                                 proj_width, proj_height,
                                 cam_width, cam_height,
                                 false);
-    // dynamicTexture = new Texture(curMeshTextureFile.c_str(), GL_TEXTURE_2D);
-    // dynamicTexture->init_from_file();
-    // projectiveTexture->init_from_file();
     for (auto &it : textureFiles)
     {
         Texture *t = new Texture(it.second.c_str(), GL_TEXTURE_2D);
@@ -712,7 +701,6 @@ int main(int argc, char *argv[])
     }
     else
         bakedTextureRight = texturePack["uv"];
-    // SkinnedModel dinosaur("../../resource/reconst.ply", "", proj_width, proj_height, cam_width, cam_height);
     n_bones = leftHandModel.NumBones();
     postProcess.initGLBuffers();
     fullScreenQuad.init();
@@ -3765,34 +3753,36 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                     fbo_content = &game_fbo_aux2;
                     fbo_texture = &game_fbo_aux1;
                 }
-                fbo_content->bind();
-                shaderToyBufferA->use();
-                fbo_texture->getTexture()->bind(GL_TEXTURE0);
-                game_fbo_aux3.getTexture()->bind(GL_TEXTURE1);
-                float time = t_app.getElapsedTimeInSec();
-                // shaderToyBufferA->setFloat("iTime", time);
-                // shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
-                shaderToyBufferA->setVec2("iResolution", glm::vec2(proj_width, proj_height));
-                // shaderToyBufferA->setVec2("iMouse", glm::vec2(250.0f, 300.0f));
-                shaderToyBufferA->setInt("iFrame", gameFrameCount);
-                shaderToyBufferA->setInt("iChannel0", 0);
-                shaderToyBufferA->setInt("iChannel1", 1);
-                fullScreenQuad.render();
-                fbo_content->unbind();
-                // BufferB
-                game_fbo_aux3.bind();
-                fbo_content->getTexture()->bind();
-                shaderToyBufferB->use();
-                shaderToyBufferB->setVec2("iResolution", glm::vec2(proj_width, proj_height));
-                shaderToyBufferB->setInt("iChannel0", 0);
-                fullScreenQuad.render();
-                game_fbo_aux3.unbind();
+                if ((gameFrameCount == 0) || (prevGameFrameCount != gameFrameCount))
+                {
+                    fbo_content->bind();
+                    shaderToyBufferA->use();
+                    fbo_texture->getTexture()->bind(GL_TEXTURE0);
+                    game_fbo_aux3.getTexture()->bind(GL_TEXTURE1);
+                    // shaderToyBufferA->setFloat("iTime", time);
+                    // shaderToyBufferA->setFloat("iTimeDelta", deltaTime);
+                    shaderToyBufferA->setVec2("iResolution", glm::vec2(proj_width, proj_height));
+                    // shaderToyBufferA->setVec2("iMouse", glm::vec2(250.0f, 300.0f));
+                    shaderToyBufferA->setInt("iFrame", static_cast<int>(gameFrameCount * 1.0f));
+                    shaderToyBufferA->setInt("iChannel0", 0);
+                    shaderToyBufferA->setInt("iChannel1", 1);
+                    fullScreenQuad.render();
+                    fbo_content->unbind();
+                    // BufferB
+                    game_fbo_aux3.bind();
+                    fbo_content->getTexture()->bind();
+                    shaderToyBufferB->use();
+                    shaderToyBufferB->setVec2("iResolution", glm::vec2(proj_width, proj_height));
+                    shaderToyBufferB->setInt("iChannel0", 0);
+                    fullScreenQuad.render();
+                    game_fbo_aux3.unbind();
+                }
                 // Image
                 game_fbo.bind();
                 shaderToyImage->use();
                 shaderToyImage->setVec2("iResolution", glm::vec2(proj_width, proj_height));
                 // shaderToyImage->setVec2("iMouse", glm::vec2(0.5f, 0.5f));
-                shaderToyImage->setInt("iFrame", gameFrameCount);
+                shaderToyImage->setInt("iFrame", static_cast<int>(gameFrameCount * 1.0f));
                 shaderToyImage->setInt("iChannel0", 0);
                 shaderToyImage->setInt("iChannel1", 1);
                 fbo_content->getTexture()->bind(GL_TEXTURE0);
@@ -3811,7 +3801,13 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                 // set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale,
                 //                    false, false, false, false, false, true, false, false, cam_projection_transform * cam_view_transform);
                 // handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, game_fbo.getTexture());
-                gameFrameCount++;
+                gameTime += deltaTime;
+                if (gameTime >= gameSpeed)
+                {
+                    prevGameFrameCount = gameFrameCount;
+                    gameFrameCount++;
+                    gameTime = 0.0f;
+                }
                 break;
             }
             default: // original texture loaded with mesh
@@ -6023,6 +6019,7 @@ void openIMGUIFrame()
             if (ImGui::RadioButton("Multi-Shader", &texture_mode, static_cast<int>(TextureMode::MULTI_PASS_SHADER)))
             {
                 gameFrameCount = 0;
+                prevGameFrameCount = 0;
             }
             if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {

@@ -12,7 +12,7 @@
             "args": [
                 // "-download_pbo",
                 "--mesh",
-                "../../resource/GenericHand_weights_woarm_uvshader.fbx", // GenericHand_weights_woarm_uvshader.fbx, GenericHand_weights_woarm.fbx
+                "../../resource/GenericHand_weights_woarm_uvgame.fbx", // GenericHand_weights_woarm_uvgame, GenericHand_weights_woarm_uvshader.fbx, GenericHand_weights_woarm.fbx
                 // "-leap_poll",
                 // "-proj_on",
             ],

@@ -1,3 +1,4 @@
+// see https://www.shadertoy.com/view/XldGDN
 #version 330 core
 in vec2 texCoord;
 uniform vec2 iResolution;
@@ -985,6 +986,7 @@ void main() {
     float gameOver = game.x;
     float gameTimestamp = game.y;
     float gameOverTimestamp = game.z;
+    float health = game.w;
     float score = scoreState.x;
     float highscore = scoreState.y;
     
@@ -1102,8 +1104,8 @@ void main() {
             uvScore.x += (iResolution.x*0.5+play.x)*0.5;
             uvScore.y -= iResolution.y;
             uvScore /= pixelSize;
-            uvScore -= vec2(0, -50);
-            const vec2 scoreBox = vec2(42, 20);
+            uvScore -= vec2(0, -20);
+            const vec2 scoreBox = vec2(42, 500);
             float distScore = box(uvScore, scoreBox);
             
             // add a shadow around the score box
@@ -1139,7 +1141,15 @@ void main() {
                     }
 
                     // highscore
-                    scoreAcc = min(999999.0, highscore);
+                    float _Health = health / 100.0;
+                    vec4 _ColorA = vec4(0,1,0,1);
+                    vec4 _ColorB = vec4(1,0,0,1);
+                    vec4 healthCol = mix(_ColorA, _ColorB, 1.0-clamp(_Health*1.6-0.3,0.0,1.0));
+                    float healthBarMask = float(_Health < fragCoord.y / iResolution.y);
+                    vec4 outCol = mix(healthCol, vec4(0.0, 0.0, 0.0, 1.0), floor(healthBarMask));
+                    fragColor.rgb += outCol.rgb;
+
+                    scoreAcc = min(999999.0, health);
                     vec2 startHigh = uvScore*0.09;
                     startHigh += vec2(-2.5, +1.4);
                     for (int i = 0 ; i < 6 ; i++) {

@@ -1,4 +1,4 @@
-
+// see https://www.shadertoy.com/view/XldGDN
  #version 330 core
 in vec2 texCoord;
 uniform vec2 iResolution;
@@ -12,10 +12,10 @@ uniform sampler2D iChannel1;
 out vec4 fragColor;
 vec2 fragCoord = gl_FragCoord.xy;
 
- #define GODMODE
+// #define GODMODE
 // #define THUMBNAIL
 // #define HELL // uncomment if you want the real bullet hell experience ;)
- #define BOT  // uncomment so the game can play itself, code by Imp5
+// #define BOT  // uncomment so the game can play itself, code by Imp5
 
 // size between each transitions
 #define TRANSITION 3000.0
@@ -525,7 +525,7 @@ void main() {
         
         // initialize game
         if ( isInside(fragCoord, ADR_GAME) > 0.0 ) {
-            fragColor = vec4(0.0, float(iFrame), 0.0, 0.0);
+            fragColor = vec4(0.0, float(iFrame), 0.0, 100.0);
         }
         
         // initialize score
@@ -556,27 +556,27 @@ void main() {
         float speed = 0.015;
         
         #ifndef BOT
-        if (iMouse.z > 0.5) {
-            // same computation than in the image buffer
-            vec2 uv = iMouse.xy - iResolution.xy * 0.5;
-            float pixelSize = floor(iResolution.y / 350.0);
-            pixelSize = max(pixelSize, 1.0);
-            vec2 play = vec2(pixelSize * 160.0);
-            vec2 pointer = uv / play;
-            delta = pointer-pos;
-            float len = length(delta);
-            if (len > speed) {
-                delta /= len;
-                delta *= speed;
-            }
-        } else {
+        // if (iMouse.z > 0.5) {
+        //     // same computation than in the image buffer
+        //     vec2 uv = iMouse.xy - iResolution.xy * 0.5;
+        //     float pixelSize = floor(iResolution.y / 350.0);
+        //     pixelSize = max(pixelSize, 1.0);
+        //     vec2 play = vec2(pixelSize * 160.0);
+        //     vec2 pointer = uv / play;
+        //     delta = pointer-pos;
+        //     float len = length(delta);
+        //     if (len > speed) {
+        //         delta /= len;
+        //         delta *= speed;
+        //     }
+        // } else {
             // otherwise, use the keyboard
-            delta = vec2(
-                keyDown(KEY_RIGHT)-keyDown(KEY_LEFT),
-                keyDown(KEY_UP)-keyDown(KEY_DOWN));
-        	if (dot(delta, delta) > 1.44) delta /= 1.41421;
-            delta *= speed;
-        }
+        delta = vec2(
+            keyDown(KEY_RIGHT)-keyDown(KEY_LEFT),
+            keyDown(KEY_UP)-keyDown(KEY_DOWN));
+        if (dot(delta, delta) > 1.44) delta /= 1.41421;
+        delta *= speed;
+        // }
         #endif
         
         // code by Imp5
@@ -618,6 +618,7 @@ void main() {
         
         float gameOver = value.x;
         float gameOverTimestamp = value.z;
+        float health = value.w;
         
         // while the game is running, check collision model for gameover state
         if (gameOver < 0.5 && !thumb) {
@@ -625,14 +626,23 @@ void main() {
             vec2 something = getCollisionMesh(loadValue(ADR_PLAYER).xy).rb;
             #ifndef GODMODE
             if ( something.x < 0.0 || something.y < 0.0 ) {
-                gameOver = 1.0;
-                gameOverTimestamp = float(iFrame);
+                if (health >= 0.0)
+                {
+                    health -= 1.0;
+                }
+                else
+                {
+                    health = 0.0;
+                    gameOver = 1.0;
+                    gameOverTimestamp = float(iFrame);
+                }
             }
             #endif
         }
         
         value.x = gameOver;
         value.z = gameOverTimestamp;
+        value.w = health;
         fragColor = value;
     }
     

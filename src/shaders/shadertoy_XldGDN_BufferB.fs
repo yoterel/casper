@@ -1,3 +1,4 @@
+// see https://www.shadertoy.com/view/XldGDN
 #version 330 core
 in vec2 texCoord;
 uniform vec2 iResolution;
