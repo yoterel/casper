@@ -244,17 +244,16 @@ std::vector<std::string> animals{
     "a panda"};
 // game controls
 bool showGameHint = false;
-float game_corner_loc = 1.0f;
-std::vector<glm::vec2> game_verts = {glm::vec2(-1.0f, game_corner_loc),
-                                     glm::vec2(-1.0f, -1.0f),
-                                     glm::vec2(game_corner_loc, -1.0f),
-                                     glm::vec2(game_corner_loc, game_corner_loc)};
+glm::vec2 game_min(-1.0f, -1.0f);
+glm::vec2 game_max(1.0f, 1.0f);
+std::vector<glm::vec2> game_verts = {glm::vec2(game_min.x, game_max.y),
+                                     glm::vec2(game_min.x, game_min.y),
+                                     glm::vec2(game_max.x, game_min.y),
+                                     glm::vec2(game_max.x, game_max.y)};
 float gameTime = 0.0f;
 float gameSpeed = 0.01f; // the lower the faster
 int64_t gameFrameCount = 0;
 int64_t prevGameFrameCount = 0;
-glm::vec2 game_min(-0.63f, -0.72f);
-glm::vec2 game_max(0.63f, 0.93f);
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
