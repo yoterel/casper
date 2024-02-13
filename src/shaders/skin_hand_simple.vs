@@ -53,7 +53,6 @@ void main()
     TexCoord0 = TexCoord;
     if (useMetric)
     {
-        // I am ashamed of this code. sorry glsl.
         int selectedBoneID = BoneIDs0[0];
         int maxIndex = 0;
         if (Weights0[1] > Weights0[maxIndex])

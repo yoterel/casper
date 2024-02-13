@@ -603,8 +603,8 @@ int main(int argc, char *argv[])
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
     GLFWwindow *window = glfwCreateWindow(proj_width, proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
     int secondary_screen_x, secondary_screen_y;
-    glfwGetMonitorPos(monitors[0], &secondary_screen_x, &secondary_screen_y);
-    glfwSetWindowPos(window, secondary_screen_x + 100, secondary_screen_y + 100);
+    glfwGetMonitorPos(monitors[num_of_monitors - 1], &secondary_screen_x, &secondary_screen_y);
+    glfwSetWindowPos(window, secondary_screen_x + 300, secondary_screen_y + 100);
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -3327,19 +3327,19 @@ bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &po
     {
         if (entry.path().extension() != ".npy")
             continue;
-        if (entry.path().string().find("bones_left") != std::string::npos)
+        // if (entry.path().string().find("bones_left") != std::string::npos)
+        // {
+        std::vector<glm::mat4> raw_game_bones_left;
+        cnpy::NpyArray bones_left_npy;
+        std::cout << "loading: " << entry.path().string() << std::endl;
+        bones_left_npy = cnpy::npy_load(entry.path().string());
+        std::vector<float> raw_data = bones_left_npy.as_vec<float>();
+        for (int i = 0; i < raw_data.size(); i += 16)
         {
-            std::vector<glm::mat4> raw_game_bones_left;
-            cnpy::NpyArray bones_left_npy;
-            std::cout << "loading: " << entry.path().string() << std::endl;
-            bones_left_npy = cnpy::npy_load(entry.path().string());
-            std::vector<float> raw_data = bones_left_npy.as_vec<float>();
-            for (int i = 0; i < raw_data.size(); i += 16)
-            {
-                raw_game_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
-            }
-            poses.push_back(raw_game_bones_left);
+            raw_game_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
         }
+        poses.push_back(raw_game_bones_left);
+        // }
     }
     return true;
 }
@@ -3898,8 +3898,9 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                 weights_mesh = handModel.scalarLeapBoneToMeshBone(weights_leap);
                 for (int i = 0; i < weights_mesh.size(); i++)
                 {
-                    if (weights_mesh[i] > 0.5f) // clamp bad weights to help user
-                        weights_mesh[i] = 1.0f;
+                    weights_mesh[i] = sqrt(weights_mesh[i]);
+                    // if (weights_mesh[i] > 0.5f) // clamp bad weights to help user
+                    //     weights_mesh[i] = 1.0f;
                 }
             }
             else
