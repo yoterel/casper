@@ -7,6 +7,10 @@ uniform vec2 iResolution;
 uniform int iFrame;
 uniform sampler2D iChannel0;
 uniform sampler2D iChannel1;
+uniform bool left = false;
+uniform bool right = false;
+uniform bool up = false;
+uniform bool down = false;
 // uniform sampler2D iChannel2;
 // uniform sampler2D iChannel3;
 out vec4 fragColor;
@@ -547,12 +551,20 @@ void main() {
         vec2 pos = value.xy;
         vec2 ppos = pos;
         
-        bool left = keyDown(KEY_LEFT) > 0.5;
-        bool up = keyDown(KEY_UP) > 0.5;
-        bool right = keyDown(KEY_RIGHT) > 0.5;
-        bool down = keyDown(KEY_DOWN) > 0.5;
-        
+        // bool left = keyDown(KEY_LEFT) > 0.5;
+        // bool up = keyDown(KEY_UP) > 0.5;
+        // bool right = keyDown(KEY_RIGHT) > 0.5;
+        // bool down = keyDown(KEY_DOWN) > 0.5;
         vec2 delta = vec2(0);
+        if (left)
+            delta.x-=1.0;
+        if (right)
+            delta.x+=1.0;
+        if (up)
+            delta.y+=1.0;
+        if (down)
+            delta.y-=1.0;
+         
         float speed = 0.015;
         
         #ifndef BOT
@@ -571,9 +583,9 @@ void main() {
         //     }
         // } else {
             // otherwise, use the keyboard
-        delta = vec2(
-            keyDown(KEY_RIGHT)-keyDown(KEY_LEFT),
-            keyDown(KEY_UP)-keyDown(KEY_DOWN));
+        // delta = vec2(
+        //     right - left,
+        //     keyDown(KEY_UP)-keyDown(KEY_DOWN));
         if (dot(delta, delta) > 1.44) delta /= 1.41421;
         delta *= speed;
         // }

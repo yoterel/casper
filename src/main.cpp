@@ -3768,6 +3768,13 @@ void handleSkinning(std::vector<glm::mat4> &bones2world,
                     shaderToyBufferA->setInt("iFrame", static_cast<int>(gameFrameCount * 1.0f));
                     shaderToyBufferA->setInt("iChannel0", 0);
                     shaderToyBufferA->setInt("iChannel1", 1);
+                    // check if palm is rotated left
+                    glm::vec3 palm_z = bones2world[0][2];
+                    glm::vec3 cam_z = glm::vec3(cam_view_transform[2][0], cam_view_transform[2][1], cam_view_transform[2][2]);
+                    float dot_prod = glm::dot(palm_z, cam_z);
+                    // std::cout << dot_prod << std::endl;
+                    shaderToyBufferA->setBool("left", dot_prod <= -0.5f);
+                    shaderToyBufferA->setBool("right", dot_prod > 1.3f);
                     fullScreenQuad.render();
                     fbo_content->unbind();
                     // BufferB
