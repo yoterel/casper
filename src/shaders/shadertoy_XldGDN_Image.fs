@@ -1106,41 +1106,35 @@ void main() {
             uvScore.y -= iResolution.y;
             uvScore /= pixelSize;
             uvScore -= vec2(0, -20);
+            vec2 uvScore2 = uvScore - vec2(400, -40);
             const vec2 scoreBox = vec2(42, 800);
             float distScore = box(uvScore, scoreBox);
-            
+            float distScore2 = box(uvScore2, scoreBox);
             // add a shadow around the score box
             shadow += 1.0-smoothstep(6.0, 20.0, distScore);
             shadow = doDithering(shadow, dither, 4.0);
             baseColor -= shadow*0.2;
             fragColor.rgb = baseColor;
-            
-            if (distScore < 7.0) {
-                if (distScore > 6.0) {
-                    fragColor.rgb = vec3(0);
-                } else if (distScore > 3.0) {
-                    fragColor.rgb = BACKGROUND_COLOR*1.2;
-                } else if (distScore > 1.0) {
-                    fragColor.rgb = vec3(0);
-                } else {
-                    fragColor.rgb = vec3(0);
+            if (distScore2 < 40.0)
+            {
+            // display game stats
+                float scoreAcc = min(999999.0, score);
+                float colorAcc = 0.0;
 
-                    // display game stats
-                    float scoreAcc = min(999999.0, score);
-                    float colorAcc = 0.0;
-
-                    // score
-                    vec2 startScore = uvScore*0.09;
-                    startScore += vec2(-2.5, -0.5);
-                    for (int i = 0 ; i < 6 ; i++) {
-                        float digit = mod(scoreAcc, 10.0);
-                        scoreAcc -= digit;
-                        scoreAcc *= 0.1;
-                        colorAcc = max(colorAcc, SampleDigit(digit, startScore));
-                        startScore.x += 1.0;
-                        if (imod(i-2, 3) == 0) startScore.x += 0.7;
-                    }
-
+                // score2
+                vec2 startScore = uvScore2*0.09;
+                startScore += vec2(-2.5, 20.5);
+                for (int i = 0 ; i < 6 ; i++) {
+                    float digit = mod(scoreAcc, 10.0);
+                    scoreAcc -= digit;
+                    scoreAcc *= 0.1;
+                    colorAcc = max(colorAcc, SampleDigit(digit, startScore*0.5));
+                    startScore.y -= 3.0;
+                    //if (imod(i-2, 3) == 0) startScore.x += 0.7;
+                }
+                fragColor.rgb += colorAcc;
+            }
+            if (distScore < 40.0) {
                     // highscore
                     float _Health = health / 100.0;
                     vec4 _ColorA = vec4(0,1,0,1);
@@ -1149,21 +1143,20 @@ void main() {
                     float healthBarMask = float(_Health < fragCoord.y / iResolution.y);
                     vec4 outCol = mix(healthCol, vec4(0.0, 0.0, 0.0, 1.0), floor(healthBarMask));
                     fragColor.rgb += outCol.rgb;
+                    // scoreAcc = min(999999.0, health);
+                    // vec2 startHigh = uvScore*0.09;
+                    // startHigh += vec2(-2.5, +1.4);
+                    // for (int i = 0 ; i < 6 ; i++) {
+                    //     float digit = mod(scoreAcc, 10.0);
+                    //     scoreAcc -= digit;
+                    //     scoreAcc *= 0.1;
+                    //     colorAcc = max(colorAcc, SampleDigit(digit, startHigh));
+                    //     startHigh.x += 1.0;
+                    //     if (imod(i-2, 3) == 0) startHigh.x += 0.7;
+                    // }
 
-                    scoreAcc = min(999999.0, health);
-                    vec2 startHigh = uvScore*0.09;
-                    startHigh += vec2(-2.5, +1.4);
-                    for (int i = 0 ; i < 6 ; i++) {
-                        float digit = mod(scoreAcc, 10.0);
-                        scoreAcc -= digit;
-                        scoreAcc *= 0.1;
-                        colorAcc = max(colorAcc, SampleDigit(digit, startHigh));
-                        startHigh.x += 1.0;
-                        if (imod(i-2, 3) == 0) startHigh.x += 0.7;
-                    }
-
-                    fragColor.rgb += colorAcc;
-                }
+                    // fragColor.rgb += colorAcc;
+                // }
             }
         }
     }

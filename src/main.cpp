@@ -5901,6 +5901,7 @@ void openIMGUIFrame()
                 std::string savepath(std::string("../../debug/"));
                 // std::cout << "unique file name: " << filename.filename().string() << std::endl;
                 fs::path raw_image(savepath + filename.filename().string() + std::string("_raw_cam.png"));
+                fs::path game_image(savepath + filename.filename().string() + std::string("_game.png"));
                 fs::path mask_path(savepath + filename.filename().string() + std::string("_mask.png"));
                 fs::path render_color(savepath + filename.filename().string() + std::string("_render_color.png"));
                 fs::path render_depth(savepath + filename.filename().string() + std::string("_render_depth.png"));
@@ -5920,6 +5921,7 @@ void openIMGUIFrame()
                 cv::threshold(tmp, mask, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
                 cv::imwrite(raw_image.string(), tmp);
                 cv::imwrite(mask_path.string(), mask);
+                game_fbo.saveColorToFile(game_image.string());
                 hands_fbo.saveColorToFile(render_color.string());
                 hands_fbo.saveDepthToFile(render_depth.string(), true, 1.0f, 1500.0f);
                 uv_fbo.saveColorToFile(uv.string());
