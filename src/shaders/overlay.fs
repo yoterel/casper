@@ -5,6 +5,7 @@ in vec2 TexCoord;
 uniform sampler2D objectTexture;
 uniform sampler2D projectiveTexture;
 uniform float mixRatio = 0.7;
+uniform bool gammaCorrect = false;
 void main()
 {
     vec4 outputColor;
@@ -15,6 +16,11 @@ void main()
     else
     {
         outputColor = col1;
+    }
+    if (gammaCorrect)
+    {
+        float gamma = 2.2;
+        outputColor = pow(outputColor, vec4(gamma));
     }
     FragColor = outputColor;
 }

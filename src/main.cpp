@@ -174,6 +174,7 @@ bool simulated_camera = false;
 bool freecam_mode = false;
 bool use_pbo = true;
 bool use_projector = false;
+bool gamma_correct = false;
 bool use_screen = true;
 bool cam_color_mode = false;
 bool icp_apply_transform = true;
@@ -342,7 +343,7 @@ std::vector<glm::vec3> bake_joints_left, bake_joints_right;
 std::vector<glm::mat4> bones_to_world_left_interp;
 glm::mat4 global_scale_right = glm::mat4(1.0f);
 glm::mat4 global_scale_left = glm::mat4(1.0f);
-LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode));
+LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode), false);
 // calibration controls
 bool ready_to_collect = false;
 bool use_coaxial_calib = false;
@@ -425,7 +426,8 @@ std::string userTextureFile("../../resource/uv.png");
 // std::string curMeshTextureFile("../../resource/left_hand_uvunwrapped_skin.png");
 // std::string curProjectiveTextureFile("../../resource/uv.png");
 std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
-std::unordered_map<std::string, std::string> textureFiles{
+std::unordered_map<std::string, std::string> textureFiles
+{
     {"1", "../../resource/1.png"},
     {"2", "../../resource/2.png"},
     {"3", "../../resource/3.png"},
@@ -435,6 +437,9 @@ std::unordered_map<std::string, std::string> textureFiles{
     {"baked_left2", "../../resource/baked_textures/baked_left2.png"},
     {"baked_left3", "../../resource/baked_textures/baked_left3.png"},
     {"baked_left4", "../../resource/baked_textures/baked_left4.png"},
+    {"baked_left5", "../../resource/baked_textures/baked_left5.png"},
+    {"baked_left6", "../../resource/baked_textures/baked_left6.png"},
+    {"baked_left7", "../../resource/baked_textures/baked_left7.png"},
     {"butterfly", inputBakeFile},
 };
 std::unordered_map<std::string, Texture *> texturePack;
@@ -1053,7 +1058,9 @@ int main(int argc, char *argv[])
         {
             /* deal with camera input */
             t_camera.start();
-            handleCameraInput(ptrGrabResult, false, cv::Mat());
+            cv::Mat sim = cv::Mat(cam_height, cam_width, CV_8UC1);
+            handleCameraInput(ptrGrabResult, true, sim);
+            // handleCameraInput(ptrGrabResult, false, cv::Mat());
             t_camera.stop();
 
             /* deal with leap input */
@@ -5502,6 +5509,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     overlayShader->setFloat("mixRatio", projection_mix_ratio);
     c2p_fbo.getTexture()->bind(GL_TEXTURE0);
     overlayShader->setInt("objectTexture", 1);
+    overlayShader->setBool("gammaCorrect", gamma_correct);
     fake_cam_fbo.getTexture()->bind(GL_TEXTURE1);
     // set_texture_shader(textureShader, false, false, false);
     fullScreenQuad.render();
@@ -5561,9 +5569,11 @@ void openIMGUIFrame()
                     use_coaxial_calib = false;
                 }
             }
-            ImGui::Checkbox("Debug Mode", &debug_mode);
+            ImGui::SameLine();
+            ImGui::Checkbox("Gamma Correction", &gamma_correct);
             ImGui::SameLine();
             ImGui::Checkbox("Command Line Stats", &cmd_line_stats);
+            ImGui::Checkbox("Debug Mode", &debug_mode);
             ImGui::SameLine();
             if (ImGui::Checkbox("Freecam Mode", &freecam_mode))
             {
