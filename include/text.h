@@ -17,10 +17,10 @@ struct Character {
     unsigned int Advance;   // Horizontal offset to advance to next glyph
 };
 
-class Text
+class TextModel
 {
 public:
-    Text(const std::string& Filename);
+    TextModel(const std::string& Filename);
     void Render(Shader &shader, std::string text, float x, float y, float scale, glm::vec3 color);
 private:
     std::map<GLchar, Character> Characters;

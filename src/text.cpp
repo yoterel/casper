@@ -1,6 +1,6 @@
 #include "text.h"
 
-Text::Text(const std::string& fontFilename)
+TextModel::TextModel(const std::string& fontFilename)
 {
     // FreeType
     // --------
@@ -89,7 +89,7 @@ Text::Text(const std::string& fontFilename)
     glBindVertexArray(0);
 }
 
-void Text::Render(Shader &shader, std::string text, float x, float y, float scale, glm::vec3 color)
+void TextModel::Render(Shader &shader, std::string text, float x, float y, float scale, glm::vec3 color)
 {
     // activate corresponding render state	
     shader.use();

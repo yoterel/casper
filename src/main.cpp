@@ -98,7 +98,7 @@ cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
-                     Text &text);
+                     TextModel &text);
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current);
 bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &detected_left, bool &detected_right);
 bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected);
@@ -126,7 +126,7 @@ bool loadSession();
 bool loadImagesFromFolder(std::string loadpath);
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
                SkinnedModel &leftHandModel,
-               Text &text,
+               TextModel &textModel,
                glm::mat4 &cam_view_transform,
                glm::mat4 &cam_projection_transform);
 void initGLBuffers(unsigned int *pbo);
@@ -542,6 +542,7 @@ int main(int argc, char *argv[])
     cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
     options.add_options()                                                                                                                                //
         ("m,mesh", "A .fbx mesh file to use for skinning", cxxopts::value<std::string>()->default_value("../../resource/GenericHand_weights_woarm.fbx")) //
+        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false")) //
         ("h,help", "Prints usage")                                                                                                                       //
         // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                                       //
         ;
@@ -555,6 +556,7 @@ int main(int argc, char *argv[])
             exit(0);
         }
         meshFile = result["mesh"].as<std::string>();
+        simulated_camera = result["simcam"].as<bool>();
     }
     catch (const std::exception &e)
     {
@@ -721,7 +723,7 @@ int main(int argc, char *argv[])
     flip_y[1][1] = -1.0f;
     glm::mat4 flip_z = glm::mat4(1.0f);
     flip_z[2][2] = -1.0f;
-    Text text("../../resource/arial.ttf");
+    TextModel textModel("../../resource/arial.ttf");
     near_frustrum = std::vector<glm::vec3>{{-1.0f, 1.0f, -1.0f},
                                            {-1.0f, -1.0f, -1.0f},
                                            {1.0f, -1.0f, -1.0f},
@@ -895,58 +897,13 @@ int main(int argc, char *argv[])
     c2p_homography = PostProcess::findHomography(cur_screen_verts);
     /* thread loops */
     // camera.init(camera_queue, close_signal, cam_height, cam_width, exposure);
-    if (!simulated_camera)
-    {
-        /* real producer */
-        camera.init_poll(cam_height, cam_width, exposure);
-        std::cout << "Using real camera to produce images" << std::endl;
-        projector.show();
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        camera.balance_white();
-        camera.acquire();
-    }
-    else
-    {
-        /* fake producer */
-        std::cout << "Using fake camera to produce images" << std::endl;
-        // simulated_camera = true;
-        // std::string path = "../../resource/hand_capture";
-        // std::vector<cv::Mat> fake_cam_images;
-        // white image
-        // fake_cam_images.push_back(white_image);
-        // images from folder
-        // int file_counter = 0;
-        // for (const auto &entry : fs::directory_iterator(path))
-        // {
-        //     std::cout << '\r' << std::format("Loading images: {:04d}", file_counter) << std::flush;
-        //     std::string file_path = entry.path().string();
-        //     cv::Mat img3 = cv::imread(file_path, cv::IMREAD_UNCHANGED);
-        //     cv::Mat img4;
-        //     cv::cvtColor(img3, img4, cv::COLOR_BGR2BGRA);
-        //     fake_cam_images.push_back(img4);
-        //     file_counter++;
-        // }
-        // producer = std::thread([fake_cam_images]() { //, &projector
-        //     CPylonImage image = CPylonImage::Create(PixelType_BGRA8packed, cam_width, cam_height);
-        //     Timer t_block;
-        //     int counter = 0;
-        //     t_block.start();
-        //     while (!close_signal)
-        //     {
-        //         camera_queue.wait_enqueue(image);
-        //         if (counter < fake_cam_images.size() - 1)
-        //             counter++;
-        //         else
-        //             counter = 0;
-        //         while (t_block.getElapsedTimeInMilliSec() < 1.9)
-        //         {
-        //         }
-        //         t_block.stop();
-        //         t_block.start();
-        //     }
-        //     std::cout << "Producer finish" << std::endl;
-        // });
-    }
+    /* real producer */
+    camera.init_poll(cam_height, cam_width, exposure);
+    std::cout << "Using real camera to produce images" << std::endl;
+    projector.show();
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    camera.balance_white();
+    camera.acquire();
     // image consumer
     consumer = std::thread([]() { //, &projector
         uint8_t *image;
@@ -1058,9 +1015,15 @@ int main(int argc, char *argv[])
         {
             /* deal with camera input */
             t_camera.start();
-            cv::Mat sim = cv::Mat(cam_height, cam_width, CV_8UC1);
-            handleCameraInput(ptrGrabResult, true, sim);
-            // handleCameraInput(ptrGrabResult, false, cv::Mat());
+            if (simulated_camera)
+            {
+                cv::Mat sim = cv::Mat(cam_height, cam_width, CV_8UC1);
+                handleCameraInput(ptrGrabResult, true, sim);
+            }
+            else
+            {
+                handleCameraInput(ptrGrabResult, false, cv::Mat());
+            }
             t_camera.stop();
 
             /* deal with leap input */
@@ -1106,7 +1069,7 @@ int main(int argc, char *argv[])
 
             /* debug mode */
             t_debug.start();
-            handleDebugMode(shaderMap, rightHandModel, leftHandModel, text);
+            handleDebugMode(shaderMap, rightHandModel, leftHandModel, textModel);
             t_debug.stop();
             break;
         }
@@ -1130,8 +1093,14 @@ int main(int argc, char *argv[])
                         {
                             if (attempts != 0)
                             {
+                                // display "1 / 2" to subject indicating they need to choose
+                                std::vector<std::string> texts_to_render = {std::string("1 / 2")};
+                                for (int i = 0; i < texts_to_render.size(); ++i)
+                                {
+                                    textModel.Render(textShader, texts_to_render[i], -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                                }
                                 bool button_values[9] = {false, false, false, false, false, false, false, false, false};
-                                bool sucess = GetButtonStates(button_values); // get input from human
+                                bool sucess = GetButtonStates(button_values); // get input from subject
                                 if (!sucess)
                                 {
                                     std::cout << "Failed to get button states" << std::endl;
@@ -1153,18 +1122,18 @@ int main(int argc, char *argv[])
                         {
                             is_first_in_video_pair = false;
                         }
-                        vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given human choice
+                        vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given subject choice
                         videoFrameCountCont = 0.0f;                                     // reset video playback
                         videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
                         prevVideoFrameCount = -1;
                         video_reached_end = false;
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let human rest a bit
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let subject rest a bit
                     }
                     else
                     {
                         playVideo(shaderMap,
                                   leftHandModel,
-                                  text,
+                                  textModel,
                                   cam_view_transform,
                                   cam_projection_transform);
                     }
@@ -1175,7 +1144,7 @@ int main(int argc, char *argv[])
                     {
                         if (!playVideo(shaderMap,
                                        leftHandModel,
-                                       text,
+                                       textModel,
                                        cam_view_transform,
                                        cam_projection_transform))
                             debug_playback = false;
@@ -5042,7 +5011,7 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
-                     Text &text)
+                     TextModel &text)
 {
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
     Shader *textureShader = shader_map["textureShader"];
@@ -5433,7 +5402,7 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
 
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
                SkinnedModel &leftHandModel,
-               Text &text,
+               TextModel &textModel,
                glm::mat4 &cam_view_transform,
                glm::mat4 &cam_projection_transform)
 {
@@ -5520,7 +5489,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     std::vector<std::string> texts_to_render = {std::format("{}", is_first_in_video_pair ? "1" : "2")};
     for (int i = 0; i < texts_to_render.size(); ++i)
     {
-        text.Render(*textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+        textModel.Render(*textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     }
     t_debug.stop();
     // fps limiter to control speed
