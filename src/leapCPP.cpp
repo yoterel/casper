@@ -1,6 +1,6 @@
 #include "leapCPP.h"
 
-LeapCPP::LeapCPP(const bool pollMode, const bool with_images, const _eLeapTrackingMode trackingMode)
+LeapCPP::LeapCPP(const bool pollMode, const bool with_images, const _eLeapTrackingMode trackingMode, const bool verbose)
 {
     OpenConnection();
     while (!IsConnected)
@@ -24,6 +24,7 @@ LeapCPP::LeapCPP(const bool pollMode, const bool with_images, const _eLeapTracki
     // LeapRequestConfigValue();
     // LeapSaveConfigValue();
     m_poll = pollMode;
+    m_verbose = verbose;
 }
 
 LeapCPP::~LeapCPP()
@@ -53,14 +54,16 @@ void LeapCPP::setImageMode(bool imageMode)
 void LeapCPP::handleConnectionEvent(const LEAP_CONNECTION_EVENT *connection_event)
 {
     IsConnected = true;
-    std::cout << "Leap: Connected." << std::endl;
+    if (m_verbose)
+        std::cout << "Leap: Connected." << std::endl;
 }
 
 /** Called by serviceMessageLoop() when a connection lost event is returned by LeapPollConnection(). */
 void LeapCPP::handleConnectionLostEvent(const LEAP_CONNECTION_LOST_EVENT *connection_lost_event)
 {
     IsConnected = false;
-    std::cout << "leap: Disconnected." << std::endl;
+    if (m_verbose)
+        std::cout << "leap: Disconnected." << std::endl;
 }
 
 void LeapCPP::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
@@ -70,7 +73,8 @@ void LeapCPP::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
     eLeapRS result = LeapOpenDevice(device_event->device, &deviceHandle);
     if (result != eLeapRS_Success)
     {
-        std::cout << "Leap: Failed to open device " << ResultString(result) << std::endl;
+        if (m_verbose)
+            std::cout << "Leap: Failed to open device " << ResultString(result) << std::endl;
         return;
     }
 
@@ -90,7 +94,8 @@ void LeapCPP::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
         result = LeapGetDeviceInfo(deviceHandle, &deviceProperties);
         if (result != eLeapRS_Success)
         {
-            std::cout << "Leap: Failed to get device info " << ResultString(result) << std::endl;
+            if (m_verbose)
+                std::cout << "Leap: Failed to get device info " << ResultString(result) << std::endl;
             free(deviceProperties.serial);
             return;
         }
@@ -102,23 +107,27 @@ void LeapCPP::handleDeviceEvent(const LEAP_DEVICE_EVENT *device_event)
 
 void LeapCPP::handlePolicyEvent(const LEAP_POLICY_EVENT *policy_event)
 {
-    std::cout << "Leap: Policy: " << policy_event->current_policy << std::endl;
+    if (m_verbose)
+        std::cout << "Leap: Policy: " << policy_event->current_policy << std::endl;
 }
 
 void LeapCPP::handleConfigChangeEvent(const LEAP_CONFIG_CHANGE_EVENT *config_change_event)
 {
     if (config_change_event->status)
     {
-        std::cout << "Leap: Setting config request id: " << config_change_event->requestID << " was successfull." << std::endl;
+        if (m_verbose)
+            std::cout << "Leap: Setting config request id: " << config_change_event->requestID << " was successfull." << std::endl;
     }
     else
     {
-        std::cout << "Leap: Setting config request id: " << config_change_event->requestID << " failed." << std::endl;
+        if (m_verbose)
+            std::cout << "Leap: Setting config request id: " << config_change_event->requestID << " failed." << std::endl;
     }
 }
 void LeapCPP::handleConfigResponseEvent(const LEAP_CONFIG_RESPONSE_EVENT *config_response_event)
 {
-    std::cout << "Leap: The config for request id: " << config_response_event->requestID << " is: " << config_response_event->value.strValue << std::endl;
+    if (m_verbose)
+        std::cout << "Leap: The config for request id: " << config_response_event->requestID << " is: " << config_response_event->value.strValue << std::endl;
 }
 
 void LeapCPP::handleTrackingEvent(const LEAP_TRACKING_EVENT *tracking_event)
@@ -129,11 +138,13 @@ void LeapCPP::handleTrackingEvent(const LEAP_TRACKING_EVENT *tracking_event)
 
 void LeapCPP::handleTrackingModeEvent(const LEAP_TRACKING_MODE_EVENT *tracking_mode_event)
 {
-    std::cout << "Leap: Tracking mode is: " << tracking_mode_event->current_tracking_mode << std::endl;
+    if (m_verbose)
+        std::cout << "Leap: Tracking mode is: " << tracking_mode_event->current_tracking_mode << std::endl;
 }
 void LeapCPP::handlePointMappingChangeEvent(const LEAP_POINT_MAPPING_CHANGE_EVENT *point_mapping_change_event)
 {
-    std::cout << "Leap: Point mapping change event received." << std::endl;
+    if (m_verbose)
+        std::cout << "Leap: Point mapping change event received." << std::endl;
 }
 
 void LeapCPP::handleImageEvent(const LEAP_IMAGE_EVENT *imageEvent)
@@ -152,7 +163,8 @@ void LeapCPP::serviceMessageLoop()
 
         if (result != eLeapRS_Success)
         {
-            std::cout << "LeapC PollConnection call was:" << ResultString(result) << std::endl;
+            if (m_verbose)
+                std::cout << "LeapC PollConnection call was:" << ResultString(result) << std::endl;
             continue;
         }
         // std::cout << "Leap: Message received: " << msg.type << std::endl;
@@ -214,7 +226,8 @@ void LeapCPP::serviceMessageLoop()
             break;
         default:
             // discard unknown message types
-            std::cout << "Leap: Unhandled message type: " << msg.type << std::endl;
+            if (m_verbose)
+                std::cout << "Leap: Unhandled message type: " << msg.type << std::endl;
         } // switch on msg.type
     }
     // std::cout << "leap service loop finished." << std::endl;
@@ -258,7 +271,8 @@ void LeapCPP::kill(void)
     }
     CloseConnection();
     LeapDestroyConnection(connectionHandle);
-    std::cout << "Leap: Killed." << std::endl;
+    if (m_verbose)
+        std::cout << "Leap: Killed." << std::endl;
 }
 
 const char *LeapCPP::ResultString(eLeapRS r)

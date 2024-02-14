@@ -1,6 +1,15 @@
+You re going to participate in a study that tries to quantify how latency in projection mapping can be perceptually reduced.
+We will run several session, where in each session you will be presented with several trials.
+in each trial, you will see two videos of a hand moving, and a projection applied to it.
+Please choose which one seems to have latency in it by clicking either button 1 or button 2.
+Remember to select the video with MORE latency ("lag").
+
+We will start with a training session, where latency is obvious.
+
 launch ahand.exe
 open excel sheet, input subject name, age
 General -> Use Projector
+Calibration -> untick Use Coaxial Calib
 General -> User Study
 Material -> User Study Texture -> uv / baked_left1 / baked_left2
 Post Process -> Render Only / Jump Flood / Jump Flood UV

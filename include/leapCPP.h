@@ -34,7 +34,7 @@ enum class LEAP_STATUS
 class LeapCPP
 {
 public:
-    LeapCPP(const bool pollMode = true, const bool with_images = false, const _eLeapTrackingMode trackingMode = eLeapTrackingMode_HMD);
+    LeapCPP(const bool pollMode = true, const bool with_images = false, const _eLeapTrackingMode trackingMode = eLeapTrackingMode_HMD, const bool verbose = true);
     ~LeapCPP();
     void OpenConnection(void);
     void kill(void);
@@ -71,6 +71,7 @@ private:
     LEAP_CLOCK_REBASER m_clockSynchronizer;
     int64_t m_targetFrameTime = 0;
     bool m_poll = false;
+    bool m_verbose = false;
     uint64_t m_imageFrameID = 0;
     void *m_imageBuffer = NULL;
     void *distortion_buffer_left = NULL;
