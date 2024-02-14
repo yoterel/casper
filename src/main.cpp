@@ -68,7 +68,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
                        SkinnedModel &rightHandModel,
                        Texture &camTexture,
                        std::unordered_map<std::string, Shader *> &shader_map);
-void handleSkinning(std::vector<glm::mat4> &bones2world,
+void handleSkinning(const std::vector<glm::mat4> &bones2world,
                     bool isRightHand,
                     bool isFirstHand,
                     std::unordered_map<std::string, Shader *> &shader_map,
@@ -281,7 +281,7 @@ std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_correcte
 int64_t savedSimulationFrameCount = 0;
 float simulationMPDelay = 0.0f;
 bool recordImages = false;
-std::string recording_name = "all";
+std::string recording_name = "translation1";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool simulation_loaded = false;
@@ -289,8 +289,6 @@ bool run_simulation = false;
 int simulation_mode = static_cast<int>(SimulationMode::KALMAN);
 std::string loaded_simulation_name = "";
 int total_simulation_time_stamps = 0;
-std::string playback_video_name = "all";
-std::string loaded_playback_video_name = "";
 const int simulation_max_supported_frames = 2000;
 static uint8_t *pFrameData[simulation_max_supported_frames] = {NULL};
 bool playback_video_loaded = false;
@@ -426,8 +424,7 @@ std::string userTextureFile("../../resource/uv.png");
 // std::string curMeshTextureFile("../../resource/left_hand_uvunwrapped_skin.png");
 // std::string curProjectiveTextureFile("../../resource/uv.png");
 std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
-std::unordered_map<std::string, std::string> textureFiles
-{
+std::unordered_map<std::string, std::string> textureFiles{
     {"1", "../../resource/1.png"},
     {"2", "../../resource/2.png"},
     {"3", "../../resource/3.png"},
@@ -542,7 +539,7 @@ int main(int argc, char *argv[])
     cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
     options.add_options()                                                                                                                                //
         ("m,mesh", "A .fbx mesh file to use for skinning", cxxopts::value<std::string>()->default_value("../../resource/GenericHand_weights_woarm.fbx")) //
-        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false")) //
+        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                                         //
         ("h,help", "Prints usage")                                                                                                                       //
         // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                                       //
         ;
@@ -3629,7 +3626,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     c2p_fbo.unbind();
 }
 
-void handleSkinning(std::vector<glm::mat4> &bones2world,
+void handleSkinning(const std::vector<glm::mat4> &bones2world,
                     bool isRightHand,
                     bool isFirstHand,
                     std::unordered_map<std::string, Shader *> &shader_map,
@@ -4977,7 +4974,7 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
 {
     if (videoFrameCount >= session_timestamps.size())
         return false;
-    float required_time = vid_simulated_latency_ms + session_timestamps[videoFrameCount];
+    float required_time = (vid_simulated_latency_ms * vid_playback_speed) + session_timestamps[videoFrameCount];
     auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time);
     int interp_index = upper_iter - session_timestamps.begin();
     if (interp_index >= session_timestamps.size())
@@ -5494,11 +5491,11 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     t_debug.stop();
     // fps limiter to control speed
     cur_vid_time = t_app.getElapsedTimeInMilliSec();
-    if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+    if ((cur_vid_time - prev_vid_time) > (1000.0f / vid_playback_fps_limiter))
     {
         prev_vid_time = cur_vid_time;
         videoFrameCountCont += vid_playback_speed;
-        videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
+        videoFrameCount = static_cast<uint64_t>(std::round(videoFrameCountCont));
     }
     return true;
 }
