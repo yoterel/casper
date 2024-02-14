@@ -12,6 +12,7 @@ We will start with a training session, where latency is obvious.
 launch ahand.exe
 open excel sheet, input subject name, age
 General -> Use Projector
+General -> Gamma Correction
 Calibration -> untick Use Coaxial Calib
 General -> User Study
 Material -> User Study Texture -> baked_left5 / baked_left2 / 3
