@@ -61,6 +61,8 @@ namespace fs = std::filesystem;
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat simulatedImage);
 LEAP_STATUS handleLeapInput();
+void saveLeapData(LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images);
+void saveSession(std::string savepath, bool record_images);
 void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images);
 bool loadSimulation(std::string loadpath);
 bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &poses);
@@ -115,7 +117,11 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left,
                          std::vector<glm::vec3> &joints_right,
-                         bool leap_poll_mode, int64_t &curFrameID, int64_t &curFrameTimeStamp, int magic_time_delay);
+                         bool leap_poll_mode,
+                         int64_t &curFrameID,
+                         int64_t &curFrameTimeStamp,
+                         double &appTimeStamp,
+                         int magic_time_delay);
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     std::vector<glm::vec3> &joints_left,
                                     uint64_t frameCounter,
@@ -201,6 +207,7 @@ int64_t totalFrameCount = 0;
 int64_t maxVideoFrameCount = 0;
 int64_t curFrameID = 0;
 int64_t curFrameTimeStamp = 0;
+double curAppFrameTimeStamp = 0.0;
 bool space_modifier = false;
 bool shift_modifier = false;
 bool ctrl_modifier = false;
@@ -271,8 +278,7 @@ float initial_simulated_latency_ms = 40.0f;
 float vid_playback_fps_limiter = 900.0;
 float vid_playback_speed = 1.0f;
 float projection_mix_ratio = 0.6f;
-int64_t videoFrameCount = 0;
-int64_t prevVideoFrameCount = -1;
+float prevVideoFrameCountCont = -1.0f;
 float videoFrameCountCont = 0.0;
 int64_t simulationFrameCount = 0;
 float prevSimlationTime = 0.0f;
@@ -281,7 +287,7 @@ std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_correcte
 int64_t savedSimulationFrameCount = 0;
 float simulationMPDelay = 0.0f;
 bool recordImages = false;
-std::string recording_name = "translation1";
+std::string recording_name = "translation";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 bool simulation_loaded = false;
@@ -295,6 +301,8 @@ bool playback_video_loaded = false;
 int total_raw_session_time_stamps = 0;
 int total_session_time_stamps = 0;
 bool record_session = false;
+float recordStartTime = 0.0;
+float recordDuration = 10.0;
 bool record_single_pose = false;
 bool record_every_frame = false;
 std::vector<glm::mat4> raw_session_bones_left;
@@ -310,6 +318,11 @@ std::vector<float> raw_simulation_timestamps;
 std::vector<float> simulation_timestamps;
 std::string tmp_name = std::tmpnam(nullptr);
 fs::path tmp_filename(tmp_name);
+std::vector<std::vector<glm::mat4>> savedLeapBones;
+std::vector<std::vector<glm::vec3>> savedLeapJoints;
+std::vector<int64_t> savedLeapTimestamps;
+std::vector<cv::Mat> savedCameraImages;
+std::vector<uint64_t> savedCameraTimestamps;
 // leap controls
 bool leap_poll_mode = false;
 bool leap_use_arm = false;
@@ -338,7 +351,7 @@ std::vector<glm::mat4> bones_to_world_left, bones_to_world_right;
 std::vector<glm::mat4> required_pose_bones_to_world_left;
 std::vector<glm::mat4> bones_to_world_left_bake, bones_to_world_right_bake;
 std::vector<glm::vec3> bake_joints_left, bake_joints_right;
-std::vector<glm::mat4> bones_to_world_left_interp;
+std::vector<glm::mat4> bones2world_left_lag, bones2world_left_cur;
 glm::mat4 global_scale_right = glm::mat4(1.0f);
 glm::mat4 global_scale_left = glm::mat4(1.0f);
 LeapCPP leap(leap_poll_mode, false, static_cast<_eLeapTrackingMode>(leap_tracking_mode), false);
@@ -1027,7 +1040,18 @@ int main(int argc, char *argv[])
             t_leap.start();
             LEAP_STATUS leap_status = handleLeapInput();
             if (record_session)
-                saveSession(std::format("../../resource/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
+            {
+                if ((t_app.getElapsedTimeInSec() - recordStartTime) > recordDuration)
+                {
+                    record_session = false;
+                    saveSession(std::format("../../resource/recordings/{}", recording_name), recordImages);
+                    std::cout << "Recording stopped" << std::endl;
+                }
+                else
+                {
+                    saveLeapData(leap_status, totalFrameCount, recordImages);
+                }
+            }
             if (record_single_pose)
             {
                 saveSession(std::format("../../resource/recordings/{}", recording_name), leap_status, totalFrameCount, recordImages);
@@ -1121,8 +1145,7 @@ int main(int argc, char *argv[])
                         }
                         vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given subject choice
                         videoFrameCountCont = 0.0f;                                     // reset video playback
-                        videoFrameCount = static_cast<uint64_t>(videoFrameCountCont);
-                        prevVideoFrameCount = -1;
+                        prevVideoFrameCountCont = -1.0f;
                         video_reached_end = false;
                         std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let subject rest a bit
                     }
@@ -2794,7 +2817,7 @@ bool loadSession()
     float whole;             // find the whole part of the last timestamp
     std::vector<glm::mat4> bones_to_world_left_simulated;
     std::modf(raw_session_timestamps[raw_session_timestamps.size() - 1], &whole);
-    total_session_time_stamps = static_cast<int>(whole); // the timestamps are in ms, so this integer represents the final timestamp (roughly)
+    total_session_time_stamps = static_cast<int>(whole / resolution); // the timestamps are in ms, so this integer represents the final timestamp (roughly)
     for (int i = 0; i < total_session_time_stamps; i++)
     {
         float required_time = resolution * static_cast<float>(i);
@@ -2813,7 +2836,7 @@ bool loadSession()
     session_timestamps.clear();
     for (int i = 0; i < total_session_time_stamps; i++)
     {
-        session_timestamps.push_back(static_cast<float>(i));
+        session_timestamps.push_back(static_cast<float>(i) * resolution);
     }
     return true;
 }
@@ -2826,6 +2849,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          bool leap_poll_mode,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp,
+                         double &appTimeStamp,
                          int magic_time_delay)
 {
     //  some defs
@@ -2855,6 +2879,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
             bones_to_world_left.clear();
             bones_to_world_right.clear();
             curFrameTimeStamp = frame->info.timestamp;
+            appTimeStamp = t_app.getElapsedTimeInMilliSec();
         }
         else
         {
@@ -2884,6 +2909,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
             return LEAP_STATUS::LEAP_FAILED;
         }
         curFrameTimeStamp = frame->info.timestamp;
+        appTimeStamp = t_app.getElapsedTimeInMilliSec();
     }
     // Use the data...
     //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
@@ -3375,6 +3401,67 @@ bool loadSimulation(std::string loadpath)
     loadImagesFromFolder(loadpath);
     return true;
 }
+
+void saveLeapData(LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images)
+{
+    if (leap_status == LEAP_STATUS::LEAP_NEWFRAME || record_every_frame)
+    {
+        if ((bones_to_world_left.size() > 0) && (joints_left.size() > 0))
+        {
+            savedLeapBones.push_back(bones_to_world_left);
+            savedLeapJoints.push_back(joints_left);
+            savedLeapTimestamps.push_back(curFrameTimeStamp);
+            if (record_images)
+            {
+                savedCameraImages.push_back(camImageOrig);
+                savedCameraTimestamps.push_back(image_timestamp);
+            }
+        }
+        else
+        {
+            std::cout << "what happened?" << std::endl;
+        }
+    }
+}
+
+void saveSession(std::string savepath, bool record_images)
+{
+    fs::path savepath_path(savepath);
+    if (!fs::exists(savepath_path))
+    {
+        fs::create_directory(savepath_path);
+    }
+    if (leap_global_scaler != 1.0f)
+    {
+        std::cout << "cannot record session with global scale transform" << std::endl;
+        return;
+    }
+    if (savedLeapBones.size() > 0)
+    {
+        fs::path bones_left_path = savepath_path / fs::path(std::string("bones_left.npy"));
+        fs::path timestamps_path = savepath_path / fs::path(std::string("timestamps.npy"));
+        fs::path joints_left_path = savepath_path / fs::path(std::string("joints_left.npy"));
+        for (int i = 0; i < savedLeapBones.size(); i++)
+        {
+            cnpy::npy_save(bones_left_path.string().c_str(), &savedLeapBones[i][0][0].x, {1, savedLeapBones[i].size(), 4, 4}, "a");
+            cnpy::npy_save(timestamps_path.string().c_str(), &savedLeapTimestamps[i], {1}, "a");
+            // cnpy::npy_save(app_timestamps_path.string().c_str(), &curAppFrameTimeStamp, {1}, "a");
+            cnpy::npy_save(joints_left_path.string().c_str(), &savedLeapJoints[i][0].x, {1, savedLeapJoints[i].size(), 3}, "a");
+        }
+        // cnpy::npy_save(bones_left_path.string().c_str(), &savedLeapBones[0][0][0].x, {savedLeapBones.size(), savedLeapBones[0].size(), 4, 4}, "w");
+        // cnpy::npy_save(timestamps_path.string().c_str(), &savedLeapTimestamps[0], {savedLeapTimestamps.size()}, "w");
+        // cnpy::npy_save(joints_left_path.string().c_str(), &savedLeapJoints[0][0].x, {savedLeapJoints.size(), savedLeapJoints[0].size(), 3}, "w");
+        if (record_images)
+        {
+            for (int i = 0; i < savedCameraImages.size(); i++)
+            {
+                fs::path image_path = savepath_path / fs::path(std::format("{:06d}", savedCameraTimestamps[i]) + std::string("_cam.png"));
+                cv::imwrite(image_path.string(), savedCameraImages[i]);
+            }
+        }
+    }
+}
+
 void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images)
 {
     fs::path savepath_path(savepath);
@@ -3394,6 +3481,7 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
             // save leap frame
             fs::path bones_left_path = savepath_path / fs::path(std::string("bones_left.npy"));
             fs::path timestamps_path = savepath_path / fs::path(std::string("timestamps.npy"));
+            // fs::path app_timestamps_path = savepath_path / fs::path(std::string("app_timestamps.npy"));
             fs::path joints_left_path = savepath_path / fs::path(std::string("joints_left.npy"));
             // fs::path bones_right(savepath + tmp_filename.filename().string() + std::string("_bones_right.npy"));
             // fs::path joints_left_path(savepath + tmp_filename.filename().string() + std::string("_joints_left.npy"));
@@ -3404,6 +3492,7 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
             // cnpy::npz_save(session.string().c_str(), "bones_right", &bones_to_world_right[0][0].x, {bones_to_world_right.size(), 4, 4}, "a");
             cnpy::npy_save(bones_left_path.string().c_str(), &bones_to_world_left[0][0].x, {1, bones_to_world_left.size(), 4, 4}, "a");
             cnpy::npy_save(timestamps_path.string().c_str(), &curFrameTimeStamp, {1}, "a");
+            // cnpy::npy_save(app_timestamps_path.string().c_str(), &curAppFrameTimeStamp, {1}, "a");
             cnpy::npy_save(joints_left_path.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
             // cnpy::npy_save(bones_right.string().c_str(), &bones_to_world_left[0][0], {bones_to_world_right.size(), 4, 4}, "a");
             // cnpy::npy_save(joints.string().c_str(), &joints_left[0].x, {1, joints_left.size(), 3}, "a");
@@ -3425,7 +3514,7 @@ LEAP_STATUS handleLeapInput()
         std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
     }
-    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay);
+    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay);
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
@@ -4485,7 +4574,7 @@ void handleMLSAsync(Shader &gridShader)
                                     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                     std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                     std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-                                    LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp, magic_leap_time_delay_mls);
+                                    LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay_mls);
                                     if (status == LEAP_STATUS::LEAP_NEWFRAME)
                                     {
                                         if ((cur_vertices_left.size() > 0) && (useLeftHand))
@@ -4972,36 +5061,59 @@ void handleMLSAsync(Shader &gridShader)
 
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
 {
-    if (videoFrameCount >= session_timestamps.size())
+    float required_time_lag = videoFrameCountCont;
+    float required_time_cur = (vid_simulated_latency_ms * vid_playback_speed) + required_time_lag;
+    if (required_time_cur >= session_timestamps.back())
         return false;
-    float required_time = (vid_simulated_latency_ms * vid_playback_speed) + session_timestamps[videoFrameCount];
-    auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time);
-    int interp_index = upper_iter - session_timestamps.begin();
-    if (interp_index >= session_timestamps.size())
-        return false;
-    float interp1 = session_timestamps[interp_index - 1];
-    float interp2 = session_timestamps[interp_index];
-    float interp_factor = (required_time - interp1) / (interp2 - interp1);
-    // get pre-recorded leap info (current frame, will be rendered)
-    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, videoFrameCount, total_session_time_stamps, session_bones_left, session_joints_left);
-    std::vector<glm::mat4> bones_to_world_left_interp1, bones_to_world_left_interp2;
-    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-        return false;
-    // get pre-recorded leap info (some future frame, will be used as camera input)
-    bones_to_world_current = bones_to_world_left;
-    leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index - 1, total_session_time_stamps, session_bones_left, session_joints_left);
-    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-        return false;
-    bones_to_world_left_interp1 = bones_to_world_left;
-    leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index, total_session_time_stamps, session_bones_left, session_joints_left);
-    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-        return false;
-    bones_to_world_left_interp2 = bones_to_world_left;
-    bones_to_world_left_interp.clear();
-    for (int i = 0; i < bones_to_world_left.size(); i++)
+    // deal with lagged timestamp (will be used for projection)
     {
-        glm::mat4 interpolated = Helpers::interpolate(bones_to_world_left_interp1[i], bones_to_world_left_interp2[i], interp_factor, true);
-        bones_to_world_left_interp.push_back(interpolated);
+        auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time_lag);
+        int interp_index = upper_iter - session_timestamps.begin();
+        if (interp_index >= session_timestamps.size())
+            return false;
+        float interp1 = session_timestamps[interp_index - 1];
+        float interp2 = session_timestamps[interp_index];
+        float interp_factor = (required_time_lag - interp1) / (interp2 - interp1);
+        std::vector<glm::mat4> bones2world_left_interp1, bones2world_left_interp2;
+        LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index - 1, total_session_time_stamps, session_bones_left, session_joints_left);
+        if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+            return false;
+        bones2world_left_interp1 = bones_to_world_left;
+        leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index, total_session_time_stamps, session_bones_left, session_joints_left);
+        if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+            return false;
+        bones2world_left_interp2 = bones_to_world_left;
+        bones2world_left_lag.clear();
+        for (int i = 0; i < bones_to_world_left.size(); i++)
+        {
+            glm::mat4 interpolated = Helpers::interpolate(bones2world_left_interp1[i], bones2world_left_interp2[i], interp_factor, true);
+            bones2world_left_lag.push_back(interpolated);
+        }
+    }
+    // deal with current timestamp (will be used as camera image)
+    {
+        auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), required_time_cur);
+        int interp_index = upper_iter - session_timestamps.begin();
+        if (interp_index >= session_timestamps.size())
+            return false;
+        float interp1 = session_timestamps[interp_index - 1];
+        float interp2 = session_timestamps[interp_index];
+        float interp_factor = (required_time_cur - interp1) / (interp2 - interp1);
+        std::vector<glm::mat4> bones2world_left_interp1, bones2world_left_interp2;
+        LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index - 1, total_session_time_stamps, session_bones_left, session_joints_left);
+        if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+            return false;
+        bones2world_left_interp1 = bones_to_world_left;
+        leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, interp_index, total_session_time_stamps, session_bones_left, session_joints_left);
+        if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+            return false;
+        bones2world_left_interp2 = bones_to_world_left;
+        bones2world_left_cur.clear();
+        for (int i = 0; i < bones_to_world_left.size(); i++)
+        {
+            glm::mat4 interpolated = Helpers::interpolate(bones2world_left_interp1[i], bones2world_left_interp2[i], interp_factor, true);
+            bones2world_left_cur.push_back(interpolated);
+        }
     }
     return true;
 }
@@ -5414,7 +5526,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *uv_NNShader = shader_map["uv_NNShader"];
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *gridColorShader = shader_map["gridColorShader"];
-    if (prevVideoFrameCount != videoFrameCount)
+    if (prevVideoFrameCountCont != videoFrameCountCont)
     {
         // interpolate hand pose to the required latency
         t_interp.start();
@@ -5429,9 +5541,8 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_interp.stop();
         // produce fake camera image (left hand only)
         t_camera.start();
-        bones_to_world_left = bones_to_world_left_interp;
         curSelectedTexture = "skin";
-        handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
+        handleSkinning(bones2world_left_cur, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         // convert to gray scale single channel image
         fake_cam_binary_fbo.bind();
         thresholdAlphaShader->use();
@@ -5456,15 +5567,14 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_camera.stop();
         // render the scene as normal
         t_skin.start();
-        bones_to_world_left = bones_to_world_current;
         // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
         curSelectedTexture = userStudySelectedTexture;
-        handleSkinning(bones_to_world_left, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
+        handleSkinning(bones2world_left_lag, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         t_skin.stop();
         t_pp.start();
         // post process with any required effect
         handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
-        prevVideoFrameCount = videoFrameCount;
+        prevVideoFrameCountCont = videoFrameCountCont;
     }
     // overlay final render and camera image, and render to screen
     glViewport(0, 0, proj_width, proj_height);
@@ -5495,7 +5605,6 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     {
         prev_vid_time = cur_vid_time;
         videoFrameCountCont += vid_playback_speed;
-        videoFrameCount = static_cast<uint64_t>(std::round(videoFrameCountCont));
     }
     return true;
 }
@@ -6276,7 +6385,18 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Record & Playback"))
         {
             ImGui::SeparatorText("Record");
-            ImGui::Checkbox("Record Session", &record_session);
+            if (ImGui::Checkbox("Record Session", &record_session))
+            {
+                std::cout << "Recording started" << std::endl;
+                recordStartTime = t_app.getElapsedTimeInSec();
+                savedLeapBones.clear();
+                savedLeapJoints.clear();
+                savedLeapTimestamps.clear();
+                savedCameraImages.clear();
+                savedCameraTimestamps.clear();
+            }
+            ImGui::SameLine();
+            ImGui::SliderFloat("Recording Duration [s]", &recordDuration, 0.0f, 20.0f);
             ImGui::SameLine();
             ImGui::Checkbox("Record Images", &recordImages);
             ImGui::SameLine();
@@ -6305,9 +6425,8 @@ void openIMGUIFrame()
                             std::cout << "Failed to load recording: " << recording_name << std::endl;
                         }
                     }
-                    videoFrameCount = 0;
-                    prevVideoFrameCount = -1;
                     videoFrameCountCont = 0.0f;
+                    prevVideoFrameCountCont = -1.0f;
                     use_coaxial_calib = false;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                     user_study.reset(initial_simulated_latency_ms);
@@ -6338,9 +6457,8 @@ void openIMGUIFrame()
                             std::cout << "Failed to load recording: " << recording_name << std::endl;
                         }
                     }
-                    videoFrameCount = 0;
-                    prevVideoFrameCount = -1;
                     videoFrameCountCont = 0.0f;
+                    prevVideoFrameCountCont = -1.0f;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
             }
