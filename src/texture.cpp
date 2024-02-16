@@ -1,6 +1,7 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "texture.h"
+#include <filesystem>
 
 Texture::Texture(const std::string &FileName, GLenum TextureTarget)
 {
@@ -38,6 +39,8 @@ bool Texture::init_from_file(unsigned int texture_interpolation_mode, unsigned i
         stbi_set_flip_vertically_on_load(1);
     else
         stbi_set_flip_vertically_on_load(0);
+    std::filesystem::path p = m_fileName;
+    std::cout << "Loading texture: " << std::filesystem::absolute(p) << std::endl;
     unsigned char *image_data = stbi_load(m_fileName.c_str(), &m_imageWidth, &m_imageHeight, &m_imageBPP, 0);
     if (!image_data)
     {

@@ -1,3 +1,18 @@
+pilot:
+	2 uvs...
+	5 speeds (texture = flower)
+		speeds:
+			0.5, 1.1, 1.7, 2.3, 3.0
+	4 textures, 3 contrasts, 1 speed
+		textures:
+			baked1, baked5, cursive, XGA_rand
+		contrasts:
+			0.4 / 0.6 / 0.8
+	
+full:
+	2 textures, 3 conditions (nothing, jfa, jfa-uv)
+
+
 Get subjects full name, age, and gender
 
 Instructions:
@@ -17,6 +32,7 @@ Calibration -> untick Use Coaxial Calib
 General -> User Study
 Material -> User Study Texture -> baked_left5 / baked_left1 / 3
 Post Process -> Render Only / Jump Flood / Jump Flood UV
+Post Process -> JFA Distance Threshold -> 100
 Record & Playback -> Recording Name -> all / translation1 / translation2
 Record & Playback -> Video playback speed -> 1.0 / 2.0 / 3.0
 Record & Playback -> Mixer ratio -> 0.4 / 0.6 / 0.8

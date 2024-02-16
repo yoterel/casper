@@ -310,8 +310,6 @@ void SkinnedModel::LoadDiffuseTexture(const std::string &Dir, const aiMaterial *
     m_Materials[index].pDiffuse = NULL;
     if (m_externalTextureFileName != "") // bypass model texture
     {
-        std::filesystem::path p = m_externalTextureFileName;
-        std::cout << "Loading diffuse texture: " << std::filesystem::absolute(p) << std::endl;
         m_Materials[index].pDiffuse = new Texture(m_externalTextureFileName.c_str(), GL_TEXTURE_2D);
         if (!m_Materials[index].pDiffuse->init_from_file(GL_LINEAR, GL_REPEAT))
         {

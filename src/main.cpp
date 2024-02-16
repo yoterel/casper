@@ -431,26 +431,14 @@ moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
 moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
 // GL controls
 std::string inputBakeFile("../../resource/images/butterfly.png");
-std::string bakeFileLeft("../../resource/baked_left.png");
-std::string bakeFileRight("../../resource/baked_right.png");
-std::string userTextureFile("../../resource/uv.png");
-// std::string curMeshTextureFile("../../resource/left_hand_uvunwrapped_skin.png");
-// std::string curProjectiveTextureFile("../../resource/uv.png");
+std::string bakeFileLeft("../../resource/baked_textures/baked_left.png");
+std::string bakeFileRight("../../resource/baked_textures/baked_right.png");
+std::string userTextureFile("../../resource/images/uv.png");
 std::string sd_prompt("A natural skinned human hand with a colorful dragon tattoo, photorealistic skin");
-std::unordered_map<std::string, std::string> textureFiles{
-    {"1", "../../resource/1.png"},
-    {"2", "../../resource/2.png"},
-    {"3", "../../resource/3.png"},
-    {"skin", "../../resource/skin.png"},
-    {"uv", userTextureFile},
-    {"baked_left1", "../../resource/baked_textures/baked_left1.png"},
-    {"baked_left2", "../../resource/baked_textures/baked_left2.png"},
-    {"baked_left3", "../../resource/baked_textures/baked_left3.png"},
-    {"baked_left4", "../../resource/baked_textures/baked_left4.png"},
-    {"baked_left5", "../../resource/baked_textures/baked_left5.png"},
-    {"baked_left6", "../../resource/baked_textures/baked_left6.png"},
-    {"baked_left7", "../../resource/baked_textures/baked_left7.png"},
-    {"butterfly", inputBakeFile},
+std::vector<std::string> texturePaths{
+    "../../resource",
+    "../../resource/images",
+    "../../resource/baked_textures",
 };
 std::unordered_map<std::string, Texture *> texturePack;
 std::string curSelectedTexture = "uv";
@@ -696,11 +684,31 @@ int main(int argc, char *argv[])
                                 proj_width, proj_height,
                                 cam_width, cam_height,
                                 false);
-    for (auto &it : textureFiles)
+    // load all image files from supplied texture paths to GPU
+    for (auto &it : texturePaths)
     {
-        Texture *t = new Texture(it.second.c_str(), GL_TEXTURE_2D);
-        t->init_from_file();
-        texturePack.insert({it.first, t});
+        if (!std::filesystem::is_directory(it))
+        {
+            std::cout << it + " is not a folder" << std::endl;
+            exit(1);
+        }
+        for (const auto &entry : fs::directory_iterator(it))
+        {
+            const auto full_name = entry.path().string();
+            const auto stem = entry.path().stem();
+            const auto ext = entry.path().extension();
+            if (texturePack.find(stem.string()) == texturePack.end())
+            {
+                if (entry.is_regular_file())
+                {
+                    if ((ext != ".png") && (ext != ".jpg"))
+                        continue;
+                    Texture *t = new Texture(full_name.c_str(), GL_TEXTURE_2D);
+                    t->init_from_file();
+                    texturePack.insert({stem.string(), t});
+                }
+            }
+        }
     }
     projectiveTexture = texturePack["uv"];
     dynamicTexture = texturePack["uv"];
@@ -1173,7 +1181,7 @@ int main(int argc, char *argv[])
             }
             break;
         }
-        case static_cast<int>(OperationMode::SIMULATION):
+        case static_cast<int>(OperationMode::SIMULATION): // todo: remove case
         {
             if (simulation_loaded)
             {
@@ -5541,9 +5549,15 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         t_interp.stop();
         // produce fake camera image (left hand only)
         t_camera.start();
+        // first render the mesh normally with a skin texture
         curSelectedTexture = "skin";
         handleSkinning(bones2world_left_cur, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
-        // convert to gray scale single channel image
+        fake_cam_fbo.bind();
+        set_texture_shader(textureShader, true, true, false);
+        hands_fbo.getTexture()->bind();
+        fullScreenQuad.render();
+        fake_cam_fbo.unbind();
+        // now create a binary version of the same image (1 channel, either 1's or 0's)
         fake_cam_binary_fbo.bind();
         thresholdAlphaShader->use();
         thresholdAlphaShader->setMat4("view", glm::mat4(1.0));
@@ -5558,25 +5572,19 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         hands_fbo.getTexture()->bind();
         fullScreenQuad.render();
         fake_cam_binary_fbo.unbind();
-        //
-        fake_cam_fbo.bind();
-        set_texture_shader(textureShader, true, true, false);
-        hands_fbo.getTexture()->bind();
-        fullScreenQuad.render();
-        fake_cam_fbo.unbind();
         t_camera.stop();
-        // render the scene as normal
+        // now render the projection image
         t_skin.start();
-        // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
         curSelectedTexture = userStudySelectedTexture;
         handleSkinning(bones2world_left_lag, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         t_skin.stop();
         t_pp.start();
-        // post process with any required effect
+        // post process the projection with any required effect
         handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
         prevVideoFrameCountCont = videoFrameCountCont;
     }
     // overlay final render and camera image, and render to screen
+    // this is needed to simulate how a projection is mixed with the skin color
     glViewport(0, 0, proj_width, proj_height);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     overlayShader->use();
@@ -6120,12 +6128,18 @@ void openIMGUIFrame()
             }
             if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {
+                std::vector<std::string> keys;
                 for (auto &it : texturePack)
                 {
-                    const bool is_selected = (curSelectedTexture == it.first);
-                    if (ImGui::Selectable(it.first.c_str(), is_selected))
+                    keys.push_back(it.first);
+                }
+                std::sort(keys.begin(), keys.end());
+                for (auto &it : keys)
+                {
+                    const bool is_selected = (curSelectedTexture == it);
+                    if (ImGui::Selectable(it.c_str(), is_selected))
                     {
-                        curSelectedTexture = it.first;
+                        curSelectedTexture = it;
                     }
                     if (is_selected)
                     {
@@ -6136,12 +6150,18 @@ void openIMGUIFrame()
             }
             if (ImGui::BeginCombo("Proj. Texture", curSelectedPTexture.c_str(), 0))
             {
+                std::vector<std::string> keys;
                 for (auto &it : texturePack)
                 {
-                    const bool is_selected = (curSelectedPTexture == it.first);
-                    if (ImGui::Selectable(it.first.c_str(), is_selected))
+                    keys.push_back(it.first);
+                }
+                std::sort(keys.begin(), keys.end());
+                for (auto &it : keys)
+                {
+                    const bool is_selected = (curSelectedPTexture == it);
+                    if (ImGui::Selectable(it.c_str(), is_selected))
                     {
-                        curSelectedPTexture = it.first;
+                        curSelectedPTexture = it;
                     }
                     if (is_selected)
                     {
@@ -6152,12 +6172,18 @@ void openIMGUIFrame()
             }
             if (ImGui::BeginCombo("User Study Texture", userStudySelectedTexture.c_str(), 0))
             {
+                std::vector<std::string> keys;
                 for (auto &it : texturePack)
                 {
-                    const bool is_selected = (userStudySelectedTexture == it.first);
-                    if (ImGui::Selectable(it.first.c_str(), is_selected))
+                    keys.push_back(it.first);
+                }
+                std::sort(keys.begin(), keys.end());
+                for (auto &it : keys)
+                {
+                    const bool is_selected = (userStudySelectedTexture == it);
+                    if (ImGui::Selectable(it.c_str(), is_selected))
                     {
-                        userStudySelectedTexture = it.first;
+                        userStudySelectedTexture = it;
                     }
                     if (is_selected)
                     {
