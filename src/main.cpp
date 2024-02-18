@@ -194,6 +194,7 @@ float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
 float distance_threshold = 10.0f;
 float seam_threshold = 0.5f;
+bool jfauv_right_hand = false;
 glm::vec3 mask_bg_color(0.0f, 0.0f, 0.0f);
 glm::vec3 mask_missing_info_color(0.26, 0.43, 0.376);
 glm::vec3 mask_unused_info_color(0.485f, 0.331f, 0.485f);
@@ -3990,9 +3991,9 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         hands_fbo.unbind();
         /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
         // todo: if this pp is enabled, hands_fbo above performs redundant work: refactor.
-        if (!isRightHand)
+        // todo: currently only works for one hand. make it work for both
+        if ((isRightHand && jfauv_right_hand) || (!isRightHand && !jfauv_right_hand))
         {
-            // todo: currently only works for one hand. make it work for both
             if (postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
             {
                 uv_fbo.bind();
@@ -5550,7 +5551,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         // produce fake camera image (left hand only)
         t_camera.start();
         // first render the mesh normally with a skin texture
-        curSelectedTexture = "skin";
+        curSelectedTexture = "realistic_skin";
         handleSkinning(bones2world_left_cur, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         fake_cam_fbo.bind();
         set_texture_shader(textureShader, true, true, false);
@@ -6305,9 +6306,11 @@ void openIMGUIFrame()
             ImGui::RadioButton("Camera Feed", &postprocess_mode, static_cast<int>(PostProcessMode::CAM_FEED));
             ImGui::SameLine();
             ImGui::RadioButton("Overlay", &postprocess_mode, static_cast<int>(PostProcessMode::OVERLAY));
-            ImGui::RadioButton("Jump Flood", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD));
+            ImGui::RadioButton("JFA", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD));
             ImGui::SameLine();
-            ImGui::RadioButton("Jump Flood UV", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD_UV));
+            ImGui::RadioButton("JFA UV", &postprocess_mode, static_cast<int>(PostProcessMode::JUMP_FLOOD_UV));
+            ImGui::Checkbox("JF-UV for Right Hand", &jfauv_right_hand);
+            ImGui::SameLine();
             ImGui::Checkbox("Show Landmarks", &show_landmarks);
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
@@ -6319,7 +6322,7 @@ void openIMGUIFrame()
                 threshold_flag = false;
             }
             ImGui::SliderFloat("JFA Distance Threshold", &distance_threshold, 0.0f, 100.0f);
-            ImGui::SliderFloat("JFA Seam Threshold", &seam_threshold, 0.0f, 1.0f);
+            ImGui::SliderFloat("JFA Seam Threshold", &seam_threshold, 0.0f, 2.0f);
             ImGui::ColorEdit3("BG Color", &mask_bg_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Missing Info Color", &mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Unused Info Color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);

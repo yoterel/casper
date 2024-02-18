@@ -29,24 +29,35 @@ void main()
         maskCol = texture(mask, mask_uv);
     float avgMask = (maskCol.r + maskCol.g + maskCol.b) * 0.333333;
 
-    if (avgMask >= threshold) { // select only pixels that are not black from the jump flood image
-        float dist = distance(loc.xy, gl_FragCoord.xy); // compute distance to nearest seed
+    if (avgMask >= threshold) { // select only pixels that are not black from the jump flood image (foreground)
+        float dist = distance(loc.xy, gl_FragCoord.xy); // compute distance to nearest seed in pixel space
         if (dist >= distThreshold)
+        {
             discard;
-        // step1: calculate location of reflection about nearest seed
-        vec2 reflection = 2*loc.xy - gl_FragCoord.xy; // computation of reflection point in pixel space
-        // step2: calculate new uv based on reflection
-        vec2 reflection_uv = texture(uv, reflection / resolution).xy; // get uv of reflection point (0:1)
-        vec2 seed_uv = texture(uv, loc.xy / resolution).xy; // get uv of nearest seed point (0:1)
-        vec2 new_uv;
-        if (distance(reflection_uv, seed_uv) > seamThreshold) // if reflection point is too far from seed, use seed uv, we dont want jumps across seams
-            new_uv = seed_uv;
+            // FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+        }
         else
-            new_uv = 2*seed_uv - reflection_uv; // compute new uv based on reflection
-        // step3: sample unwrapped texture using the new uv
-        // vec2 new_uv = texture(uv, reflection).xy; // get uv of reflection point
-        FragColor = texture(unwrapped, new_uv);
-    } else {
+        {
+            // step1: calculate location of reflection about nearest seed
+            vec2 reflection = 2*loc.xy - gl_FragCoord.xy; // computation of reflection point in pixel space
+            // step2: calculate new uv based on reflection
+            vec2 reflection_uv = texture(uv, reflection / resolution).xy; // get uv of reflection point (0:1)
+            vec2 seed_uv = texture(uv, loc.xy / resolution).xy; // get uv of nearest seed point (0:1)
+            vec2 new_uv;
+            if (distance(reflection_uv, seed_uv) > seamThreshold) // if reflection point is too far from seed, use seed uv, we dont want jumps across seams
+            {
+                new_uv = seed_uv;
+                // FragColor = vec4(0.0, 1.0, 1.0, 1.0);   
+            }
+            else
+            {
+                new_uv = 2*seed_uv - reflection_uv; // compute new uv based on reflection
+                // FragColor = vec4(1-distance(reflection_uv, seed_uv), 0.0, 0.0, 1.0);
+            }
+            // step3: sample unwrapped texture using the new uv
+            FragColor = texture(unwrapped, new_uv); // sample unwrapped texture using new uv
+        }
+    } else {  // background
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     }
 }
