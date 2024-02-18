@@ -5551,7 +5551,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         // produce fake camera image (left hand only)
         t_camera.start();
         // first render the mesh normally with a skin texture
-        curSelectedTexture = "realistic_skin";
+        curSelectedTexture = "realistic_skin3";
         handleSkinning(bones2world_left_cur, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
         fake_cam_fbo.bind();
         set_texture_shader(textureShader, true, true, false);
