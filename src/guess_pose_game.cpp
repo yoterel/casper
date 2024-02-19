@@ -1,13 +1,13 @@
-#include "game.h"
+#include "guess_pose_game.h"
 #include <iostream>
 
-Game::Game()
+GuessPoseGame::GuessPoseGame()
 {
     rng = std::default_random_engine{};
     // reset();
 }
 
-int Game::getState()
+int GuessPoseGame::getState()
 {
     switch (curState)
     {
@@ -157,28 +157,28 @@ int Game::getState()
     return curState;
 }
 
-int Game::getCountdownTime()
+int GuessPoseGame::getCountdownTime()
 {
     return static_cast<int>(timer.getElapsedTimeInSec());
 }
-std::vector<glm::mat4> Game::getPose()
+std::vector<glm::mat4> GuessPoseGame::getPose()
 {
     if (curPoseIndex >= poses.size())
         return poses[poses.size() - 1];
     return poses[curPoseIndex];
 }
 
-void Game::setScore(float score)
+void GuessPoseGame::setScore(float score)
 {
     cur_scores.push_back(score);
 }
 
-void Game::setPoses(std::vector<std::vector<glm::mat4>> required_poses)
+void GuessPoseGame::setPoses(std::vector<std::vector<glm::mat4>> required_poses)
 {
     poses = required_poses;
 }
 
-void Game::reset(bool shuffle)
+void GuessPoseGame::reset(bool shuffle)
 {
     curState = 0;
     curPoseIndex = 0;
@@ -192,7 +192,7 @@ void Game::reset(bool shuffle)
     gameMode = 1;
 }
 
-void Game::printScore()
+void GuessPoseGame::printScore()
 {
     float avgScore = 0.0f;
     std::cout << "------------------------" << std::endl;

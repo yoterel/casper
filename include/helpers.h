@@ -118,7 +118,7 @@ enum class OperationMode
     COAXIAL = 3,
     LEAP = 4,
     SIMULATION = 5,
-    GAME = 6,
+    GUESS_POSE_GAME = 6,
 };
 enum class SimulationMode
 {

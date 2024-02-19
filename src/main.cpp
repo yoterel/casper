@@ -34,7 +34,8 @@
 #include "imgui_impl_opengl3.h"
 #include "diffuse.h"
 #include "user_study.h"
-#include "game.h"
+#include "guess_pose_game.h"
+#include "guess_num_game.h"
 #include "MidiControllerAPI.h"
 #ifdef _DEBUG
 #undef _DEBUG
@@ -266,7 +267,7 @@ int64_t prevGameFrameCount = 0;
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
-Game game = Game();
+GuessPoseGame guessPoseGame = GuessPoseGame();
 int humanChoice = 1;
 bool video_reached_end = true;
 bool is_first_in_video_pair = true;
@@ -1379,21 +1380,21 @@ int main(int argc, char *argv[])
             }
             break;
         }
-        case static_cast<int>(OperationMode::GAME):
+        case static_cast<int>(OperationMode::GUESS_POSE_GAME):
         {
-            int state = game.getState();
+            int state = guessPoseGame.getState();
             switch (state)
             {
             case static_cast<int>(GameState::WAIT_FOR_USER):
             {
-                game.setBonesVisible(bones_to_world_left.size() > 0);
+                guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
                 break;
             }
             case static_cast<int>(GameState::COUNTDOWN):
             {
                 material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                int cd_time = game.getCountdownTime();
+                int cd_time = guessPoseGame.getCountdownTime();
                 switch (cd_time)
                 {
                 case 0:
@@ -1419,8 +1420,8 @@ int main(int argc, char *argv[])
             case static_cast<int>(GameState::PLAY):
             {
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
-                game.setBonesVisible(bones_to_world_left.size() > 0);
-                required_pose_bones_to_world_left = game.getPose();
+                guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
+                required_pose_bones_to_world_left = guessPoseGame.getPose();
                 if (bones_to_world_left.size() > 0)
                 {
                     std::vector<float> weights_leap = computeDistanceFromPose(bones_to_world_left, required_pose_bones_to_world_left);
@@ -1431,12 +1432,12 @@ int main(int argc, char *argv[])
                         if ((scores[i] < minScore) && (scores[i] > 0.0f))
                             minScore = scores[i];
                     }
-                    game.setScore(minScore);
+                    guessPoseGame.setScore(minScore);
                     // float avgScore = 0.0f;
                     // for (int i = 0; i < scores.size(); i++)
                     //     avgScore += scores[i];
                     // avgScore /= scores.size();
-                    // game.setScore(avgScore);
+                    // guessPosegame.setScore(avgScore);
                 }
                 break;
             }
@@ -5712,7 +5713,7 @@ void openIMGUIFrame()
                 debug_mode = false;
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Game", &operation_mode, static_cast<int>(OperationMode::GAME)))
+            if (ImGui::RadioButton("Game", &operation_mode, static_cast<int>(OperationMode::GUESS_POSE_GAME)))
             {
                 recording_name = "game";
                 std::vector<std::vector<glm::mat4>> poses;
@@ -5720,8 +5721,8 @@ void openIMGUIFrame()
                 {
                     std::cout << "Failed to load recording: " << recording_name << std::endl;
                 }
-                game.setPoses(poses);
-                game.reset(false);
+                guessPoseGame.setPoses(poses);
+                guessPoseGame.reset(false);
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...

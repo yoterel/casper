@@ -7,10 +7,10 @@
 #include <algorithm>
 #include <random>
 
-class Game
+class GuessPoseGame
 {
 public:
-    Game();
+    GuessPoseGame();
     void setPoses(std::vector<std::vector<glm::mat4>> required_poses);
     void setBonesVisible(bool visible) { bonesVisible = visible; };
     // bool isCountingDown() { return countDownInProgress; };
