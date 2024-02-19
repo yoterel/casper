@@ -1,13 +1,11 @@
 pilot:
-	2 uvs...
-	5 speeds (texture = flower)
-		speeds:
+	speeds:  (texture = uv)
 			0.5, 1.1, 1.7, 2.3, 3.0
-	4 textures, 3 contrasts, 1 speed
-		textures:
-			baked1, baked5, cursive, XGA_rand
-		contrasts:
+	contrasts:  (texture = uv)
 			0.4 / 0.6 / 0.8
+	6 textures
+		textures:
+			cursive2, butterfly2, XGA_colorbars_hor, dragon, zombie, uv
 	
 full:
 	2 textures, 3 conditions (nothing, jfa, jfa-uv)
