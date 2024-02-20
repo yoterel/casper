@@ -22,7 +22,6 @@
 #include "post_process.h"
 #include "utils.h"
 #include "cnpy.h"
-#include "image_process.h"
 #include "stb_image_write.h"
 #include <filesystem>
 #include "helpers.h"
@@ -1158,7 +1157,7 @@ int main(int argc, char *argv[])
                         videoFrameCountCont = 0.0f;                                     // reset video playback
                         prevVideoFrameCountCont = -1.0f;
                         video_reached_end = false;
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let subject rest a bit
+                        // std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let subject rest a bit
                     }
                     else
                     {
@@ -6517,6 +6516,12 @@ void openIMGUIFrame()
                 {
                     CloseMidiController();
                 }
+            }
+            if (ImGui::Button("Refresh MIDI Controller"))
+            {
+                CloseMidiController();
+                if (!OpenMidiController())
+                    std::cout << "Midi Controller is not available!" << std::endl;
             }
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);

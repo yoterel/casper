@@ -15,14 +15,17 @@ void UserStudy::reset(float initialLatency)
     trialEnded = false;
     baseStep = 1.6f;
     minBaseStep = 0.01f;
-    minLatency = 0.1f;
+    minLatency = 0.0f;
     curLatency = initialLatency;
     attempts = 0;
     pair_attempts = 0;
     reversals = 0;
+    successStreak = 0;
+    maxSuccessStreak = 5;
     maxReversals = 10;
     jnd = 0.0f;
     latencies.clear();
+    sessionTimer.start();
 }
 
 float UserStudy::getCurrentLatency()
@@ -92,10 +95,12 @@ float UserStudy::randomTrial(int humanChoice)
     attempts++;
     if (trialIsBaseline)
     {
+        std::cout << "Current video is baseline" << std::endl;
         return 0.0f;
     }
     else
     {
+        std::cout << "Current video is not baseline" << std::endl;
         return getCurrentLatency();
     }
 }
@@ -123,14 +128,25 @@ void UserStudy::trial(bool successfullHuman)
     {
         if (successfullHuman)
         {
-            if (!wasHumanSucessfull)
+            successStreak +=1;
+            if (successStreak >= maxSuccessStreak)
             {
-                std::cout << "reversal occured" << std::endl;
-                reversals++;
-                baseStep /= 2;
-                if (baseStep <= minBaseStep)
+                std::cout << "Success streak occured, increasing base step" << std::endl;
+                baseStep *= 2;
+                successStreak = 0;
+            }
+            else
+            {
+                if (!wasHumanSucessfull)
                 {
-                    baseStep = minBaseStep;
+                    std::cout << "reversal occured" << std::endl;
+                    reversals++;
+                    std::cout << "reversals: " << reversals << std::endl;
+                    baseStep /= 2;
+                    if (baseStep <= minBaseStep)
+                    {
+                        baseStep = minBaseStep;
+                    }
                 }
             }
             curLatency -= baseStep;
@@ -141,10 +157,12 @@ void UserStudy::trial(bool successfullHuman)
         }
         else
         {
+            successStreak = 0;
             if (wasHumanSucessfull)
             {
                 std::cout << "reversal occured" << std::endl;
                 reversals++;
+                std::cout << "reversals: " << reversals << std::endl;
                 baseStep /= 2;
                 if (baseStep <= minBaseStep)
                 {
@@ -156,19 +174,23 @@ void UserStudy::trial(bool successfullHuman)
         if (reversals >= maxReversals)
         {
             trialEnded = true;
+            sessionTimer.stop();
             jnd = curLatency;
+            return;
         }
     }
-    std::cout << "new latency: " << curLatency << std::endl;
+    std::cout << "New latency: " << curLatency << std::endl;
+    std::cout << "Total session time [m]: " << sessionTimer.getElapsedTimeInSec() / 60 << std::endl;
     wasHumanSucessfull = successfullHuman;
     pair_attempts++;
 }
 
 void UserStudy::printStats()
 {
+    std::cout << "Total session time [m]: " << sessionTimer.getElapsedTimeInSec() / 60 << std::endl;
     std::cout << "JND: " << jnd << std::endl;
 
-    std::cout << "Latencies: ";
+    std::cout << "Latencies: " <<std::endl;
     float accumulator_last_five = 0.0f;
     for (int i = 0; i < latencies.size(); i++)
     {
@@ -178,5 +200,6 @@ void UserStudy::printStats()
             accumulator_last_five += latencies[i];
         }
     }
-    std::cout << "JND, last 5: " << accumulator_last_five / 5 << std::endl;
+    std::cout << std::endl;
+    std::cout << "Avg last 5: " << accumulator_last_five / 5 << std::endl;
 }

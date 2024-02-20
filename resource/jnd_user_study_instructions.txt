@@ -6,12 +6,16 @@ pilot:
 	6 textures
 		textures:
 			random_colors, dragon, cursive2, birds, uv, brick
-	
+	notes from pilot:
+		latencies are much lower than expected
+		prepare proper excel sheet
+		blur image? report time it took
+		shorten videos...
 full:
 	2 textures, 3 conditions (nothing, jfa, jfa-uv)
 
 
-Get subjects full name, age, and gender
+Get subjects full name, age, and gender, if they watched pm before, if they wear glasses
 
 Instructions:
 You re going to participate in a study that tries to quantify how latency in projection mapping can be perceptually reduced.
@@ -19,21 +23,19 @@ We will run several session, where in each session you will be presented with se
 in each trial, you will see two videos of a hand moving, and a projection applied to it.
 Please choose which one seems to have more latency to it by clicking either button 1 or button 2.
 Remember to select the video with MORE latency ("lag").
-
 We will start with a training session, where latency is obvious.
 
-launch ahand.exe
+ahand.exe --simcam --mesh ../../resource/UserStudy.fbx
 open excel sheet, input subject name, age
 General -> Use Projector
 General -> Gamma Correction
-Calibration -> untick Use Coaxial Calib
 General -> User Study
-Material -> User Study Texture -> baked_left5 / baked_left1 / 3
+Material -> User Study Texture -> select texture
 Post Process -> Render Only / Jump Flood / Jump Flood UV
 Post Process -> JFA Distance Threshold -> 100
-Record & Playback -> Recording Name -> all / translation1 / translation2
-Record & Playback -> Video playback speed -> 1.0 / 2.0 / 3.0
-Record & Playback -> Mixer ratio -> 0.4 / 0.6 / 0.8
+Record & Playback -> Recording Name -> all / translation
+Record & Playback -> Video playback speed -> select speed
+Record & Playback -> Mixer ratio -> select mixture ratio
 Record & Playback -> Initial Latency -> 40.0f
 
 < SHOW SUBJECT >
@@ -46,3 +48,7 @@ Record & Playback -> Run user study
 < END EXPERIMENT >
 Write final JND in excel
 repeat from step 6
+
+final quesitons:
+did you figure out the experimental protocol ?
+did you have a stratedgy to figure out the latency ?

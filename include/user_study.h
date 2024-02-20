@@ -2,6 +2,8 @@
 #define USER_STUDY_H
 
 #include <vector>
+#include "timer.h"
+
 class UserStudy
 {
 public:
@@ -28,7 +30,10 @@ private:
     int pair_attempts;
     int reversals;
     int maxReversals;
+    int successStreak;
+    int maxSuccessStreak;
     float jnd;
+    Timer sessionTimer;
     std::vector<float> latencies;
 };
 #endif // USER_STUDY_H
