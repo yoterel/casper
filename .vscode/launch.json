@@ -11,7 +11,7 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "--mesh",
-                "../../resource/GenericHand_weights_woarm.fbx", // GenericHand_weights_woarm_uvjfa2, GenericHand_weights_woarm_uvshader.fbx, GenericHand_weights_woarm.fbx
+                "../../resource/Default.fbx", // Default.fbx, UserStudy.fbx, ShaderGame.fbx, ShaderToy.fbx, GuessNumGame.fbx
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build//Debug",

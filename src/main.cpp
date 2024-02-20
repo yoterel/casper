@@ -268,6 +268,7 @@ int64_t prevGameFrameCount = 0;
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
 GuessPoseGame guessPoseGame = GuessPoseGame();
+GuessNumGame guessNumGame = GuessNumGame();
 int humanChoice = 1;
 bool video_reached_end = true;
 bool is_first_in_video_pair = true;
@@ -540,11 +541,11 @@ int main(int argc, char *argv[])
     t_app.start();
     /* parse cmd line options */
     cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
-    options.add_options()                                                                                                                                //
-        ("m,mesh", "A .fbx mesh file to use for skinning", cxxopts::value<std::string>()->default_value("../../resource/GenericHand_weights_woarm.fbx")) //
-        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                                         //
-        ("h,help", "Prints usage")                                                                                                                       //
-        // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                                       //
+    options.add_options()                                                                                                              //
+        ("m,mesh", "A .fbx mesh file to use for skinning", cxxopts::value<std::string>()->default_value("../../resource/Default.fbx")) //
+        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                       //
+        ("h,help", "Prints usage")                                                                                                     //
+        // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                      //
         ;
     std::string meshFile;
     try
@@ -1385,12 +1386,12 @@ int main(int argc, char *argv[])
             int state = guessPoseGame.getState();
             switch (state)
             {
-            case static_cast<int>(GameState::WAIT_FOR_USER):
+            case static_cast<int>(GuessPoseGameState::WAIT_FOR_USER):
             {
                 guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
                 break;
             }
-            case static_cast<int>(GameState::COUNTDOWN):
+            case static_cast<int>(GuessPoseGameState::COUNTDOWN):
             {
                 material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 texture_mode = static_cast<int>(TextureMode::FROM_FILE);
@@ -1417,7 +1418,7 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
-            case static_cast<int>(GameState::PLAY):
+            case static_cast<int>(GuessPoseGameState::PLAY):
             {
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
                 guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
@@ -1441,7 +1442,7 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
-            case static_cast<int>(GameState::END):
+            case static_cast<int>(GuessPoseGameState::END):
             {
                 break;
             }
@@ -1489,6 +1490,57 @@ int main(int argc, char *argv[])
                 hands_fbo.getTexture()->bind();
                 topRightQuad.render();
             }
+            break;
+        }
+        case static_cast<int>(OperationMode::GUESS_NUM_GAME):
+        {
+            int state = guessNumGame.getState();
+            switch (state)
+            {
+            // wait for user to place their hand infront of screen
+            case static_cast<int>(GuessNumGameState::WAIT_FOR_USER):
+            {
+                guessNumGame.setBonesVisible(bones_to_world_left.size() > 0);
+                break;
+            }
+            // countdown to start game
+            case static_cast<int>(GuessNumGameState::COUNTDOWN):
+            {
+                material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+                texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                int cd_time = guessNumGame.getCountdownTime();
+                switch (cd_time)
+                {
+                case 0:
+                {
+                    curSelectedTexture = "3";
+                    break;
+                }
+                case 1:
+                {
+                    curSelectedTexture = "2";
+                    break;
+                }
+                case 2:
+                {
+                    curSelectedTexture = "1";
+                    break;
+                }
+                default:
+                    break;
+                }
+                break;
+            }
+            default:
+                break;
+            }
+            // display a set of random characters on finger tips &
+            // display one of them on the palm / backhand &
+            // move finger tips characters randomly
+            // wait for user to bend a finger
+            // if finger is wrong -1 point, if right +1 point
+            // proceed to next round, until 10 rounds are finished
+            // print score
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera

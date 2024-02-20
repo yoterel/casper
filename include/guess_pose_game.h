@@ -1,5 +1,5 @@
-#ifndef GAME_H
-#define GAME_H
+#ifndef GUESS_POSE_GAME_H
+#define GUESS_POSE_GAME_H
 
 #include <vector>
 #include "timer.h"
@@ -35,7 +35,7 @@ private:
     std::mt19937 rng;
 };
 
-enum class GameState
+enum class GuessPoseGameState
 {
     WAIT_FOR_USER = 0,
     COUNTDOWN = 1,
@@ -49,4 +49,4 @@ enum class GameMode
     TIME_UNTIL_THRESHOLD = 1,
 };
 
-#endif // GAME_H
+#endif // GUESS_POSE_GAME_H

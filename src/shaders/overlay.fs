@@ -13,7 +13,7 @@ void main()
     vec4 col2 = texture(projectiveTexture, TexCoord);
     if ((col1.w != 0.0) && (col2.w != 0.0))
     {
-        outputColor = vec4(mix(vec3(col1), vec3(col2), mixRatio), 1.0);
+        outputColor = vec4(mix(vec3(col1)*0.8, vec3(col2), mixRatio), 1.0);
     }
     else
     {

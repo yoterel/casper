@@ -5,7 +5,7 @@ pilot:
 			0.4 / 0.6 / 0.8
 	6 textures
 		textures:
-			cursive2, butterfly2, XGA_colorbars_hor, dragon, zombie, uv
+			random_colors, dragon, cursive2, birds, uv, brick
 	
 full:
 	2 textures, 3 conditions (nothing, jfa, jfa-uv)

@@ -11,7 +11,7 @@ int GuessPoseGame::getState()
 {
     switch (curState)
     {
-    case static_cast<int>(GameState::WAIT_FOR_USER):
+    case static_cast<int>(GuessPoseGameState::WAIT_FOR_USER):
     {
         if (bonesVisible)
         {
@@ -26,7 +26,7 @@ int GuessPoseGame::getState()
                 {
                     countDownInProgress = false;
                     timer.stop();
-                    setState(static_cast<int>(GameState::COUNTDOWN));
+                    setState(static_cast<int>(GuessPoseGameState::COUNTDOWN));
                 }
             }
         }
@@ -37,7 +37,7 @@ int GuessPoseGame::getState()
         }
         break;
     }
-    case static_cast<int>(GameState::COUNTDOWN):
+    case static_cast<int>(GuessPoseGameState::COUNTDOWN):
     {
         if (!countDownInProgress)
         {
@@ -50,12 +50,12 @@ int GuessPoseGame::getState()
             {
                 countDownInProgress = false;
                 timer.stop();
-                setState(static_cast<int>(GameState::PLAY));
+                setState(static_cast<int>(GuessPoseGameState::PLAY));
             }
         }
         break;
     }
-    case static_cast<int>(GameState::PLAY):
+    case static_cast<int>(GuessPoseGameState::PLAY):
     {
         switch (gameMode)
         {
@@ -127,7 +127,7 @@ int GuessPoseGame::getState()
                     countDownInProgress = false;
                     score_per_pose.push_back(time_until_threshold);
                     curPoseIndex += 1;
-                    setState(static_cast<int>(GameState::COUNTDOWN));
+                    setState(static_cast<int>(GuessPoseGameState::COUNTDOWN));
                     break;
                 }
             }
@@ -141,14 +141,14 @@ int GuessPoseGame::getState()
         if (curPoseIndex >= poses.size())
         {
             printScore();
-            setState(static_cast<int>(GameState::END));
+            setState(static_cast<int>(GuessPoseGameState::END));
         }
         break;
     }
-    case static_cast<int>(GameState::END):
+    case static_cast<int>(GuessPoseGameState::END):
     {
         reset();
-        setState(static_cast<int>(GameState::WAIT_FOR_USER));
+        setState(static_cast<int>(GuessPoseGameState::WAIT_FOR_USER));
         break;
     }
     default:
