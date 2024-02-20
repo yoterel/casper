@@ -465,6 +465,7 @@ FBO pre_bake_fbo(1024, 1024, 4, false);
 FBO deformed_bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
+FBO postprocess_fbo2(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
 Quad fullScreenQuad(0.0f, false);
 PostProcess postProcess(cam_width, cam_height, dst_width, dst_height);
@@ -511,6 +512,7 @@ std::vector<std::vector<glm::vec2>> prev_pred_glm_left, prev_pred_glm_right;
 bool mls_succeed = false;
 bool mls_running = false;
 bool use_mls = true;
+bool postprocess_blur = false;
 int mls_mode = static_cast<int>(MLSMode::CONTROL_POINTS1);
 bool show_landmarks = false;
 bool show_mls_grid = false;
@@ -675,6 +677,7 @@ int main(int argc, char *argv[])
     deformed_bake_fbo.init();
     sd_fbo.init();
     postprocess_fbo.init();
+    postprocess_fbo2.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
     SkinnedModel leftHandModel(meshFile,
@@ -797,7 +800,7 @@ int main(int argc, char *argv[])
     Shader jfaShader("../../src/shaders/jfa.vs", "../../src/shaders/jfa.fs");
     Shader debugShader("../../src/shaders/debug.vs", "../../src/shaders/debug.fs");
     Shader projectorShader("../../src/shaders/projector_shader.vs", "../../src/shaders/projector_shader.fs");
-    Shader projectorOnlyShader("../../src/shaders/projector_only.vs", "../../src/shaders/projector_only.fs");
+    Shader blurShader("../../src/shaders/blur.vs", "../../src/shaders/blur.fs");
     Shader textureShader("../../src/shaders/color_by_texture.vs", "../../src/shaders/color_by_texture.fs");
     Shader overlayShader("../../src/shaders/overlay.vs", "../../src/shaders/overlay.fs");
     Shader thresholdAlphaShader("../../src/shaders/threshold_alpha.vs", "../../src/shaders/threshold_alpha.fs");
@@ -823,7 +826,7 @@ int main(int argc, char *argv[])
         {"jfaShader", &jfaShader},
         {"debugShader", &debugShader},
         {"projectorShader", &projectorShader},
-        {"projectorOnlyShader", &projectorOnlyShader},
+        {"blurShader", &blurShader},
         {"textureShader", &textureShader},
         {"overlayShader", &overlayShader},
         {"thresholdAlphaShader", &thresholdAlphaShader},
@@ -3606,6 +3609,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     Shader *NNShader = shader_map["NNShader"];
     Shader *uv_NNShader = shader_map["uv_NNShader"];
     Shader *gridColorShader = shader_map["gridColorShader"];
+    Shader *blurShader = shader_map["blurShader"];
     Texture *leftHandTexture;
     Texture *rightHandTexture;
     switch (texture_mode)
@@ -5587,6 +5591,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *uv_NNShader = shader_map["uv_NNShader"];
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *gridColorShader = shader_map["gridColorShader"];
+    Shader *blurShader = shader_map["blurShader"];
     if (prevVideoFrameCountCont != videoFrameCountCont)
     {
         // interpolate hand pose to the required latency
@@ -5635,6 +5640,25 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         // post process the projection with any required effect
         handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
         prevVideoFrameCountCont = videoFrameCountCont;
+    }
+    if (postprocess_blur)
+    {
+        postprocess_fbo2.bind();
+        blurShader->use();
+        blurShader->setVec2("u_direction", glm::vec2(1.0f / dst_width, 0.0f));
+        blurShader->setInt("u_input_texture", 0);
+        blurShader->setMat4("mvp", glm::mat4(1.0f));
+        c2p_fbo.getTexture()->bind();
+        fullScreenQuad.render();
+        postprocess_fbo2.unbind();
+        c2p_fbo.bind();
+        blurShader->use();
+        blurShader->setVec2("u_direction", glm::vec2(0.0f, 1.0f / dst_height));
+        blurShader->setInt("u_input_texture", 0);
+        blurShader->setMat4("mvp", glm::mat4(1.0f));
+        postprocess_fbo2.getTexture()->bind();
+        fullScreenQuad.render();
+        c2p_fbo.unbind();
     }
     // overlay final render and camera image, and render to screen
     // this is needed to simulate how a projection is mixed with the skin color
@@ -6364,6 +6388,7 @@ void openIMGUIFrame()
             ImGui::Checkbox("JF-UV for Right Hand", &jfauv_right_hand);
             ImGui::SameLine();
             ImGui::Checkbox("Show Landmarks", &show_landmarks);
+            ImGui::Checkbox("Blur", &postprocess_blur);
             ImGui::SliderFloat("Masking Threshold", &masking_threshold, 0.0f, 1.0f);
             if (ImGui::IsItemActive())
             {

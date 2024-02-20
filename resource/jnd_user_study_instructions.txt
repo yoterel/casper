@@ -9,7 +9,7 @@ pilot:
 	notes from pilot:
 		latencies are much lower than expected
 		prepare proper excel sheet
-		blur image? report time it took
+		blur image?
 		shorten videos...
 full:
 	2 textures, 3 conditions (nothing, jfa, jfa-uv)
