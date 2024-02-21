@@ -5,6 +5,7 @@ in vec2 TexCoord;
 uniform sampler2D objectTexture;
 uniform sampler2D projectiveTexture;
 uniform float mixRatio = 0.7;
+uniform float skinBrightness = 1.0;
 uniform bool gammaCorrect = false;
 void main()
 {
@@ -13,11 +14,11 @@ void main()
     vec4 col2 = texture(projectiveTexture, TexCoord);
     if ((col1.w != 0.0) && (col2.w != 0.0))
     {
-        outputColor = vec4(mix(vec3(col1)*0.8, vec3(col2), mixRatio), 1.0);
+        outputColor = vec4(mix(vec3(col1)*skinBrightness, vec3(col2), mixRatio), 1.0);
     }
     else
     {
-        outputColor = col1;
+        outputColor = vec4(col1.r*skinBrightness, col1.g*skinBrightness, col1.b*skinBrightness, col1.a);
     }
     if (gammaCorrect)
     {

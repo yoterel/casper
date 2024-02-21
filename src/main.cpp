@@ -280,6 +280,7 @@ float initial_simulated_latency_ms = 40.0f;
 float vid_playback_fps_limiter = 900.0;
 float vid_playback_speed = 1.0f;
 float projection_mix_ratio = 0.6f;
+float skin_brightness = 0.3f;
 float prevVideoFrameCountCont = -1.0f;
 float videoFrameCountCont = 0.0;
 int64_t simulationFrameCount = 0;
@@ -5668,6 +5669,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     overlayShader->setMat4("mvp", glm::mat4(1.0));
     overlayShader->setInt("projectiveTexture", 0);
     overlayShader->setFloat("mixRatio", projection_mix_ratio);
+    overlayShader->setFloat("skinBrightness", skin_brightness);
     c2p_fbo.getTexture()->bind(GL_TEXTURE0);
     overlayShader->setInt("objectTexture", 1);
     overlayShader->setBool("gammaCorrect", gamma_correct);
@@ -6552,6 +6554,7 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Video Playback Speed", &vid_playback_speed, 0.1f, 10.0f);
             ImGui::SliderFloat("Mixer Ratio", &projection_mix_ratio, 0.0f, 1.0f);
+            ImGui::SliderFloat("Skin Brightness", &skin_brightness, 0.0f, 1.0f);
             ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 1.0f, 900.0f);
             if (ImGui::Checkbox("Debug Playback", &debug_playback))
             {
