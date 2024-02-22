@@ -200,6 +200,7 @@ glm::vec3 mask_missing_info_color(0.26, 0.43, 0.376);
 glm::vec3 mask_unused_info_color(0.485f, 0.331f, 0.485f);
 bool threshold_flag = false;
 glm::vec3 debug_vec(0.0f, 0.0f, 0.0f);
+float debug_scalar = 1.0f;
 glm::vec3 triangulated(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
 float ms_per_frame = 0;
@@ -467,6 +468,7 @@ FBO deformed_bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
 FBO postprocess_fbo2(dst_width, dst_height, 4, false);
+FBO dynamic_fbo(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
 Quad fullScreenQuad(0.0f, false);
 PostProcess postProcess(cam_width, cam_height, dst_width, dst_height);
@@ -1503,7 +1505,7 @@ int main(int argc, char *argv[])
             // wait for user to place their hand infront of screen
             case static_cast<int>(GuessNumGameState::WAIT_FOR_USER):
             {
-                guessNumGame.setBonesVisible(bones_to_world_left.size() > 0);
+                guessNumGame.setBonesVisible(bones_to_world_right.size() > 0);
                 break;
             }
             // countdown to start game
@@ -1534,16 +1536,60 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
+            case static_cast<int>(GuessNumGameState::PLAY):
+            {
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+                // std::vector<std::string> chars = guessNumGame.getRandomChars();
+                // std::string selectedChar = guessNumGame.getSelectedChar();
+                dynamic_fbo.bind();
+                textModel.Render(textShader, "X", debug_vec.x, debug_vec.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
+                dynamic_fbo.unbind();
+                // display a set of random characters on finger tips &
+                // display one of them on the palm / backhand &
+                // move finger tips characters randomly
+                // wait for user to bend a finger
+                // if finger is wrong -1 point, if right +1 point
+                // proceed to next round, until 10 rounds are finished
+                break;
+            }
+            case static_cast<int>(GuessNumGameState::END):
+            {
+                break;
+            }
             default:
                 break;
             }
-            // display a set of random characters on finger tips &
-            // display one of them on the palm / backhand &
-            // move finger tips characters randomly
-            // wait for user to bend a finger
-            // if finger is wrong -1 point, if right +1 point
-            // proceed to next round, until 10 rounds are finished
-            // print score
+            /* deal with camera input */
+            t_camera.start();
+            handleCameraInput(ptrGrabResult, false, cv::Mat());
+            t_camera.stop();
+
+            /* deal with leap input */
+            t_leap.start();
+            LEAP_STATUS leap_status = handleLeapInput();
+            t_leap.stop();
+
+            /* skin hand meshes */
+            t_skin.start();
+            handleSkinning(bones_to_world_right, false, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+            t_skin.stop();
+
+            /* run MLS on MP prediction to reduce bias */
+            t_mls.start();
+            handleMLSAsync(gridShader);
+            t_mls.stop();
+
+            /* post process fbo using camera input */
+            t_pp.start();
+            handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+            t_pp.stop();
+
+            /* render final output to screen */
+            glViewport(0, 0, proj_width, proj_height);
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            set_texture_shader(&textureShader, false, false, false);
+            c2p_fbo.getTexture()->bind();
+            fullScreenQuad.render();
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera
@@ -3719,6 +3765,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     default:
         break;
     }
+    // add blur to final render
+    if (postprocess_blur)
+    {
+        postProcess.gaussian_blur(blurShader, &postprocess_fbo, &postprocess_fbo2, dst_width, dst_height);
+    }
+    // apply the homography between camera and projector
     c2p_fbo.bind();
     if (use_coaxial_calib)
         set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), c2p_homography);
@@ -3726,6 +3778,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f));
     postprocess_fbo.getTexture()->bind();
     fullScreenQuad.render();
+    // use this opportunity to perhaps render the mls grid and landmarks
     if (use_mls)
     {
         if (show_mls_grid)
@@ -3945,6 +3998,13 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
                     gameFrameCount++;
                     gameTime = 0.0f;
                 }
+                break;
+            }
+            case static_cast<int>(TextureMode::DYNAMIC):
+            {
+                dynamicTexture = dynamic_fbo.getTexture();
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
                 break;
             }
             default: // original texture loaded with mesh
@@ -5642,25 +5702,6 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
         prevVideoFrameCountCont = videoFrameCountCont;
     }
-    if (postprocess_blur)
-    {
-        postprocess_fbo2.bind();
-        blurShader->use();
-        blurShader->setVec2("u_direction", glm::vec2(1.0f / dst_width, 0.0f));
-        blurShader->setInt("u_input_texture", 0);
-        blurShader->setMat4("mvp", glm::mat4(1.0f));
-        c2p_fbo.getTexture()->bind();
-        fullScreenQuad.render();
-        postprocess_fbo2.unbind();
-        c2p_fbo.bind();
-        blurShader->use();
-        blurShader->setVec2("u_direction", glm::vec2(0.0f, 1.0f / dst_height));
-        blurShader->setInt("u_input_texture", 0);
-        blurShader->setMat4("mvp", glm::mat4(1.0f));
-        postprocess_fbo2.getTexture()->bind();
-        fullScreenQuad.render();
-        c2p_fbo.unbind();
-    }
     // overlay final render and camera image, and render to screen
     // this is needed to simulate how a projection is mixed with the skin color
     glViewport(0, 0, proj_width, proj_height);
@@ -5789,8 +5830,7 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
                 debug_mode = false;
             }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Game", &operation_mode, static_cast<int>(OperationMode::GUESS_POSE_GAME)))
+            if (ImGui::RadioButton("Guess Pose Game", &operation_mode, static_cast<int>(OperationMode::GUESS_POSE_GAME)))
             {
                 recording_name = "game";
                 std::vector<std::vector<glm::mat4>> poses;
@@ -5804,6 +5844,17 @@ void openIMGUIFrame()
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
+                exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(exposure);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Guess Number Game", &operation_mode, static_cast<int>(OperationMode::GUESS_NUM_GAME)))
+            {
+                guessNumGame.reset(false);
+                leap.setImageMode(false);
+                leap.setPollMode(false);
+                // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
+                material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
@@ -6295,6 +6346,8 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Game Controls"))
         {
             ImGui::Checkbox("Show Game Hint", &showGameHint);
+            ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -500.0f, 500.0f);
+            ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 100.0f);
             ImGui::SeparatorText("Game Quad");
             ImWidgets::RangeSelect2D("Game Quad", &game_min.x, &game_min.y, &game_max.x, &game_max.y, -1.0f, -1.0f, 1.0f, 1.0f, 0.5f);
             // ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);

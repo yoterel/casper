@@ -14,8 +14,28 @@ int GuessNumGame::getState()
     case static_cast<int>(GuessNumGameState::WAIT_FOR_USER):
     {
 
-        countDownInProgress = false;
-        timer.stop();
+        if (bonesVisible)
+        {
+            if (!countDownInProgress)
+            {
+                countDownInProgress = true;
+                timer.start();
+            }
+            else
+            {
+                if (timer.getElapsedTimeInSec() >= 3)
+                {
+                    countDownInProgress = false;
+                    timer.stop();
+                    setState(static_cast<int>(GuessNumGameState::COUNTDOWN));
+                }
+            }
+        }
+        else
+        {
+            countDownInProgress = false;
+            timer.stop();
+        }
         break;
     }
     case static_cast<int>(GuessNumGameState::COUNTDOWN):
