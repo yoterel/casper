@@ -1142,18 +1142,15 @@ int main(int argc, char *argv[])
                                     textModel.Render(textShader, texts_to_render[i], -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
                                 }
                                 bool button_values[9] = {false, false, false, false, false, false, false, false, false};
-                                bool sucess = GetButtonStates(button_values); // get input from subject
-                                if (!sucess)
-                                {
-                                    std::cout << "Failed to get button states" << std::endl;
-                                    break;
-                                }
+                                GetButtonStates(button_values); // get input from subject
                                 humanChoice = 0;
-                                if (button_values[0])
+                                bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
+                                bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
+                                if (button_values[0] || one_pressed)
                                     humanChoice = 1;
-                                if (button_values[1])
+                                if (button_values[1] || two_pressed)
                                     humanChoice = 2;
-                                if (humanChoice == 0)
+                                if (humanChoice == 0 || (one_pressed && two_pressed))
                                 {
                                     break;
                                 }
@@ -6663,6 +6660,7 @@ void openIMGUIFrame()
                 }
                 else
                 {
+                    video_reached_end = true;
                     CloseMidiController();
                 }
             }
