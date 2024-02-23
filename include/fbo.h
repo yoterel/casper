@@ -16,7 +16,7 @@ public:
               unsigned int texture_color_format = GL_RGBA,
               unsigned int texture_interpolation_mode = GL_LINEAR,
               unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
-    void bind(bool clear = true);
+    void bind(bool clear = true, glm::vec4 clear_color = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
     void unbind();
     void saveColorToFile(std::string filepath, bool flip_vertically = true);
     void saveDepthToFile(std::string filepath, bool flip_vertically = true, float near = 1.0f, float far = 1500.0f);

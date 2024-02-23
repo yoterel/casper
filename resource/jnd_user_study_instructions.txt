@@ -1,4 +1,8 @@
 pilot:
+	pilot results:
+		changed hand brightness compared to backgrond to be more realistic
+		distance from screen matters
+		should shorten videos for more efficiency
 	speeds:  (texture = uv)
 			0.5, 1.1, 1.7, 2.3, 3.0
 	contrasts:  (texture = uv)

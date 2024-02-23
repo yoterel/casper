@@ -117,6 +117,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left,
                          std::vector<glm::vec3> &joints_right,
+                         std::vector<uint32_t> &leftFingersExtended,
+                         std::vector<uint32_t> &rightFingersExtended,
                          bool leap_poll_mode,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp,
@@ -352,6 +354,7 @@ double whole = 0.0;
 LEAP_CLOCK_REBASER clockSynchronizer;
 std::vector<glm::vec3> joints_left, joints_right;
 std::vector<glm::mat4> bones_to_world_left, bones_to_world_right;
+std::vector<uint32_t> left_fingers_extended, right_fingers_extended;
 std::vector<glm::mat4> required_pose_bones_to_world_left;
 std::vector<glm::mat4> bones_to_world_left_bake, bones_to_world_right_bake;
 std::vector<glm::vec3> bake_joints_left, bake_joints_right;
@@ -371,7 +374,7 @@ bool leap_calib_use_ransac = false;
 int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-int operation_mode = static_cast<int>(OperationMode::NORMAL);
+int operation_mode = static_cast<int>(OperationMode::GUESS_NUM_GAME);
 int n_points_leap_calib = 2000;
 int n_points_cam_calib = 30;
 std::vector<double> calib_cam_matrix;
@@ -681,6 +684,7 @@ int main(int argc, char *argv[])
     sd_fbo.init();
     postprocess_fbo.init();
     postprocess_fbo2.init();
+    dynamic_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
     SkinnedModel leftHandModel(meshFile,
@@ -849,6 +853,7 @@ int main(int argc, char *argv[])
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
+    textShader.setFloat("threshold", 0.5f);
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
@@ -1500,60 +1505,113 @@ int main(int argc, char *argv[])
         case static_cast<int>(OperationMode::GUESS_NUM_GAME):
         {
             int state = guessNumGame.getState();
+            guessNumGame.setBonesVisible(bones_to_world_left.size() > 0);
             switch (state)
             {
             // wait for user to place their hand infront of screen
             case static_cast<int>(GuessNumGameState::WAIT_FOR_USER):
             {
-                guessNumGame.setBonesVisible(bones_to_world_right.size() > 0);
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+                textModel.Render(textShader, "Hi !", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                dynamic_fbo.unbind();
                 break;
             }
             // countdown to start game
             case static_cast<int>(GuessNumGameState::COUNTDOWN):
             {
                 material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-                texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                // texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
                 int cd_time = guessNumGame.getCountdownTime();
+                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
                 switch (cd_time)
                 {
                 case 0:
                 {
-                    curSelectedTexture = "3";
+                    textModel.Render(textShader, "3!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                     break;
                 }
                 case 1:
                 {
-                    curSelectedTexture = "2";
+                    textModel.Render(textShader, "2!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                     break;
                 }
                 case 2:
                 {
-                    curSelectedTexture = "1";
+                    textModel.Render(textShader, "1!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                     break;
                 }
                 default:
                     break;
                 }
+                dynamic_fbo.unbind();
                 break;
             }
             case static_cast<int>(GuessNumGameState::PLAY):
             {
                 texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-                // std::vector<std::string> chars = guessNumGame.getRandomChars();
-                // std::string selectedChar = guessNumGame.getSelectedChar();
-                dynamic_fbo.bind();
-                textModel.Render(textShader, "X", debug_vec.x, debug_vec.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
+                std::string chars;
+                int correctIndex = guessNumGame.getRandomChars(chars);
+                int selectedIndex = -1;
+                bool allExtended = true;
+                bool moreThanOneDown = false;
+                for (int i = 1; i < left_fingers_extended.size(); i++)
+                {
+                    if (left_fingers_extended[i] == 0)
+                    {
+                        allExtended = false;
+                        if (selectedIndex != -1)
+                            moreThanOneDown = true;
+                        selectedIndex = i - 1;
+                    }
+                }
+                if (allExtended)
+                    guessNumGame.setAllExtended(true);
+                else
+                    guessNumGame.setAllExtended(false);
+                if (!allExtended && !moreThanOneDown)
+                {
+                    if (selectedIndex == correctIndex)
+                    {
+                        guessNumGame.setResponse(true);
+                    }
+                    else
+                    {
+                        guessNumGame.setResponse(false);
+                    }
+                }
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+                glm::vec2 palm_screen = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                glm::vec2 thumb_screen = Helpers::NDCtoScreen(glm::vec2(0.829f, -0.741f), proj_width, proj_height);
+                glm::vec2 index_ndc = glm::vec2(-0.425f, 0.847f) + guessNumGame.getRandomLocation();
+                glm::vec2 middle_ndc = glm::vec2(0.822f, 0.729f) + guessNumGame.getRandomLocation();
+                glm::vec2 ring_ndc = glm::vec2(-0.966f, 0.282) + guessNumGame.getRandomLocation();
+                glm::vec2 pinky_ndc = glm::vec2(0.14f, 0.894) + guessNumGame.getRandomLocation();
+                glm::vec2 index_screen = Helpers::NDCtoScreen(index_ndc, proj_width, proj_height);
+                glm::vec2 middle_screen = Helpers::NDCtoScreen(middle_ndc, proj_width, proj_height);
+                glm::vec2 ring_screen = Helpers::NDCtoScreen(ring_ndc, proj_width, proj_height);
+                glm::vec2 pinky_screen = Helpers::NDCtoScreen(pinky_ndc, proj_width, proj_height);
+                glm::vec2 ndc_cords = Helpers::NDCtoScreen(glm::vec2(debug_vec), proj_width, proj_height);
+                // textModel.Render(textShader, "X", ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
+                textModel.Render(textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                // textModel.Render(textShader, "T", thumb_ndc.x, thumb_ndc.y, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f));
+                textModel.Render(textShader, chars.substr(0, 1), index_screen.x, index_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(1, 1), middle_screen.x, middle_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(2, 1), ring_screen.x, ring_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(3, 1), pinky_screen.x, pinky_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                 dynamic_fbo.unbind();
-                // display a set of random characters on finger tips &
-                // display one of them on the palm / backhand &
-                // move finger tips characters randomly
-                // wait for user to bend a finger
-                // if finger is wrong -1 point, if right +1 point
-                // proceed to next round, until 10 rounds are finished
                 break;
             }
             case static_cast<int>(GuessNumGameState::END):
             {
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+                textModel.Render(textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                dynamic_fbo.unbind();
                 break;
             }
             default:
@@ -1571,7 +1629,7 @@ int main(int argc, char *argv[])
 
             /* skin hand meshes */
             t_skin.start();
-            handleSkinning(bones_to_world_right, false, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+            handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
             t_skin.stop();
 
             /* run MLS on MP prediction to reduce bias */
@@ -2957,6 +3015,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left, // todo: remove joints, they are redundant
                          std::vector<glm::vec3> &joints_right,
+                         std::vector<uint32_t> &leftFingersExtended,
+                         std::vector<uint32_t> &rightFingersExtended,
                          bool leap_poll_mode,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp,
@@ -2989,6 +3049,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
             joints_right.clear();
             bones_to_world_left.clear();
             bones_to_world_right.clear();
+            leftFingersExtended.clear();
+            rightFingersExtended.clear();
             curFrameTimeStamp = frame->info.timestamp;
             appTimeStamp = t_app.getElapsedTimeInMilliSec();
         }
@@ -3003,6 +3065,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         joints_right.clear();
         bones_to_world_left.clear();
         bones_to_world_right.clear();
+        leftFingersExtended.clear();
+        rightFingersExtended.clear();
         // Get the buffer size needed to hold the tracking data
         eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_time_delay, &targetFrameSize);
         if (retVal != eLeapRS_Success)
@@ -3035,6 +3099,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         float grab_angle = hand->grab_angle;
         std::vector<glm::mat4> bones_to_world;
         std::vector<glm::vec3> joints;
+        std::vector<uint32_t> fingersExtended;
         // palm
         glm::vec3 palm_pos_raw = glm::vec3(hand->palm.position.x,
                                            hand->palm.position.y,
@@ -3100,6 +3165,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         for (uint32_t f = 0; f < 5; f++)
         {
             LEAP_DIGIT finger = hand->digits[f];
+            fingersExtended.push_back(finger.is_extended);
             for (uint32_t b = 0; b < 4; b++)
             {
                 LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
@@ -3127,12 +3193,14 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         {
             bones_to_world_right = std::move(bones_to_world);
             joints_right = std::move(joints);
+            rightFingersExtended = std::move(fingersExtended);
             // grab_angle_right = grab_angle;
         }
         else
         {
             bones_to_world_left = std::move(bones_to_world);
             joints_left = std::move(joints);
+            leftFingersExtended = std::move(fingersExtended);
             // grab_angle_left = grab_angle;
         }
     }
@@ -3625,7 +3693,7 @@ LEAP_STATUS handleLeapInput()
         std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
     }
-    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay);
+    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay);
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
@@ -4700,7 +4768,7 @@ void handleMLSAsync(Shader &gridShader)
                                     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                     std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                     std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-                                    LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay_mls);
+                                    LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay_mls);
                                     if (status == LEAP_STATUS::LEAP_NEWFRAME)
                                     {
                                         if ((cur_vertices_left.size() > 0) && (useLeftHand))
@@ -6346,8 +6414,8 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Game Controls"))
         {
             ImGui::Checkbox("Show Game Hint", &showGameHint);
-            ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -500.0f, 500.0f);
-            ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 100.0f);
+            ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -1.0f, 1.0f);
+            ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 5.0f);
             ImGui::SeparatorText("Game Quad");
             ImWidgets::RangeSelect2D("Game Quad", &game_min.x, &game_min.y, &game_max.x, &game_max.y, -1.0f, -1.0f, 1.0f, 1.0f, 0.5f);
             // ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);
@@ -6474,6 +6542,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::Checkbox("Forecast MP w LEAP", &mls_forecast);
             ImGui::SliderInt("MLS CP Smooth window", &mls_cp_smooth_window, 0, 10);
+            ImGui::SliderFloat("MLS grid shader thresh.", &mls_grid_shader_threshold, 0.0f, 1.0f);
             ImGui::SliderInt("MLS Grid Smooth window", &mls_grid_smooth_window, 0, 10);
             ImGui::SliderInt("MLS Leap Prediction [us]", &magic_leap_time_delay_mls, -50000, 50000);
             if (ImGui::Checkbox("Kalman Filter", &use_mp_kalman))
