@@ -164,8 +164,23 @@ void GuessNumGame::setScore(float score)
 
 glm::vec2 GuessNumGame::getRandomLocation()
 {
-    std::uniform_real_distribution<float> dist(-0.02f, 0.02f);
+    std::uniform_real_distribution<float> dist(-0.05f, 0.05f);
     return glm::vec2(dist(rng), dist(rng));
+}
+
+std::unordered_map<std::string, glm::vec2> GuessNumGame::getNumberLocations()
+{
+    if (!delayTimer.isRunning())
+        delayTimer.start();
+    if (delayTimer.getElapsedTimeInSec() >= 1.0)
+    {
+        curFingerLocationsUV["index"] = fingerLocationsUV["index"] + getRandomLocation();
+        curFingerLocationsUV["middle"] = fingerLocationsUV["middle"] + getRandomLocation();
+        curFingerLocationsUV["ring"] = fingerLocationsUV["ring"] + getRandomLocation();
+        curFingerLocationsUV["pinky"] = fingerLocationsUV["pinky"] + getRandomLocation();
+        delayTimer.start();
+    }
+    return curFingerLocationsUV;
 }
 
 void GuessNumGame::reset(bool shuffle)
@@ -180,6 +195,22 @@ void GuessNumGame::reset(bool shuffle)
     curCorrectIndex = 0;
     breakTime = 0.0f;
     gameMode = 1;
+    glm::vec2 palm_ndc2 = glm::vec2(-0.551f, -0.579f);
+    glm::vec2 palm_ndc = glm::vec2(-0.66f, -0.683f);
+    glm::vec2 index_ndc = glm::vec2(-0.425f, 0.847f);
+    glm::vec2 index_ndc2 = glm::vec2(0.59f, 0.407f);
+    glm::vec2 middle_ndc = glm::vec2(0.822f, 0.729f);
+    glm::vec2 middle_ndc2 = glm::vec2(-0.029f, 0.464f);
+    glm::vec2 ring_ndc = glm::vec2(-0.966f, 0.282f);
+    glm::vec2 ring_ndc2 = glm::vec2(0.502f, -0.565f);
+    glm::vec2 pinky_ndc = glm::vec2(0.14f, 0.894);
+    glm::vec2 pinky_ndc2 = glm::vec2(0.449f, -0.131f);
+    fingerLocationsUV["palm"] = palm_ndc2;
+    fingerLocationsUV["index"] = index_ndc2;
+    fingerLocationsUV["middle"] = middle_ndc2;
+    fingerLocationsUV["ring"] = ring_ndc2;
+    fingerLocationsUV["pinky"] = pinky_ndc2;
+    curFingerLocationsUV = fingerLocationsUV;
 }
 
 void GuessNumGame::printScore()

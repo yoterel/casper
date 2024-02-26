@@ -27,10 +27,11 @@ public:
     Timer();  // default constructor
     ~Timer(); // default destructor
 
-    void start();  // start timer
-    void stop();   // stop the timer
-    void resume(); // resume the timer
-    void reset();  // reset timer statistics to 0
+    void start();     // start timer
+    void stop();      // stop the timer
+    void resume();    // resume the timer
+    void reset();     // reset timer statistics to 0
+    bool isRunning(); // check if the timer is running
     double averageLapInMilliSec();
     double getElapsedTime();           // get elapsed time in second
     double getElapsedTimeInSec();      // get elapsed time in second (same as getElapsedTime)

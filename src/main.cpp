@@ -266,11 +266,12 @@ float gameTime = 0.0f;
 float gameSpeed = 0.01f; // the lower the faster
 int64_t gameFrameCount = 0;
 int64_t prevGameFrameCount = 0;
+GuessPoseGame guessPoseGame = GuessPoseGame();
+GuessNumGame guessNumGame = GuessNumGame();
+bool gameUseRightHand = false;
 // user study controls
 bool run_user_study = false;
 UserStudy user_study = UserStudy();
-GuessPoseGame guessPoseGame = GuessPoseGame();
-GuessNumGame guessNumGame = GuessNumGame();
 int humanChoice = 1;
 bool video_reached_end = true;
 bool is_first_in_video_pair = true;
@@ -374,7 +375,7 @@ bool leap_calib_use_ransac = false;
 int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-int operation_mode = static_cast<int>(OperationMode::GUESS_NUM_GAME);
+int operation_mode = static_cast<int>(OperationMode::NORMAL);
 int n_points_leap_calib = 2000;
 int n_points_cam_calib = 30;
 std::vector<double> calib_cam_matrix;
@@ -548,10 +549,13 @@ int main(int argc, char *argv[])
     t_app.start();
     /* parse cmd line options */
     cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
-    options.add_options()                                                                                                              //
-        ("m,mesh", "A .fbx mesh file to use for skinning", cxxopts::value<std::string>()->default_value("../../resource/Default.fbx")) //
-        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                       //
-        ("h,help", "Prints usage")                                                                                                     //
+    options.add_options()                                                                                                       //
+        ("mode", "the operation mode [normal, user_study, cam_calib, coax_calib, leap_calib, guess_char_game, guess_num_game]", //
+         cxxopts::value<std::string>()->default_value("normal"))                                                                //
+        ("mesh", "A .fbx mesh file to use for skinning",                                                                        //
+         cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                            //
+        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                //
+        ("h,help", "Prints usage")                                                                                              //
         // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                      //
         ;
     std::string meshFile;
@@ -565,6 +569,24 @@ int main(int argc, char *argv[])
         }
         meshFile = result["mesh"].as<std::string>();
         simulated_camera = result["simcam"].as<bool>();
+        std::unordered_map<std::string, int> mode_map{
+            {"normal", 0},
+            {"user_study", 1},
+            {"cam_calib", 2},
+            {"coax_calib", 3},
+            {"leap_calib", 4},
+            {"guess_char_game", 6},
+            {"guess_num_game", 7}};
+        // check if mode is valid
+        if (mode_map.find(result["mode"].as<std::string>()) == mode_map.end())
+        {
+            std::cout << "Invalid mode: " << result["mode"].as<std::string>() << std::endl;
+            operation_mode = static_cast<int>(OperationMode::NORMAL);
+        }
+        else
+        {
+            operation_mode = mode_map[result["mode"].as<std::string>()];
+        }
     }
     catch (const std::exception &e)
     {
@@ -1502,7 +1524,8 @@ int main(int argc, char *argv[])
         case static_cast<int>(OperationMode::GUESS_NUM_GAME):
         {
             int state = guessNumGame.getState();
-            guessNumGame.setBonesVisible(bones_to_world_left.size() > 0);
+            auto bones = gameUseRightHand ? bones_to_world_right : bones_to_world_left;
+            guessNumGame.setBonesVisible(bones.size() > 0);
             switch (state)
             {
             // wait for user to place their hand infront of screen
@@ -1511,7 +1534,7 @@ int main(int argc, char *argv[])
                 texture_mode = static_cast<int>(TextureMode::DYNAMIC);
                 glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
                 dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-                textModel.Render(textShader, "Hi !", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                 dynamic_fbo.unbind();
                 break;
             }
@@ -1581,24 +1604,22 @@ int main(int argc, char *argv[])
                     }
                 }
                 dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-                glm::vec2 palm_screen = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
-                glm::vec2 thumb_screen = Helpers::NDCtoScreen(glm::vec2(0.829f, -0.741f), proj_width, proj_height);
-                glm::vec2 index_ndc = glm::vec2(-0.425f, 0.847f) + guessNumGame.getRandomLocation();
-                glm::vec2 middle_ndc = glm::vec2(0.822f, 0.729f) + guessNumGame.getRandomLocation();
-                glm::vec2 ring_ndc = glm::vec2(-0.966f, 0.282) + guessNumGame.getRandomLocation();
-                glm::vec2 pinky_ndc = glm::vec2(0.14f, 0.894) + guessNumGame.getRandomLocation();
-                glm::vec2 index_screen = Helpers::NDCtoScreen(index_ndc, proj_width, proj_height);
-                glm::vec2 middle_screen = Helpers::NDCtoScreen(middle_ndc, proj_width, proj_height);
-                glm::vec2 ring_screen = Helpers::NDCtoScreen(ring_ndc, proj_width, proj_height);
-                glm::vec2 pinky_screen = Helpers::NDCtoScreen(pinky_ndc, proj_width, proj_height);
+                float scale = 0.758f; // 1.0f;
                 glm::vec2 ndc_cords = Helpers::NDCtoScreen(glm::vec2(debug_vec), proj_width, proj_height);
                 // textModel.Render(textShader, "X", ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
-                textModel.Render(textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                // textModel.Render(textShader, "T", thumb_ndc.x, thumb_ndc.y, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f));
-                textModel.Render(textShader, chars.substr(0, 1), index_screen.x, index_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                textModel.Render(textShader, chars.substr(1, 1), middle_screen.x, middle_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                textModel.Render(textShader, chars.substr(2, 1), ring_screen.x, ring_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                textModel.Render(textShader, chars.substr(3, 1), pinky_screen.x, pinky_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                auto fingerMap = guessNumGame.getNumberLocations();
+                glm::vec2 palm_screen = Helpers::NDCtoScreen(fingerMap["palm"], proj_width, proj_height);
+                glm::vec2 index_screen = Helpers::NDCtoScreen(fingerMap["index"], proj_width, proj_height);
+                glm::vec2 middle_screen = Helpers::NDCtoScreen(fingerMap["middle"], proj_width, proj_height);
+                glm::vec2 ring_screen = Helpers::NDCtoScreen(fingerMap["ring"], proj_width, proj_height);
+                glm::vec2 pinky_screen = Helpers::NDCtoScreen(fingerMap["pinky"], proj_width, proj_height);
+                textModel.Render(textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, 3.0f * scale, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(0, 1), index_screen.x, index_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(1, 1), middle_screen.x, middle_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(2, 1), ring_screen.x, ring_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(3, 1), pinky_screen.x, pinky_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+                // // glm::vec2 thumb_screen = Helpers::NDCtoScreen(glm::vec2(0.829f, -0.741f), proj_width, proj_height);
+                // // textModel.Render(textShader, "T", thumb_ndc.x, thumb_ndc.y, scale, glm::vec3(1.0f, 0.0f, 1.0f));
                 dynamic_fbo.unbind();
                 break;
             }
@@ -1626,7 +1647,10 @@ int main(int argc, char *argv[])
 
             /* skin hand meshes */
             t_skin.start();
-            handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+            if (gameUseRightHand)
+                handleSkinning(bones, gameUseRightHand, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+            else
+                handleSkinning(bones, gameUseRightHand, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
             t_skin.stop();
 
             /* run MLS on MP prediction to reduce bias */
@@ -3742,6 +3766,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     {
         leftHandTexture = dynamicTexture;
         rightHandTexture = dynamicTexture;
+        break;
+    }
+    case static_cast<int>(TextureMode::DYNAMIC):
+    {
+        leftHandTexture = dynamic_fbo.getTexture();
+        rightHandTexture = dynamic_fbo.getTexture();
         break;
     }
     default:
@@ -6411,6 +6441,8 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Game Controls"))
         {
             ImGui::Checkbox("Show Game Hint", &showGameHint);
+            ImGui::SameLine();
+            ImGui::Checkbox("Use Right Hand", &gameUseRightHand);
             ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -1.0f, 1.0f);
             ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 5.0f);
             ImGui::SeparatorText("Game Quad");

@@ -85,6 +85,11 @@ void Timer::reset()
     movingAverage = 0;
     samples = 0;
 }
+
+bool Timer::isRunning()
+{
+    return !stopped;
+}
 ///////////////////////////////////////////////////////////////////////////////
 // return average lap time in milli-second
 //

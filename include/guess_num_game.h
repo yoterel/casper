@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <random>
+#include <unordered_map>
 
 class GuessNumGame
 {
@@ -21,6 +22,7 @@ public:
     void setResponse(bool playerCorrect);
     void setAllExtended(bool all_extended);
     glm::vec2 getRandomLocation();
+    std::unordered_map<std::string, glm::vec2> getNumberLocations();
     // std::vector<glm::mat4> getPose();
     void setScore(float score);
     void printScore();
@@ -35,9 +37,12 @@ private:
     bool roundFinished;
     // int curPoseIndex;
     Timer countDownTimer;
+    Timer delayTimer;
     Timer totalTime;
     // std::vector<std::vector<glm::mat4>> poses;
     std::vector<float> cur_scores;
+    std::unordered_map<std::string, glm::vec2> fingerLocationsUV;
+    std::unordered_map<std::string, glm::vec2> curFingerLocationsUV;
     float breakTime;
     std::string curChars;
     int curCorrectIndex;
