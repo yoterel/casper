@@ -21,7 +21,7 @@ void UserStudy::reset(float initialLatency)
     pair_attempts = 0;
     reversals = 0;
     successStreak = 0;
-    maxSuccessStreak = 5;
+    maxSuccessStreak = 10;
     maxReversals = 10;
     jnd = 0.0f;
     latencies.clear();
