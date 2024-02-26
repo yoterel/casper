@@ -20,6 +20,7 @@ public:
     void jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shader,
                        unsigned int uvTexture, unsigned int uvUnwrappedTexture, unsigned int camTexture, FBO *target_fbo,
                        const float threshold, const float distance_threshold = 50.0f, const float seam_threshold = 0.1f);
+    void gaussian_blur(Shader *blurShader, FBO *pp_fbo, FBO *pp_fbo2, unsigned int dst_width, unsigned int dst_height);
     static glm::mat4 findHomography(std::vector<glm::vec2> screen_verts);
     void bake(Shader &uvShader, unsigned int textureToBake, unsigned int TextureUV, const std::string &filepath);
     void saveColorToFile(std::string filepath, unsigned int fbo_id);

@@ -117,6 +117,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left,
                          std::vector<glm::vec3> &joints_right,
+                         std::vector<uint32_t> &leftFingersExtended,
+                         std::vector<uint32_t> &rightFingersExtended,
                          bool leap_poll_mode,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp,
@@ -200,6 +202,7 @@ glm::vec3 mask_missing_info_color(0.26, 0.43, 0.376);
 glm::vec3 mask_unused_info_color(0.485f, 0.331f, 0.485f);
 bool threshold_flag = false;
 glm::vec3 debug_vec(0.0f, 0.0f, 0.0f);
+float debug_scalar = 1.0f;
 glm::vec3 triangulated(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
 float ms_per_frame = 0;
@@ -351,6 +354,7 @@ double whole = 0.0;
 LEAP_CLOCK_REBASER clockSynchronizer;
 std::vector<glm::vec3> joints_left, joints_right;
 std::vector<glm::mat4> bones_to_world_left, bones_to_world_right;
+std::vector<uint32_t> left_fingers_extended, right_fingers_extended;
 std::vector<glm::mat4> required_pose_bones_to_world_left;
 std::vector<glm::mat4> bones_to_world_left_bake, bones_to_world_right_bake;
 std::vector<glm::vec3> bake_joints_left, bake_joints_right;
@@ -370,7 +374,7 @@ bool leap_calib_use_ransac = false;
 int mark_bone_index = 17;
 int leap_calibration_mark_state = 0;
 int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-int operation_mode = static_cast<int>(OperationMode::NORMAL);
+int operation_mode = static_cast<int>(OperationMode::GUESS_NUM_GAME);
 int n_points_leap_calib = 2000;
 int n_points_cam_calib = 30;
 std::vector<double> calib_cam_matrix;
@@ -467,6 +471,7 @@ FBO deformed_bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
 FBO postprocess_fbo2(dst_width, dst_height, 4, false);
+FBO dynamic_fbo(dst_width, dst_height, 4, false);
 FBO c2p_fbo(dst_width, dst_height, 4, false);
 Quad fullScreenQuad(0.0f, false);
 PostProcess postProcess(cam_width, cam_height, dst_width, dst_height);
@@ -679,6 +684,7 @@ int main(int argc, char *argv[])
     sd_fbo.init();
     postprocess_fbo.init();
     postprocess_fbo2.init();
+    dynamic_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
     SkinnedModel leftHandModel(meshFile,
@@ -847,6 +853,7 @@ int main(int argc, char *argv[])
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(proj_width), 0.0f, static_cast<float>(proj_height));
     textShader.setMat4("projection", orth_projection_transform);
+    textShader.setFloat("threshold", 0.5f);
     // render the baked texture into fbo
     bake_fbo_right.bind(true);
     bakedTextureRight->bind();
@@ -1135,18 +1142,15 @@ int main(int argc, char *argv[])
                                     textModel.Render(textShader, texts_to_render[i], -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
                                 }
                                 bool button_values[9] = {false, false, false, false, false, false, false, false, false};
-                                bool sucess = GetButtonStates(button_values); // get input from subject
-                                if (!sucess)
-                                {
-                                    std::cout << "Failed to get button states" << std::endl;
-                                    break;
-                                }
+                                GetButtonStates(button_values); // get input from subject
                                 humanChoice = 0;
-                                if (button_values[0])
+                                bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
+                                bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
+                                if (button_values[0] || one_pressed)
                                     humanChoice = 1;
-                                if (button_values[1])
+                                if (button_values[1] || two_pressed)
                                     humanChoice = 2;
-                                if (humanChoice == 0)
+                                if (humanChoice == 0 || (one_pressed && two_pressed))
                                 {
                                     break;
                                 }
@@ -1498,52 +1502,149 @@ int main(int argc, char *argv[])
         case static_cast<int>(OperationMode::GUESS_NUM_GAME):
         {
             int state = guessNumGame.getState();
+            guessNumGame.setBonesVisible(bones_to_world_left.size() > 0);
             switch (state)
             {
             // wait for user to place their hand infront of screen
             case static_cast<int>(GuessNumGameState::WAIT_FOR_USER):
             {
-                guessNumGame.setBonesVisible(bones_to_world_left.size() > 0);
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+                textModel.Render(textShader, "Hi !", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                dynamic_fbo.unbind();
                 break;
             }
             // countdown to start game
             case static_cast<int>(GuessNumGameState::COUNTDOWN):
             {
                 material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-                texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                // texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
                 int cd_time = guessNumGame.getCountdownTime();
+                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
                 switch (cd_time)
                 {
                 case 0:
                 {
-                    curSelectedTexture = "3";
+                    textModel.Render(textShader, "3!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                     break;
                 }
                 case 1:
                 {
-                    curSelectedTexture = "2";
+                    textModel.Render(textShader, "2!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                     break;
                 }
                 case 2:
                 {
-                    curSelectedTexture = "1";
+                    textModel.Render(textShader, "1!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
                     break;
                 }
                 default:
                     break;
                 }
+                dynamic_fbo.unbind();
+                break;
+            }
+            case static_cast<int>(GuessNumGameState::PLAY):
+            {
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+                std::string chars;
+                int correctIndex = guessNumGame.getRandomChars(chars);
+                int selectedIndex = -1;
+                bool allExtended = true;
+                bool moreThanOneDown = false;
+                for (int i = 1; i < left_fingers_extended.size(); i++)
+                {
+                    if (left_fingers_extended[i] == 0)
+                    {
+                        allExtended = false;
+                        if (selectedIndex != -1)
+                            moreThanOneDown = true;
+                        selectedIndex = i - 1;
+                    }
+                }
+                if (allExtended)
+                    guessNumGame.setAllExtended(true);
+                else
+                    guessNumGame.setAllExtended(false);
+                if (!allExtended && !moreThanOneDown)
+                {
+                    if (selectedIndex == correctIndex)
+                    {
+                        guessNumGame.setResponse(true);
+                    }
+                    else
+                    {
+                        guessNumGame.setResponse(false);
+                    }
+                }
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+                glm::vec2 palm_screen = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                glm::vec2 thumb_screen = Helpers::NDCtoScreen(glm::vec2(0.829f, -0.741f), proj_width, proj_height);
+                glm::vec2 index_ndc = glm::vec2(-0.425f, 0.847f) + guessNumGame.getRandomLocation();
+                glm::vec2 middle_ndc = glm::vec2(0.822f, 0.729f) + guessNumGame.getRandomLocation();
+                glm::vec2 ring_ndc = glm::vec2(-0.966f, 0.282) + guessNumGame.getRandomLocation();
+                glm::vec2 pinky_ndc = glm::vec2(0.14f, 0.894) + guessNumGame.getRandomLocation();
+                glm::vec2 index_screen = Helpers::NDCtoScreen(index_ndc, proj_width, proj_height);
+                glm::vec2 middle_screen = Helpers::NDCtoScreen(middle_ndc, proj_width, proj_height);
+                glm::vec2 ring_screen = Helpers::NDCtoScreen(ring_ndc, proj_width, proj_height);
+                glm::vec2 pinky_screen = Helpers::NDCtoScreen(pinky_ndc, proj_width, proj_height);
+                glm::vec2 ndc_cords = Helpers::NDCtoScreen(glm::vec2(debug_vec), proj_width, proj_height);
+                // textModel.Render(textShader, "X", ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
+                textModel.Render(textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                // textModel.Render(textShader, "T", thumb_ndc.x, thumb_ndc.y, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f));
+                textModel.Render(textShader, chars.substr(0, 1), index_screen.x, index_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(1, 1), middle_screen.x, middle_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(2, 1), ring_screen.x, ring_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                textModel.Render(textShader, chars.substr(3, 1), pinky_screen.x, pinky_screen.y, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                dynamic_fbo.unbind();
+                break;
+            }
+            case static_cast<int>(GuessNumGameState::END):
+            {
+                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+                textModel.Render(textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+                dynamic_fbo.unbind();
                 break;
             }
             default:
                 break;
             }
-            // display a set of random characters on finger tips &
-            // display one of them on the palm / backhand &
-            // move finger tips characters randomly
-            // wait for user to bend a finger
-            // if finger is wrong -1 point, if right +1 point
-            // proceed to next round, until 10 rounds are finished
-            // print score
+            /* deal with camera input */
+            t_camera.start();
+            handleCameraInput(ptrGrabResult, false, cv::Mat());
+            t_camera.stop();
+
+            /* deal with leap input */
+            t_leap.start();
+            LEAP_STATUS leap_status = handleLeapInput();
+            t_leap.stop();
+
+            /* skin hand meshes */
+            t_skin.start();
+            handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+            t_skin.stop();
+
+            /* run MLS on MP prediction to reduce bias */
+            t_mls.start();
+            handleMLSAsync(gridShader);
+            t_mls.stop();
+
+            /* post process fbo using camera input */
+            t_pp.start();
+            handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+            t_pp.stop();
+
+            /* render final output to screen */
+            glViewport(0, 0, proj_width, proj_height);
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            set_texture_shader(&textureShader, false, false, false);
+            c2p_fbo.getTexture()->bind();
+            fullScreenQuad.render();
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera
@@ -2911,6 +3012,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_right,
                          std::vector<glm::vec3> &joints_left, // todo: remove joints, they are redundant
                          std::vector<glm::vec3> &joints_right,
+                         std::vector<uint32_t> &leftFingersExtended,
+                         std::vector<uint32_t> &rightFingersExtended,
                          bool leap_poll_mode,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp,
@@ -2943,6 +3046,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
             joints_right.clear();
             bones_to_world_left.clear();
             bones_to_world_right.clear();
+            leftFingersExtended.clear();
+            rightFingersExtended.clear();
             curFrameTimeStamp = frame->info.timestamp;
             appTimeStamp = t_app.getElapsedTimeInMilliSec();
         }
@@ -2957,6 +3062,8 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         joints_right.clear();
         bones_to_world_left.clear();
         bones_to_world_right.clear();
+        leftFingersExtended.clear();
+        rightFingersExtended.clear();
         // Get the buffer size needed to hold the tracking data
         eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_time_delay, &targetFrameSize);
         if (retVal != eLeapRS_Success)
@@ -2989,6 +3096,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         float grab_angle = hand->grab_angle;
         std::vector<glm::mat4> bones_to_world;
         std::vector<glm::vec3> joints;
+        std::vector<uint32_t> fingersExtended;
         // palm
         glm::vec3 palm_pos_raw = glm::vec3(hand->palm.position.x,
                                            hand->palm.position.y,
@@ -3054,6 +3162,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         for (uint32_t f = 0; f < 5; f++)
         {
             LEAP_DIGIT finger = hand->digits[f];
+            fingersExtended.push_back(finger.is_extended);
             for (uint32_t b = 0; b < 4; b++)
             {
                 LEAP_VECTOR joint1 = finger.bones[b].prev_joint;
@@ -3081,12 +3190,14 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         {
             bones_to_world_right = std::move(bones_to_world);
             joints_right = std::move(joints);
+            rightFingersExtended = std::move(fingersExtended);
             // grab_angle_right = grab_angle;
         }
         else
         {
             bones_to_world_left = std::move(bones_to_world);
             joints_left = std::move(joints);
+            leftFingersExtended = std::move(fingersExtended);
             // grab_angle_left = grab_angle;
         }
     }
@@ -3579,7 +3690,7 @@ LEAP_STATUS handleLeapInput()
         std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
         LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
     }
-    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay);
+    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay);
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
@@ -3719,6 +3830,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     default:
         break;
     }
+    // add blur to final render
+    if (postprocess_blur)
+    {
+        postProcess.gaussian_blur(blurShader, &postprocess_fbo, &postprocess_fbo2, dst_width, dst_height);
+    }
+    // apply the homography between camera and projector
     c2p_fbo.bind();
     if (use_coaxial_calib)
         set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), c2p_homography);
@@ -3726,6 +3843,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f));
     postprocess_fbo.getTexture()->bind();
     fullScreenQuad.render();
+    // use this opportunity to perhaps render the mls grid and landmarks
     if (use_mls)
     {
         if (show_mls_grid)
@@ -3945,6 +4063,13 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
                     gameFrameCount++;
                     gameTime = 0.0f;
                 }
+                break;
+            }
+            case static_cast<int>(TextureMode::DYNAMIC):
+            {
+                dynamicTexture = dynamic_fbo.getTexture();
+                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
                 break;
             }
             default: // original texture loaded with mesh
@@ -4640,7 +4765,7 @@ void handleMLSAsync(Shader &gridShader)
                                     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                     std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                     std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-                                    LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay_mls);
+                                    LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay_mls);
                                     if (status == LEAP_STATUS::LEAP_NEWFRAME)
                                     {
                                         if ((cur_vertices_left.size() > 0) && (useLeftHand))
@@ -5642,25 +5767,6 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
         prevVideoFrameCountCont = videoFrameCountCont;
     }
-    if (postprocess_blur)
-    {
-        postprocess_fbo2.bind();
-        blurShader->use();
-        blurShader->setVec2("u_direction", glm::vec2(1.0f / dst_width, 0.0f));
-        blurShader->setInt("u_input_texture", 0);
-        blurShader->setMat4("mvp", glm::mat4(1.0f));
-        c2p_fbo.getTexture()->bind();
-        fullScreenQuad.render();
-        postprocess_fbo2.unbind();
-        c2p_fbo.bind();
-        blurShader->use();
-        blurShader->setVec2("u_direction", glm::vec2(0.0f, 1.0f / dst_height));
-        blurShader->setInt("u_input_texture", 0);
-        blurShader->setMat4("mvp", glm::mat4(1.0f));
-        postprocess_fbo2.getTexture()->bind();
-        fullScreenQuad.render();
-        c2p_fbo.unbind();
-    }
     // overlay final render and camera image, and render to screen
     // this is needed to simulate how a projection is mixed with the skin color
     glViewport(0, 0, proj_width, proj_height);
@@ -5789,8 +5895,7 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
                 debug_mode = false;
             }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Game", &operation_mode, static_cast<int>(OperationMode::GUESS_POSE_GAME)))
+            if (ImGui::RadioButton("Guess Pose Game", &operation_mode, static_cast<int>(OperationMode::GUESS_POSE_GAME)))
             {
                 recording_name = "game";
                 std::vector<std::vector<glm::mat4>> poses;
@@ -5804,6 +5909,17 @@ void openIMGUIFrame()
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
+                exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(exposure);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Guess Number Game", &operation_mode, static_cast<int>(OperationMode::GUESS_NUM_GAME)))
+            {
+                guessNumGame.reset(false);
+                leap.setImageMode(false);
+                leap.setPollMode(false);
+                // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
+                material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
             }
@@ -6295,6 +6411,8 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Game Controls"))
         {
             ImGui::Checkbox("Show Game Hint", &showGameHint);
+            ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -1.0f, 1.0f);
+            ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 5.0f);
             ImGui::SeparatorText("Game Quad");
             ImWidgets::RangeSelect2D("Game Quad", &game_min.x, &game_min.y, &game_max.x, &game_max.y, -1.0f, -1.0f, 1.0f, 1.0f, 0.5f);
             // ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);
@@ -6421,6 +6539,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::Checkbox("Forecast MP w LEAP", &mls_forecast);
             ImGui::SliderInt("MLS CP Smooth window", &mls_cp_smooth_window, 0, 10);
+            ImGui::SliderFloat("MLS grid shader thresh.", &mls_grid_shader_threshold, 0.0f, 1.0f);
             ImGui::SliderInt("MLS Grid Smooth window", &mls_grid_smooth_window, 0, 10);
             ImGui::SliderInt("MLS Leap Prediction [us]", &magic_leap_time_delay_mls, -50000, 50000);
             if (ImGui::Checkbox("Kalman Filter", &use_mp_kalman))
@@ -6541,6 +6660,7 @@ void openIMGUIFrame()
                 }
                 else
                 {
+                    video_reached_end = true;
                     CloseMidiController();
                 }
             }

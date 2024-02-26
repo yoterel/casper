@@ -1,4 +1,8 @@
 pilot:
+	pilot results:
+		changed hand brightness compared to backgrond to be more realistic
+		distance from screen matters
+		should shorten videos for more efficiency
 	speeds:  (texture = uv)
 			0.5, 1.1, 1.7, 2.3, 3.0
 	contrasts:  (texture = uv)
@@ -6,12 +10,6 @@ pilot:
 	6 textures
 		textures:
 			random_colors, dragon, cursive2, birds, uv, brick
-	notes from pilot:
-		latencies are much lower than expected
-		prepare proper excel sheet
-		blur image?
-		add knob to control contrast between hand and background
-		shorten videos...
 full:
 	2 textures, 3 conditions (nothing, jfa, jfa-uv)
 

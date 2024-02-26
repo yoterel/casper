@@ -92,13 +92,13 @@ void FBO::init(unsigned int input_color_format,
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void FBO::bind(bool clear)
+void FBO::bind(bool clear, glm::vec4 clear_color)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
     if (clear)
     {
         glViewport(0, 0, m_width, m_height);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 }

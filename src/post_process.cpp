@@ -530,6 +530,26 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader,
     }
 }
 
+void PostProcess::gaussian_blur(Shader *blurShader, FBO *pp_fbo, FBO *pp_fbo2, unsigned int dst_width, unsigned int dst_height)
+{
+    pp_fbo2->bind();
+    blurShader->use();
+    blurShader->setVec2("u_direction", glm::vec2(1.0f / dst_width, 0.0f));
+    blurShader->setInt("u_input_texture", 0);
+    blurShader->setMat4("mvp", glm::mat4(1.0f));
+    pp_fbo->getTexture()->bind();
+    m_quad.render();
+    pp_fbo2->unbind();
+    pp_fbo->bind();
+    blurShader->use();
+    blurShader->setVec2("u_direction", glm::vec2(0.0f, 1.0f / dst_height));
+    blurShader->setInt("u_input_texture", 0);
+    blurShader->setMat4("mvp", glm::mat4(1.0f));
+    pp_fbo2->getTexture()->bind();
+    m_quad.render();
+    pp_fbo->unbind();
+}
+
 void PostProcess::saveColorToFile(std::string filepath, unsigned int fbo_id)
 {
     unsigned int nrChannels = 4;

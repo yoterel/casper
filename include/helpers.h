@@ -56,6 +56,7 @@ enum class TextureMode
     CAMERA = 4,
     SHADER = 5,
     MULTI_PASS_SHADER = 6,
+    DYNAMIC = 7,
 };
 enum class SDMode
 {
