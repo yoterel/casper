@@ -100,6 +100,12 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
                      TextModel &text);
+void handleUserStudy(std::unordered_map<std::string, Shader *> &shader_map,
+                     GLFWwindow *window,
+                     SkinnedModel &leftHandModel,
+                     TextModel &textModel,
+                     glm::mat4 &cam_view_transform,
+                     glm::mat4 &cam_projection_transform);
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current);
 bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &detected_left, bool &detected_right);
 bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected);
@@ -280,11 +286,11 @@ double prev_vid_time;
 double cur_vid_time;
 int vid_motion_type = -1;
 float cached_simulated_latency_ms = 1.0f;
-float initial_simulated_latency_ms = 40.0f;
 std::pair<int, int> video_pair;
+float vid_simulated_latency_ms = 1.0f;
+float initial_simulated_latency_ms = 40.0f;
 // record & playback controls
 bool debug_playback = false;
-float vid_simulated_latency_ms = 1.0f;
 float vid_playback_fps_limiter = 900.0;
 float vid_playback_speed = 1.0f;
 float projection_mix_ratio = 0.6f;
@@ -296,7 +302,7 @@ bool recordImages = false;
 std::string recording_name = "translation_10s";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
-const int max_supported_frames = 2000;
+const int max_supported_frames = 1000;
 static uint8_t *pFrameData[max_supported_frames] = {NULL};
 bool playback_video_loaded = false;
 int total_session_time_stamps = 0;
@@ -306,11 +312,12 @@ float recordDuration = 10.0;
 bool record_single_pose = false;
 bool record_every_frame = false;
 std::vector<glm::mat4> session_bones_left;
-std::vector<glm::vec3> session_joints_left; // dummy variable
+std::vector<glm::vec3> session_joints_left;
 std::vector<float> session_timestamps;
 std::unordered_map<std::string, std::vector<glm::mat4>> sessions_bones_left;
 std::unordered_map<std::string, std::vector<glm::vec3>> sessions_joints_left;
 std::unordered_map<std::string, std::vector<float>> sessions_timestamps;
+std::vector<float> raw_session_timestamps;
 std::string tmp_name = std::tmpnam(nullptr);
 fs::path tmp_filename(tmp_name);
 std::vector<std::vector<glm::mat4>> savedLeapBones;
@@ -1127,217 +1134,12 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(OperationMode::USER_STUDY): // record and playback session
         {
-            if (pre_recorded_session_loaded) // a video was loaded
-            {
-                if (run_user_study) // user marked the checkbox
-                {
-                    if (video_reached_end) // we reached the video end, or we just started
-                    {
-                        if (user_study.getTrialFinished()) // experiment is finished
-                        {
-                            user_study.printStats();
-                            CloseMidiController();
-                            run_user_study = false;
-                            break;
-                        }
-                        int attempts = user_study.getAttempts();
-                        if (attempts % 2 == 0) // if this is an even attempt, we should get human response and start a new trial
-                        {
-                            if (attempts != 0)
-                            {
-                                // display "1 / 2" to subject indicating they need to choose
-                                std::vector<std::string> texts_to_render = {std::string("1 / 2")};
-                                for (int i = 0; i < texts_to_render.size(); ++i)
-                                {
-                                    textModel.Render(textShader, texts_to_render[i], -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-                                }
-                                bool button_values[9] = {false, false, false, false, false, false, false, false, false};
-                                GetButtonStates(button_values); // get input from subject
-                                humanChoice = 0;
-                                bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
-                                bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
-                                if (button_values[0] || one_pressed)
-                                    humanChoice = 1;
-                                if (button_values[1] || two_pressed)
-                                    humanChoice = 2;
-                                if (humanChoice == 0 || (one_pressed && two_pressed))
-                                {
-                                    break;
-                                }
-                            }
-                            is_first_in_video_pair = true;
-                        }
-                        else
-                        {
-                            is_first_in_video_pair = false;
-                        }
-                        vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given subject choice
-                        videoFrameCountCont = 0.0f;                                     // reset video playback
-                        prevVideoFrameCountCont = -1.0f;
-                        video_reached_end = false;
-                        // std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let subject rest a bit
-                    }
-                    else
-                    {
-                        playVideo(shaderMap,
-                                  leftHandModel,
-                                  textModel,
-                                  cam_view_transform,
-                                  cam_projection_transform);
-                    }
-                }
-                else
-                {
-                    if (run_user_study_random)
-                    {
-                        if (video_reached_end)
-                        {
-                            is_first_in_video_pair = !is_first_in_video_pair;
-                            if (is_first_in_video_pair)
-                            {
-                                int attempts = user_study.getAttempts();
-                                if (attempts != 0)
-                                {
-                                    // display "1 / 2" to subject indicating they need to choose
-                                    textModel.Render(textShader, std::string("1 / 2"), -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-                                    // get input from subject
-                                    bool button_values[9] = {false, false, false, false, false, false, false, false, false};
-                                    GetButtonStates(button_values);
-                                    humanChoice = 0;
-                                    bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
-                                    bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
-                                    if (button_values[0] || one_pressed)
-                                        humanChoice = 1;
-                                    if (button_values[1] || two_pressed)
-                                        humanChoice = 2;
-                                    if (humanChoice == 0 || (one_pressed && two_pressed))
-                                    {
-                                        break; // don't do anything until user makes a choice
-                                    }
-                                }
-                                user_study.setSubjectResponse(humanChoice);
-                                if (user_study.getTrialFinished()) // experiment is finished
-                                {
-                                    user_study.printRandomSessionStats();
-                                    CloseMidiController();
-                                    run_user_study = false;
-                                    break;
-                                }
-                                user_study.randomTrial(cached_simulated_latency_ms, vid_motion_type, video_pair);
-                                switch (video_pair.first)
-                                {
-                                case 0:
-                                {
-                                    vid_simulated_latency_ms = 0.0f;
-                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
-                                    break;
-                                }
-                                case 1:
-                                {
-                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
-                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
-                                    break;
-                                }
-                                case 2:
-                                {
-                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
-                                    postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
-                                    break;
-                                }
-                                default:
-                                {
-                                    break;
-                                }
-                                }
-                                switch (vid_motion_type)
-                                {
-                                case static_cast<int>(UserStudyMotionModel::TRANSLATION):
-                                {
-                                    session_bones_left = sessions_bones_left["translation"];
-                                    session_timestamps = sessions_timestamps["translation"];
-                                    break;
-                                }
-                                case static_cast<int>(UserStudyMotionModel::ROTATION):
-                                {
-                                    session_bones_left = sessions_bones_left["rotation"];
-                                    session_timestamps = sessions_timestamps["rotation"];
-                                    break;
-                                }
-                                case static_cast<int>(UserStudyMotionModel::DEFORMATION):
-                                {
-                                    session_bones_left = sessions_bones_left["deformation"];
-                                    session_timestamps = sessions_timestamps["deformation"];
-                                    break;
-                                }
-                                case static_cast<int>(UserStudyMotionModel::ALL):
-                                {
-                                    session_bones_left = sessions_bones_left["all"];
-                                    session_timestamps = sessions_timestamps["all"];
-                                    break;
-                                }
-                                default:
-                                {
-                                    break;
-                                }
-                                }
-                            }
-                            else
-                            {
-                                switch (video_pair.second)
-                                {
-                                case 0:
-                                {
-                                    vid_simulated_latency_ms = 0.0f;
-                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
-                                    break;
-                                }
-                                case 1:
-                                {
-                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
-                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
-                                    break;
-                                }
-                                case 2:
-                                {
-                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
-                                    postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
-                                    break;
-                                }
-                                default:
-                                {
-                                    break;
-                                }
-                                }
-                            }
-                            // reset video playback
-                            videoFrameCountCont = 0.0f;
-                            prevVideoFrameCountCont = -1.0f;
-                            video_reached_end = false;
-                        }
-                        else
-                        {
-                            playVideo(shaderMap,
-                                      leftHandModel,
-                                      textModel,
-                                      cam_view_transform,
-                                      cam_projection_transform);
-                        }
-                    }
-                    else
-                    {
-
-                        if (debug_playback)
-                        {
-                            if (!playVideo(shaderMap,
-                                           leftHandModel,
-                                           textModel,
-                                           cam_view_transform,
-                                           cam_projection_transform))
-                                debug_playback = false;
-                        }
-                    }
-                }
-            }
+            handleUserStudy(shaderMap,
+                            window,
+                            leftHandModel,
+                            textModel,
+                            cam_view_transform,
+                            cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::GUESS_POSE_GAME):
@@ -3036,6 +2838,85 @@ bool loadSession()
     for (int i = 0; i < total_session_time_stamps; i++)
     {
         session_timestamps.push_back(static_cast<float>(i) * resolution);
+    }
+    return true;
+}
+
+bool loadSessions(std::vector<std::string> &session_names)
+{
+    std::string recordings("../../resource/recordings/");
+    for (const auto &entry : session_names)
+    {
+        fs::path cur_recording_path = fs::path(recordings) / fs::path(entry);
+        if (fs::is_directory(cur_recording_path))
+        {
+            fs::path bones_left_path = cur_recording_path / fs::path(std::string("bones_left.npy"));
+            fs::path timestamps_path = cur_recording_path / fs::path(std::string("timestamps.npy"));
+            cnpy::NpyArray bones_left_npy, timestamps_npy;
+            std::vector<glm::mat4> raw_session_bones_left;
+            if (fs::exists(bones_left_path))
+            {
+                bones_left_npy = cnpy::npy_load(bones_left_path.string());
+                std::vector<float> raw_data = bones_left_npy.as_vec<float>();
+                for (int i = 0; i < raw_data.size(); i += 16)
+                {
+                    raw_session_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
+                }
+            }
+            else
+            {
+                return false;
+            }
+            std::vector<float> raw_session_timestamps;
+            if (fs::exists(timestamps_path))
+            {
+                timestamps_npy = cnpy::npy_load(timestamps_path.string());
+                std::vector<uint64_t> raw_data = timestamps_npy.as_vec<uint64_t>();
+                // todo: convert to std iterators
+                uint64_t first_timestamp = raw_data[0];
+                for (int i = 0; i < raw_data.size(); i++)
+                {
+                    raw_session_timestamps.push_back((raw_data[i] - first_timestamp) / 1000.0f);
+                }
+            }
+            else
+            {
+                return false;
+            }
+            int total_raw_session_time_stamps = session_timestamps.size();
+            // create a simulated session where every frame is 1 ms apart
+            float resolution = 1.0f; // resolution of simulated session in ms
+            float whole;             // find the whole part of the last timestamp
+            std::vector<glm::mat4> bones_to_world_left_simulated;
+            std::modf(raw_session_timestamps[raw_session_timestamps.size() - 1], &whole);
+            total_session_time_stamps = static_cast<int>(whole / resolution); // the timestamps are in ms, so this integer represents the final timestamp (roughly)
+            for (int i = 0; i < total_session_time_stamps; i++)
+            {
+                float required_time = resolution * static_cast<float>(i);
+                auto upper_iter = std::upper_bound(raw_session_timestamps.begin(), raw_session_timestamps.end(), required_time);
+                int interp_index = upper_iter - raw_session_timestamps.begin();
+                float interp1 = raw_session_timestamps[interp_index - 1];
+                float interp2 = raw_session_timestamps[interp_index];
+                float interp_factor = (required_time - interp1) / (interp2 - interp1);
+                for (int j = 0; j < 22; j++)
+                {
+                    glm::mat4 interpolated = Helpers::interpolate(raw_session_bones_left[22 * (interp_index - 1) + j], raw_session_bones_left[22 * interp_index + j], interp_factor, true);
+                    bones_to_world_left_simulated.push_back(interpolated);
+                }
+            }
+            session_bones_left = bones_to_world_left_simulated;
+            sessions_bones_left[entry] = bones_to_world_left_simulated;
+            session_timestamps.clear();
+            for (int i = 0; i < total_session_time_stamps; i++)
+            {
+                session_timestamps.push_back(static_cast<float>(i) * resolution);
+            }
+            sessions_timestamps[entry] = session_timestamps;
+        }
+        else
+        {
+            return false;
+        }
     }
     return true;
 }
@@ -5288,6 +5169,227 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
     }
     return true;
 }
+
+void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
+                     GLFWwindow *window,
+                     SkinnedModel &leftHandModel,
+                     TextModel &textModel,
+                     glm::mat4 &cam_view_transform,
+                     glm::mat4 &cam_projection_transform)
+{
+    Shader *textShader = shaderMap["textShader"];
+    if (pre_recorded_session_loaded) // a video was loaded
+    {
+        if (run_user_study) // user marked the checkbox
+        {
+            if (video_reached_end) // we reached the video end, or we just started
+            {
+                if (user_study.getTrialFinished()) // experiment is finished
+                {
+                    user_study.printStats();
+                    CloseMidiController();
+                    run_user_study = false;
+                    return;
+                }
+                int attempts = user_study.getAttempts();
+                if (attempts % 2 == 0) // if this is an even attempt, we should get human response and start a new trial
+                {
+                    if (attempts != 0)
+                    {
+                        // display "1 / 2" to subject indicating they need to choose
+                        std::vector<std::string> texts_to_render = {std::string("1 / 2")};
+                        for (int i = 0; i < texts_to_render.size(); ++i)
+                        {
+                            textModel.Render(*textShader, texts_to_render[i], -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        }
+                        bool button_values[9] = {false, false, false, false, false, false, false, false, false};
+                        GetButtonStates(button_values); // get input from subject
+                        humanChoice = 0;
+                        bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
+                        bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
+                        if (button_values[0] || one_pressed)
+                            humanChoice = 1;
+                        if (button_values[1] || two_pressed)
+                            humanChoice = 2;
+                        if (humanChoice == 0 || (one_pressed && two_pressed))
+                        {
+                            return;
+                        }
+                    }
+                    is_first_in_video_pair = true;
+                }
+                else
+                {
+                    is_first_in_video_pair = false;
+                }
+                vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given subject choice
+                videoFrameCountCont = 0.0f;                                     // reset video playback
+                prevVideoFrameCountCont = -1.0f;
+                video_reached_end = false;
+                // std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let subject rest a bit
+            }
+            else
+            {
+                playVideo(shaderMap,
+                          leftHandModel,
+                          textModel,
+                          cam_view_transform,
+                          cam_projection_transform);
+            }
+        }
+        else
+        {
+            if (run_user_study_random)
+            {
+                if (video_reached_end)
+                {
+                    is_first_in_video_pair = !is_first_in_video_pair;
+                    if (is_first_in_video_pair)
+                    {
+                        int attempts = user_study.getAttempts();
+                        if (attempts != 0)
+                        {
+                            // display "1 / 2" to subject indicating they need to choose
+                            textModel.Render(*textShader, std::string("1 / 2"), -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                            // get input from subject
+                            bool button_values[9] = {false, false, false, false, false, false, false, false, false};
+                            GetButtonStates(button_values);
+                            humanChoice = 0;
+                            bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
+                            bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
+                            if (button_values[0] || one_pressed)
+                                humanChoice = 1;
+                            if (button_values[1] || two_pressed)
+                                humanChoice = 2;
+                            if (humanChoice == 0 || (one_pressed && two_pressed))
+                            {
+                                return; // don't do anything until user makes a choice
+                            }
+                        }
+                        user_study.setSubjectResponse(humanChoice);
+                        if (user_study.getTrialFinished()) // experiment is finished
+                        {
+                            user_study.printRandomSessionStats();
+                            CloseMidiController();
+                            run_user_study = false;
+                            return;
+                        }
+                        user_study.randomTrial(cached_simulated_latency_ms, vid_motion_type, video_pair);
+                        switch (video_pair.first)
+                        {
+                        case 0:
+                        {
+                            vid_simulated_latency_ms = 0.0f;
+                            postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                            break;
+                        }
+                        case 1:
+                        {
+                            vid_simulated_latency_ms = cached_simulated_latency_ms;
+                            postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                            break;
+                        }
+                        case 2:
+                        {
+                            vid_simulated_latency_ms = cached_simulated_latency_ms;
+                            postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                        }
+                        switch (vid_motion_type)
+                        {
+                        case static_cast<int>(UserStudyMotionModel::TRANSLATION):
+                        {
+                            session_bones_left = sessions_bones_left["translation"];
+                            session_timestamps = sessions_timestamps["translation"];
+                            break;
+                        }
+                        case static_cast<int>(UserStudyMotionModel::ROTATION):
+                        {
+                            session_bones_left = sessions_bones_left["rotation"];
+                            session_timestamps = sessions_timestamps["rotation"];
+                            break;
+                        }
+                        case static_cast<int>(UserStudyMotionModel::DEFORMATION):
+                        {
+                            session_bones_left = sessions_bones_left["deformation"];
+                            session_timestamps = sessions_timestamps["deformation"];
+                            break;
+                        }
+                        case static_cast<int>(UserStudyMotionModel::ALL):
+                        {
+                            session_bones_left = sessions_bones_left["all"];
+                            session_timestamps = sessions_timestamps["all"];
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                        }
+                    }
+                    else
+                    {
+                        switch (video_pair.second)
+                        {
+                        case 0:
+                        {
+                            vid_simulated_latency_ms = 0.0f;
+                            postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                            break;
+                        }
+                        case 1:
+                        {
+                            vid_simulated_latency_ms = cached_simulated_latency_ms;
+                            postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                            break;
+                        }
+                        case 2:
+                        {
+                            vid_simulated_latency_ms = cached_simulated_latency_ms;
+                            postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                        }
+                    }
+                    // reset video playback
+                    videoFrameCountCont = 0.0f;
+                    prevVideoFrameCountCont = -1.0f;
+                    video_reached_end = false;
+                }
+                else
+                {
+                    playVideo(shaderMap,
+                              leftHandModel,
+                              textModel,
+                              cam_view_transform,
+                              cam_projection_transform);
+                }
+            }
+            else
+            {
+                if (debug_playback)
+                {
+                    if (!playVideo(shaderMap,
+                                   leftHandModel,
+                                   textModel,
+                                   cam_view_transform,
+                                   cam_projection_transform))
+                        debug_playback = false;
+                }
+            }
+        }
+    }
+}
+
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
