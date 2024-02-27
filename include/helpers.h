@@ -118,21 +118,8 @@ enum class OperationMode
     CAMERA = 2,
     COAXIAL = 3,
     LEAP = 4,
-    SIMULATION = 5,
-    GUESS_POSE_GAME = 6,
-    GUESS_NUM_GAME = 7,
-};
-enum class SimulationMode
-{
-    AS_REAL_AS_POSSIBLE = 0,
-    KALMAN = 1,
-};
-enum class MotionModel
-{
-    TRANSLATION = 0,
-    ROTATION = 1,
-    DEFORMATION = 2,
-    ALL = 3,
+    GUESS_POSE_GAME = 5,
+    GUESS_NUM_GAME = 6,
 };
 enum class DeformationMode
 {

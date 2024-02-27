@@ -7,11 +7,11 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/normal.hpp>
+#include "display.h"
 #include "readerwritercircularbuffer.h"
 #include "cxxopts.h"
 #include "camera.h"
 #include "gl_camera.h"
-#include "display.h"
 #include "shader.h"
 #include "skinned_shader.h"
 #include "skinned_model.h"
@@ -64,7 +64,6 @@ LEAP_STATUS handleLeapInput();
 void saveLeapData(LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images);
 void saveSession(std::string savepath, bool record_images);
 void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images);
-bool loadSimulation(std::string loadpath);
 bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &poses);
 void handlePostProcess(SkinnedModel &leftHandModel,
                        SkinnedModel &rightHandModel,
@@ -131,6 +130,7 @@ LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones_to_world_left,
                                     const std::vector<glm::mat4> &bones_session,
                                     const std::vector<glm::vec3> &joints_session);
 bool loadSession();
+bool loadSessions(std::vector<std::string> &session_names);
 bool loadImagesFromFolder(std::string loadpath);
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
                SkinnedModel &leftHandModel,
@@ -271,58 +271,46 @@ GuessNumGame guessNumGame = GuessNumGame();
 bool gameUseRightHand = false;
 // user study controls
 bool run_user_study = false;
+bool run_user_study_random = false;
 UserStudy user_study = UserStudy();
 int humanChoice = 1;
 bool video_reached_end = true;
-bool is_first_in_video_pair = true;
+bool is_first_in_video_pair = false;
 double prev_vid_time;
 double cur_vid_time;
+int vid_motion_type = -1;
+float cached_simulated_latency_ms = 1.0f;
+float initial_simulated_latency_ms = 40.0f;
+std::pair<int, int> video_pair;
 // record & playback controls
 bool debug_playback = false;
 float vid_simulated_latency_ms = 1.0f;
-float initial_simulated_latency_ms = 40.0f;
 float vid_playback_fps_limiter = 900.0;
 float vid_playback_speed = 1.0f;
 float projection_mix_ratio = 0.6f;
 float skin_brightness = 0.3f;
 float prevVideoFrameCountCont = -1.0f;
 float videoFrameCountCont = 0.0;
-int64_t simulationFrameCount = 0;
-float prevSimlationTime = 0.0f;
-int64_t prevSimulationFrameCount = -1;
 std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_corrected, kalman_forecast;
-int64_t savedSimulationFrameCount = 0;
-float simulationMPDelay = 0.0f;
 bool recordImages = false;
-std::string recording_name = "translation";
+std::string recording_name = "translation_10s";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
-bool simulation_loaded = false;
-bool run_simulation = false;
-int simulation_mode = static_cast<int>(SimulationMode::KALMAN);
-std::string loaded_simulation_name = "";
-int total_simulation_time_stamps = 0;
-const int simulation_max_supported_frames = 2000;
-static uint8_t *pFrameData[simulation_max_supported_frames] = {NULL};
+const int max_supported_frames = 2000;
+static uint8_t *pFrameData[max_supported_frames] = {NULL};
 bool playback_video_loaded = false;
-int total_raw_session_time_stamps = 0;
 int total_session_time_stamps = 0;
 bool record_session = false;
 float recordStartTime = 0.0;
 float recordDuration = 10.0;
 bool record_single_pose = false;
 bool record_every_frame = false;
-std::vector<glm::mat4> raw_session_bones_left;
 std::vector<glm::mat4> session_bones_left;
-std::vector<glm::vec3> session_joints_left;
-std::vector<glm::vec3> raw_simulation_joints_left;
-std::vector<glm::vec3> simulation_joints_left;
-std::vector<float> raw_session_timestamps;
+std::vector<glm::vec3> session_joints_left; // dummy variable
 std::vector<float> session_timestamps;
-std::vector<glm::mat4> raw_simulation_bones_left;
-std::vector<glm::mat4> simulation_bones_left;
-std::vector<float> raw_simulation_timestamps;
-std::vector<float> simulation_timestamps;
+std::unordered_map<std::string, std::vector<glm::mat4>> sessions_bones_left;
+std::unordered_map<std::string, std::vector<glm::vec3>> sessions_joints_left;
+std::unordered_map<std::string, std::vector<float>> sessions_timestamps;
 std::string tmp_name = std::tmpnam(nullptr);
 fs::path tmp_filename(tmp_name);
 std::vector<std::vector<glm::mat4>> savedLeapBones;
@@ -549,13 +537,13 @@ int main(int argc, char *argv[])
     t_app.start();
     /* parse cmd line options */
     cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
-    options.add_options()                                                                                                       //
-        ("mode", "the operation mode [normal, user_study, cam_calib, coax_calib, leap_calib, guess_char_game, guess_num_game]", //
-         cxxopts::value<std::string>()->default_value("normal"))                                                                //
-        ("mesh", "A .fbx mesh file to use for skinning",                                                                        //
-         cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                            //
-        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                //
-        ("h,help", "Prints usage")                                                                                              //
+    options.add_options()                                                                                                        //
+        ("mode", "the operation mode [normal, user_study, cam_calib, coax_calib, leap_calib, guess_char_game, guess_pose_game]", //
+         cxxopts::value<std::string>()->default_value("normal"))                                                                 //
+        ("mesh", "A .fbx mesh file to use for skinning",                                                                         //
+         cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                             //
+        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                 //
+        ("h,help", "Prints usage")                                                                                               //
         // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                      //
         ;
     std::string meshFile;
@@ -570,13 +558,13 @@ int main(int argc, char *argv[])
         meshFile = result["mesh"].as<std::string>();
         simulated_camera = result["simcam"].as<bool>();
         std::unordered_map<std::string, int> mode_map{
-            {"normal", 0},
-            {"user_study", 1},
-            {"cam_calib", 2},
-            {"coax_calib", 3},
-            {"leap_calib", 4},
-            {"guess_char_game", 6},
-            {"guess_num_game", 7}};
+            {"normal", static_cast<int>(OperationMode::NORMAL)},
+            {"user_study", static_cast<int>(OperationMode::USER_STUDY)},
+            {"cam_calib", static_cast<int>(OperationMode::CAMERA)},
+            {"coax_calib", static_cast<int>(OperationMode::COAXIAL)},
+            {"leap_calib", static_cast<int>(OperationMode::LEAP)},
+            {"guess_char_game", static_cast<int>(OperationMode::GUESS_NUM_GAME)},
+            {"guess_pose_game", static_cast<int>(OperationMode::GUESS_POSE_GAME)}};
         // check if mode is valid
         if (mode_map.find(result["mode"].as<std::string>()) == mode_map.end())
         {
@@ -721,7 +709,7 @@ int main(int argc, char *argv[])
     // load all image files from supplied texture paths to GPU
     for (auto &it : texturePaths)
     {
-        if (!std::filesystem::is_directory(it))
+        if (!fs::is_directory(it))
         {
             std::cout << it + " is not a folder" << std::endl;
             exit(1);
@@ -1200,211 +1188,153 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    if (debug_playback)
+                    if (run_user_study_random)
                     {
-                        if (!playVideo(shaderMap,
-                                       leftHandModel,
-                                       textModel,
-                                       cam_view_transform,
-                                       cam_projection_transform))
-                            debug_playback = false;
-                    }
-                }
-            }
-            break;
-        }
-        case static_cast<int>(OperationMode::SIMULATION): // todo: remove case
-        {
-            if (simulation_loaded)
-            {
-                if (run_simulation)
-                {
-                    switch (simulation_mode)
-                    {
-                    case static_cast<int>(SimulationMode::KALMAN):
-                    {
-                        if (prevSimulationFrameCount != simulationFrameCount)
+                        if (video_reached_end)
                         {
-                            filtered_cur.clear();
-                            filtered_next.clear();
-                            kalman_pred.clear();
-                            kalman_corrected.clear();
-                            kalman_forecast.clear();
-                            // get current simulated leap info
-                            t_leap.start();
-                            std::vector<glm::vec3> cur_joints, next_joints;
-                            std::vector<glm::mat4> ignore;
-                            LEAP_STATUS status = getLeapFramePreRecorded(ignore, next_joints, simulationFrameCount + 1, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-                            if (status != LEAP_STATUS::LEAP_NEWFRAME)
+                            is_first_in_video_pair = !is_first_in_video_pair;
+                            if (is_first_in_video_pair)
                             {
-                                run_simulation = false;
-                                break;
+                                int attempts = user_study.getAttempts();
+                                if (attempts != 0)
+                                {
+                                    // display "1 / 2" to subject indicating they need to choose
+                                    textModel.Render(textShader, std::string("1 / 2"), -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                                    // get input from subject
+                                    bool button_values[9] = {false, false, false, false, false, false, false, false, false};
+                                    GetButtonStates(button_values);
+                                    humanChoice = 0;
+                                    bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
+                                    bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
+                                    if (button_values[0] || one_pressed)
+                                        humanChoice = 1;
+                                    if (button_values[1] || two_pressed)
+                                        humanChoice = 2;
+                                    if (humanChoice == 0 || (one_pressed && two_pressed))
+                                    {
+                                        break; // don't do anything until user makes a choice
+                                    }
+                                }
+                                user_study.setSubjectResponse(humanChoice);
+                                if (user_study.getTrialFinished()) // experiment is finished
+                                {
+                                    user_study.printRandomSessionStats();
+                                    CloseMidiController();
+                                    run_user_study = false;
+                                    break;
+                                }
+                                user_study.randomTrial(cached_simulated_latency_ms, vid_motion_type, video_pair);
+                                switch (video_pair.first)
+                                {
+                                case 0:
+                                {
+                                    vid_simulated_latency_ms = 0.0f;
+                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                                    break;
+                                }
+                                case 1:
+                                {
+                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
+                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                                    break;
+                                }
+                                case 2:
+                                {
+                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
+                                    postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+                                    break;
+                                }
+                                default:
+                                {
+                                    break;
+                                }
+                                }
+                                switch (vid_motion_type)
+                                {
+                                case static_cast<int>(UserStudyMotionModel::TRANSLATION):
+                                {
+                                    session_bones_left = sessions_bones_left["translation"];
+                                    session_timestamps = sessions_timestamps["translation"];
+                                    break;
+                                }
+                                case static_cast<int>(UserStudyMotionModel::ROTATION):
+                                {
+                                    session_bones_left = sessions_bones_left["rotation"];
+                                    session_timestamps = sessions_timestamps["rotation"];
+                                    break;
+                                }
+                                case static_cast<int>(UserStudyMotionModel::DEFORMATION):
+                                {
+                                    session_bones_left = sessions_bones_left["deformation"];
+                                    session_timestamps = sessions_timestamps["deformation"];
+                                    break;
+                                }
+                                case static_cast<int>(UserStudyMotionModel::ALL):
+                                {
+                                    session_bones_left = sessions_bones_left["all"];
+                                    session_timestamps = sessions_timestamps["all"];
+                                    break;
+                                }
+                                default:
+                                {
+                                    break;
+                                }
+                                }
                             }
-                            getLeapFramePreRecorded(bones_to_world_left, cur_joints, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-                            std::vector<glm::vec2> projected_cur = Helpers::project_points(cur_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                            std::vector<glm::vec2> projected_next = Helpers::project_points(next_joints, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
+                            else
+                            {
+                                switch (video_pair.second)
+                                {
+                                case 0:
+                                {
+                                    vid_simulated_latency_ms = 0.0f;
+                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                                    break;
+                                }
+                                case 1:
+                                {
+                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
+                                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                                    break;
+                                }
+                                case 2:
+                                {
+                                    vid_simulated_latency_ms = cached_simulated_latency_ms;
+                                    postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+                                    break;
+                                }
+                                default:
+                                {
+                                    break;
+                                }
+                                }
+                            }
+                            // reset video playback
+                            videoFrameCountCont = 0.0f;
+                            prevVideoFrameCountCont = -1.0f;
+                            video_reached_end = false;
+                        }
+                        else
+                        {
+                            playVideo(shaderMap,
+                                      leftHandModel,
+                                      textModel,
+                                      cam_view_transform,
+                                      cam_projection_transform);
+                        }
+                    }
+                    else
+                    {
 
-                            for (int i = 0; i < leap_selection_vector.size(); i++)
-                            {
-                                filtered_cur.push_back(projected_cur[leap_selection_vector[i]]);
-                                filtered_next.push_back(projected_next[leap_selection_vector[i]]);
-                            }
-
-                            float curSimulationTime = simulation_timestamps[simulationFrameCount];
-                            float nextSimulationTime = simulation_timestamps[simulationFrameCount + 1];
-                            float interval = curSimulationTime - prevSimlationTime;
-                            float forecast_interval = nextSimulationTime - curSimulationTime;
-                            for (int i = 0; i < filtered_cur.size(); i++)
-                            {
-                                cv::Mat pred = kalman_filters_left[i].predict(interval);
-                                cv::Mat measurement(2, 1, CV_32F);
-                                measurement.at<float>(0) = filtered_cur[i].x;
-                                measurement.at<float>(1) = filtered_cur[i].y;
-                                cv::Mat corr = kalman_filters_left[i].correct(measurement);
-                                cv::Mat forecast = kalman_filters_left[i].forecast(forecast_interval);
-                                kalman_pred.push_back(glm::vec2(pred.at<float>(0), pred.at<float>(1)));
-                                kalman_corrected.push_back(glm::vec2(corr.at<float>(0), corr.at<float>(1)));
-                                kalman_forecast.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
-                            }
-                            prevSimlationTime = curSimulationTime;
-                            t_leap.stop();
-                        }
-                        // skin the mesh
-                        t_skin.start();
-                        handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
-                        t_skin.stop();
-                        // post process
-                        t_pp.start();
-                        handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
-                        t_pp.stop();
-                        // render to screen
-                        glViewport(0, 0, proj_width, proj_height); // set viewport
-                        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                        set_texture_shader(&textureShader, false, false, false);
-                        c2p_fbo.getTexture()->bind();
-                        fullScreenQuad.render();
-                        vcolorShader.use();
-                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                        PointCloud cloud_cur(filtered_cur, screen_verts_color_blue);
-                        PointCloud cloud_pred(kalman_pred, screen_verts_color_red);
-                        PointCloud cloud_corr(kalman_corrected, screen_verts_color_green);
-                        PointCloud cloud_next(filtered_next, screen_verts_color_white);
-                        PointCloud cloud_fore(kalman_forecast, screen_verts_color_cyan);
-                        // cloud_cur.render(5.0f);
-                        cloud_next.render(5.0f);
-                        cloud_pred.render(5.0f);
-                        cloud_corr.render(5.0f);
-                        cloud_fore.render(5.0f);
-                        prevSimulationFrameCount = simulationFrameCount;
-                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
-                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
+                        if (debug_playback)
                         {
-                            prev_vid_time = cur_vid_time;
-                            simulationFrameCount += 1;
+                            if (!playVideo(shaderMap,
+                                           leftHandModel,
+                                           textModel,
+                                           cam_view_transform,
+                                           cam_projection_transform))
+                                debug_playback = false;
                         }
-                        if (simulationFrameCount >= total_simulation_time_stamps)
-                        {
-                            simulationFrameCount = 0;
-                            prevSimlationTime = 0.0f;
-                            prevSimulationFrameCount = -1;
-                            run_simulation = false;
-                        }
-                        break;
-                    }
-                    case static_cast<int>(SimulationMode::AS_REAL_AS_POSSIBLE):
-                    {
-                        if (maxVideoFrameCount == 0)
-                        {
-                            std::cout << "Simulation video is empty" << std::endl;
-                            run_simulation = false;
-                            break;
-                        }
-                        t_camera.start();
-                        // get current simulated camera image
-                        cv::Mat simulated = cv::Mat(cam_height, cam_width, CV_8UC1, pFrameData[simulationFrameCount]).clone();
-                        // cv::flip(simulated, simulated, 1);
-                        // set it as camera input
-                        handleCameraInput(ptrGrabResult, true, simulated);
-                        t_camera.stop();
-                        // get current simulated leap info
-                        t_leap.start();
-                        LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_to_world_left, joints_left, simulationFrameCount, total_simulation_time_stamps, simulation_bones_left, simulation_joints_left);
-                        t_leap.stop();
-                        // skin the mesh
-                        t_skin.start();
-                        handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
-                        t_skin.stop();
-                        // filtered mls
-                        t_mls.start();
-                        if (prevSimulationFrameCount != simulationFrameCount)
-                        {
-                            // handleMLSSync(gridShader);
-                            // if (simulationFrameCount == 0)
-                            // {
-                            //     std::vector<glm::vec3> to_project = joints_left;
-                            //     std::vector<glm::vec2> projected = Helpers::project_points(to_project, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-                            //     prev_leap_keypoints = Helpers::glm2cv(projected);
-                            //     cv::Mat x = deformationGrid.getM();
-                            //     for (int i = 0; i < grid_x_point_count * grid_y_point_count; i++)
-                            //     {
-                            //         cv::Mat state = cv::Mat::zeros(4, 1, CV_32F);
-                            //         state.at<float>(0) = x.at<float>(0, i);
-                            //         state.at<float>(1) = x.at<float>(1, i);
-                            //         grid_kalman[i].setInitialState(state);
-                            //         grid_kalman[i].saveCheckpoint();
-                            //     }
-                            //     x_prev = x.clone();
-                            // }
-                            // cv::Mat vel_grid, pred_grid;
-                            // float simulationTime = simulation_timestamps[simulationFrameCount];
-                            // float interval = prevSimlationTime - simulationTime;
-                            // if (interval >= simulationMPDelay)
-                            // {
-                            //     handleFilteredMLS(gridShader, false, vel_grid, pred_grid);
-                            //     prevSimlationTime = simulationTime;
-                            //     savedSimulationFrameCount = simulationFrameCount;
-                            // }
-                            // else
-                            // {
-                            //     handleFilteredMLS(gridShader, false, vel_grid, pred_grid);
-                            // }
-                        }
-                        t_mls.stop();
-                        // post process
-                        t_pp.start();
-                        handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
-                        t_pp.stop();
-                        // render to screen
-                        glViewport(0, 0, proj_width, proj_height); // set viewport
-                        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                        set_texture_shader(&textureShader, false, false, false);
-                        c2p_fbo.getTexture()->bind();
-                        fullScreenQuad.render();
-                        // std::vector<glm::vec2> origGridVerts = Helpers::flatten_2dgrid(deformationGrid.getM());
-                        // std::vector<glm::vec2> velGridVerts = Helpers::flatten_2dgrid(vel_grid);
-                        // PointCloud originalGrid(origGridVerts, screen_verts_color_green);
-                        // PointCloud velGrid(velGridVerts, screen_verts_color_blue);
-                        // vcolorShader.use();
-                        // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                        // originalGrid.render(5.0f);
-                        // velGrid.render(5.0f);
-                        prevSimulationFrameCount = simulationFrameCount;
-                        cur_vid_time = t_app.getElapsedTimeInMilliSec();
-                        if (cur_vid_time - prev_vid_time > (1000.0f / vid_playback_fps_limiter))
-                        {
-                            prev_vid_time = cur_vid_time;
-                            simulationFrameCount += 1;
-                        }
-                        if (simulationFrameCount >= total_simulation_time_stamps)
-                        {
-                            simulationFrameCount = 0;
-                            prevSimulationFrameCount = -1;
-                            prevSimlationTime = 0.0f;
-                        }
-                        break;
-                    }
-                    default:
-                        break;
                     }
                 }
             }
@@ -2949,7 +2879,7 @@ bool loadImagesFromFolder(std::string loadpath)
     {
         if (entry.path().extension() != ".png")
             continue;
-        if (counter >= simulation_max_supported_frames)
+        if (counter >= max_supported_frames)
         {
             std::cout << "too many images in folder" << std::endl;
             exit(1);
@@ -2964,6 +2894,85 @@ bool loadImagesFromFolder(std::string loadpath)
     return true;
 }
 
+bool loadSessions(std::vector<std::string> &session_names)
+{
+    std::string recordings("../../resource/recordings/");
+    for (const auto &entry : session_names)
+    {
+        fs::path cur_recording_path = fs::path(recordings) / fs::path(entry);
+        if (fs::is_directory(cur_recording_path))
+        {
+            fs::path bones_left_path = cur_recording_path / fs::path(std::string("bones_left.npy"));
+            fs::path timestamps_path = cur_recording_path / fs::path(std::string("timestamps.npy"));
+            cnpy::NpyArray bones_left_npy, timestamps_npy;
+            std::vector<glm::mat4> raw_session_bones_left;
+            if (fs::exists(bones_left_path))
+            {
+                bones_left_npy = cnpy::npy_load(bones_left_path.string());
+                std::vector<float> raw_data = bones_left_npy.as_vec<float>();
+                for (int i = 0; i < raw_data.size(); i += 16)
+                {
+                    raw_session_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
+                }
+            }
+            else
+            {
+                return false;
+            }
+            std::vector<float> raw_session_timestamps;
+            if (fs::exists(timestamps_path))
+            {
+                timestamps_npy = cnpy::npy_load(timestamps_path.string());
+                std::vector<uint64_t> raw_data = timestamps_npy.as_vec<uint64_t>();
+                // todo: convert to std iterators
+                uint64_t first_timestamp = raw_data[0];
+                for (int i = 0; i < raw_data.size(); i++)
+                {
+                    raw_session_timestamps.push_back((raw_data[i] - first_timestamp) / 1000.0f);
+                }
+            }
+            else
+            {
+                return false;
+            }
+            int total_raw_session_time_stamps = session_timestamps.size();
+            // create a simulated session where every frame is 1 ms apart
+            float resolution = 1.0f; // resolution of simulated session in ms
+            float whole;             // find the whole part of the last timestamp
+            std::vector<glm::mat4> bones_to_world_left_simulated;
+            std::modf(raw_session_timestamps[raw_session_timestamps.size() - 1], &whole);
+            total_session_time_stamps = static_cast<int>(whole / resolution); // the timestamps are in ms, so this integer represents the final timestamp (roughly)
+            for (int i = 0; i < total_session_time_stamps; i++)
+            {
+                float required_time = resolution * static_cast<float>(i);
+                auto upper_iter = std::upper_bound(raw_session_timestamps.begin(), raw_session_timestamps.end(), required_time);
+                int interp_index = upper_iter - raw_session_timestamps.begin();
+                float interp1 = raw_session_timestamps[interp_index - 1];
+                float interp2 = raw_session_timestamps[interp_index];
+                float interp_factor = (required_time - interp1) / (interp2 - interp1);
+                for (int j = 0; j < 22; j++)
+                {
+                    glm::mat4 interpolated = Helpers::interpolate(raw_session_bones_left[22 * (interp_index - 1) + j], raw_session_bones_left[22 * interp_index + j], interp_factor, true);
+                    bones_to_world_left_simulated.push_back(interpolated);
+                }
+            }
+            session_bones_left = bones_to_world_left_simulated;
+            sessions_bones_left[entry] = bones_to_world_left_simulated;
+            session_timestamps.clear();
+            for (int i = 0; i < total_session_time_stamps; i++)
+            {
+                session_timestamps.push_back(static_cast<float>(i) * resolution);
+            }
+            sessions_timestamps[entry] = session_timestamps;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool loadSession()
 {
     // load raw session data (hand poses n x 22 x 4 x 4, and timestamps n x 1)
@@ -2971,9 +2980,9 @@ bool loadSession()
     fs::path bones_left_path = fs::path(recordings) / fs::path(recording_name) / fs::path(std::string("bones_left.npy"));
     fs::path timestamps_path = fs::path(recordings) / fs::path(recording_name) / fs::path(std::string("timestamps.npy"));
     cnpy::NpyArray bones_left_npy, timestamps_npy;
+    std::vector<glm::mat4> raw_session_bones_left;
     if (fs::exists(bones_left_path))
     {
-        raw_session_bones_left.clear();
         bones_left_npy = cnpy::npy_load(bones_left_path.string());
         std::vector<float> raw_data = bones_left_npy.as_vec<float>();
         for (int i = 0; i < raw_data.size(); i += 16)
@@ -2985,9 +2994,9 @@ bool loadSession()
     {
         return false;
     }
+    std::vector<float> raw_session_timestamps;
     if (fs::exists(timestamps_path))
     {
-        raw_session_timestamps.clear();
         timestamps_npy = cnpy::npy_load(timestamps_path.string());
         std::vector<uint64_t> raw_data = timestamps_npy.as_vec<uint64_t>();
         // todo: convert to std iterators
@@ -3001,7 +3010,7 @@ bool loadSession()
     {
         return false;
     }
-    total_raw_session_time_stamps = session_timestamps.size();
+    int total_raw_session_time_stamps = session_timestamps.size();
     // create a simulated session where every frame is 1 ms apart
     float resolution = 1.0f; // resolution of simulated session in ms
     float whole;             // find the whole part of the last timestamp
@@ -3540,65 +3549,6 @@ bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &po
         poses.push_back(raw_game_bones_left);
         // }
     }
-    return true;
-}
-
-bool loadSimulation(std::string loadpath)
-{
-    // load raw session data (hand poses n x 22 x 4 x 4, joints n x 42 x 3, timestamps n x 1)
-    fs::path bones_left_path = fs::path(loadpath) / fs::path(std::string("bones_left.npy"));
-    fs::path joints_left_path = fs::path(loadpath) / fs::path(std::string("joints_left.npy"));
-    fs::path timestamps_path = fs::path(loadpath) / fs::path(std::string("timestamps.npy"));
-    cnpy::NpyArray bones_left_npy, joints_left_npy, timestamps_npy;
-    if (fs::exists(bones_left_path))
-    {
-        raw_simulation_bones_left.clear();
-        bones_left_npy = cnpy::npy_load(bones_left_path.string());
-        std::vector<float> raw_data = bones_left_npy.as_vec<float>();
-        for (int i = 0; i < raw_data.size(); i += 16)
-        {
-            raw_simulation_bones_left.push_back(glm::make_mat4(raw_data.data() + i));
-        }
-    }
-    else
-    {
-        return false;
-    }
-    if (fs::exists(joints_left_path))
-    {
-        raw_simulation_joints_left.clear();
-        joints_left_npy = cnpy::npy_load(joints_left_path.string());
-        std::vector<float> raw_data = joints_left_npy.as_vec<float>();
-        for (int i = 0; i < raw_data.size(); i += 3)
-        {
-            raw_simulation_joints_left.push_back(glm::make_vec3(raw_data.data() + i));
-        }
-    }
-    else
-    {
-        return false;
-    }
-    if (fs::exists(timestamps_path))
-    {
-        raw_simulation_timestamps.clear();
-        timestamps_npy = cnpy::npy_load(timestamps_path.string());
-        std::vector<uint64_t> raw_data = timestamps_npy.as_vec<uint64_t>();
-        // todo: convert to std iterators
-        uint64_t first_timestamp = raw_data[0];
-        for (int i = 0; i < raw_data.size(); i++)
-        {
-            raw_simulation_timestamps.push_back((raw_data[i] - first_timestamp) / 1000.0f);
-        }
-    }
-    else
-    {
-        return false;
-    }
-    total_simulation_time_stamps = raw_simulation_timestamps.size();
-    simulation_bones_left = std::move(raw_simulation_bones_left);
-    simulation_joints_left = std::move(raw_simulation_joints_left);
-    simulation_timestamps = std::move(raw_simulation_timestamps);
-    loadImagesFromFolder(loadpath);
     return true;
 }
 
@@ -6438,29 +6388,6 @@ void openIMGUIFrame()
             ImGui::InputText("Texture File", &userTextureFile);
             ImGui::TreePop();
         }
-        if (ImGui::TreeNode("Game Controls"))
-        {
-            ImGui::Checkbox("Show Game Hint", &showGameHint);
-            ImGui::SameLine();
-            ImGui::Checkbox("Use Right Hand", &gameUseRightHand);
-            ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -1.0f, 1.0f);
-            ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 5.0f);
-            ImGui::SeparatorText("Game Quad");
-            ImWidgets::RangeSelect2D("Game Quad", &game_min.x, &game_min.y, &game_max.x, &game_max.y, -1.0f, -1.0f, 1.0f, 1.0f, 0.5f);
-            // ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);
-            if (ImGui::IsItemActive())
-            {
-            }
-            else
-            {
-                std::vector<glm::vec2> new_game_verts = {glm::vec2(game_min.x, game_max.y),
-                                                         glm::vec2(game_min.x, game_min.y),
-                                                         glm::vec2(game_max.x, game_min.y),
-                                                         glm::vec2(game_max.x, game_max.y)};
-                game_verts = new_game_verts;
-            }
-            ImGui::TreePop();
-        }
         /////////////////////////////////////////////////////////////////////////////
         if (ImGui::TreeNode("Bake"))
         {
@@ -6684,6 +6611,32 @@ void openIMGUIFrame()
                             std::cout << "Failed to load recording: " << recording_name << std::endl;
                         }
                     }
+                    run_user_study_random = false;
+                    videoFrameCountCont = 0.0f;
+                    prevVideoFrameCountCont = -1.0f;
+                    use_coaxial_calib = false;
+                    vid_motion_type = -1;
+                    texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                    user_study.reset(initial_simulated_latency_ms);
+                }
+                else
+                {
+                    video_reached_end = true;
+                    CloseMidiController();
+                }
+            }
+            if (ImGui::Checkbox("Run Random User Study", &run_user_study_random))
+            {
+                if (run_user_study_random)
+                {
+                    if (!OpenMidiController())
+                        std::cout << "Midi Controller is not available!" << std::endl;
+                    std::vector<std::string> recording_names = {"translation", "rotation", "deformation", "all"};
+                    if (loadSessions(recording_names))
+                    {
+                        pre_recorded_session_loaded = true;
+                    }
+                    run_user_study = false;
                     videoFrameCountCont = 0.0f;
                     prevVideoFrameCountCont = -1.0f;
                     use_coaxial_calib = false;
@@ -6728,6 +6681,29 @@ void openIMGUIFrame()
                     prevVideoFrameCountCont = -1.0f;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
+            }
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Game Controls"))
+        {
+            ImGui::Checkbox("Show Game Hint", &showGameHint);
+            ImGui::SameLine();
+            ImGui::Checkbox("Use Right Hand", &gameUseRightHand);
+            ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -1.0f, 1.0f);
+            ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 5.0f);
+            ImGui::SeparatorText("Game Quad");
+            ImWidgets::RangeSelect2D("Game Quad", &game_min.x, &game_min.y, &game_max.x, &game_max.y, -1.0f, -1.0f, 1.0f, 1.0f, 0.5f);
+            // ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);
+            if (ImGui::IsItemActive())
+            {
+            }
+            else
+            {
+                std::vector<glm::vec2> new_game_verts = {glm::vec2(game_min.x, game_max.y),
+                                                         glm::vec2(game_min.x, game_min.y),
+                                                         glm::vec2(game_max.x, game_min.y),
+                                                         glm::vec2(game_max.x, game_max.y)};
+                game_verts = new_game_verts;
             }
             ImGui::TreePop();
         }
