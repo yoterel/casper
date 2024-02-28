@@ -200,8 +200,8 @@ int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
-float distance_threshold = 10.0f;
-float seam_threshold = 0.5f;
+float jfa_distance_threshold = 10.0f;
+float jfa_seam_threshold = 0.5f;
 bool jfauv_right_hand = false;
 glm::vec3 mask_bg_color(0.0f, 0.0f, 0.0f);
 glm::vec3 mask_missing_info_color(0.26, 0.43, 0.376);
@@ -281,7 +281,7 @@ bool run_user_study_random = false;
 UserStudy user_study = UserStudy();
 int humanChoice = 1;
 bool video_reached_end = true;
-bool is_first_in_video_pair = false;
+bool is_first_in_video_pair = true;
 double prev_vid_time;
 double cur_vid_time;
 int vid_motion_type = -1;
@@ -292,14 +292,15 @@ float initial_simulated_latency_ms = 40.0f;
 // record & playback controls
 bool debug_playback = false;
 float vid_playback_fps_limiter = 900.0;
-float vid_playback_speed = 1.0f;
-float projection_mix_ratio = 0.6f;
+float vid_playback_speed = 1.5f;
+float projection_mix_ratio = 0.4f;
 float skin_brightness = 0.3f;
 float prevVideoFrameCountCont = -1.0f;
 float videoFrameCountCont = 0.0;
 std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_corrected, kalman_forecast;
 bool recordImages = false;
 std::string recording_name = "translation_10s";
+std::string subject_name = "subject1";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;
 const int max_supported_frames = 1000;
@@ -588,6 +589,13 @@ int main(int argc, char *argv[])
         std::cerr << e.what() << '\n';
         std::cout << options.help() << std::endl;
         exit(0);
+    }
+    // set some default values for user study depending on cmd line
+    if (operation_mode == static_cast<int>(OperationMode::USER_STUDY))
+    {
+        postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+        vid_simulated_latency_ms = 35.0f;
+        use_mls = false;
     }
     /* embedded python init */
     Py_Initialize();
@@ -2701,6 +2709,7 @@ bool loadSessions(std::vector<std::string> &session_names)
     std::string recordings("../../resource/recordings/");
     for (const auto &entry : session_names)
     {
+        std::cout << "loading session: " << entry << std::endl;
         fs::path cur_recording_path = fs::path(recordings) / fs::path(entry);
         if (fs::is_directory(cur_recording_path))
         {
@@ -3586,12 +3595,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         if (use_mls)
             postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
                                    mls_fbo.getTexture()->getTexture(), camTexture.getTexture(),
-                                   &postprocess_fbo, masking_threshold, distance_threshold);
+                                   &postprocess_fbo, masking_threshold, jfa_distance_threshold);
         else
             postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
                                    hands_fbo.getTexture()->getTexture(),
                                    camTexture.getTexture(),
-                                   &postprocess_fbo, masking_threshold, distance_threshold);
+                                   &postprocess_fbo, masking_threshold, jfa_distance_threshold);
         break;
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
@@ -3601,12 +3610,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
                                       leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
-                                      &postprocess_fbo, masking_threshold, distance_threshold, seam_threshold);
+                                      &postprocess_fbo, masking_threshold, jfa_distance_threshold, jfa_seam_threshold);
         else
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, uv_fbo.getTexture()->getTexture(),
                                       leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
-                                      &postprocess_fbo, masking_threshold, distance_threshold, seam_threshold);
+                                      &postprocess_fbo, masking_threshold, jfa_distance_threshold, jfa_seam_threshold);
         break;
     }
     default:
@@ -5137,11 +5146,6 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                             return;
                         }
                     }
-                    is_first_in_video_pair = true;
-                }
-                else
-                {
-                    is_first_in_video_pair = false;
                 }
                 vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given subject choice
                 videoFrameCountCont = 0.0f;                                     // reset video playback
@@ -5164,7 +5168,6 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
             {
                 if (video_reached_end)
                 {
-                    is_first_in_video_pair = !is_first_in_video_pair;
                     if (is_first_in_video_pair)
                     {
                         int attempts = user_study.getAttempts();
@@ -5184,16 +5187,16 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                                 humanChoice = 2;
                             if (humanChoice == 0 || (one_pressed && two_pressed))
                             {
-                                return; // don't do anything until user makes a choice
+                                return;
                             }
-                        }
-                        user_study.setSubjectResponse(humanChoice);
-                        if (user_study.getTrialFinished()) // experiment is finished
-                        {
-                            user_study.printRandomSessionStats();
-                            CloseMidiController();
-                            run_user_study = false;
-                            return;
+                            user_study.setSubjectResponse(humanChoice);
+                            if (user_study.getTrialFinished()) // experiment is finished
+                            {
+                                user_study.printRandomSessionStats();
+                                CloseMidiController();
+                                run_user_study_random = false;
+                                return;
+                            }
                         }
                         user_study.randomTrial(cached_simulated_latency_ms, vid_motion_type, video_pair);
                         switch (video_pair.first)
@@ -5730,6 +5733,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         if (!success)
         {
             video_reached_end = true;
+            is_first_in_video_pair = !is_first_in_video_pair;
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             return false;
         }
@@ -6500,8 +6504,8 @@ void openIMGUIFrame()
             {
                 threshold_flag = false;
             }
-            ImGui::SliderFloat("JFA Distance Threshold", &distance_threshold, 0.0f, 100.0f);
-            ImGui::SliderFloat("JFA Seam Threshold", &seam_threshold, 0.0f, 2.0f);
+            ImGui::SliderFloat("JFA Distance Threshold", &jfa_distance_threshold, 0.0f, 100.0f);
+            ImGui::SliderFloat("JFA Seam Threshold", &jfa_seam_threshold, 0.0f, 2.0f);
             ImGui::ColorEdit3("BG Color", &mask_bg_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Missing Info Color", &mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Unused Info Color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
@@ -6591,7 +6595,7 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Leap Arm Scale", &leap_arm_local_scaler, 0.001f, 0.1f);
             ImGui::TreePop();
         }
-        if (ImGui::TreeNode("Record & Playback"))
+        if (ImGui::TreeNode("Record / Playback"))
         {
             ImGui::SeparatorText("Record");
             if (ImGui::Checkbox("Record Session", &record_session))
@@ -6616,7 +6620,41 @@ void openIMGUIFrame()
             }
             ImGui::InputText("Recording Name", &recording_name);
             ImGui::SeparatorText("Playback");
-            if (ImGui::Checkbox("Run User Study", &run_user_study))
+            ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 0.0f, 50.0f);
+            ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);
+            ImGui::SliderFloat("Video Playback Speed", &vid_playback_speed, 0.1f, 10.0f);
+            ImGui::SliderFloat("Mixer Ratio", &projection_mix_ratio, 0.0f, 1.0f);
+            ImGui::SliderFloat("Skin Brightness", &skin_brightness, 0.0f, 1.0f);
+            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 1.0f, 900.0f);
+            if (ImGui::Checkbox("Debug Playback", &debug_playback))
+            {
+                if (debug_playback)
+                {
+                    if (recording_name != loaded_session_name)
+                    {
+                        if (loadSession())
+                        {
+                            pre_recorded_session_loaded = true;
+                            loaded_session_name = recording_name;
+                        }
+                        else
+                        {
+                            std::cout << "Failed to load recording: " << recording_name << std::endl;
+                        }
+                    }
+                    videoFrameCountCont = 0.0f;
+                    prevVideoFrameCountCont = -1.0f;
+                    video_reached_end = true;
+                    is_first_in_video_pair = true;
+                    texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                }
+            }
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("User Study"))
+        {
+            ImGui::InputText("Subject Name", &subject_name);
+            if (ImGui::Checkbox("Run JND User Study", &run_user_study))
             {
                 if (run_user_study)
                 {
@@ -6637,6 +6675,8 @@ void openIMGUIFrame()
                     run_user_study_random = false;
                     videoFrameCountCont = 0.0f;
                     prevVideoFrameCountCont = -1.0f;
+                    video_reached_end = true;
+                    is_first_in_video_pair = true;
                     use_coaxial_calib = false;
                     vid_motion_type = -1;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
@@ -6644,11 +6684,10 @@ void openIMGUIFrame()
                 }
                 else
                 {
-                    video_reached_end = true;
                     CloseMidiController();
                 }
             }
-            if (ImGui::Checkbox("Run Random User Study", &run_user_study_random))
+            if (ImGui::Checkbox("Run Comparitive User Study", &run_user_study_random))
             {
                 if (run_user_study_random)
                 {
@@ -6660,15 +6699,18 @@ void openIMGUIFrame()
                         pre_recorded_session_loaded = true;
                     }
                     run_user_study = false;
+                    jfa_distance_threshold = 100.0f;
                     videoFrameCountCont = 0.0f;
                     prevVideoFrameCountCont = -1.0f;
+                    video_reached_end = true;
+                    is_first_in_video_pair = true;
                     use_coaxial_calib = false;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                     user_study.reset(initial_simulated_latency_ms);
+                    user_study.setResultFilePath(std::format("../../{}.csv", subject_name));
                 }
                 else
                 {
-                    video_reached_end = true;
                     CloseMidiController();
                 }
             }
@@ -6702,6 +6744,8 @@ void openIMGUIFrame()
                     }
                     videoFrameCountCont = 0.0f;
                     prevVideoFrameCountCont = -1.0f;
+                    video_reached_end = true;
+                    is_first_in_video_pair = true;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
             }

@@ -4,6 +4,8 @@
 #include <vector>
 #include "timer.h"
 #include <random>
+#include <iostream>
+#include <fstream>
 
 class UserStudy
 {
@@ -15,7 +17,9 @@ public:
     void trial(bool successfullHuman);
     void printStats();
     void printRandomSessionStats();
-    void saveStats();
+    void printTrialInfo(int attempt, bool withUserResponse);
+    void saveAttempt(int attempt);
+    void setResultFilePath(std::string resultFilePath);
     bool getTrialFinished() { return trialEnded; };
     void setSubjectResponse(int response);
     int getAttempts() { return attempts; };
@@ -44,8 +48,9 @@ private:
     std::vector<float> allowedLatencies;
     std::vector<int> allowedMotionTypes;
     std::vector<std::pair<int, int>> allowedPairs;
-    std::vector<std::tuple<int, int, int, bool, bool>> trials; // latency, motionType, pair, pairinverted, subjectChoice
+    std::vector<std::tuple<int, int, int, bool, int>> trials; // latency, motionType, pair, pairinverted, subjectChoice
     std::mt19937 rng;
+    std::string resultFile;
 };
 
 enum class UserStudyMotionModel

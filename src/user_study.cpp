@@ -1,9 +1,12 @@
 #include "user_study.h"
-#include <iostream>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 UserStudy::UserStudy()
 {
     rng = std::default_random_engine{};
+    rng.seed(std::random_device{}());
     reset();
 }
 
@@ -13,6 +16,7 @@ void UserStudy::reset(float initialLatency)
     trialIsBaseline = false;
     isFirstTrial = true;
     trialEnded = false;
+    resultFile = "";
     baseStep = 1.6f;
     minBaseStep = 0.01f;
     minLatency = 0.0f;
@@ -39,9 +43,7 @@ void UserStudy::reset(float initialLatency)
         {
             for (int k = 0; k < allowedPairs.size(); k++)
             {
-                std::uniform_int_distribution<> distr(0, 1);
-
-                trials.push_back(std::make_tuple(i, j, k, false, false));
+                trials.push_back(std::make_tuple(i, j, k, false, 0));
             }
         }
     }
@@ -70,58 +72,80 @@ bool UserStudy::randomize01()
     }
 }
 
+void UserStudy::printTrialInfo(int attempt, bool withUserResponse)
+{
+    if (attempt < trials.size())
+    {
+        std::tuple<int, int, int, bool, int> trial = trials[attempt];
+        int latencyIndex = std::get<0>(trial);
+        int motionTypeIndex = std::get<1>(trial);
+        int pairIndex = std::get<2>(trial);
+        bool swapPair = std::get<3>(trial);
+        float latency = allowedLatencies[latencyIndex];
+        int motionType = allowedMotionTypes[motionTypeIndex];
+        std::pair<int, int> mypair = allowedPairs[pairIndex];
+        if (swapPair)
+            mypair = std::make_pair(mypair.second, mypair.first);
+        std::vector<std::string> pairNames = {"GT", "vanilla", "ours"};
+        std::cout << "latency: " << latency << ", ";
+        switch (motionType)
+        {
+        case 0:
+            std::cout << "motionType: translation, ";
+            break;
+        case 1:
+            std::cout << "motionType: rotation, ";
+            break;
+        case 2:
+            std::cout << "motionType: deformation, ";
+            break;
+        case 3:
+            std::cout << "motionType: all, ";
+            break;
+        default:
+            std::cout << "motionType: unknown, ";
+            break;
+        }
+        std::cout << "pair: " << pairNames[mypair.first] << " " << pairNames[mypair.second];
+        if (withUserResponse)
+        {
+            int response = std::get<4>(trial);
+            std::cout << ", response: " << pairNames[response];
+        }
+        std::cout << std::endl;
+    }
+}
+
 void UserStudy::setSubjectResponse(int response)
 {
-    std::tuple<int, int, int, bool, bool> trial = trials[attempts];
-    int latencyIndex = std::get<0>(trial);
-    int motionTypeIndex = std::get<1>(trial);
+    // to be called only after randomTrial was called
+    // response must be 1 or 2 corresponding to one of the video in the presented pair
+    std::tuple<int, int, int, bool, int> trial = trials[attempts - 1];
     int pairIndex = std::get<2>(trial);
     bool swapPair = std::get<3>(trial);
-    float latency = allowedLatencies[latencyIndex];
-    int motionType = allowedMotionTypes[motionTypeIndex];
     std::pair<int, int> mypair = allowedPairs[pairIndex];
-    std::cout << "latency: " << latency << ", ";
-    switch (motionType)
-    {
-    case 0:
-        std::cout << "motionType: translation, ";
-        break;
-    case 1:
-        std::cout << "motionType: rotation, ";
-        break;
-    case 2:
-        std::cout << "motionType: deformation, ";
-        break;
-    case 3:
-        std::cout << "motionType: all, ";
-        break;
-    default:
-        std::cout << "motionType: unknown, ";
-        break;
-    }
     if (swapPair)
         mypair = std::make_pair(mypair.second, mypair.first);
-    std::vector<std::string> pairNames = {"GT", "vanilla", "ours"};
-    std::cout << "pair: " << pairNames[mypair.first] << " " << pairNames[mypair.second] << ", ";
-    if (response == 1)
+    if (response == 1) // user decided first video has more latency
     {
-        std::cout << "response: " << pairNames[mypair.first];
-        std::get<4>(trial) = true;
+        std::get<4>(trial) = mypair.first;
+        trials[attempts - 1] = trial;
     }
     else
     {
         if (response == 2)
         {
-            std::cout << "response: " << pairNames[mypair.second];
-            std::get<4>(trial) = false;
+            std::get<4>(trial) = mypair.second;
+            trials[attempts - 1] = trial;
         }
         else
         {
-            std::cout << "response: unknown";
+            std::cout << "unknown response" << std::endl;
+            exit(1);
         }
     }
-    std::cout << std::endl;
-    attempts++;
+    printTrialInfo(attempts - 1, true);
+    saveAttempt(attempts - 1);
     if (attempts >= trials.size())
     {
         trialEnded = true;
@@ -133,7 +157,7 @@ void UserStudy::randomTrial(float &latency, int &motionType, std::pair<int, int>
 {
     if (attempts < trials.size())
     {
-        std::tuple<int, int, int, bool, bool> trial = trials[attempts];
+        std::tuple<int, int, int, bool, int> trial = trials[attempts];
         // select a random combination with no repetition
         int latencyIndex = std::get<0>(trial);
         int motionTypeIndex = std::get<1>(trial);
@@ -150,8 +174,11 @@ void UserStudy::randomTrial(float &latency, int &motionType, std::pair<int, int>
         {
             pair = std::make_pair(mypair.second, mypair.first);
             std::get<3>(trial) = true;
+            trials[attempts] = trial;
         }
+        printTrialInfo(attempts, false);
     }
+    attempts++;
 }
 
 float UserStudy::randomTrial(int humanChoice)
@@ -212,7 +239,6 @@ float UserStudy::randomTrial(int humanChoice)
 
 void UserStudy::trial(bool successfullHuman)
 {
-
     if (trialEnded)
     {
         return;
@@ -294,18 +320,39 @@ void UserStudy::printRandomSessionStats()
 {
     std::cout << "Report: " << std::endl;
     std::cout << "Total session time [m]: " << sessionTimer.getElapsedTimeInSec() / 60 << std::endl;
-    for (auto entry : trials)
+    for (int i = 0; i < trials.size(); i++)
     {
-        std::cout << "latency: " << std::get<0>(entry) << ", ";
-        std::cout << "motionType: " << std::get<1>(entry) << ", ";
-        std::cout << "pair: " << std::get<2>(entry) << ", ";
-        bool choice = std::get<3>(entry) ? !std::get<4>(entry) : std::get<4>(entry);
-        std::cout << "subjectChoice: " << choice << std::endl;
+        printTrialInfo(i, true);
     }
 }
 
-void UserStudy::saveStats()
+void UserStudy::setResultFilePath(std::string resultFilePath)
 {
+    fs::path filePath{resultFilePath};
+    if (!fs::exists(filePath))
+    {
+        resultFile = resultFilePath;
+    }
+    else
+    {
+        std::cout << "File already exists, please provide a new file name" << std::endl;
+    }
+}
+
+void UserStudy::saveAttempt(int attempt)
+{
+    std::ofstream outfile;
+    outfile.open(resultFile, std::ios_base::app);
+    std::tuple<int, int, int, bool, int> trial = trials[attempt];
+    int latencyIndex = std::get<0>(trial);
+    int motionTypeIndex = std::get<1>(trial);
+    int pairIndex = std::get<2>(trial);
+    // bool pairInverted = std::get<3>(trial);
+    int subjectChoice = std::get<4>(trial);
+    float latency = allowedLatencies[latencyIndex];
+    int motionType = allowedMotionTypes[motionTypeIndex];
+    std::pair<int, int> pair = allowedPairs[pairIndex];
+    outfile << latency << "," << motionType << "," << pair.first << "," << pair.second << "," << subjectChoice << "\n";
 }
 
 void UserStudy::printStats()

@@ -24,11 +24,12 @@ Please choose which one seems to have more latency to it by clicking either butt
 Remember to select the video with MORE latency ("lag").
 We will start with a training session, where latency is obvious.
 
-ahand.exe --simcam --mesh ../../resource/UserStudy.fbx
+ahand.exe --simcam --mesh ../../resource/UserStudy.fbx --mode user_study
 open excel sheet, input subject name, age
 General -> Use Projector
 General -> Gamma Correction
-General -> User Study
+
+////////// JND /////////////
 Material -> User Study Texture -> select texture
 Post Process -> Render Only / Jump Flood / Jump Flood UV
 Post Process -> JFA Distance Threshold -> 100
@@ -36,7 +37,6 @@ Record & Playback -> Recording Name -> all / translation
 Record & Playback -> Video playback speed -> select speed
 Record & Playback -> Mixer ratio -> select mixture ratio
 Record & Playback -> Initial Latency -> 40.0f
-
 < SHOW SUBJECT >
 Record & Playback -> Run user study
 < END SHOW SUBJECT >
@@ -46,8 +46,12 @@ Record & Playback -> Initial Latency -> 10.0f
 Record & Playback -> Run user study
 < END EXPERIMENT >
 Write final JND in excel
-repeat from step 6
+////////// JND /////////////
+
+////////// Comparitive //////////
+User Study -> Debug Playback
+(show large latency, medium, and small)
+////////// Comparitive //////////
 
 final quesitons:
-did you figure out the experimental protocol ?
-did you have a stratedgy to figure out the latency ?
+did you have a stratedgy to figure out the latency ? (do you look at some location, or focus on some area?)
