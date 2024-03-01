@@ -73,6 +73,7 @@ uniform bool flipTexHorizontally = false;
 uniform bool useGGX = false;
 uniform bool renderUV = false;
 uniform bool useMetric = false;
+uniform float ambientCoeff = 0.0;
 
 vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 projectiveColor)
 {
@@ -218,8 +219,8 @@ void main()
                 else
                 {
                     vec3 diffuse_color = texture(src, TexCoord0).rgb;
-                    vec3 ambient_color = diffuse_color * 0.5;
-                    FragColor = vec4(ambient_color * projColor, 1.0);
+                    vec3 ambient_color = diffuse_color * ambientCoeff;
+                    FragColor = vec4(ambient_color + (diffuse_color * projColor), 1.0);
                 }
             }
             else

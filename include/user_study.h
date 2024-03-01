@@ -17,12 +17,14 @@ public:
     void trial(bool successfullHuman);
     void printStats();
     void printRandomSessionStats();
-    void printTrialInfo(int attempt, bool withUserResponse);
+    void printTrialInfo(int attempt, bool withUserResponse, bool onlyUserResponse);
     void saveAttempt(int attempt);
     void setResultFilePath(std::string resultFilePath);
     bool getTrialFinished() { return trialEnded; };
     void setSubjectResponse(int response);
     int getAttempts() { return attempts; };
+    void setAttempts(int newAttempts) { attempts = newAttempts; };
+    void setDontRandomize(bool dont_randomize) { dontRandomize = dont_randomize; };
     int getPairAttempts() { return pair_attempts; };
 
 private:
@@ -32,6 +34,7 @@ private:
     bool trialIsBaseline;
     bool isFirstTrial;
     bool trialEnded;
+    bool dontRandomize;
     float baseStep;
     float minBaseStep;
     float minLatency;

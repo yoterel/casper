@@ -278,6 +278,9 @@ bool gameUseRightHand = false;
 // user study controls
 bool run_user_study = false;
 bool run_user_study_random = false;
+bool user_study_break = false;
+bool force_latency = false;
+bool dont_randomize = false;
 UserStudy user_study = UserStudy();
 int humanChoice = 1;
 bool video_reached_end = true;
@@ -288,15 +291,14 @@ int vid_motion_type = -1;
 float cached_simulated_latency_ms = 1.0f;
 std::pair<int, int> video_pair;
 float vid_simulated_latency_ms = 1.0f;
-float initial_simulated_latency_ms = 40.0f;
+float initial_simulated_latency_ms = 20.0f;
 // record & playback controls
 bool debug_playback = false;
-float vid_playback_fps_limiter = 900.0;
+float pseudo_vid_playback_speed = 1.0f;
 float vid_playback_speed = 1.5f;
 float projection_mix_ratio = 0.4f;
 float skin_brightness = 0.3f;
-float prevVideoFrameCountCont = -1.0f;
-float videoFrameCountCont = 0.0;
+float videoFrameCountCont = 0.0f;
 std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_corrected, kalman_forecast;
 bool recordImages = false;
 std::string recording_name = "translation_10s";
@@ -595,6 +597,7 @@ int main(int argc, char *argv[])
     {
         postprocess_mode = static_cast<int>(PostProcessMode::NONE);
         vid_simulated_latency_ms = 35.0f;
+        jfa_distance_threshold = 100.0f;
         use_mls = false;
     }
     /* embedded python init */
@@ -1009,7 +1012,7 @@ int main(int argc, char *argv[])
                 std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
                 std::cout << "mls: " << t_mls.averageLapInMilliSec() << std::endl;
                 std::cout << "mls thread: " << t_mls_thread.averageLapInMilliSec() << std::endl;
-                std::cout << "profile: " << t_profile.averageLapInMilliSec() << std::endl;
+                // std::cout << "profile: " << t_profile.averageLapInMilliSec() << std::endl;
                 std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
                 std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
                 std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
@@ -1030,7 +1033,7 @@ int main(int argc, char *argv[])
             t_pp.reset();
             t_mls.reset();
             t_mls_thread.reset();
-            t_profile.reset();
+            // t_profile.reset();
             t_debug.reset();
         }
         /* deal with user input */
@@ -1140,7 +1143,7 @@ int main(int argc, char *argv[])
             t_debug.stop();
             break;
         }
-        case static_cast<int>(OperationMode::USER_STUDY): // record and playback session
+        case static_cast<int>(OperationMode::USER_STUDY): // can also record and playback session
         {
             handleUserStudy(shaderMap,
                             window,
@@ -2037,7 +2040,7 @@ int main(int argc, char *argv[])
         } // OperationMode::LEAP
         default:
             break;
-        } // switch(calib_mode)
+        } // switch(operation_mode)
 
         if (use_projector)
         {
@@ -5114,13 +5117,6 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
         {
             if (video_reached_end) // we reached the video end, or we just started
             {
-                if (user_study.getTrialFinished()) // experiment is finished
-                {
-                    user_study.printStats();
-                    CloseMidiController();
-                    run_user_study = false;
-                    return;
-                }
                 int attempts = user_study.getAttempts();
                 if (attempts % 2 == 0) // if this is an even attempt, we should get human response and start a new trial
                 {
@@ -5149,8 +5145,14 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                 }
                 vid_simulated_latency_ms = user_study.randomTrial(humanChoice); // get required latency given subject choice
                 videoFrameCountCont = 0.0f;                                     // reset video playback
-                prevVideoFrameCountCont = -1.0f;
                 video_reached_end = false;
+                if (user_study.getTrialFinished()) // experiment is finished
+                {
+                    user_study.printStats();
+                    CloseMidiController();
+                    run_user_study = false;
+                    return;
+                }
                 // std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // let subject rest a bit
             }
             else
@@ -5181,24 +5183,35 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                             humanChoice = 0;
                             bool one_pressed = glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS;
                             bool two_pressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
-                            if (button_values[0] || one_pressed)
-                                humanChoice = 1;
-                            if (button_values[1] || two_pressed)
-                                humanChoice = 2;
-                            if (humanChoice == 0 || (one_pressed && two_pressed))
+                            bool three_pressed = glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS;
+                            if (three_pressed) // special option for replaying (operator only)
                             {
-                                return;
+                                user_study.setAttempts(attempts - 1);
                             }
-                            user_study.setSubjectResponse(humanChoice);
-                            if (user_study.getTrialFinished()) // experiment is finished
+                            else
                             {
-                                user_study.printRandomSessionStats();
-                                CloseMidiController();
-                                run_user_study_random = false;
-                                return;
+                                if (button_values[0] || one_pressed)
+                                    humanChoice = 1;
+                                if (button_values[1] || two_pressed)
+                                    humanChoice = 2;
+                                if (humanChoice == 0 || (one_pressed && two_pressed))
+                                {
+                                    return;
+                                }
+                                user_study.setSubjectResponse(humanChoice);
+                                if (user_study.getTrialFinished()) // experiment is finished
+                                {
+                                    user_study.printRandomSessionStats();
+                                    CloseMidiController();
+                                    run_user_study_random = false;
+                                    return;
+                                }
                             }
                         }
+                        user_study.setDontRandomize(dont_randomize);
                         user_study.randomTrial(cached_simulated_latency_ms, vid_motion_type, video_pair);
+                        if (force_latency)
+                            cached_simulated_latency_ms = initial_simulated_latency_ms;
                         switch (video_pair.first)
                         {
                         case 0:
@@ -5255,6 +5268,10 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                             break;
                         }
                         }
+                        if (attempts == 110)
+                        {
+                            user_study_break = true;
+                        }
                     }
                     else
                     {
@@ -5286,11 +5303,21 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                     }
                     // reset video playback
                     videoFrameCountCont = 0.0f;
-                    prevVideoFrameCountCont = -1.0f;
                     video_reached_end = false;
                 }
                 else
                 {
+                    // deal with user break
+                    if (user_study_break) // offer break for subject
+                    {
+                        textModel.Render(*textShader, std::string("break !"), -150 + proj_width / 2, proj_height / 2, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        bool four_pressed = glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS;
+                        if (four_pressed)
+                        {
+                            user_study_break = false;
+                        }
+                        return;
+                    }
                     playVideo(shaderMap,
                               leftHandModel,
                               textModel,
@@ -5307,7 +5334,15 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                                    textModel,
                                    cam_view_transform,
                                    cam_projection_transform))
-                        debug_playback = false;
+                    {
+                        t_profile.stop();
+                        t_profile.stop();
+                        std::cout << "video playback time: " << t_profile.getElapsedTimeInMilliSec() << " ms" << std::endl;
+                        videoFrameCountCont = 0.0f;
+                        is_first_in_video_pair = true;
+                        texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                        t_profile.start();
+                    }
                 }
             }
         }
@@ -5724,56 +5759,53 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *gridColorShader = shader_map["gridColorShader"];
     Shader *blurShader = shader_map["blurShader"];
-    if (prevVideoFrameCountCont != videoFrameCountCont)
+    // interpolate hand pose to the required latency
+    t_interp.start();
+    std::vector<glm::mat4> bones_to_world_current;
+    bool success = handleInterpolateFrames(bones_to_world_current);
+    if (!success)
     {
-        // interpolate hand pose to the required latency
-        t_interp.start();
-        std::vector<glm::mat4> bones_to_world_current;
-        bool success = handleInterpolateFrames(bones_to_world_current);
-        if (!success)
-        {
-            video_reached_end = true;
-            is_first_in_video_pair = !is_first_in_video_pair;
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            return false;
-        }
-        t_interp.stop();
-        // produce fake camera image (left hand only)
-        t_camera.start();
-        // first render the mesh normally with a skin texture
-        curSelectedTexture = "realistic_skin3";
-        handleSkinning(bones2world_left_cur, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
-        fake_cam_fbo.bind();
-        set_texture_shader(textureShader, true, true, false);
-        hands_fbo.getTexture()->bind();
-        fullScreenQuad.render();
-        fake_cam_fbo.unbind();
-        // now create a binary version of the same image (1 channel, either 1's or 0's)
-        fake_cam_binary_fbo.bind();
-        thresholdAlphaShader->use();
-        thresholdAlphaShader->setMat4("view", glm::mat4(1.0));
-        thresholdAlphaShader->setMat4("projection", glm::mat4(1.0));
-        thresholdAlphaShader->setMat4("model", glm::mat4(1.0));
-        thresholdAlphaShader->setFloat("threshold", 0.5);
-        thresholdAlphaShader->setBool("flipHor", true);
-        thresholdAlphaShader->setBool("flipVer", true);
-        thresholdAlphaShader->setBool("isGray", false);
-        thresholdAlphaShader->setBool("binary", true);
-        thresholdAlphaShader->setInt("src", 0);
-        hands_fbo.getTexture()->bind();
-        fullScreenQuad.render();
-        fake_cam_binary_fbo.unbind();
-        t_camera.stop();
-        // now render the projection image
-        t_skin.start();
-        curSelectedTexture = userStudySelectedTexture;
-        handleSkinning(bones2world_left_lag, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
-        t_skin.stop();
-        t_pp.start();
-        // post process the projection with any required effect
-        handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
-        prevVideoFrameCountCont = videoFrameCountCont;
+        video_reached_end = true;
+        is_first_in_video_pair = !is_first_in_video_pair;
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        return false;
     }
+    t_interp.stop();
+    // produce fake camera image (left hand only)
+    t_camera.start();
+    // first render the mesh normally with a skin texture
+    curSelectedTexture = "realistic_skin3";
+    handleSkinning(bones2world_left_cur, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
+    fake_cam_fbo.bind();
+    set_texture_shader(textureShader, true, true, false);
+    hands_fbo.getTexture()->bind();
+    fullScreenQuad.render();
+    fake_cam_fbo.unbind();
+    // now create a binary version of the same image (1 channel, either 1's or 0's)
+    fake_cam_binary_fbo.bind();
+    thresholdAlphaShader->use();
+    thresholdAlphaShader->setMat4("view", glm::mat4(1.0));
+    thresholdAlphaShader->setMat4("projection", glm::mat4(1.0));
+    thresholdAlphaShader->setMat4("model", glm::mat4(1.0));
+    thresholdAlphaShader->setFloat("threshold", 0.5);
+    thresholdAlphaShader->setBool("flipHor", true);
+    thresholdAlphaShader->setBool("flipVer", true);
+    thresholdAlphaShader->setBool("isGray", false);
+    thresholdAlphaShader->setBool("binary", true);
+    thresholdAlphaShader->setInt("src", 0);
+    hands_fbo.getTexture()->bind();
+    fullScreenQuad.render();
+    fake_cam_binary_fbo.unbind();
+    t_camera.stop();
+    // now render the projection image
+    t_skin.start();
+    curSelectedTexture = userStudySelectedTexture;
+    handleSkinning(bones2world_left_lag, false, true, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
+    t_skin.stop();
+    t_pp.start();
+    // post process the projection with any required effect
+    handlePostProcess(leftHandModel, leftHandModel, *fake_cam_binary_fbo.getTexture(), shader_map);
+    // }
     // overlay final render and camera image, and render to screen
     // this is needed to simulate how a projection is mixed with the skin color
     glViewport(0, 0, proj_width, proj_height);
@@ -5799,13 +5831,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         textModel.Render(*textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     }
     t_debug.stop();
-    // fps limiter to control speed
-    cur_vid_time = t_app.getElapsedTimeInMilliSec();
-    if ((cur_vid_time - prev_vid_time) > (1000.0f / vid_playback_fps_limiter))
-    {
-        prev_vid_time = cur_vid_time;
-        videoFrameCountCont += vid_playback_speed;
-    }
+    videoFrameCountCont += deltaTime * 1000.0f * vid_playback_speed * pseudo_vid_playback_speed;
     return true;
 }
 // ---------------------------------------------------------------------------------------------
@@ -6623,9 +6649,9 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Video Playback Speed", &vid_playback_speed, 0.1f, 10.0f);
+            ImGui::SliderFloat("Video Playback Limiter", &pseudo_vid_playback_speed, 0.0f, 1.0f);
             ImGui::SliderFloat("Mixer Ratio", &projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &skin_brightness, 0.0f, 1.0f);
-            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 1.0f, 900.0f);
             if (ImGui::Checkbox("Debug Playback", &debug_playback))
             {
                 if (debug_playback)
@@ -6643,9 +6669,9 @@ void openIMGUIFrame()
                         }
                     }
                     videoFrameCountCont = 0.0f;
-                    prevVideoFrameCountCont = -1.0f;
                     video_reached_end = true;
                     is_first_in_video_pair = true;
+                    t_profile.start();
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
             }
@@ -6673,8 +6699,8 @@ void openIMGUIFrame()
                         }
                     }
                     run_user_study_random = false;
+                    jfa_distance_threshold = 100.0f;
                     videoFrameCountCont = 0.0f;
-                    prevVideoFrameCountCont = -1.0f;
                     video_reached_end = true;
                     is_first_in_video_pair = true;
                     use_coaxial_calib = false;
@@ -6701,7 +6727,6 @@ void openIMGUIFrame()
                     run_user_study = false;
                     jfa_distance_threshold = 100.0f;
                     videoFrameCountCont = 0.0f;
-                    prevVideoFrameCountCont = -1.0f;
                     video_reached_end = true;
                     is_first_in_video_pair = true;
                     use_coaxial_calib = false;
@@ -6714,6 +6739,11 @@ void openIMGUIFrame()
                     CloseMidiController();
                 }
             }
+            ImGui::SameLine();
+            ImGui::Checkbox("Forced Latency", &force_latency);
+            ImGui::Checkbox("Don't Randomize", &dont_randomize);
+            ImGui::SameLine();
+            ImGui::Checkbox("Pause User Study", &user_study_break);
             if (ImGui::Button("Refresh MIDI Controller"))
             {
                 CloseMidiController();
@@ -6723,9 +6753,9 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Video Playback Speed", &vid_playback_speed, 0.1f, 10.0f);
+            ImGui::SliderFloat("Video Playback Limiter", &pseudo_vid_playback_speed, 0.0f, 1.0f);
             ImGui::SliderFloat("Mixer Ratio", &projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &skin_brightness, 0.0f, 1.0f);
-            ImGui::SliderFloat("FPS Limiter", &vid_playback_fps_limiter, 1.0f, 900.0f);
             if (ImGui::Checkbox("Debug Playback", &debug_playback))
             {
                 if (debug_playback)
@@ -6743,7 +6773,6 @@ void openIMGUIFrame()
                         }
                     }
                     videoFrameCountCont = 0.0f;
-                    prevVideoFrameCountCont = -1.0f;
                     video_reached_end = true;
                     is_first_in_video_pair = true;
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);

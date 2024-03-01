@@ -12,13 +12,15 @@ void main()
     vec4 outputColor;
     vec4 col1 = texture(objectTexture, vec2(1-TexCoord.x, 1-TexCoord.y));
     vec4 col2 = texture(projectiveTexture, TexCoord);
+    vec3 skinColor = vec3(col1.r*skinBrightness, col1.g*skinBrightness, col1.b*skinBrightness);
     if ((col1.w != 0.0) && (col2.w != 0.0))
     {
-        outputColor = vec4(mix(vec3(col1)*skinBrightness, vec3(col2), mixRatio), 1.0);
+        outputColor = vec4(mix(skinColor, vec3(col2), mixRatio), 1.0);
+        // outputColor = vec4(vec3(col1)*vec3(col2), 1.0);
     }
     else
     {
-        outputColor = vec4(col1.r*skinBrightness, col1.g*skinBrightness, col1.b*skinBrightness, col1.a);
+        outputColor = vec4(skinColor, col1.a);
     }
     if (gammaCorrect)
     {

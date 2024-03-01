@@ -49,8 +49,20 @@ Write final JND in excel
 ////////// JND /////////////
 
 ////////// Comparitive //////////
+User Study -> Subject Name
 User Study -> Debug Playback
 (show large latency, medium, and small)
+
+User Study -> Run Comparitive User Study
+User Study -> Forced Latency (tick on)
+User Study -> Don't Randomize (tick on)
+let user train with explanations
+DELETE SAVED FILE
+
+User Study -> Forced Latency (tick off)
+User Study -> Don't Randomize (tick off)
+User Study -> Run Comparitive User Study
+
 ////////// Comparitive //////////
 
 final quesitons:

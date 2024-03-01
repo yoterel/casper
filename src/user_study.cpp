@@ -16,6 +16,7 @@ void UserStudy::reset(float initialLatency)
     trialIsBaseline = false;
     isFirstTrial = true;
     trialEnded = false;
+    dontRandomize = false;
     resultFile = "";
     baseStep = 1.6f;
     minBaseStep = 0.01f;
@@ -25,13 +26,14 @@ void UserStudy::reset(float initialLatency)
     pair_attempts = 0;
     reversals = 0;
     successStreak = 0;
-    maxSuccessStreak = 10;
+    maxSuccessStreak = 20;
     maxReversals = 10;
     jnd = 0.0f;
     latencies.clear();
     trials.clear();
     sessionTimer.start();
-    allowedLatencies = std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f};
+    allowedLatencies = std::vector<float>{1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f, 4.5f, 5.0f,
+                                          5.5f, 6.0f, 6.6f, 7.0f, 7.5f, 8.0f, 8.5f, 9.0f, 9.5f, 10.0f};
     allowedMotionTypes = std::vector<int>{static_cast<int>(UserStudyMotionModel::TRANSLATION),
                                           static_cast<int>(UserStudyMotionModel::ROTATION),
                                           static_cast<int>(UserStudyMotionModel::DEFORMATION),
@@ -72,7 +74,7 @@ bool UserStudy::randomize01()
     }
 }
 
-void UserStudy::printTrialInfo(int attempt, bool withUserResponse)
+void UserStudy::printTrialInfo(int attempt, bool withUserResponse, bool onlyUserResponse)
 {
     if (attempt < trials.size())
     {
@@ -87,32 +89,40 @@ void UserStudy::printTrialInfo(int attempt, bool withUserResponse)
         if (swapPair)
             mypair = std::make_pair(mypair.second, mypair.first);
         std::vector<std::string> pairNames = {"GT", "vanilla", "ours"};
-        std::cout << "latency: " << latency << ", ";
-        switch (motionType)
-        {
-        case 0:
-            std::cout << "motionType: translation, ";
-            break;
-        case 1:
-            std::cout << "motionType: rotation, ";
-            break;
-        case 2:
-            std::cout << "motionType: deformation, ";
-            break;
-        case 3:
-            std::cout << "motionType: all, ";
-            break;
-        default:
-            std::cout << "motionType: unknown, ";
-            break;
-        }
-        std::cout << "pair: " << pairNames[mypair.first] << " " << pairNames[mypair.second];
-        if (withUserResponse)
+        if (onlyUserResponse)
         {
             int response = std::get<4>(trial);
-            std::cout << ", response: " << pairNames[response];
+            std::cout << "response: " << pairNames[response] << std::endl;
         }
-        std::cout << std::endl;
+        else
+        {
+            std::cout << "latency: " << latency << ", ";
+            switch (motionType)
+            {
+            case 0:
+                std::cout << "motionType: translation, ";
+                break;
+            case 1:
+                std::cout << "motionType: rotation, ";
+                break;
+            case 2:
+                std::cout << "motionType: deformation, ";
+                break;
+            case 3:
+                std::cout << "motionType: all, ";
+                break;
+            default:
+                std::cout << "motionType: unknown, ";
+                break;
+            }
+            std::cout << "pair: " << pairNames[mypair.first] << " " << pairNames[mypair.second];
+            if (withUserResponse)
+            {
+                int response = std::get<4>(trial);
+                std::cout << ", response: " << pairNames[response];
+            }
+            std::cout << std::endl;
+        }
     }
 }
 
@@ -144,7 +154,7 @@ void UserStudy::setSubjectResponse(int response)
             exit(1);
         }
     }
-    printTrialInfo(attempts - 1, true);
+    printTrialInfo(attempts - 1, true, true);
     saveAttempt(attempts - 1);
     if (attempts >= trials.size())
     {
@@ -157,6 +167,7 @@ void UserStudy::randomTrial(float &latency, int &motionType, std::pair<int, int>
 {
     if (attempts < trials.size())
     {
+        std::cout << "trial: " << attempts << "/" << trials.size() << " Total session time [m]: " << sessionTimer.getElapsedTimeInSec() / 60 << std::endl;
         std::tuple<int, int, int, bool, int> trial = trials[attempts];
         // select a random combination with no repetition
         int latencyIndex = std::get<0>(trial);
@@ -165,18 +176,25 @@ void UserStudy::randomTrial(float &latency, int &motionType, std::pair<int, int>
         latency = allowedLatencies[latencyIndex];
         motionType = allowedMotionTypes[motionTypeIndex];
         std::pair<int, int> mypair = allowedPairs[pairIndex];
-        std::uniform_int_distribution<> distr(0, 1);
-        if (distr(rng) == 0)
+        if (dontRandomize)
         {
             pair = mypair;
         }
         else
         {
-            pair = std::make_pair(mypair.second, mypair.first);
-            std::get<3>(trial) = true;
-            trials[attempts] = trial;
+            std::uniform_int_distribution<> distr(0, 1);
+            if (distr(rng) == 0)
+            {
+                pair = mypair;
+            }
+            else
+            {
+                pair = std::make_pair(mypair.second, mypair.first);
+                std::get<3>(trial) = true;
+                trials[attempts] = trial;
+            }
         }
-        printTrialInfo(attempts, false);
+        printTrialInfo(attempts, false, false);
     }
     attempts++;
 }
@@ -322,7 +340,7 @@ void UserStudy::printRandomSessionStats()
     std::cout << "Total session time [m]: " << sessionTimer.getElapsedTimeInSec() / 60 << std::endl;
     for (int i = 0; i < trials.size(); i++)
     {
-        printTrialInfo(i, true);
+        printTrialInfo(i, true, true);
     }
 }
 
