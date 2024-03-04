@@ -29,8 +29,5 @@ Post Process -> Render Only / Jump Flood UV
 Write final JNDs in excel
 
 final quesitons after each session:
-1) which part did you tend to focus on? (center of hand, fingers, edges between hand and background, no specific part, other)
+1) which part did you tend to focus on? (let user paint)
 2) are your eyes fatigued? (1 - no, 2 - slightly, 3 - yes)
-
-final question:
-if you had to decide what looks better which one would you choose? (show expected latency with/without JND)
