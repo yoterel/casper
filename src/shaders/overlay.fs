@@ -15,8 +15,8 @@ void main()
     vec3 skinColor = vec3(col1.r*skinBrightness, col1.g*skinBrightness, col1.b*skinBrightness);
     if ((col1.w != 0.0) && (col2.w != 0.0))
     {
-        outputColor = vec4(mix(skinColor, vec3(col2), mixRatio), 1.0);
-        // outputColor = vec4(vec3(col1)*vec3(col2), 1.0);
+        // outputColor = vec4(mix(skinColor, vec3(col2), mixRatio), 1.0);
+        outputColor = vec4(vec3(col1)*vec3(col2), 1.0);
     }
     else
     {

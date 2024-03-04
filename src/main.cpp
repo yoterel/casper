@@ -295,13 +295,13 @@ float initial_simulated_latency_ms = 20.0f;
 // record & playback controls
 bool debug_playback = false;
 float pseudo_vid_playback_speed = 1.0f;
-float vid_playback_speed = 1.5f;
+float vid_playback_speed = 1.0f;
 float projection_mix_ratio = 0.4f;
-float skin_brightness = 0.3f;
+float skin_brightness = 0.5f;
 float videoFrameCountCont = 0.0f;
 std::vector<glm::vec2> filtered_cur, filtered_next, kalman_pred, kalman_corrected, kalman_forecast;
 bool recordImages = false;
-std::string recording_name = "translation_10s";
+std::string recording_name = "all_10s";
 std::string subject_name = "subject1";
 std::string loaded_session_name = "";
 bool pre_recorded_session_loaded = false;

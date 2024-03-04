@@ -1,69 +1,36 @@
-pilot:
-	pilot results:
-		changed hand brightness compared to backgrond to be more realistic
-		distance from screen matters
-		should shorten videos for more efficiency
-	speeds:  (texture = uv)
-			0.5, 1.1, 1.7, 2.3, 3.0
-	contrasts:  (texture = uv)
-			0.4 / 0.6 / 0.8
-	6 textures
-		textures:
-			random_colors, dragon, cursive2, birds, uv, brick
-full:
-	2 textures, 3 conditions (nothing, jfa, jfa-uv)
-
-
 Get subjects full name, age, and gender, if they watched pm before, if they wear glasses
 
 Instructions:
 You re going to participate in a study that tries to quantify how latency in projection mapping can be perceptually reduced.
-We will run several session, where in each session you will be presented with several trials.
+We will run 3 "sessions", one for training, and two for testing, where in each session you will be presented with several "trial".
 in each trial, you will see two videos of a hand moving, and a projection applied to it.
 Please choose which one seems to have more latency to it by clicking either button 1 or button 2.
 Remember to select the video with MORE latency ("lag").
-We will start with a training session, where latency is obvious.
 
+We will start with a training session. But before that please observe how high latency looks like, vs how low latency looks like.
+
+steps:
 ahand.exe --simcam --mesh ../../resource/UserStudy.fbx --mode user_study
-open excel sheet, input subject name, age
+open excel sheet, input subject name, age, have they seen dynamic projection mapping before, glasses
 General -> Use Projector
 General -> Gamma Correction
-
-////////// JND /////////////
-Material -> User Study Texture -> select texture
-Post Process -> Render Only / Jump Flood / Jump Flood UV
-Post Process -> JFA Distance Threshold -> 100
-Record & Playback -> Recording Name -> all / translation
-Record & Playback -> Video playback speed -> select speed
-Record & Playback -> Mixer ratio -> select mixture ratio
-Record & Playback -> Initial Latency -> 40.0f
+Post Process -> Render Only
 < SHOW SUBJECT >
-Record & Playback -> Run user study
-< END SHOW SUBJECT >
-
-Record & Playback -> Initial Latency -> 10.0f
-< START EXPERIMENT >
-Record & Playback -> Run user study
-< END EXPERIMENT >
-Write final JND in excel
-////////// JND /////////////
-
-////////// Comparitive //////////
-User Study -> Subject Name
 User Study -> Debug Playback
-(show large latency, medium, and small)
+< START EXPERIMENT - session 1>
+User Study -> Run user study
+< BREAK >
+< START EXPERIMENT - session 2>
+Post Process -> Render Only / Jump Flood UV
+< BREAK >
+< START EXPERIMENT - session 2>
+Post Process -> Render Only / Jump Flood UV
 
-User Study -> Run Comparitive User Study
-User Study -> Forced Latency (tick on)
-User Study -> Don't Randomize (tick on)
-let user train with explanations
-DELETE SAVED FILE
+Write final JNDs in excel
 
-User Study -> Forced Latency (tick off)
-User Study -> Don't Randomize (tick off)
-User Study -> Run Comparitive User Study
+final quesitons after each session:
+1) which part did you tend to focus on? (center of hand, fingers, edges between hand and background, no specific part, other)
+2) are your eyes fatigued? (1 - no, 2 - slightly, 3 - yes)
 
-////////// Comparitive //////////
-
-final quesitons:
-did you have a stratedgy to figure out the latency ? (do you look at some location, or focus on some area?)
+final question:
+if you had to decide what looks better which one would you choose? (show expected latency with/without JND)
