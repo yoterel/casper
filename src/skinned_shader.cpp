@@ -24,7 +24,7 @@ SkinningShader::SkinningShader(const std::string &vertexPath, const std::string 
     CameraLocalPosLoc = GetUniformLocation("gCameraLocalPos");
     // NumPointLightsLocation = GetUniformLocation("gNumPointLights");
     // NumSpotLightsLocation = GetUniformLocation("gNumSpotLights");
-    displayBoneIndexLocation = GetUniformLocation("gDisplayBoneIndex");
+    // displayBoneIndexLocation = GetUniformLocation("gDisplayBoneIndex");
     // if (displayBoneIndexLocation == INVALID_UNIFORM_LOCATION)
     // {
     //     std::cout << "Error: displayBoneIndexLocation is invalid" << std::endl;
@@ -139,11 +139,6 @@ void SkinningShader::SetWorldTransform(const glm::mat4 &worldTransform)
 void SkinningShader::SetProjectorTransform(const glm::mat4 &worldTransform)
 {
     glUniformMatrix4fv(projectorTransformLoc, 1, GL_FALSE, glm::value_ptr(worldTransform));
-}
-
-void SkinningShader::SetDisplayBoneIndex(unsigned int DisplayBoneIndex)
-{
-    glUniform1i(displayBoneIndexLocation, DisplayBoneIndex);
 }
 
 void SkinningShader::SetTextureUnit(unsigned int TextureUnit)

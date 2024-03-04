@@ -11,7 +11,7 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "--mesh",
-                "../../resource/Default.fbx", // Default.fbx, UserStudy.fbx, ShaderGame.fbx, ShaderToy.fbx, GuessNumGame.fbx
+                "../../resource/Default.fbx", // Default.fbx, UserStudy.fbx, ShaderGame.fbx, ShaderToy.fbx, GuessCharGame.fbx
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build//Debug",
@@ -41,7 +41,7 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "--mesh",
-                "../../resource/UserStudy.fbx", // Default.fbx, UserStudy.fbx, ShaderGame.fbx, ShaderToy.fbx, GuessNumGame.fbx
+                "../../resource/UserStudy.fbx",
                 "--simcam",
                 "--mode",
                 "user_study"
@@ -74,7 +74,7 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "--mesh",
-                "../../resource/GuessNumGame.fbx", // Default.fbx, UserStudy.fbx, ShaderGame.fbx, ShaderToy.fbx, GuessNumGame.fbx
+                "../../resource/GuessCharGame.fbx",
                 "--mode",
                 "guess_char_game"
             ],

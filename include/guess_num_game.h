@@ -1,5 +1,5 @@
-#ifndef GUESS_NUM_GAME_H
-#define GUESS_NUM_GAME_H
+#ifndef GUESS_CHAR_GAME_H
+#define GUESS_CHAR_GAME_H
 
 #include <vector>
 #include "timer.h"
@@ -8,10 +8,10 @@
 #include <random>
 #include <unordered_map>
 
-class GuessNumGame
+class GuessCharGame
 {
 public:
-    GuessNumGame();
+    GuessCharGame();
     // void setPoses(std::vector<std::vector<glm::mat4>> required_poses);
     void setBonesVisible(bool visible) { bonesVisible = visible; };
     // bool isCountingDown() { return countDownInProgress; };
@@ -26,7 +26,7 @@ public:
     // std::vector<glm::mat4> getPose();
     void setScore(float score);
     void printScore();
-    void reset(bool shuffle = true);
+    void reset();
 
 private:
     void setState(int state) { curState = state; };
@@ -50,12 +50,13 @@ private:
     std::mt19937 rng;
 };
 
-enum class GuessNumGameState
+enum class GuessCharGameState
 {
     WAIT_FOR_USER = 0,
     COUNTDOWN = 1,
     PLAY = 2,
-    END = 3,
+    WAIT = 3,
+    END = 4,
 };
 
-#endif // GUESS_NUM_GAME
+#endif // GUESS_CHAR_GAME

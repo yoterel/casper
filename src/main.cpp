@@ -273,7 +273,7 @@ float gameSpeed = 0.01f; // the lower the faster
 int64_t gameFrameCount = 0;
 int64_t prevGameFrameCount = 0;
 GuessPoseGame guessPoseGame = GuessPoseGame();
-GuessNumGame guessNumGame = GuessNumGame();
+GuessCharGame guessCharGame = GuessCharGame();
 bool gameUseRightHand = false;
 // user study controls
 bool run_user_study = false;
@@ -573,7 +573,7 @@ int main(int argc, char *argv[])
             {"cam_calib", static_cast<int>(OperationMode::CAMERA)},
             {"coax_calib", static_cast<int>(OperationMode::COAXIAL)},
             {"leap_calib", static_cast<int>(OperationMode::LEAP)},
-            {"guess_char_game", static_cast<int>(OperationMode::GUESS_NUM_GAME)},
+            {"guess_char_game", static_cast<int>(OperationMode::GUESS_CHAR_GAME)},
             {"guess_pose_game", static_cast<int>(OperationMode::GUESS_POSE_GAME)}};
         // check if mode is valid
         if (mode_map.find(result["mode"].as<std::string>()) == mode_map.end())
@@ -592,13 +592,23 @@ int main(int argc, char *argv[])
         std::cout << options.help() << std::endl;
         exit(0);
     }
-    // set some default values for user study depending on cmd line
-    if (operation_mode == static_cast<int>(OperationMode::USER_STUDY))
+    switch (operation_mode) // set some default values for user study depending on cmd line
+    {
+    case static_cast<int>(OperationMode::USER_STUDY):
     {
         postprocess_mode = static_cast<int>(PostProcessMode::NONE);
         vid_simulated_latency_ms = 35.0f;
         jfa_distance_threshold = 100.0f;
         use_mls = false;
+        break;
+    }
+    case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
+    {
+        guessCharGame.reset();
+        break;
+    }
+    default:
+        break;
     }
     /* embedded python init */
     Py_Initialize();
@@ -1264,15 +1274,15 @@ int main(int argc, char *argv[])
             }
             break;
         }
-        case static_cast<int>(OperationMode::GUESS_NUM_GAME):
+        case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
         {
-            int state = guessNumGame.getState();
+            int state = guessCharGame.getState();
             auto bones = gameUseRightHand ? bones_to_world_right : bones_to_world_left;
-            guessNumGame.setBonesVisible(bones.size() > 0);
+            guessCharGame.setBonesVisible(bones.size() > 0);
             switch (state)
             {
             // wait for user to place their hand infront of screen
-            case static_cast<int>(GuessNumGameState::WAIT_FOR_USER):
+            case static_cast<int>(GuessCharGameState::WAIT_FOR_USER):
             {
                 texture_mode = static_cast<int>(TextureMode::DYNAMIC);
                 glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
@@ -1282,12 +1292,12 @@ int main(int argc, char *argv[])
                 break;
             }
             // countdown to start game
-            case static_cast<int>(GuessNumGameState::COUNTDOWN):
+            case static_cast<int>(GuessCharGameState::COUNTDOWN):
             {
                 material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 // texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-                int cd_time = guessNumGame.getCountdownTime();
+                int cd_time = guessCharGame.getCountdownTime();
                 glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
                 dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
                 switch (cd_time)
@@ -1313,11 +1323,11 @@ int main(int argc, char *argv[])
                 dynamic_fbo.unbind();
                 break;
             }
-            case static_cast<int>(GuessNumGameState::PLAY):
+            case static_cast<int>(GuessCharGameState::PLAY):
             {
                 texture_mode = static_cast<int>(TextureMode::DYNAMIC);
                 std::string chars;
-                int correctIndex = guessNumGame.getRandomChars(chars);
+                int correctIndex = guessCharGame.getRandomChars(chars);
                 int selectedIndex = -1;
                 bool allExtended = true;
                 bool moreThanOneDown = false;
@@ -1332,25 +1342,25 @@ int main(int argc, char *argv[])
                     }
                 }
                 if (allExtended)
-                    guessNumGame.setAllExtended(true);
+                    guessCharGame.setAllExtended(true);
                 else
-                    guessNumGame.setAllExtended(false);
+                    guessCharGame.setAllExtended(false);
                 if (!allExtended && !moreThanOneDown)
                 {
                     if (selectedIndex == correctIndex)
                     {
-                        guessNumGame.setResponse(true);
+                        guessCharGame.setResponse(true);
                     }
                     else
                     {
-                        guessNumGame.setResponse(false);
+                        guessCharGame.setResponse(false);
                     }
                 }
                 dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
                 float scale = 0.758f; // 1.0f;
                 glm::vec2 ndc_cords = Helpers::NDCtoScreen(glm::vec2(debug_vec), proj_width, proj_height);
                 // textModel.Render(textShader, "X", ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
-                auto fingerMap = guessNumGame.getNumberLocations();
+                auto fingerMap = guessCharGame.getNumberLocations();
                 glm::vec2 palm_screen = Helpers::NDCtoScreen(fingerMap["palm"], proj_width, proj_height);
                 glm::vec2 index_screen = Helpers::NDCtoScreen(fingerMap["index"], proj_width, proj_height);
                 glm::vec2 middle_screen = Helpers::NDCtoScreen(fingerMap["middle"], proj_width, proj_height);
@@ -1366,7 +1376,30 @@ int main(int argc, char *argv[])
                 dynamic_fbo.unbind();
                 break;
             }
-            case static_cast<int>(GuessNumGameState::END):
+            case static_cast<int>(GuessCharGameState::WAIT):
+            {
+                int selectedIndex = -1;
+                bool allExtended = true;
+                bool moreThanOneDown = false;
+                for (int i = 1; i < left_fingers_extended.size(); i++)
+                {
+                    if (left_fingers_extended[i] == 0)
+                    {
+                        allExtended = false;
+                        if (selectedIndex != -1)
+                            moreThanOneDown = true;
+                        selectedIndex = i - 1;
+                    }
+                }
+                if (allExtended)
+                    guessCharGame.setAllExtended(true);
+                else
+                    guessCharGame.setAllExtended(false);
+                texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                curSelectedTexture = "XGA_rand";
+                break;
+            }
+            case static_cast<int>(GuessCharGameState::END):
             {
                 texture_mode = static_cast<int>(TextureMode::DYNAMIC);
                 glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
@@ -5946,9 +5979,9 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Guess Number Game", &operation_mode, static_cast<int>(OperationMode::GUESS_NUM_GAME)))
+            if (ImGui::RadioButton("Guess Number Game", &operation_mode, static_cast<int>(OperationMode::GUESS_CHAR_GAME)))
             {
-                guessNumGame.reset(false);
+                guessCharGame.reset();
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...

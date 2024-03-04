@@ -1,19 +1,18 @@
 #include "guess_num_game.h"
 #include <iostream>
 
-GuessNumGame::GuessNumGame()
+GuessCharGame::GuessCharGame()
 {
     rng = std::default_random_engine{};
     // reset();
 }
 
-int GuessNumGame::getState()
+int GuessCharGame::getState()
 {
     switch (curState)
     {
-    case static_cast<int>(GuessNumGameState::WAIT_FOR_USER):
+    case static_cast<int>(GuessCharGameState::WAIT_FOR_USER):
     {
-
         if (bonesVisible)
         {
             if (!countDownInProgress)
@@ -27,7 +26,7 @@ int GuessNumGame::getState()
                 {
                     countDownInProgress = false;
                     countDownTimer.stop();
-                    setState(static_cast<int>(GuessNumGameState::COUNTDOWN));
+                    setState(static_cast<int>(GuessCharGameState::COUNTDOWN));
                 }
             }
         }
@@ -38,7 +37,7 @@ int GuessNumGame::getState()
         }
         break;
     }
-    case static_cast<int>(GuessNumGameState::COUNTDOWN):
+    case static_cast<int>(GuessCharGameState::COUNTDOWN):
     {
         if (!countDownInProgress)
         {
@@ -53,12 +52,12 @@ int GuessNumGame::getState()
                 countDownTimer.stop();
                 setRandomChars();
                 totalTime.start();
-                setState(static_cast<int>(GuessNumGameState::PLAY));
+                setState(static_cast<int>(GuessCharGameState::PLAY));
             }
         }
         break;
     }
-    case static_cast<int>(GuessNumGameState::PLAY):
+    case static_cast<int>(GuessCharGameState::PLAY):
     {
         if (!bonesVisible)
         {
@@ -80,10 +79,36 @@ int GuessNumGame::getState()
 
         break;
     }
-    case static_cast<int>(GuessNumGameState::END):
+    case static_cast<int>(GuessCharGameState::WAIT):
+    {
+        if (!countDownInProgress)
+        {
+            if (roundFinished)
+            {
+                countDownInProgress = true;
+                countDownTimer.start();
+            }
+        }
+        else
+        {
+            if (allExtended)
+            {
+                if (countDownTimer.getElapsedTimeInSec() >= 1)
+                {
+                    roundFinished = false;
+                    countDownInProgress = false;
+                    countDownTimer.stop();
+                    breakTime += countDownTimer.getElapsedTimeInSec();
+                    setState(static_cast<int>(GuessCharGameState::PLAY));
+                }
+            }
+        }
+        break;
+    }
+    case static_cast<int>(GuessCharGameState::END):
     {
         reset();
-        setState(static_cast<int>(GuessNumGameState::WAIT_FOR_USER));
+        setState(static_cast<int>(GuessCharGameState::WAIT_FOR_USER));
         break;
     }
     default:
@@ -92,12 +117,12 @@ int GuessNumGame::getState()
     return curState;
 }
 
-int GuessNumGame::getCountdownTime()
+int GuessCharGame::getCountdownTime()
 {
     return static_cast<int>(countDownTimer.getElapsedTimeInSec());
 }
 
-void GuessNumGame::setRandomChars()
+void GuessCharGame::setRandomChars()
 {
     std::string allChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&?";
     // shuffle the string
@@ -109,22 +134,18 @@ void GuessNumGame::setRandomChars()
     curCorrectIndex = std::uniform_int_distribution<int>(0, 3)(rng);
 }
 
-int GuessNumGame::getRandomChars(std::string &chars)
+int GuessCharGame::getRandomChars(std::string &chars)
 {
     chars = curChars;
     return curCorrectIndex;
 }
 
-void GuessNumGame::setAllExtended(bool all_extended)
+void GuessCharGame::setAllExtended(bool all_extended)
 {
     allExtended = all_extended;
-    if (allExtended && roundFinished)
-    {
-        roundFinished = false;
-    }
 }
 
-void GuessNumGame::setResponse(bool playerCorrect)
+void GuessCharGame::setResponse(bool playerCorrect)
 {
     if (bonesVisible)
     {
@@ -144,31 +165,30 @@ void GuessNumGame::setResponse(bool playerCorrect)
             {
                 totalTime.stop();
                 printScore();
-                setState(static_cast<int>(GuessNumGameState::END));
+                setState(static_cast<int>(GuessCharGameState::END));
             }
             else
             {
-                countDownInProgress = true;
-                countDownTimer.start();
                 setRandomChars();
+                setState(static_cast<int>(GuessCharGameState::WAIT));
             }
             roundFinished = true;
         }
     }
 }
 
-void GuessNumGame::setScore(float score)
+void GuessCharGame::setScore(float score)
 {
     cur_scores.push_back(score);
 }
 
-glm::vec2 GuessNumGame::getRandomLocation()
+glm::vec2 GuessCharGame::getRandomLocation()
 {
     std::uniform_real_distribution<float> dist(-0.05f, 0.05f);
     return glm::vec2(dist(rng), dist(rng));
 }
 
-std::unordered_map<std::string, glm::vec2> GuessNumGame::getNumberLocations()
+std::unordered_map<std::string, glm::vec2> GuessCharGame::getNumberLocations()
 {
     if (!delayTimer.isRunning())
         delayTimer.start();
@@ -183,7 +203,7 @@ std::unordered_map<std::string, glm::vec2> GuessNumGame::getNumberLocations()
     return curFingerLocationsUV;
 }
 
-void GuessNumGame::reset(bool shuffle)
+void GuessCharGame::reset()
 {
     curState = 0;
     countDownInProgress = false;
@@ -195,15 +215,15 @@ void GuessNumGame::reset(bool shuffle)
     curCorrectIndex = 0;
     breakTime = 0.0f;
     gameMode = 1;
+    // glm::vec2 palm_ndc = glm::vec2(-0.66f, -0.683f);
+    // glm::vec2 index_ndc = glm::vec2(-0.425f, 0.847f);
+    // glm::vec2 middle_ndc = glm::vec2(0.822f, 0.729f);
+    // glm::vec2 ring_ndc = glm::vec2(-0.966f, 0.282f);
+    // glm::vec2 pinky_ndc = glm::vec2(0.14f, 0.894);
     glm::vec2 palm_ndc2 = glm::vec2(-0.551f, -0.579f);
-    glm::vec2 palm_ndc = glm::vec2(-0.66f, -0.683f);
-    glm::vec2 index_ndc = glm::vec2(-0.425f, 0.847f);
     glm::vec2 index_ndc2 = glm::vec2(0.59f, 0.407f);
-    glm::vec2 middle_ndc = glm::vec2(0.822f, 0.729f);
     glm::vec2 middle_ndc2 = glm::vec2(-0.029f, 0.464f);
-    glm::vec2 ring_ndc = glm::vec2(-0.966f, 0.282f);
     glm::vec2 ring_ndc2 = glm::vec2(0.502f, -0.565f);
-    glm::vec2 pinky_ndc = glm::vec2(0.14f, 0.894);
     glm::vec2 pinky_ndc2 = glm::vec2(0.449f, -0.131f);
     fingerLocationsUV["palm"] = palm_ndc2;
     fingerLocationsUV["index"] = index_ndc2;
@@ -213,7 +233,7 @@ void GuessNumGame::reset(bool shuffle)
     curFingerLocationsUV = fingerLocationsUV;
 }
 
-void GuessNumGame::printScore()
+void GuessCharGame::printScore()
 {
     float avgScore = 0.0f;
     for (auto &score : cur_scores)

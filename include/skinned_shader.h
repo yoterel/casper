@@ -91,7 +91,6 @@ public:
 
     void SetWorldTransform(const glm::mat4 &worldTransform);
     void SetProjectorTransform(const glm::mat4 &worldTransform);
-    void SetDisplayBoneIndex(unsigned int DisplayBoneIndex);
     void SetTextureUnit(unsigned int TextureUnit);
     void SetSpecularExponentTextureUnit(unsigned int TextureUnit);
     void SetDirectionalLight(const DirectionalLight &Light);
@@ -101,7 +100,6 @@ public:
     void SetMaterial(const Material &material);
     void SetBoneTransform(unsigned int Index, const glm::mat4 &Transform);
     GLint GetUniformLocation(const char *pUniformName);
-    // void SetDisplayBoneIndex(uint DisplayBoneIndex);
 
 private:
     GLuint worldTransformLoc;
@@ -111,7 +109,7 @@ private:
     GLuint CameraLocalPosLoc;
     GLuint NumPointLightsLocation;
     GLuint NumSpotLightsLocation;
-    GLuint displayBoneIndexLocation;
+    // GLuint displayBoneIndexLocation;
 
     struct
     {
