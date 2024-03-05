@@ -294,7 +294,7 @@ float vid_simulated_latency_ms = 1.0f;
 float initial_simulated_latency_ms = 20.0f;
 // record & playback controls
 bool debug_playback = false;
-float pseudo_vid_playback_speed = 1.0f;
+float pseudo_vid_playback_speed = 1.1f;
 float vid_playback_speed = 1.0f;
 float projection_mix_ratio = 0.4f;
 float skin_brightness = 0.5f;
@@ -6682,7 +6682,7 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Video Playback Speed", &vid_playback_speed, 0.1f, 10.0f);
-            ImGui::SliderFloat("Video Playback Limiter", &pseudo_vid_playback_speed, 0.0f, 1.0f);
+            ImGui::SliderFloat("Video Playback Limiter", &pseudo_vid_playback_speed, 0.0f, 1.5f);
             ImGui::SliderFloat("Mixer Ratio", &projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &skin_brightness, 0.0f, 1.0f);
             if (ImGui::Checkbox("Debug Playback", &debug_playback))
@@ -6786,7 +6786,7 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Desired Latency [ms]", &vid_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Initial Latency [ms]", &initial_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Video Playback Speed", &vid_playback_speed, 0.1f, 10.0f);
-            ImGui::SliderFloat("Video Playback Limiter", &pseudo_vid_playback_speed, 0.0f, 1.0f);
+            ImGui::SliderFloat("Video Playback Limiter", &pseudo_vid_playback_speed, 0.0f, 1.5f);
             ImGui::SliderFloat("Mixer Ratio", &projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &skin_brightness, 0.0f, 1.0f);
             if (ImGui::Checkbox("Debug Playback", &debug_playback))
