@@ -6704,6 +6704,7 @@ void openIMGUIFrame()
                     videoFrameCountCont = 0.0f;
                     video_reached_end = true;
                     is_first_in_video_pair = true;
+                    use_coaxial_calib = false;
                     t_profile.start();
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
