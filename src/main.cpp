@@ -100,6 +100,18 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
                      TextModel &text);
+void handleGuessPoseGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                         SkinnedModel &leftHandModel,
+                         SkinnedModel &rightHandModel,
+                         Quad &topRightQuad,
+                         glm::mat4 &cam_view_transform,
+                         glm::mat4 &cam_projection_transform);
+void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                         SkinnedModel &leftHandModel,
+                         SkinnedModel &rightHandModel,
+                         TextModel &textModel,
+                         glm::mat4 &cam_view_transform,
+                         glm::mat4 &cam_projection_transform);
 void handleUserStudy(std::unordered_map<std::string, Shader *> &shader_map,
                      GLFWwindow *window,
                      SkinnedModel &leftHandModel,
@@ -1165,286 +1177,12 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(OperationMode::GUESS_POSE_GAME):
         {
-            int state = guessPoseGame.getState();
-            switch (state)
-            {
-            case static_cast<int>(GuessPoseGameState::WAIT_FOR_USER):
-            {
-                guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
-                break;
-            }
-            case static_cast<int>(GuessPoseGameState::COUNTDOWN):
-            {
-                material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-                texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                int cd_time = guessPoseGame.getCountdownTime();
-                switch (cd_time)
-                {
-                case 0:
-                {
-                    curSelectedTexture = "3";
-                    break;
-                }
-                case 1:
-                {
-                    curSelectedTexture = "2";
-                    break;
-                }
-                case 2:
-                {
-                    curSelectedTexture = "1";
-                    break;
-                }
-                default:
-                    break;
-                }
-                break;
-            }
-            case static_cast<int>(GuessPoseGameState::PLAY):
-            {
-                material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
-                guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
-                required_pose_bones_to_world_left = guessPoseGame.getPose();
-                if (bones_to_world_left.size() > 0)
-                {
-                    std::vector<float> weights_leap = computeDistanceFromPose(bones_to_world_left, required_pose_bones_to_world_left);
-                    std::vector<float> scores = leftHandModel.scalarLeapBoneToMeshBone(weights_leap);
-                    float minScore = 1.0f;
-                    for (int i = 0; i < scores.size(); i++)
-                    {
-                        if ((scores[i] < minScore) && (scores[i] > 0.0f))
-                            minScore = scores[i];
-                    }
-                    guessPoseGame.setScore(minScore);
-                    // float avgScore = 0.0f;
-                    // for (int i = 0; i < scores.size(); i++)
-                    //     avgScore += scores[i];
-                    // avgScore /= scores.size();
-                    // guessPosegame.setScore(avgScore);
-                }
-                break;
-            }
-            case static_cast<int>(GuessPoseGameState::END):
-            {
-                break;
-            }
-            default:
-                break;
-            }
-
-            /* deal with camera input */
-            t_camera.start();
-            handleCameraInput(ptrGrabResult, false, cv::Mat());
-            t_camera.stop();
-
-            /* deal with leap input */
-            t_leap.start();
-            LEAP_STATUS leap_status = handleLeapInput();
-            t_leap.stop();
-
-            /* skin hand meshes */
-            t_skin.start();
-            handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
-            t_skin.stop();
-
-            /* run MLS on MP prediction to reduce bias */
-            t_mls.start();
-            handleMLSAsync(gridShader);
-            t_mls.stop();
-
-            /* post process fbo using camera input */
-            t_pp.start();
-            handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
-            t_pp.stop();
-
-            /* render final output to screen */
-            glViewport(0, 0, proj_width, proj_height);
-            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-            set_texture_shader(&textureShader, false, false, false);
-            c2p_fbo.getTexture()->bind();
-            fullScreenQuad.render();
-            // material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-            // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
-            if (showGameHint)
-            {
-                handleSkinning(required_pose_bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
-                set_texture_shader(&textureShader, false, false, false);
-                hands_fbo.getTexture()->bind();
-                topRightQuad.render();
-            }
+            handleGuessPoseGame(shaderMap, leftHandModel, rightHandModel, topRightQuad, cam_view_transform, cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
         {
-            int state = guessCharGame.getState();
-            auto bones = gameUseRightHand ? bones_to_world_right : bones_to_world_left;
-            guessCharGame.setBonesVisible(bones.size() > 0);
-            switch (state)
-            {
-            // wait for user to place their hand infront of screen
-            case static_cast<int>(GuessCharGameState::WAIT_FOR_USER):
-            {
-                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
-                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-                textModel.Render(textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                dynamic_fbo.unbind();
-                break;
-            }
-            // countdown to start game
-            case static_cast<int>(GuessCharGameState::COUNTDOWN):
-            {
-                material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-                // texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-                int cd_time = guessCharGame.getCountdownTime();
-                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
-                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-                switch (cd_time)
-                {
-                case 0:
-                {
-                    textModel.Render(textShader, "3!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                    break;
-                }
-                case 1:
-                {
-                    textModel.Render(textShader, "2!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                    break;
-                }
-                case 2:
-                {
-                    textModel.Render(textShader, "1!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                    break;
-                }
-                default:
-                    break;
-                }
-                dynamic_fbo.unbind();
-                break;
-            }
-            case static_cast<int>(GuessCharGameState::PLAY):
-            {
-                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-                std::string chars;
-                int correctIndex = guessCharGame.getRandomChars(chars);
-                int selectedIndex = -1;
-                bool allExtended = true;
-                bool moreThanOneDown = false;
-                for (int i = 1; i < left_fingers_extended.size(); i++)
-                {
-                    if (left_fingers_extended[i] == 0)
-                    {
-                        allExtended = false;
-                        if (selectedIndex != -1)
-                            moreThanOneDown = true;
-                        selectedIndex = i - 1;
-                    }
-                }
-                if (allExtended)
-                    guessCharGame.setAllExtended(true);
-                else
-                    guessCharGame.setAllExtended(false);
-                if (!allExtended && !moreThanOneDown)
-                {
-                    if (selectedIndex == correctIndex)
-                    {
-                        guessCharGame.setResponse(true);
-                    }
-                    else
-                    {
-                        guessCharGame.setResponse(false);
-                    }
-                }
-                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-                float scale = 0.758f; // 1.0f;
-                glm::vec2 ndc_cords = Helpers::NDCtoScreen(glm::vec2(debug_vec), proj_width, proj_height);
-                // textModel.Render(textShader, "X", ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
-                auto fingerMap = guessCharGame.getNumberLocations();
-                glm::vec2 palm_screen = Helpers::NDCtoScreen(fingerMap["palm"], proj_width, proj_height);
-                glm::vec2 index_screen = Helpers::NDCtoScreen(fingerMap["index"], proj_width, proj_height);
-                glm::vec2 middle_screen = Helpers::NDCtoScreen(fingerMap["middle"], proj_width, proj_height);
-                glm::vec2 ring_screen = Helpers::NDCtoScreen(fingerMap["ring"], proj_width, proj_height);
-                glm::vec2 pinky_screen = Helpers::NDCtoScreen(fingerMap["pinky"], proj_width, proj_height);
-                textModel.Render(textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, 3.0f * scale, glm::vec3(0.0f, 0.0f, 0.0f));
-                textModel.Render(textShader, chars.substr(0, 1), index_screen.x, index_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
-                textModel.Render(textShader, chars.substr(1, 1), middle_screen.x, middle_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
-                textModel.Render(textShader, chars.substr(2, 1), ring_screen.x, ring_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
-                textModel.Render(textShader, chars.substr(3, 1), pinky_screen.x, pinky_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
-                // // glm::vec2 thumb_screen = Helpers::NDCtoScreen(glm::vec2(0.829f, -0.741f), proj_width, proj_height);
-                // // textModel.Render(textShader, "T", thumb_ndc.x, thumb_ndc.y, scale, glm::vec3(1.0f, 0.0f, 1.0f));
-                dynamic_fbo.unbind();
-                break;
-            }
-            case static_cast<int>(GuessCharGameState::WAIT):
-            {
-                int selectedIndex = -1;
-                bool allExtended = true;
-                bool moreThanOneDown = false;
-                for (int i = 1; i < left_fingers_extended.size(); i++)
-                {
-                    if (left_fingers_extended[i] == 0)
-                    {
-                        allExtended = false;
-                        if (selectedIndex != -1)
-                            moreThanOneDown = true;
-                        selectedIndex = i - 1;
-                    }
-                }
-                if (allExtended)
-                    guessCharGame.setAllExtended(true);
-                else
-                    guessCharGame.setAllExtended(false);
-                texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                curSelectedTexture = "XGA_rand";
-                break;
-            }
-            case static_cast<int>(GuessCharGameState::END):
-            {
-                texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-                glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
-                dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-                textModel.Render(textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
-                dynamic_fbo.unbind();
-                break;
-            }
-            default:
-                break;
-            }
-            /* deal with camera input */
-            t_camera.start();
-            handleCameraInput(ptrGrabResult, false, cv::Mat());
-            t_camera.stop();
-
-            /* deal with leap input */
-            t_leap.start();
-            LEAP_STATUS leap_status = handleLeapInput();
-            t_leap.stop();
-
-            /* skin hand meshes */
-            t_skin.start();
-            if (gameUseRightHand)
-                handleSkinning(bones, gameUseRightHand, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
-            else
-                handleSkinning(bones, gameUseRightHand, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
-            t_skin.stop();
-
-            /* run MLS on MP prediction to reduce bias */
-            t_mls.start();
-            handleMLSAsync(gridShader);
-            t_mls.stop();
-
-            /* post process fbo using camera input */
-            t_pp.start();
-            handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
-            t_pp.stop();
-
-            /* render final output to screen */
-            glViewport(0, 0, proj_width, proj_height);
-            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-            set_texture_shader(&textureShader, false, false, false);
-            c2p_fbo.getTexture()->bind();
-            fullScreenQuad.render();
+            handleGuessCharGame(shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera
@@ -5134,6 +4872,308 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current)
         }
     }
     return true;
+}
+
+void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                         SkinnedModel &leftHandModel,
+                         SkinnedModel &rightHandModel,
+                         TextModel &textModel,
+                         glm::mat4 &cam_view_transform,
+                         glm::mat4 &cam_projection_transform)
+{
+    Shader *textShader = shaderMap["textShader"];
+    Shader *gridShader = shaderMap["gridShader"];
+    Shader *textureShader = shaderMap["textureShader"];
+
+    int state = guessCharGame.getState();
+    auto bones = gameUseRightHand ? bones_to_world_right : bones_to_world_left;
+    guessCharGame.setBonesVisible(bones.size() > 0);
+    switch (state)
+    {
+    // wait for user to place their hand infront of screen
+    case static_cast<int>(GuessCharGameState::WAIT_FOR_USER):
+    {
+        texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+        glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+        dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        textModel.Render(*textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+        dynamic_fbo.unbind();
+        break;
+    }
+    // countdown to start game
+    case static_cast<int>(GuessCharGameState::COUNTDOWN):
+    {
+        material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+        // texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+        texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+        int cd_time = guessCharGame.getCountdownTime();
+        glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+        dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        switch (cd_time)
+        {
+        case 0:
+        {
+            textModel.Render(*textShader, "3!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+            break;
+        }
+        case 1:
+        {
+            textModel.Render(*textShader, "2!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+            break;
+        }
+        case 2:
+        {
+            textModel.Render(*textShader, "1!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+            break;
+        }
+        default:
+            break;
+        }
+        dynamic_fbo.unbind();
+        break;
+    }
+    case static_cast<int>(GuessCharGameState::PLAY):
+    {
+        texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+        std::string chars;
+        int correctIndex = guessCharGame.getRandomChars(chars);
+        int selectedIndex = -1;
+        bool allExtended = true;
+        bool moreThanOneDown = false;
+        for (int i = 1; i < left_fingers_extended.size(); i++)
+        {
+            if (left_fingers_extended[i] == 0)
+            {
+                allExtended = false;
+                if (selectedIndex != -1)
+                    moreThanOneDown = true;
+                selectedIndex = i - 1;
+            }
+        }
+        if (allExtended)
+            guessCharGame.setAllExtended(true);
+        else
+            guessCharGame.setAllExtended(false);
+        if (!allExtended && !moreThanOneDown)
+        {
+            if (selectedIndex == correctIndex)
+            {
+                guessCharGame.setResponse(true);
+            }
+            else
+            {
+                guessCharGame.setResponse(false);
+            }
+        }
+        dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        float scale = 0.758f; // 1.0f;
+        glm::vec2 ndc_cords = Helpers::NDCtoScreen(glm::vec2(debug_vec), proj_width, proj_height);
+        // textModel.Render(textShader, "X", ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
+        auto fingerMap = guessCharGame.getNumberLocations();
+        glm::vec2 palm_screen = Helpers::NDCtoScreen(fingerMap["palm"], proj_width, proj_height);
+        glm::vec2 index_screen = Helpers::NDCtoScreen(fingerMap["index"], proj_width, proj_height);
+        glm::vec2 middle_screen = Helpers::NDCtoScreen(fingerMap["middle"], proj_width, proj_height);
+        glm::vec2 ring_screen = Helpers::NDCtoScreen(fingerMap["ring"], proj_width, proj_height);
+        glm::vec2 pinky_screen = Helpers::NDCtoScreen(fingerMap["pinky"], proj_width, proj_height);
+        textModel.Render(*textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, 3.0f * scale, glm::vec3(0.0f, 0.0f, 0.0f));
+        textModel.Render(*textShader, chars.substr(0, 1), index_screen.x, index_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+        textModel.Render(*textShader, chars.substr(1, 1), middle_screen.x, middle_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+        textModel.Render(*textShader, chars.substr(2, 1), ring_screen.x, ring_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+        textModel.Render(*textShader, chars.substr(3, 1), pinky_screen.x, pinky_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
+        // // glm::vec2 thumb_screen = Helpers::NDCtoScreen(glm::vec2(0.829f, -0.741f), proj_width, proj_height);
+        // // textModel.Render(textShader, "T", thumb_ndc.x, thumb_ndc.y, scale, glm::vec3(1.0f, 0.0f, 1.0f));
+        dynamic_fbo.unbind();
+        break;
+    }
+    case static_cast<int>(GuessCharGameState::WAIT):
+    {
+        int selectedIndex = -1;
+        bool allExtended = true;
+        bool moreThanOneDown = false;
+        for (int i = 1; i < left_fingers_extended.size(); i++)
+        {
+            if (left_fingers_extended[i] == 0)
+            {
+                allExtended = false;
+                if (selectedIndex != -1)
+                    moreThanOneDown = true;
+                selectedIndex = i - 1;
+            }
+        }
+        if (allExtended)
+            guessCharGame.setAllExtended(true);
+        else
+            guessCharGame.setAllExtended(false);
+        texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+        curSelectedTexture = "XGA_rand";
+        break;
+    }
+    case static_cast<int>(GuessCharGameState::END):
+    {
+        texture_mode = static_cast<int>(TextureMode::DYNAMIC);
+        glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
+        dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        textModel.Render(*textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+        dynamic_fbo.unbind();
+        break;
+    }
+    default:
+        break;
+    }
+    /* deal with camera input */
+    t_camera.start();
+    CGrabResultPtr ptrGrabResult;
+    handleCameraInput(ptrGrabResult, false, cv::Mat());
+    t_camera.stop();
+
+    /* deal with leap input */
+    t_leap.start();
+    LEAP_STATUS leap_status = handleLeapInput();
+    t_leap.stop();
+
+    /* skin hand meshes */
+    t_skin.start();
+    if (gameUseRightHand)
+        handleSkinning(bones, gameUseRightHand, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+    else
+        handleSkinning(bones, gameUseRightHand, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+    t_skin.stop();
+
+    /* run MLS on MP prediction to reduce bias */
+    t_mls.start();
+    handleMLSAsync(*gridShader);
+    t_mls.stop();
+
+    /* post process fbo using camera input */
+    t_pp.start();
+    handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+    t_pp.stop();
+
+    /* render final output to screen */
+    glViewport(0, 0, proj_width, proj_height);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    set_texture_shader(textureShader, false, false, false);
+    c2p_fbo.getTexture()->bind();
+    fullScreenQuad.render();
+}
+
+void handleGuessPoseGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                         SkinnedModel &leftHandModel,
+                         SkinnedModel &rightHandModel,
+                         Quad &topRightQuad,
+                         glm::mat4 &cam_view_transform,
+                         glm::mat4 &cam_projection_transform)
+{
+    Shader *gridShader = shaderMap["gridShader"];
+    Shader *textureShader = shaderMap["textureShader"];
+    int state = guessPoseGame.getState();
+    switch (state)
+    {
+    case static_cast<int>(GuessPoseGameState::WAIT_FOR_USER):
+    {
+        guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
+        break;
+    }
+    case static_cast<int>(GuessPoseGameState::COUNTDOWN):
+    {
+        material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+        texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+        int cd_time = guessPoseGame.getCountdownTime();
+        switch (cd_time)
+        {
+        case 0:
+        {
+            curSelectedTexture = "3";
+            break;
+        }
+        case 1:
+        {
+            curSelectedTexture = "2";
+            break;
+        }
+        case 2:
+        {
+            curSelectedTexture = "1";
+            break;
+        }
+        default:
+            break;
+        }
+        break;
+    }
+    case static_cast<int>(GuessPoseGameState::PLAY):
+    {
+        material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
+        guessPoseGame.setBonesVisible(bones_to_world_left.size() > 0);
+        required_pose_bones_to_world_left = guessPoseGame.getPose();
+        if (bones_to_world_left.size() > 0)
+        {
+            std::vector<float> weights_leap = computeDistanceFromPose(bones_to_world_left, required_pose_bones_to_world_left);
+            std::vector<float> scores = leftHandModel.scalarLeapBoneToMeshBone(weights_leap);
+            float minScore = 1.0f;
+            for (int i = 0; i < scores.size(); i++)
+            {
+                if ((scores[i] < minScore) && (scores[i] > 0.0f))
+                    minScore = scores[i];
+            }
+            guessPoseGame.setScore(minScore);
+            // float avgScore = 0.0f;
+            // for (int i = 0; i < scores.size(); i++)
+            //     avgScore += scores[i];
+            // avgScore /= scores.size();
+            // guessPosegame.setScore(avgScore);
+        }
+        break;
+    }
+    case static_cast<int>(GuessPoseGameState::END):
+    {
+        break;
+    }
+    default:
+        break;
+    }
+
+    /* deal with camera input */
+    t_camera.start();
+    CGrabResultPtr ptrGrabResult;
+    handleCameraInput(ptrGrabResult, false, cv::Mat());
+    t_camera.stop();
+
+    /* deal with leap input */
+    t_leap.start();
+    LEAP_STATUS leap_status = handleLeapInput();
+    t_leap.stop();
+
+    /* skin hand meshes */
+    t_skin.start();
+    handleSkinning(bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+    t_skin.stop();
+
+    /* run MLS on MP prediction to reduce bias */
+    t_mls.start();
+    handleMLSAsync(*gridShader);
+    t_mls.stop();
+
+    /* post process fbo using camera input */
+    t_pp.start();
+    handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+    t_pp.stop();
+
+    /* render final output to screen */
+    glViewport(0, 0, proj_width, proj_height);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    set_texture_shader(textureShader, false, false, false);
+    c2p_fbo.getTexture()->bind();
+    fullScreenQuad.render();
+    // material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+    // texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+    if (showGameHint)
+    {
+        handleSkinning(required_pose_bones_to_world_left, false, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+        set_texture_shader(textureShader, false, false, false);
+        hands_fbo.getTexture()->bind();
+        topRightQuad.render();
+    }
 }
 
 void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
