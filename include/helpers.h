@@ -47,6 +47,12 @@ private:
     Helpers();
 };
 
+enum class Hand
+{
+    LEFT = 0,
+    RIGHT = 1,
+};
+
 enum class TextureMode
 {
     ORIGINAL = 0,

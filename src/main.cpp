@@ -326,8 +326,9 @@ bool playback_video_loaded = false;
 int total_session_time_stamps = 0;
 bool record_session = false;
 bool two_hand_recording = false;
+int recordedHand = static_cast<int>(Hand::LEFT);
 float recordStartTime = 0.0;
-float recordDuration = 10.0;
+float recordDuration = 5.0;
 bool record_single_pose = false;
 bool record_every_frame = false;
 std::vector<glm::mat4> session_bones_left;
@@ -3142,15 +3143,29 @@ void saveLeapData(LEAP_STATUS leap_status, uint64_t image_timestamp, bool record
 {
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME || record_every_frame)
     {
-        if ((bones_to_world_left.size() > 0) && (joints_left.size() > 0))
+        if (two_hand_recording)
         {
-            if (two_hand_recording)
+            if ((bones_to_world_right.size() > 0) && (joints_right.size() > 0) && (bones_to_world_left.size() > 0) && (joints_left.size() > 0))
+            {
+                savedLeapBonesLeft.push_back(bones_to_world_left);
+                savedLeapJointsLeft.push_back(joints_left);
+                savedLeapBonesRight.push_back(bones_to_world_right);
+                savedLeapJointsRight.push_back(joints_right);
+                savedLeapTimestamps.push_back(curFrameTimeStamp);
+                if (record_images)
+                {
+                    savedCameraImages.push_back(camImageOrig);
+                    savedCameraTimestamps.push_back(image_timestamp);
+                }
+            }
+        }
+        else
+        {
+            if (recordedHand == static_cast<int>(Hand::RIGHT))
             {
                 if ((bones_to_world_right.size() > 0) && (joints_right.size() > 0))
                 {
-                    savedLeapBonesLeft.push_back(bones_to_world_left);
                     savedLeapBonesRight.push_back(bones_to_world_right);
-                    savedLeapJointsLeft.push_back(joints_left);
                     savedLeapJointsRight.push_back(joints_right);
                     savedLeapTimestamps.push_back(curFrameTimeStamp);
                     if (record_images)
@@ -3162,13 +3177,16 @@ void saveLeapData(LEAP_STATUS leap_status, uint64_t image_timestamp, bool record
             }
             else
             {
-                savedLeapBonesLeft.push_back(bones_to_world_left);
-                savedLeapJointsLeft.push_back(joints_left);
-                savedLeapTimestamps.push_back(curFrameTimeStamp);
-                if (record_images)
+                if ((bones_to_world_left.size() > 0) && (joints_left.size() > 0))
                 {
-                    savedCameraImages.push_back(camImageOrig);
-                    savedCameraTimestamps.push_back(image_timestamp);
+                    savedLeapBonesLeft.push_back(bones_to_world_left);
+                    savedLeapJointsLeft.push_back(joints_left);
+                    savedLeapTimestamps.push_back(curFrameTimeStamp);
+                    if (record_images)
+                    {
+                        savedCameraImages.push_back(camImageOrig);
+                        savedCameraTimestamps.push_back(image_timestamp);
+                    }
                 }
             }
         }
@@ -3187,39 +3205,58 @@ void saveSession(std::string savepath, bool record_images)
         std::cout << "cannot record session with global scale transform" << std::endl;
         return;
     }
-    if (savedLeapBonesLeft.size() > 0)
+    fs::path bones_left_path = savepath_path / fs::path(std::string("bones_left.npy"));
+    fs::path joints_left_path = savepath_path / fs::path(std::string("joints_left.npy"));
+    fs::path timestamps_path = savepath_path / fs::path(std::string("timestamps.npy"));
+    fs::path bones_right_path = savepath_path / fs::path(std::string("bones_right.npy"));
+    fs::path joints_right_path = savepath_path / fs::path(std::string("joints_right.npy"));
+    if (two_hand_recording)
     {
-        fs::path bones_left_path = savepath_path / fs::path(std::string("bones_left.npy"));
-        fs::path joints_left_path = savepath_path / fs::path(std::string("joints_left.npy"));
-        fs::path timestamps_path = savepath_path / fs::path(std::string("timestamps.npy"));
-        for (int i = 0; i < savedLeapBonesLeft.size(); i++)
+        if ((savedLeapBonesLeft.size() > 0) && (savedLeapBonesRight.size() > 0))
         {
-            std::cout << std::format("Saving recording {} / {}", i, savedLeapBonesLeft.size()) << std::endl;
-            cnpy::npy_save(bones_left_path.string().c_str(), &savedLeapBonesLeft[i][0][0].x, {1, savedLeapBonesLeft[i].size(), 4, 4}, "a");
-            cnpy::npy_save(joints_left_path.string().c_str(), &savedLeapJointsLeft[i][0].x, {1, savedLeapJointsLeft[i].size(), 3}, "a");
-            cnpy::npy_save(timestamps_path.string().c_str(), &savedLeapTimestamps[i], {1}, "a");
-            // cnpy::npy_save(app_timestamps_path.string().c_str(), &curAppFrameTimeStamp, {1}, "a");
-            if (two_hand_recording)
+            for (int i = 0; i < savedLeapBonesLeft.size(); i++)
             {
-                if (savedLeapBonesRight.size() > 0)
+                cnpy::npy_save(bones_left_path.string().c_str(), &savedLeapBonesLeft[i][0][0].x, {1, savedLeapBonesLeft[i].size(), 4, 4}, "a");
+                cnpy::npy_save(joints_left_path.string().c_str(), &savedLeapJointsLeft[i][0].x, {1, savedLeapJointsLeft[i].size(), 3}, "a");
+                cnpy::npy_save(timestamps_path.string().c_str(), &savedLeapTimestamps[i], {1}, "a");
+                cnpy::npy_save(bones_right_path.string().c_str(), &savedLeapBonesRight[i][0][0].x, {1, savedLeapBonesRight[i].size(), 4, 4}, "a");
+                cnpy::npy_save(joints_right_path.string().c_str(), &savedLeapJointsRight[i][0].x, {1, savedLeapJointsRight[i].size(), 3}, "a");
+            }
+        }
+    }
+    else
+    {
+        if (recordedHand == static_cast<int>(Hand::RIGHT))
+        {
+            if (savedLeapBonesRight.size() > 0)
+            {
+                for (int i = 0; i < savedLeapBonesRight.size(); i++)
                 {
-                    fs::path bones_right_path = savepath_path / fs::path(std::string("bones_right.npy"));
-                    fs::path joints_right_path = savepath_path / fs::path(std::string("joints_right.npy"));
                     cnpy::npy_save(bones_right_path.string().c_str(), &savedLeapBonesRight[i][0][0].x, {1, savedLeapBonesRight[i].size(), 4, 4}, "a");
                     cnpy::npy_save(joints_right_path.string().c_str(), &savedLeapJointsRight[i][0].x, {1, savedLeapJointsRight[i].size(), 3}, "a");
+                    cnpy::npy_save(timestamps_path.string().c_str(), &savedLeapTimestamps[i], {1}, "a");
                 }
             }
         }
-        // cnpy::npy_save(bones_left_path.string().c_str(), &savedLeapBones[0][0][0].x, {savedLeapBones.size(), savedLeapBones[0].size(), 4, 4}, "w");
-        // cnpy::npy_save(timestamps_path.string().c_str(), &savedLeapTimestamps[0], {savedLeapTimestamps.size()}, "w");
-        // cnpy::npy_save(joints_left_path.string().c_str(), &savedLeapJoints[0][0].x, {savedLeapJoints.size(), savedLeapJoints[0].size(), 3}, "w");
-        if (record_images)
+        else
         {
-            for (int i = 0; i < savedCameraImages.size(); i++)
+            if (savedLeapBonesLeft.size() > 0)
             {
-                fs::path image_path = savepath_path / fs::path(std::format("{:06d}", savedCameraTimestamps[i]) + std::string("_cam.png"));
-                cv::imwrite(image_path.string(), savedCameraImages[i]);
+                for (int i = 0; i < savedLeapBonesLeft.size(); i++)
+                {
+                    cnpy::npy_save(bones_left_path.string().c_str(), &savedLeapBonesLeft[i][0][0].x, {1, savedLeapBonesLeft[i].size(), 4, 4}, "a");
+                    cnpy::npy_save(joints_left_path.string().c_str(), &savedLeapJointsLeft[i][0].x, {1, savedLeapJointsLeft[i].size(), 3}, "a");
+                    cnpy::npy_save(timestamps_path.string().c_str(), &savedLeapTimestamps[i], {1}, "a");
+                }
             }
+        }
+    }
+    if (record_images)
+    {
+        for (int i = 0; i < savedCameraImages.size(); i++)
+        {
+            fs::path image_path = savepath_path / fs::path(std::format("{:06d}", savedCameraTimestamps[i]) + std::string("_cam.png"));
+            cv::imwrite(image_path.string(), savedCameraImages[i]);
         }
     }
 }
@@ -6735,14 +6772,15 @@ void openIMGUIFrame()
                 savedCameraImages.clear();
                 savedCameraTimestamps.clear();
             }
+            ImGui::RadioButton("Record Right Hand", &recordedHand, static_cast<int>(Hand::RIGHT));
             ImGui::SameLine();
-            ImGui::Checkbox("Two hands recording", &two_hand_recording);
-            ImGui::SameLine();
-            ImGui::SliderFloat("Recording Duration [s]", &recordDuration, 0.0f, 20.0f);
+            ImGui::RadioButton("Record Left Hand", &recordedHand, static_cast<int>(Hand::LEFT));
+            ImGui::Checkbox("Two Hands Recording", &two_hand_recording);
             ImGui::SameLine();
             ImGui::Checkbox("Record Images", &recordImages);
             ImGui::SameLine();
             ImGui::Checkbox("Record Every Frame", &record_every_frame);
+            ImGui::SliderFloat("Recording Duration [s]", &recordDuration, 0.0f, 20.0f);
             if (ImGui::Button("Record Single Pose"))
             {
                 record_single_pose = true;
