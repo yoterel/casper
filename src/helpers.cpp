@@ -561,12 +561,13 @@ std::vector<glm::vec3> Helpers::accumulate(const std::vector<std::vector<glm::ve
     return accumulator;
 }
 
-glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale)
+glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale, bool isRightHand)
 {
     // if you can't join'm, slerp'm.
     glm::mat4 mat1, mat2;
     glm::mat4 scalar = glm::scale(glm::mat4(1.0f), glm::vec3(10.f));
     glm::mat4 inv_scalar = glm::inverse(scalar);
+    // first undo the scale, which is the first matrix in the bone transform (slerp requires pure rotation)
     if (prescale)
     {
         mat1 = _mat1 * inv_scalar;
@@ -577,12 +578,26 @@ glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, f
         mat1 = _mat1;
         mat2 = _mat2;
     }
+    // also undo chirality for right hand, we require det=1
+    glm::mat4 flip_x = glm::mat4(1.0f);
+    flip_x[0][0] = -1.0f;
+    if (isRightHand)
+    {
+        // formally should have undone the other transforms up to chirality, but they all commute
+        mat1 = mat1 * glm::inverse(flip_x);
+        mat2 = mat2 * glm::inverse(flip_x);
+    }
+    // finally slerp the quaternion rep. of the rotation matrix
     glm::quat rot1 = glm::quat_cast(mat1);
     glm::quat rot2 = glm::quat_cast(mat2);
     glm::quat finalRot = glm::slerp(rot1, rot2, _time);
     glm::mat4 finalMat = glm::mat4_cast(finalRot);
+    // redo transforms in inverse order
+    if (isRightHand)
+        finalMat = finalMat * flip_x;
     if (prescale)
         finalMat = finalMat * scalar;
+    // regular interpolation for translation component (lerp)
     finalMat[3] = _mat1[3] * (1 - _time) + _mat2[3] * _time; // lerp them for translation though
     return finalMat;
 }
