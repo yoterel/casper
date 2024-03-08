@@ -219,8 +219,10 @@ float jfa_distance_threshold = 10.0f;
 float jfa_seam_threshold = 0.5f;
 bool jfauv_right_hand = false;
 glm::vec3 mask_bg_color(0.0f, 0.0f, 0.0f);
-glm::vec3 mask_missing_info_color(0.26, 0.43, 0.376);
-glm::vec3 mask_unused_info_color(0.485f, 0.331f, 0.485f);
+glm::vec3 mask_fg_color(64.0f / 255.0f, 176.0f / 255.0f, 166.0f / 255.0f);
+glm::vec3 mask_missing_info_color(47.0f / 255.0f, 103.0f / 255.0f, 177.0f / 255.0f);
+glm::vec3 mask_unused_info_color(191.0f / 255.0f, 44.0f / 255.0f, 35.0f / 255.0f);
+bool mask_fg_single_color = false;
 bool threshold_flag = false;
 glm::vec3 debug_vec(0.0f, 0.0f, 0.0f);
 float debug_scalar = 1.0f;
@@ -3420,8 +3422,10 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     {
         maskShader->use();
         maskShader->setVec3("bgColor", mask_bg_color);
+        maskShader->setVec3("fgColor", mask_fg_color);
         maskShader->setVec3("missingInfoColor", mask_missing_info_color);
         maskShader->setVec3("unusedInfoColor", mask_unused_info_color);
+        maskShader->setBool("fgSingleColor", mask_fg_single_color);
         if (use_mls)
             postProcess.mask(maskShader, mls_fbo.getTexture()->getTexture(), camTexture.getTexture(), &postprocess_fbo, masking_threshold);
         else
@@ -5944,8 +5948,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     // }
     // overlay final render and camera image, and render to screen
     // this is needed to simulate how a projection is mixed with the skin color
-    glViewport(0, 0, proj_width, proj_height);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    postprocess_fbo2.bind();
     overlayShader->use();
     overlayShader->setMat4("mvp", glm::mat4(1.0));
     overlayShader->setInt("projectiveTexture", 0);
@@ -5956,6 +5959,13 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     overlayShader->setBool("gammaCorrect", gamma_correct);
     fake_cam_fbo.getTexture()->bind(GL_TEXTURE1);
     // set_texture_shader(textureShader, false, false, false);
+    fullScreenQuad.render();
+    postprocess_fbo2.unbind();
+    // render to screen
+    glViewport(0, 0, proj_width, proj_height);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    postprocess_fbo2.getTexture()->bind();
+    set_texture_shader(textureShader, false, false, false);
     fullScreenQuad.render();
     t_pp.stop();
     // add a "number" to the screen to indicate which video is being played
@@ -6372,6 +6382,7 @@ void openIMGUIFrame()
                 fs::path uv(savepath + filename.filename().string() + std::string("_uv.png"));
                 fs::path mls(savepath + filename.filename().string() + std::string("_mls_fbo.png"));
                 fs::path pp(savepath + filename.filename().string() + std::string("_pp.png"));
+                fs::path pp2(savepath + filename.filename().string() + std::string("_pp2.png"));
                 fs::path coax(savepath + filename.filename().string() + std::string("_coax.png"));
                 fs::path joints_left_path(savepath + filename.filename().string() + std::string("_joints_left.npy"));
                 fs::path joints_left_projected_path(savepath + filename.filename().string() + std::string("_joints_2d_left.npy"));
@@ -6379,18 +6390,27 @@ void openIMGUIFrame()
                 fs::path joints_right_path(savepath + filename.filename().string() + std::string("_joints_right.npy"));
                 fs::path joints_right_projected_path(savepath + filename.filename().string() + std::string("_joints_2d_right.npy"));
                 fs::path bones_right_path(savepath + filename.filename().string() + std::string("_bones_right.npy"));
-                cv::Mat tmp, mask;
-                cv::flip(camImageOrig, tmp, 1); // flip horizontally
-                cv::resize(tmp, tmp, cv::Size(proj_width, proj_height));
-                cv::threshold(tmp, mask, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
-                cv::imwrite(raw_image.string(), tmp);
-                cv::imwrite(mask_path.string(), mask);
+                if (operation_mode == static_cast<int>(OperationMode::USER_STUDY))
+                {
+                    fake_cam_fbo.saveColorToFile(raw_image.string(), false);
+                    fake_cam_binary_fbo.saveColorToFile(mask_path.string(), false);
+                }
+                else
+                {
+                    cv::Mat tmp, mask;
+                    cv::flip(camImageOrig, tmp, 1); // flip horizontally
+                    cv::resize(tmp, tmp, cv::Size(proj_width, proj_height));
+                    cv::threshold(tmp, mask, static_cast<int>(masking_threshold * 255), 255, cv::THRESH_BINARY);
+                    cv::imwrite(raw_image.string(), tmp);
+                    cv::imwrite(mask_path.string(), mask);
+                }
                 game_fbo.saveColorToFile(game_image.string());
                 hands_fbo.saveColorToFile(render_color.string());
                 hands_fbo.saveDepthToFile(render_depth.string(), true, 1.0f, 1500.0f);
                 uv_fbo.saveColorToFile(uv.string());
                 mls_fbo.saveColorToFile(mls.string());
                 postprocess_fbo.saveColorToFile(pp.string());
+                postprocess_fbo2.saveColorToFile(pp2.string());
                 c2p_fbo.saveColorToFile(coax.string());
                 if (joints_right.size() > 0)
                 {
@@ -6668,9 +6688,11 @@ void openIMGUIFrame()
             }
             ImGui::SliderFloat("JFA Distance Threshold", &jfa_distance_threshold, 0.0f, 100.0f);
             ImGui::SliderFloat("JFA Seam Threshold", &jfa_seam_threshold, 0.0f, 2.0f);
+            ImGui::ColorEdit3("FG Color", &mask_fg_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("BG Color", &mask_bg_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Missing Info Color", &mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Unused Info Color", &mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
+            ImGui::Checkbox("FG single color", &mask_fg_single_color);
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &use_mls);
             ImGui::RadioButton("CP1", &mls_mode, static_cast<int>(MLSMode::CONTROL_POINTS1));
