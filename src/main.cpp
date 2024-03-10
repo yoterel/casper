@@ -119,8 +119,11 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shader_map,
                      TextModel &textModel,
                      glm::mat4 &cam_view_transform,
                      glm::mat4 &cam_projection_transform);
-bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, std::vector<glm::mat4> session, bool isRightHand);
-bool handleInterpolateFrames(std::vector<glm::mat4> &bones_to_world_current);
+bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, std::vector<glm::mat4> &session, bool isRightHand);
+bool handleInterpolateFrames(std::vector<glm::mat4> &bones2world_left_cur,
+                             std::vector<glm::mat4> &bones2world_right_cur,
+                             std::vector<glm::mat4> &bones2world_left_lag,
+                             std::vector<glm::mat4> &bones2world_right_lag);
 bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &detected_left, bool &detected_right);
 bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
@@ -4883,7 +4886,7 @@ void handleMLSAsync(Shader &gridShader)
     }
 }
 
-bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, std::vector<glm::mat4> session, bool isRightHand)
+bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, std::vector<glm::mat4> &session, bool isRightHand)
 {
     auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), time);
     int interp_index = upper_iter - session_timestamps.begin();
@@ -5898,8 +5901,8 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *blurShader = shader_map["blurShader"];
     // interpolate hand pose to the required latency
     t_interp.start();
-    std::vector<glm::mat4> bones2world_left_cur, bones2world_right_cur;
-    std::vector<glm::mat4> bones2world_left_lag, bones2world_right_lag;
+    std::vector<glm::mat4> bones2world_left_cur, bones2world_left_lag;
+    std::vector<glm::mat4> bones2world_right_cur, bones2world_right_lag;
     bool success = handleInterpolateFrames(bones2world_left_cur, bones2world_right_cur, bones2world_left_lag, bones2world_right_lag);
     if (!success)
     {
