@@ -524,7 +524,7 @@ const int grid_x_point_count = 21;
 const int grid_y_point_count = 21;
 const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
 const float grid_y_spacing = 2.0f / static_cast<float>(grid_y_point_count - 1);
-float mls_alpha = 0.2f; // emperically best: 0.8f for rigid, 0.5f for affine
+float mls_alpha = 0.5f; // emperically best: 0.8f for rigid, 0.5f for affine
 Grid deformationGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 Grid bakeGrid(grid_x_point_count, grid_y_point_count, grid_x_spacing, grid_y_spacing);
 std::vector<cv::Point2f> ControlPointsP;
@@ -740,7 +740,7 @@ int main(int argc, char *argv[])
     game_fbo_aux3.init(GL_RGBA, GL_RGBA32F);
     fake_cam_fbo.init();
     fake_cam_binary_fbo.init();
-    uv_fbo.init(GL_RGBA, GL_RGBA32F); // stores uv coordinates, so must be 32F
+    uv_fbo.init(GL_RGBA, GL_RGBA32F, GL_NEAREST); // stores uv coordinates, so must be 32F
     bake_fbo_right.init();
     bake_fbo_left.init();
     pre_bake_fbo.init();
