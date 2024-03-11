@@ -151,14 +151,16 @@ void GuessCharGame::setResponse(bool playerCorrect)
     {
         if (!roundFinished)
         {
+            std::cout << cur_scores.size() << "/"
+                      << "20";
             if (playerCorrect)
             {
-                // std::cout << "CORRECT" << std::endl;
+                std::cout << ", CORRECT" << std::endl;
                 setScore(1.0f);
             }
             else
             {
-                // std::cout << "MISTAKE" << std::endl;
+                std::cout << ", MISTAKE" << std::endl;
                 setScore(0.0f);
             }
             if (cur_scores.size() >= 20)
@@ -241,6 +243,8 @@ void GuessCharGame::printScore()
         avgScore += score;
     }
     avgScore /= cur_scores.size();
+    std::cout << "##### Results #####" << std::endl;
     std::cout << "Average score: " << avgScore << std::endl;
     std::cout << "Total time: " << totalTime.getElapsedTimeInSec() - breakTime << " seconds" << std::endl;
+    std::cout << "###################" << std::endl;
 }

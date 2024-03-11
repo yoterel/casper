@@ -630,6 +630,7 @@ int main(int argc, char *argv[])
     case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
     {
         guessCharGame.reset();
+        postprocess_mode = static_cast<int>(PostProcessMode::NONE);
         break;
     }
     default:
