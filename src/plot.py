@@ -100,7 +100,51 @@ def jnd_plot(dst_path):
     # report mean and stds
     print(f"Baseline: {baseline.mean():.2f} ± {baseline.std():.2f}")
     print(f"Ours: {ours.mean():.2f} ± {ours.std():.2f}")
-
+    session_times = np.array(
+        [
+            14.7656,
+            12.589,
+            16.2561,
+            16.2402,
+            17.2429,
+            12.6386,
+            11.0314,
+            10.4284,
+            26.5882,
+            12.5154,
+            19.7092,
+            17.8119,
+            9.69475,
+            11.5,
+            5.91688,
+            7.75539,
+            17.3458,
+            22.8213,
+            13.5791,
+            15.354,
+            32.1,
+            12.3,
+            13.56,
+            9.61529,
+            11.1667,
+            12.0407,
+            12.7014,
+            14.5462,
+            16.4917,
+            20.418,
+            12.9531,
+            11.4878,
+            8.31638,
+            13.86,
+            11.1048,
+            11.5897,
+            8.97708,
+            9.8952,
+            19.7321,
+            13.5763,
+        ]
+    )
+    print(f"Session times: {session_times.mean():.2f} ± {session_times.std():.2f}")
     import matplotlib.pyplot as plt
 
     # set bar plots
