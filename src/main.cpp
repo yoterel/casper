@@ -34,7 +34,7 @@
 #include "diffuse.h"
 #include "user_study.h"
 #include "guess_pose_game.h"
-#include "guess_num_game.h"
+#include "guess_char_game.h"
 #include "MidiControllerAPI.h"
 #ifdef _DEBUG
 #undef _DEBUG

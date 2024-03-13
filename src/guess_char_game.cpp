@@ -1,4 +1,4 @@
-#include "guess_num_game.h"
+#include "guess_char_game.h"
 #include <iostream>
 
 GuessCharGame::GuessCharGame()
