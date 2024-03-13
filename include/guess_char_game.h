@@ -22,7 +22,7 @@ public:
     void setResponse(bool playerCorrect);
     void setAllExtended(bool all_extended);
     glm::vec2 getRandomLocation();
-    std::unordered_map<std::string, glm::vec2> getNumberLocations();
+    std::unordered_map<std::string, glm::vec2> getNumberLocations(bool frontView = false);
     // std::vector<glm::mat4> getPose();
     void setScore(float score);
     void printScore();

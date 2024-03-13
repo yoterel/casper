@@ -213,6 +213,9 @@ bool icp_apply_transform = true;
 bool showCamera = true;
 bool showProjector = true;
 bool undistortCamera = false;
+bool jfauv_right_hand = false;
+bool mask_fg_single_color = false;
+bool threshold_flag = false;
 int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
 int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
@@ -220,14 +223,12 @@ float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
 float jfa_distance_threshold = 10.0f;
 float jfa_seam_threshold = 0.5f;
-bool jfauv_right_hand = false;
 glm::vec3 mask_bg_color(0.0f, 0.0f, 0.0f);
 glm::vec3 mask_fg_color(64.0f / 255.0f, 176.0f / 255.0f, 166.0f / 255.0f);
 glm::vec3 mask_missing_info_color(47.0f / 255.0f, 103.0f / 255.0f, 177.0f / 255.0f);
 glm::vec3 mask_unused_info_color(191.0f / 255.0f, 44.0f / 255.0f, 35.0f / 255.0f);
-bool mask_fg_single_color = false;
-bool threshold_flag = false;
 glm::vec3 debug_vec(0.0f, 0.0f, 0.0f);
+std::string debug_text = "X";
 float debug_scalar = 1.0f;
 glm::vec3 triangulated(0.0f, 0.0f, 0.0f);
 unsigned int fps = 0;
@@ -250,6 +251,8 @@ const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
 Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_interp, t_profile;
 std::thread producer, consumer, run_sd, run_mls;
+std::string meshFile;
+std::string extraMeshFile;
 // bake/sd controls
 bool bakeRequest = false;
 bool deformedBaking = false;
@@ -475,6 +478,7 @@ std::unordered_map<std::string, Texture *> texturePack;
 std::string curSelectedTexture = "uv";
 std::string curSelectedPTexture = "uv";
 std::string userStudySelectedTexture = "uv";
+SkinnedModel *extraLeftHandModel = nullptr;
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *bakedTextureLeft = nullptr;
@@ -578,10 +582,10 @@ int main(int argc, char *argv[])
         ("mesh", "A .fbx mesh file to use for skinning",                                                                         //
          cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                             //
         ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                 //
+        ("emesh", "A .fbx mesh file to use as an extra (used in some apps)",                                                     //
+         cxxopts::value<std::string>()->default_value("../../resource/GuessCharGame_palm.fbx"))                                  //
         ("h,help", "Prints usage")                                                                                               //
-        // ("cf,cam_free", "Whether to use a free moving camera", cxxopts::value<bool>()->default_value("false"))                      //
         ;
-    std::string meshFile;
     try
     {
         auto result = options.parse(argc, argv);
@@ -591,6 +595,7 @@ int main(int argc, char *argv[])
             exit(0);
         }
         meshFile = result["mesh"].as<std::string>();
+        extraMeshFile = result["emesh"].as<std::string>();
         simulated_camera = result["simcam"].as<bool>();
         std::unordered_map<std::string, int> mode_map{
             {"normal", static_cast<int>(OperationMode::NORMAL)},
@@ -616,25 +621,6 @@ int main(int argc, char *argv[])
         std::cerr << e.what() << '\n';
         std::cout << options.help() << std::endl;
         exit(0);
-    }
-    switch (operation_mode) // set some default values for user study depending on cmd line
-    {
-    case static_cast<int>(OperationMode::USER_STUDY):
-    {
-        postprocess_mode = static_cast<int>(PostProcessMode::NONE);
-        vid_simulated_latency_ms = 35.0f;
-        jfa_distance_threshold = 100.0f;
-        use_mls = false;
-        break;
-    }
-    case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
-    {
-        guessCharGame.reset();
-        postprocess_mode = static_cast<int>(PostProcessMode::NONE);
-        break;
-    }
-    default:
-        break;
     }
     /* embedded python init */
     Py_Initialize();
@@ -760,6 +746,29 @@ int main(int argc, char *argv[])
                                 proj_width, proj_height,
                                 cam_width, cam_height,
                                 false);
+    switch (operation_mode) // set some default values for user study depending on cmd line
+    {
+    case static_cast<int>(OperationMode::USER_STUDY):
+    {
+        postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+        vid_simulated_latency_ms = 35.0f;
+        jfa_distance_threshold = 100.0f;
+        use_mls = false;
+        break;
+    }
+    case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
+    {
+        guessCharGame.reset();
+        postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+        extraLeftHandModel = new SkinnedModel(extraMeshFile,
+                                              userTextureFile,
+                                              proj_width, proj_height,
+                                              cam_width, cam_height);
+        break;
+    }
+    default:
+        break;
+    }
     // load all image files from supplied texture paths to GPU
     for (auto &it : texturePaths)
     {
@@ -4947,19 +4956,28 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
     Shader *textShader = shaderMap["textShader"];
     Shader *gridShader = shaderMap["gridShader"];
     Shader *textureShader = shaderMap["textureShader"];
-
-    int state = guessCharGame.getState();
     auto bones = gameUseRightHand ? bones_to_world_right : bones_to_world_left;
+    bool frontView = false;
+    if (bones.size() > 0)
+        frontView = Helpers::isPalmFacingCamera(bones[0], cam_view_transform);
+    // std::cout << frontView << std::endl;
+    int state = guessCharGame.getState();
     guessCharGame.setBonesVisible(bones.size() > 0);
+    glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
     switch (state)
     {
     // wait for user to place their hand infront of screen
     case static_cast<int>(GuessCharGameState::WAIT_FOR_USER):
     {
         texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-        glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
         dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        textModel.Render(*textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+        float palm_scale = 2.0f;
+        if (frontView)
+        {
+            palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.589f, -0.679), proj_width, proj_height);
+            palm_scale = 1.134f;
+        }
+        textModel.Render(*textShader, "Ready?", palm_ndc.x, palm_ndc.y, palm_scale, glm::vec3(0.0f, 0.0f, 0.0f));
         dynamic_fbo.unbind();
         break;
     }
@@ -4970,23 +4988,28 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
         // texture_mode = static_cast<int>(TextureMode::FROM_FILE);
         texture_mode = static_cast<int>(TextureMode::DYNAMIC);
         int cd_time = guessCharGame.getCountdownTime();
-        glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
         dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        float palm_scale = 3.0f;
+        if (frontView)
+        {
+            palm_scale = 2.5f;
+            palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.554f, -0.679f), proj_width, proj_height);
+        }
         switch (cd_time)
         {
         case 0:
         {
-            textModel.Render(*textShader, "3!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+            textModel.Render(*textShader, "3!", palm_ndc.x, palm_ndc.y, palm_scale, glm::vec3(0.0f, 0.0f, 0.0f));
             break;
         }
         case 1:
         {
-            textModel.Render(*textShader, "2!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+            textModel.Render(*textShader, "2!", palm_ndc.x, palm_ndc.y, palm_scale, glm::vec3(0.0f, 0.0f, 0.0f));
             break;
         }
         case 2:
         {
-            textModel.Render(*textShader, "1!", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+            textModel.Render(*textShader, "1!", palm_ndc.x, palm_ndc.y, palm_scale, glm::vec3(0.0f, 0.0f, 0.0f));
             break;
         }
         default:
@@ -5029,16 +5052,22 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
             }
         }
         dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        float scale = 0.758f; // 1.0f;
+        float scale = 0.758f;
+        float palm_scale = 0.758f * 4.0f;
+        if (frontView)
+        {
+            scale = 0.5f;
+            palm_scale = 2.5f;
+        }
         glm::vec2 ndc_cords = Helpers::NDCtoScreen(glm::vec2(debug_vec), proj_width, proj_height);
-        // textModel.Render(textShader, "X", ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
-        auto fingerMap = guessCharGame.getNumberLocations();
+        // textModel.Render(*textShader, debug_text, ndc_cords.x, ndc_cords.y, debug_scalar, glm::vec3(1.0f, 0.0f, 1.0f));
+        auto fingerMap = guessCharGame.getNumberLocations(frontView);
         glm::vec2 palm_screen = Helpers::NDCtoScreen(fingerMap["palm"], proj_width, proj_height);
         glm::vec2 index_screen = Helpers::NDCtoScreen(fingerMap["index"], proj_width, proj_height);
         glm::vec2 middle_screen = Helpers::NDCtoScreen(fingerMap["middle"], proj_width, proj_height);
         glm::vec2 ring_screen = Helpers::NDCtoScreen(fingerMap["ring"], proj_width, proj_height);
         glm::vec2 pinky_screen = Helpers::NDCtoScreen(fingerMap["pinky"], proj_width, proj_height);
-        textModel.Render(*textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, 3.0f * scale, glm::vec3(0.0f, 0.0f, 0.0f));
+        textModel.Render(*textShader, chars.substr(correctIndex, 1), palm_screen.x, palm_screen.y, palm_scale, glm::vec3(0.0f, 0.0f, 0.0f));
         textModel.Render(*textShader, chars.substr(0, 1), index_screen.x, index_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
         textModel.Render(*textShader, chars.substr(1, 1), middle_screen.x, middle_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
         textModel.Render(*textShader, chars.substr(2, 1), ring_screen.x, ring_screen.y, scale, glm::vec3(0.0f, 0.0f, 0.0f));
@@ -5073,10 +5102,15 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
     }
     case static_cast<int>(GuessCharGameState::END):
     {
+        float palm_scale = 3.0f;
+        if (frontView)
+        {
+            palm_scale = 2.5f;
+            palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.554f, -0.679f), proj_width, proj_height);
+        }
         texture_mode = static_cast<int>(TextureMode::DYNAMIC);
-        glm::vec2 palm_ndc = Helpers::NDCtoScreen(glm::vec2(-0.66f, -0.683f), proj_width, proj_height);
         dynamic_fbo.bind(true, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        textModel.Render(*textShader, ":)", palm_ndc.x, palm_ndc.y, 3.0f, glm::vec3(0.0f, 0.0f, 0.0f));
+        textModel.Render(*textShader, ":)", palm_ndc.x, palm_ndc.y, palm_scale, glm::vec3(0.0f, 0.0f, 0.0f));
         dynamic_fbo.unbind();
         break;
     }
@@ -5097,9 +5131,16 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
     /* skin hand meshes */
     t_skin.start();
     if (gameUseRightHand)
+    {
         handleSkinning(bones, gameUseRightHand, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+    }
     else
-        handleSkinning(bones, gameUseRightHand, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+    {
+        if (frontView)
+            handleSkinning(bones, gameUseRightHand, true, shaderMap, *extraLeftHandModel, cam_view_transform, cam_projection_transform);
+        else
+            handleSkinning(bones, gameUseRightHand, true, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+    }
     t_skin.stop();
 
     /* run MLS on MP prediction to reduce bias */
@@ -5109,7 +5150,10 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
 
     /* post process fbo using camera input */
     t_pp.start();
-    handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+    if (frontView)
+        handlePostProcess(*extraLeftHandModel, rightHandModel, camTexture, shaderMap);
+    else
+        handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
     t_pp.stop();
 
     /* render final output to screen */
@@ -6105,6 +6149,13 @@ void openIMGUIFrame()
                 material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(exposure);
+                if (extraLeftHandModel == nullptr)
+                {
+                    extraLeftHandModel = new SkinnedModel(extraMeshFile,
+                                                          userTextureFile,
+                                                          proj_width, proj_height,
+                                                          cam_width, cam_height);
+                }
             }
             ImGui::TreePop();
         }
@@ -6950,11 +7001,16 @@ void openIMGUIFrame()
         }
         if (ImGui::TreeNode("Game Controls"))
         {
-            ImGui::Checkbox("Show Game Hint", &showGameHint);
-            ImGui::SameLine();
+            if (ImGui::Button("Reset Game"))
+            {
+                guessCharGame.reset();
+            }
             ImGui::Checkbox("Use Right Hand", &gameUseRightHand);
+            ImGui::SameLine();
+            ImGui::Checkbox("Show Game Hint", &showGameHint);
             ImGui::SliderFloat3("Debug Vector", &debug_vec.x, -1.0f, 1.0f);
             ImGui::SliderFloat("Debug Scalar", &debug_scalar, 0.0f, 5.0f);
+            ImGui::InputText("Debug Text", &debug_text);
             ImGui::SeparatorText("Game Quad");
             ImWidgets::RangeSelect2D("Game Quad", &game_min.x, &game_min.y, &game_max.x, &game_max.y, -1.0f, -1.0f, 1.0f, 1.0f, 0.5f);
             // ImGui::SliderFloat("Corner", &game_corner_loc, -1.0f, 1.0f);

@@ -601,6 +601,15 @@ glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, f
     finalMat[3] = _mat1[3] * (1 - _time) + _mat2[3] * _time; // lerp them for translation though
     return finalMat;
 }
+
+bool Helpers::isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform)
+{
+    glm::vec3 palm_normal = glm::vec3(palm_bone * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f));
+    glm::vec3 cam_normal = glm::vec3(cam_view_transform * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f));
+    float dot_product = glm::dot(palm_normal, cam_normal);
+    // std::cout << dot_product << std::endl;
+    return dot_product > 0;
+}
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
 // {
 //     std::vector<glm::vec3> vertices;
