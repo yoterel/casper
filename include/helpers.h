@@ -141,4 +141,10 @@ enum class MLSMode
     CONTROL_POINTS2 = 1,
     GRID = 2,
 };
+
+enum class GameSessionType
+{
+    A = 0,
+    B = 1,
+};
 #endif // HELPERS_H

@@ -194,6 +194,27 @@ def jnd_plot(dst_path):
     plt.savefig(str(dst_path / "jnd.png"))
 
 
+def guesschar_plot(dst_path):
+    baseline_score_f = [55.6936, 62.7488, 83.6083, 66.7138, 65.8102, 55.8145]
+    baseline_score_b = [91.0068, 60.4948, 63.1906, 63.9748, 63.2502, 42.1859]
+    baseline_acc = [0.6, 0.9, 0.95, 0.9, 1, 0.95, 0.8, 0.85, 0.9, 0.85, 0.9, 0.95]
+    baseline_q1 = [3, 5, 3, 4, 3, 4, 3, 3, 3, 3, 3, 3]
+    ours_score_f = [48.1361, 55.4559, 46.1222, 40.5935, 45.5417, 35.9801]
+    ours_score_b = [48.0332, 62.7061, 35.8121, 28.9236, 36.9414, 34.0126]
+    ours_acc = [0.9, 0.75, 0.95, 1, 0.75, 0.95, 0.85, 0.95, 0.85, 1, 0.75, 1]
+    ours_q1 = [4, 2, 3, 3, 1, 2, 1, 2, 2, 2, 2, 2]
+
+    baseline = np.array(baseline_score_f + baseline_score_b)
+    ours = np.array(ours_score_f + ours_score_b)
+    # report mean and stds
+    print("baseline: {} ± {}".format(baseline.mean(), baseline.std()))
+    print("baseline acc: {} ± {}".format(np.mean(baseline_acc), np.std(baseline_acc)))
+    print("baseline q1: {} ± {}".format(np.mean(baseline_q1), np.std(baseline_q1)))
+    print("ours: {} ± {}".format(ours.mean(), ours.std()))
+    print("ours acc: {} ± {}".format(np.mean(ours_acc), np.std(ours_acc)))
+    print("ours q1: {} ± {}".format(np.mean(ours_q1), np.std(ours_q1)))
+
+
 if __name__ == "__main__":
     # src_path = Path(
     #     "C:/Users/sens/Desktop/images/jnd_results/ours"
@@ -203,4 +224,5 @@ if __name__ == "__main__":
     # dst_path = Path("C:/Users/sens/Desktop/images/jnd_processed")
     # jnd_process_images(src_path, mask_path, dst_path)
 
-    jnd_plot(Path("C:/Users/sens/Desktop/images/jnd_processed"))
+    # jnd_plot(Path("C:/Users/sens/Desktop/images/jnd_processed"))
+    guesschar_plot(Path("C:/Users/sens/Desktop/images/"))

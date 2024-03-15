@@ -285,6 +285,8 @@ std::vector<std::string> animals{
     "a panda"};
 // game controls
 bool showGameHint = false;
+int gameSessionType = static_cast<int>(GameSessionType::A);
+int curSessionType = static_cast<int>(GameSessionType::A);
 glm::vec2 game_min(-1.0f, -1.0f);
 glm::vec2 game_max(1.0f, 1.0f);
 std::vector<glm::vec2> game_verts = {glm::vec2(game_min.x, game_max.y),
@@ -758,8 +760,6 @@ int main(int argc, char *argv[])
     }
     case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
     {
-        guessCharGame.reset();
-        postprocess_mode = static_cast<int>(PostProcessMode::NONE);
         extraLeftHandModel = new SkinnedModel(extraMeshFile,
                                               userTextureFile,
                                               proj_width, proj_height,
@@ -4953,6 +4953,8 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          glm::mat4 &cam_view_transform,
                          glm::mat4 &cam_projection_transform)
 {
+    if (!guessCharGame.isInitialized())
+        return;
     Shader *textShader = shaderMap["textShader"];
     Shader *gridShader = shaderMap["gridShader"];
     Shader *textureShader = shaderMap["textureShader"];
@@ -6140,9 +6142,8 @@ void openIMGUIFrame()
                 camera.set_exposure_time(exposure);
             }
             ImGui::SameLine();
-            if (ImGui::RadioButton("Guess Number Game", &operation_mode, static_cast<int>(OperationMode::GUESS_CHAR_GAME)))
+            if (ImGui::RadioButton("Guess Char Game", &operation_mode, static_cast<int>(OperationMode::GUESS_CHAR_GAME)))
             {
-                guessCharGame.reset();
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
@@ -7003,7 +7004,56 @@ void openIMGUIFrame()
         {
             if (ImGui::Button("Reset Game"))
             {
-                guessCharGame.reset();
+                int sessionNumber = guessCharGame.getTotalSessionCounter();
+                bool randomizeSession;
+                if (sessionNumber == 0)
+                {
+                    if (gameSessionType == static_cast<int>(GameSessionType::A))
+                        curSessionType = static_cast<int>(GameSessionType::A);
+                    else
+                        curSessionType = static_cast<int>(GameSessionType::B);
+                    randomizeSession = true;
+                }
+                else
+                {
+                    if (sessionNumber % 2 == 0)
+                    {
+                        if (curSessionType == static_cast<int>(GameSessionType::A))
+                            curSessionType = static_cast<int>(GameSessionType::B);
+                        else
+                            curSessionType = static_cast<int>(GameSessionType::A);
+                    }
+                    if (sessionNumber % 4 == 0)
+                        randomizeSession = true;
+                    else
+                        randomizeSession = false;
+                }
+                if (curSessionType == static_cast<int>(GameSessionType::A))
+                {
+                    postprocess_mode = static_cast<int>(PostProcessMode::NONE);
+                    use_mls = false;
+                    guessCharGame.reset(randomizeSession, "Baseline");
+                }
+                else
+                {
+                    postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+                    use_mls = true;
+                    guessCharGame.reset(randomizeSession, "Ours");
+                }
+            }
+            // ImGui::SameLine();
+            // if (ImGui::Button("Skip Session"))
+            // {
+            //     guessCharGame.setResponse(true);
+            // }
+            if (ImGui::RadioButton("Session Type A", &gameSessionType, static_cast<int>(GameSessionType::A)))
+            {
+                guessCharGame.hardReset();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Session Type B", &gameSessionType, static_cast<int>(GameSessionType::B)))
+            {
+                guessCharGame.hardReset();
             }
             ImGui::Checkbox("Use Right Hand", &gameUseRightHand);
             ImGui::SameLine();

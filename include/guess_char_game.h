@@ -17,24 +17,29 @@ public:
     // bool isCountingDown() { return countDownInProgress; };
     int getState();
     int getCountdownTime();
-    void setRandomChars();
+    void setNewChars();
     int getRandomChars(std::string &chars);
     void setResponse(bool playerCorrect);
     void setAllExtended(bool all_extended);
     glm::vec2 getRandomLocation();
     std::unordered_map<std::string, glm::vec2> getNumberLocations(bool frontView = false);
-    // std::vector<glm::mat4> getPose();
+    int getTotalSessionCounter() { return totalSessionCounter; };
     void setScore(float score);
     void printScore();
-    void reset();
+    void reset(bool randomSession, std::string comment = "");
+    void hardReset();
+    bool isInitialized() { return initialized; };
 
 private:
     void setState(int state) { curState = state; };
     int curState;
+    bool initialized;
     bool countDownInProgress;
     bool bonesVisible;
     bool allExtended;
     bool roundFinished;
+    bool curSessionRandom;
+    int totalSessionCounter;
     // int curPoseIndex;
     Timer countDownTimer;
     Timer delayTimer;
@@ -45,6 +50,8 @@ private:
     std::unordered_map<std::string, glm::vec2> curFingerLocationsUV;
     float breakTime;
     std::string curChars;
+    std::vector<std::string> selectedChars;
+    std::vector<int> selectedIndices;
     int curCorrectIndex;
     int gameMode;
     std::mt19937 rng;

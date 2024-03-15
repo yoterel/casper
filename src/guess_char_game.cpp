@@ -4,6 +4,8 @@
 GuessCharGame::GuessCharGame()
 {
     rng = std::default_random_engine{};
+    totalSessionCounter = 0;
+    initialized = false;
     // reset();
 }
 
@@ -50,7 +52,7 @@ int GuessCharGame::getState()
             {
                 countDownInProgress = false;
                 countDownTimer.stop();
-                setRandomChars();
+                setNewChars();
                 totalTime.start();
                 setState(static_cast<int>(GuessCharGameState::PLAY));
             }
@@ -122,16 +124,28 @@ int GuessCharGame::getCountdownTime()
     return static_cast<int>(countDownTimer.getElapsedTimeInSec());
 }
 
-void GuessCharGame::setRandomChars()
+void GuessCharGame::setNewChars()
 {
-    std::string allChars = "abcdefghijkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&?";
-    // shuffle the string
-    std::shuffle(allChars.begin(), allChars.end(), rng);
-    // get the first 4 characters
-    std::string randomChars = allChars.substr(0, 4);
-    curChars = randomChars;
-    // select a random index from 0 to 3
-    curCorrectIndex = std::uniform_int_distribution<int>(0, 3)(rng);
+    if (!curSessionRandom)
+    {
+        curChars = selectedChars[cur_scores.size()];
+        curCorrectIndex = selectedIndices[cur_scores.size()];
+    }
+    else
+    {
+        std::string allChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345678!@#$%^&?";
+        // shuffle the string
+        std::shuffle(allChars.begin(), allChars.end(), rng);
+        // get the first 4 characters
+        std::string randomChars = allChars.substr(0, 4);
+        curChars = randomChars;
+
+        selectedChars.push_back(curChars);
+        // select a random index from 0 to 3
+        curCorrectIndex = std::uniform_int_distribution<int>(0, 3)(rng);
+        selectedIndices.push_back(curCorrectIndex);
+    }
+    // std::cout << "New characters: " << curChars << std::endl;
 }
 
 int GuessCharGame::getRandomChars(std::string &chars)
@@ -151,16 +165,16 @@ void GuessCharGame::setResponse(bool playerCorrect)
     {
         if (!roundFinished)
         {
-            std::cout << cur_scores.size() << "/"
-                      << "20";
+            // std::cout << cur_scores.size() << "/"
+            //           << "20";
             if (playerCorrect)
             {
-                std::cout << ", CORRECT" << std::endl;
+                // std::cout << ", CORRECT" << std::endl;
                 setScore(1.0f);
             }
             else
             {
-                std::cout << ", MISTAKE" << std::endl;
+                // std::cout << ", MISTAKE" << std::endl;
                 setScore(0.0f);
             }
             // auto tTime = totalTime.getElapsedTimeInSec();
@@ -175,7 +189,7 @@ void GuessCharGame::setResponse(bool playerCorrect)
             }
             else
             {
-                setRandomChars();
+                setNewChars();
                 setState(static_cast<int>(GuessCharGameState::WAIT));
             }
             roundFinished = true;
@@ -225,13 +239,25 @@ std::unordered_map<std::string, glm::vec2> GuessCharGame::getNumberLocations(boo
     return curFingerLocationsUV;
 }
 
-void GuessCharGame::reset()
+void GuessCharGame::reset(bool randomSession, std::string comment)
 {
+    initialized = true;
+    totalSessionCounter++;
+    std::cout << std::endl
+              << "Resetting game..." << std::endl;
+    std::cout << "Session Number: " << totalSessionCounter << std::endl;
+    std::cout << "Type: " << comment << ", RandomChars: " << randomSession << std::endl;
     curState = 0;
     countDownInProgress = false;
     bonesVisible = false;
     cur_scores.clear();
     curChars = "";
+    curSessionRandom = randomSession;
+    if (curSessionRandom)
+    {
+        selectedIndices.clear();
+        selectedChars.clear();
+    }
     allExtended = false;
     roundFinished = false;
     curCorrectIndex = 0;
@@ -255,6 +281,12 @@ void GuessCharGame::reset()
     fingerLocationsUV["ring"] = ring_ndc;
     fingerLocationsUV["pinky"] = pinky_ndc;
     curFingerLocationsUV = fingerLocationsUV;
+}
+
+void GuessCharGame::hardReset()
+{
+    initialized = false;
+    totalSessionCounter = 0;
 }
 
 void GuessCharGame::printScore()

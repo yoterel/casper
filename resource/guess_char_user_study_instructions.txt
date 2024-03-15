@@ -1,0 +1,38 @@
+Get subjects full name, age, and gender, if they watched pm before, if they wear glasses
+
+Instructions:
+purpose:
+You are going to participate in a study that comapares two methods of dynamically projecting onto hands. 
+
+gameplay:
+each session consists of 20 rounds of the guessing game.
+In this game, you need to bend one of four fingers according to the character in the middle of the hand
+
+sessions:
+We will run with as many sessions as we can, where the first ~20% will be training.
+each sessions takes about 1 minute.
+for each method, you will do a session for back and front hand.
+a session ends when a smiley appears.
+
+questions:
+between sessions:
+"How difficult was it to spot the correct character?" 1-5
+"how tired is your hand?" 1-5
+
+final questions:
+lastly i will ask you:
+"which method do you find more visually appealing?" 1st / 2nd
+"which hand position was more comfortable?" front / back
+
+
+score:
+You will be scored by accuracy and time it took to bend finger.
+
+tips:
+try finding a good location for the hand and keeping it there.
+the leap losses track sometimes. bring your arm upwards to continue playing.
+bend the fingers "strongly" to choose a response.
+it is better to be sure about the character (accuracy > time)
+if you can't see a character, you can wait a bit, or deduce from the other fingers...
+use only left hand
+don't block the hand with your head.
