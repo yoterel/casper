@@ -6,6 +6,8 @@ from scipy.interpolate import LinearNDInterpolator
 from scipy import ndimage
 import cv2
 from PIL import Image, ImageDraw
+import csv
+import matplotlib.pyplot as plt
 
 
 def paint_skin():
@@ -145,18 +147,16 @@ def jnd_plot(dst_path):
         ]
     )
     print(f"Session times: {session_times.mean():.2f} ± {session_times.std():.2f}")
-    import matplotlib.pyplot as plt
-
     # set bar plots
     n_subjects = len(baseline)
     ind = np.arange(n_subjects)
     width = 0.3
     plt.bar(ind, baseline, width, label="baseline", color="blue", alpha=0.8)
-    plt.bar(ind + width, ours, width, label="ours", color="green", alpha=0.8)
+    plt.bar(ind + width, ours, width, label="ours", color="orange", alpha=0.8)
     plt.xticks(ind + width / 2, tuple(str(i) for i in range(1, n_subjects + 1)))
     # set means as horizontal lines
     plt.axhline(baseline.mean(), color="blue", linewidth=2, linestyle="--")
-    plt.axhline(ours.mean(), color="green", linewidth=2, linestyle="--")
+    plt.axhline(ours.mean(), color="orange", linewidth=2, linestyle="--")
     # Add arrows annotating the means:
     for dat, xoff in zip([baseline, ours], [15, 15]):
         mean_value = dat.mean()
@@ -192,37 +192,181 @@ def jnd_plot(dst_path):
     plt.ylabel("JND [ms]")
     plt.tight_layout()
     plt.savefig(str(dst_path / "jnd.png"))
+    plt.cla()
+    plt.clf()
 
 
-def guesschar_plot(dst_path):
-    baseline_score_f = [55.6936, 62.7488, 83.6083, 66.7138, 65.8102, 55.8145]
-    baseline_score_b = [91.0068, 60.4948, 63.1906, 63.9748, 63.2502, 42.1859]
-    baseline_acc = [0.6, 0.9, 0.95, 0.9, 1, 0.95, 0.8, 0.85, 0.9, 0.85, 0.9, 0.95]
-    baseline_q1 = [3, 5, 3, 4, 3, 4, 3, 3, 3, 3, 3, 3]
-    ours_score_f = [48.1361, 55.4559, 46.1222, 40.5935, 45.5417, 35.9801]
-    ours_score_b = [48.0332, 62.7061, 35.8121, 28.9236, 36.9414, 34.0126]
-    ours_acc = [0.9, 0.75, 0.95, 1, 0.75, 0.95, 0.85, 0.95, 0.85, 1, 0.75, 1]
-    ours_q1 = [4, 2, 3, 3, 1, 2, 1, 2, 2, 2, 2, 2]
+def guesschar_plot(src_path, dst_path):
+    sids = []
+    methods = []
+    palms = []
+    scores = []
+    accuracies = []
+    q1s = []
+    with open(src_path, mode="r") as f:
+        csvFile = csv.reader(f)
+        for i, line in enumerate(csvFile):
+            if i == 0:
+                continue
+            sid, _, method, palm, score, accuracy, q1 = line
+            if score != "":
+                sids.append(sid)
+                methods.append(method)
+                palms.append(palm)
+                scores.append(float(score))
+                accuracies.append(float(accuracy))
+                q1s.append(int(q1))
 
-    baseline = np.array(baseline_score_f + baseline_score_b)
-    ours = np.array(ours_score_f + ours_score_b)
+    baseline_mask = np.array(methods) == "wo"
+    front_mask = np.array(palms) == "f"
+    baseline_scores = np.array(scores)[baseline_mask]
+    baseline_acc = np.array(accuracies)[baseline_mask]
+    baseline_q1 = np.array(q1s)[baseline_mask]
+    ours_scores = np.array(scores)[~baseline_mask]
+    ours_acc = np.array(accuracies)[~baseline_mask]
+    ours_q1 = np.array(q1s)[~baseline_mask]
+
+    # baseline_score_f = [55.6936, 62.7488, 83.6083, 66.7138, 65.8102, 55.8145]
+    # baseline_score_b = [91.0068, 60.4948, 63.1906, 63.9748, 63.2502, 42.1859]
+    # baseline_acc = [0.6, 0.9, 0.95, 0.9, 1, 0.95, 0.8, 0.85, 0.9, 0.85, 0.9, 0.95]
+    # baseline_q1 = [3, 5, 3, 4, 3, 4, 3, 3, 3, 3, 3, 3]
+    # ours_score_f = [48.1361, 55.4559, 46.1222, 40.5935, 45.5417, 35.9801]
+    # ours_score_b = [48.0332, 62.7061, 35.8121, 28.9236, 36.9414, 34.0126]
+    # ours_acc = [0.9, 0.75, 0.95, 1, 0.75, 0.95, 0.85, 0.95, 0.85, 1, 0.75, 1]
+    # ours_q1 = [4, 2, 3, 3, 1, 2, 1, 2, 2, 2, 2, 2]
+
+    # baseline = np.array(baseline_score_f + baseline_score_b)
+    # ours = np.array(ours_score_f + ours_score_b)
     # report mean and stds
-    print("baseline: {} ± {}".format(baseline.mean(), baseline.std()))
+    print("baseline: {} ± {}".format(baseline_scores.mean(), baseline_scores.std()))
     print("baseline acc: {} ± {}".format(np.mean(baseline_acc), np.std(baseline_acc)))
     print("baseline q1: {} ± {}".format(np.mean(baseline_q1), np.std(baseline_q1)))
-    print("ours: {} ± {}".format(ours.mean(), ours.std()))
+    print("ours: {} ± {}".format(ours_scores.mean(), ours_scores.std()))
     print("ours acc: {} ± {}".format(np.mean(ours_acc), np.std(ours_acc)))
     print("ours q1: {} ± {}".format(np.mean(ours_q1), np.std(ours_q1)))
+
+    plt.hist(baseline_scores, bins=20, alpha=0.5, label="Naive", color="blue")
+    plt.hist(ours_scores, bins=20, alpha=0.5, label="Ours", color="orange")
+    plt.legend()
+    plt.xlabel("Time [s]")
+    plt.ylabel("Sessions")
+    plt.tight_layout()
+    plt.savefig(str(dst_path / "guess_char_scores.png"))
+    plt.cla()
+    plt.clf()
+
+    plt.hist(baseline_acc, bins=20, alpha=0.5, label="Naive", color="blue")
+    plt.hist(ours_acc, bins=20, alpha=0.5, label="Ours", color="orange")
+    plt.legend()
+    plt.xlabel("Accuracy")
+    plt.ylabel("Sessions")
+    plt.tight_layout()
+    plt.savefig(str(dst_path / "guess_char_acuracies.png"))
+    plt.cla()
+    plt.clf()
+
+    # category_names = ["1", "2", "3", "4", "5"]
+    # results = {
+    #     "Naive": [
+    #         np.count_nonzero(baseline_q1 == 1),
+    #         np.count_nonzero(baseline_q1 == 2),
+    #         np.count_nonzero(baseline_q1 == 3),
+    #         np.count_nonzero(baseline_q1 == 4),
+    #         np.count_nonzero(baseline_q1 == 5),
+    #     ],
+    #     "Ours": [
+    #         np.count_nonzero(ours_q1 == 1),
+    #         np.count_nonzero(ours_q1 == 2),
+    #         np.count_nonzero(ours_q1 == 3),
+    #         np.count_nonzero(ours_q1 == 4),
+    #         np.count_nonzero(ours_q1 == 5),
+    #     ],
+    # }
+    # labels = list(results.keys())
+    # data = np.array(list(results.values()))
+    # data_cum = data.cumsum(axis=1)
+    # category_colors = plt.colormaps["RdYlGn"](np.linspace(0.15, 0.85, data.shape[1]))
+
+    # fig, ax = plt.subplots(figsize=(3, 9.2))
+    # ax.invert_yaxis()
+    # ax.xaxis.set_visible(False)
+    # ax.set_xlim(0, np.sum(data, axis=1).max())
+
+    # for i, (colname, color) in enumerate(zip(category_names, category_colors)):
+    #     widths = data[:, i]
+    #     starts = data_cum[:, i] - widths
+    #     rects = ax.bar(
+    #         labels, widths, left=starts, height=0.9, label=colname, color=color
+    #     )
+
+    #     r, g, b, _ = color
+    #     text_color = "white" if r * g * b < 0.5 else "darkgrey"
+    #     barlabels = [str(x) for x in widths]
+    #     for i in range(len(barlabels)):
+    #         if barlabels[i] == "0":
+    #             barlabels[i] = ""
+    #     ax.bar_label(rects, labels=barlabels, label_type="center", color=text_color)
+    # ax.legend(
+    #     ncols=len(category_names),
+    #     # bbox_to_anchor=(0, 1),
+    #     loc="lower left",
+    #     fontsize="small",
+    # )
+
+    categories = (
+        "Naive",
+        "Ours",
+    )
+    weight_counts = {
+        "1": np.array(
+            [np.count_nonzero(baseline_q1 == 1), np.count_nonzero(ours_q1 == 1)]
+        ),
+        "2": np.array(
+            [np.count_nonzero(baseline_q1 == 2), np.count_nonzero(ours_q1 == 2)]
+        ),
+        "3": np.array(
+            [np.count_nonzero(baseline_q1 == 3), np.count_nonzero(ours_q1 == 3)]
+        ),
+        "4": np.array(
+            [np.count_nonzero(baseline_q1 == 4), np.count_nonzero(ours_q1 == 4)]
+        ),
+        "5": np.array(
+            [np.count_nonzero(baseline_q1 == 5), np.count_nonzero(ours_q1 == 5)]
+        ),
+    }
+    width = 0.5
+    fig, ax = plt.subplots(figsize=(3, 5))
+    bottom = np.zeros(2)
+
+    for boolean, weight_count in weight_counts.items():
+        p = ax.bar(categories, weight_count, width, label=boolean, bottom=bottom)
+        bottom += weight_count
+        barlabels = [str(x) for x in weight_count]
+        for i in range(len(barlabels)):
+            if barlabels[i] == "0":
+                barlabels[i] = ""
+        ax.bar_label(p, labels=barlabels, label_type="center", color="white")
+
+    ax.set_ylabel("Sessions")
+    ax.set_title("How hard was it to perform the task?\n (1 - easy, 5 - hard)")
+    ax.legend(loc="upper right")
+    # remove y ticks
+    ax.yaxis.set_visible(False)
+    # plt.tight_layout()
+    plt.savefig(str(dst_path / "guess_char_q1.png"))
 
 
 if __name__ == "__main__":
     # src_path = Path(
-    #     "C:/Users/sens/Desktop/images/jnd_results/ours"
-    #     # "C:/Users/sens/Desktop/images/jnd_results/baseline"
+    #     "C:/Users/sens/Desktop/ahand/images/jnd_results/ours"
+    #     # "C:/Users/sens/Desktop/ahand/images/jnd_results/baseline"
     # )
     # mask_path = Path("C:/src/augmented_hands/resource/images/mask.png")
-    # dst_path = Path("C:/Users/sens/Desktop/images/jnd_processed")
+    # dst_path = Path("C:/Users/sens/Desktop/ahand/images/jnd_processed")
     # jnd_process_images(src_path, mask_path, dst_path)
 
-    # jnd_plot(Path("C:/Users/sens/Desktop/images/jnd_processed"))
-    guesschar_plot(Path("C:/Users/sens/Desktop/images/"))
+    # jnd_plot(Path("C:/Users/sens/Desktop/ahand/images/jnd_processed"))
+    guesschar_plot(
+        Path("C:/Users/sens/Desktop/ahand/guess_char_results.csv"),
+        Path("C:/Users/sens/Desktop/ahand/images/"),
+    )
