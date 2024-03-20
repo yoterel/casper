@@ -3496,7 +3496,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         {
             gridColorShader->use();
             gridColorShader->setBool("flipVer", false);
-            deformationGrid.renderGridPoints();
+            deformationGrid.renderGridLines();
         }
     }
     if (show_landmarks)

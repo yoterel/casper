@@ -222,9 +222,13 @@ def guesschar_plot(src_path, dst_path):
     baseline_scores = np.array(scores)[baseline_mask]
     baseline_acc = np.array(accuracies)[baseline_mask]
     baseline_q1 = np.array(q1s)[baseline_mask]
+    baseline_scores_front = np.array(scores)[baseline_mask & front_mask]
+    baseline_scores_back = np.array(scores)[baseline_mask & ~front_mask]
     ours_scores = np.array(scores)[~baseline_mask]
     ours_acc = np.array(accuracies)[~baseline_mask]
     ours_q1 = np.array(q1s)[~baseline_mask]
+    ours_scores_front = np.array(scores)[~baseline_mask & front_mask]
+    ours_scores_back = np.array(scores)[~baseline_mask & ~front_mask]
 
     # baseline_score_f = [55.6936, 62.7488, 83.6083, 66.7138, 65.8102, 55.8145]
     # baseline_score_b = [91.0068, 60.4948, 63.1906, 63.9748, 63.2502, 42.1859]
@@ -244,9 +248,54 @@ def guesschar_plot(src_path, dst_path):
     print("ours: {} ± {}".format(ours_scores.mean(), ours_scores.std()))
     print("ours acc: {} ± {}".format(np.mean(ours_acc), np.std(ours_acc)))
     print("ours q1: {} ± {}".format(np.mean(ours_q1), np.std(ours_q1)))
-
-    plt.hist(baseline_scores, bins=20, alpha=0.5, label="Naive", color="blue")
-    plt.hist(ours_scores, bins=20, alpha=0.5, label="Ours", color="orange")
+    bins = np.histogram(np.hstack((baseline_scores, ours_scores)), bins=40)[
+        1
+    ]  # get the bin edges
+    plt.hist(
+        baseline_scores,
+        bins=bins,
+        alpha=0.5,
+        label="Naive",
+        color="blue",
+    )
+    plt.hist(
+        ours_scores,
+        bins=bins,
+        alpha=0.5,
+        label="Ours",
+        color="orange",
+    )
+    # bins = np.histogram(np.hstack((baseline_scores_front, baseline_scores_back, ours_scores_front, ours_scores_back)), bins=40)[
+    #     1
+    # ]
+    # plt.hist(
+    #     baseline_scores_front,
+    #     bins=bins,
+    #     alpha=0.5,
+    #     label="Naive, front",
+    #     color="blue",
+    # )
+    # plt.hist(
+    #     baseline_scores_back,
+    #     bins=bins,
+    #     alpha=0.5,
+    #     label="Naive, back",
+    #     color="teal",
+    # )
+    # plt.hist(
+    #     ours_scores_front,
+    #     bins=bins,
+    #     alpha=0.5,
+    #     label="Ours, front",
+    #     color="orange",
+    # )
+    # plt.hist(
+    #     ours_scores_back,
+    #     bins=bins,
+    #     alpha=0.5,
+    #     label="Ours, back",
+    #     color="red",
+    # )
     plt.legend()
     plt.xlabel("Time [s]")
     plt.ylabel("Sessions")
