@@ -21,16 +21,17 @@ namespace nb = nanobind;
 class DynaFlashProjector
 {
 public:
-    DynaFlashProjector(bool flip_ver = false, bool flip_hor = false) : white_image(DYNA_FRAME_WIDTH, DYNA_FRAME_HEIGHT, CV_8UC3, cv::Scalar(255, 255, 255)),
-                                                                       m_flip_ver(flip_ver),
-                                                                       m_flip_hor(flip_hor){};
+    DynaFlashProjector(bool flip_ver = false, bool flip_hor = false, bool verbose = false) : white_image(DYNA_FRAME_WIDTH, DYNA_FRAME_HEIGHT, CV_8UC3, cv::Scalar(255, 255, 255)),
+                                                                                             m_flip_ver(flip_ver),
+                                                                                             m_flip_hor(flip_hor),
+                                                                                             m_verbose(verbose){};
     ~DynaFlashProjector()
     {
         gracefully_close();
     };
     bool init();
     void show(const cv::Mat frame);
-    void show_buffer(const uint8_t *buffer, const bool verbose = false);
+    void show_buffer(const uint8_t *buffer);
     void show();
     void kill() { gracefully_close(); };
     bool is_initialized() { return initialized; };
@@ -62,6 +63,7 @@ private:
     bool initialized = false;
     bool m_flip_ver = false;
     bool m_flip_hor = false;
+    bool m_verbose = false;
     int board_index = 0;
     float frame_rate = 946.0f; // max: 946.0f
     int bit_depth = 8;
@@ -84,7 +86,10 @@ private:
 NB_MODULE(dynaflash, m)
 {
     nb::class_<DynaFlashProjector>(m, "projector")
-        .def(nb::init<bool, bool>(), nb::arg("flip_ver") = false, nb::arg("flip_hor") = false, "a class to control a dynaflash projector")
+        .def(nb::init<bool, bool, bool>(), nb::arg("flip_ver") = false,
+             nb::arg("flip_hor") = false,
+             nb::arg("verbose") = false,
+             "a class to control a dynaflash projector")
         .def("init", &DynaFlashProjector::init, "initializes the projector")
         .def("is_initialized", &DynaFlashProjector::is_initialized, "returns true if the projector is initialized")
         .def("kill", &DynaFlashProjector::kill, "frees the internal projector resources")

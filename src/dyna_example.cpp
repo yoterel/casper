@@ -253,11 +253,13 @@ int _tmain(int argc, _TCHAR *argv[])
 		// auto start = std::chrono::system_clock::now();
 		/* ステータスの取得 */
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		int diff = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
-		std::cout << "diff: " << diff << std::endl;
-		if (diff > 100)
+		int dropped = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
+		if ((dropped % 1000 == 0) && (dropped > 0))
 		{
-			continue;
+			// should happen eventually since this program is much faster than the projector throughput
+			std::cout << "frames transffered: " << stDynaFlashStatus.InputFrames << std::endl;
+			std::cout << "frames projected: " << stDynaFlashStatus.OutputFrames << std::endl;
+			std::cout << "dropped: " << dropped << std::endl;
 		}
 
 		/* 投影データ更新可能な投影用フレームバッファ取得 */

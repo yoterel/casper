@@ -5,7 +5,8 @@ bool DynaFlashProjector::init()
 	// apparently this is needed or else the projector will not work. perhaps dynaflash can't tolerate page faults?
 	if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE))
 	{
-		std::cout << "SetProcessWorkingSetSize Failed!\n";
+		if (m_verbose)
+			std::cout << "SetProcessWorkingSetSize Failed!" << std::endl;
 		return false;
 	}
 	/* create a DynaFlash instance */
@@ -75,7 +76,8 @@ bool DynaFlashProjector::init()
 
 	if (pDynaFlash->Start() != STATUS_SUCCESSFUL)
 	{
-		printf("Start Error\n");
+		if (m_verbose)
+			std::cout << "Start Error" << std::endl;
 		gracefully_close();
 		return false;
 	}
@@ -91,16 +93,19 @@ void DynaFlashProjector::print_led_values()
 	pDynaFlash->ReadDACRegister(0x02, &nDaValue[2]);
 	pDynaFlash->ReadDACRegister(0x03, &nDaValue[3]);
 	double current = ((nDaValue[0]) * (5.0 / 1024.0)) / 0.75;
-	std::cout << "green LED current: " << current << std::endl;
+	if (m_verbose)
+		std::cout << "green LED current: " << current << std::endl;
 	pDynaFlash->ReadDACRegister(0x04, &nDaValue[0]);
 	pDynaFlash->ReadDACRegister(0x05, &nDaValue[1]);
 	pDynaFlash->ReadDACRegister(0x06, &nDaValue[2]);
 	pDynaFlash->ReadDACRegister(0x07, &nDaValue[3]);
 	current = ((nDaValue[0]) * (5.0 / 1024.0)) / 0.75;
-	std::cout << "red LED current: " << current << std::endl;
+	if (m_verbose)
+		std::cout << "red LED current: " << current << std::endl;
 	pDynaFlash->ReadDACRegister(0x08, &nDaValue[0]);
 	current = ((nDaValue[0]) * (5.0 / 1024.0)) / 0.067;
-	std::cout << "blue LED current: " << current << std::endl;
+	if (m_verbose)
+		std::cout << "blue LED current: " << current << std::endl;
 }
 
 void DynaFlashProjector::set_led_values()
@@ -147,7 +152,8 @@ void DynaFlashProjector::gracefully_close()
 
 		/* release instance of DynaFlash class */
 		ReleaseDynaFlash(&pDynaFlash);
-		std::cout << "dynaflash killed." << std::endl;
+		if (m_verbose)
+			std::cout << "dynaflash killed." << std::endl;
 	}
 }
 
@@ -158,15 +164,19 @@ void DynaFlashProjector::print_version()
 
 	/* get a driver version */
 	pDynaFlash->GetDriverVersion(DriverVersion);
-	printf("DynaFlash driver Ver : %s\r\n", DriverVersion);
 
 	/* get a HW version */
 	pDynaFlash->GetHWVersion(&nVersion);
-	printf("DynaFlash HW Ver     : %08x\r\n", nVersion);
 
 	/* get a DLL version */
 	pDynaFlash->GetDLLVersion(&nVersion);
-	printf("DynaFlash DLL Ver    : %08x\r\n", nVersion);
+
+	if (m_verbose)
+	{
+		printf("DynaFlash driver Ver : %s\r\n", DriverVersion);
+		printf("DynaFlash HW Ver     : %08x\r\n", nVersion);
+		printf("DynaFlash DLL Ver    : %08x\r\n", nVersion);
+	}
 }
 
 void DynaFlashProjector::show(const cv::Mat frame)
@@ -180,14 +190,16 @@ void DynaFlashProjector::show(const cv::Mat frame)
 		// }
 		// memcpy((void *)pFrameData, (void *)frame.data, frame_size);
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
+		int dropped = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
+		if (dropped > 100)
 		{
-			std::cout << "input - output > 100!" << std::endl;
-			return;
+			if (m_verbose)
+				std::cout << "warning, frame drop is occuring (dropped: " << dropped << " so far)" << std::endl;
 		}
 		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
-			std::cout << "GetFrameBuffer Error\n";
+			if (m_verbose)
+				std::cout << "GetFrameBuffer Error\n";
 			gracefully_close();
 		}
 		if ((pBuf != NULL) && (nGetFrameCnt != 0))
@@ -196,7 +208,8 @@ void DynaFlashProjector::show(const cv::Mat frame)
 			memcpy(pBuf, frame.data, frame_size);
 			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
 			{
-				std::cout << "PostFrameBuffer Error\n";
+				if (m_verbose)
+					std::cout << "PostFrameBuffer Error\n";
 				gracefully_close();
 			}
 		}
@@ -204,20 +217,20 @@ void DynaFlashProjector::show(const cv::Mat frame)
 	}
 }
 
-void DynaFlashProjector::show_buffer(const uint8_t *buffer, const bool verbose)
+void DynaFlashProjector::show_buffer(const uint8_t *buffer)
 {
 	if (initialized)
 	{
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
+		int dropped = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
+		if (dropped > 100)
 		{
-			if (verbose)
-				std::cout << "dropping frame, as (input buffer - output buffer) > 100" << std::endl;
-			return;
+			if (m_verbose)
+				std::cout << "warning, frame drop is occuring (dropped: " << dropped << " so far)" << std::endl;
 		}
 		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
-			if (verbose)
+			if (m_verbose)
 				std::cout << "GetFrameBuffer Error\n";
 			gracefully_close();
 		}
@@ -227,7 +240,7 @@ void DynaFlashProjector::show_buffer(const uint8_t *buffer, const bool verbose)
 			memcpy(pBuf, buffer, frame_size);
 			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
 			{
-				if (verbose)
+				if (m_verbose)
 					std::cout << "PostFrameBuffer Error\n";
 				gracefully_close();
 			}
@@ -241,13 +254,16 @@ void DynaFlashProjector::show()
 	if (initialized)
 	{
 		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		if ((stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames) > 100)
+		int dropped = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
+		if (dropped > 100)
 		{
-			return;
+			if (m_verbose)
+				std::cout << "warning, frame drop is occuring (dropped: " << dropped << " so far)" << std::endl;
 		}
 		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
-			std::cout << "GetFrameBuffer Error\n";
+			if (m_verbose)
+				std::cout << "GetFrameBuffer Error\n";
 			gracefully_close();
 		}
 		if ((pBuf != NULL) && (nGetFrameCnt != 0))
@@ -255,7 +271,8 @@ void DynaFlashProjector::show()
 			memcpy(pBuf, white_image.data, frame_size);
 			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
 			{
-				std::cout << "PostFrameBuffer Error\n";
+				if (m_verbose)
+					std::cout << "PostFrameBuffer Error\n";
 				gracefully_close();
 			}
 		}
