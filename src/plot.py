@@ -224,23 +224,16 @@ def guesschar_plot(src_path, dst_path):
     baseline_q1 = np.array(q1s)[baseline_mask]
     baseline_scores_front = np.array(scores)[baseline_mask & front_mask]
     baseline_scores_back = np.array(scores)[baseline_mask & ~front_mask]
+    baseline_acc_front = np.array(accuracies)[baseline_mask & front_mask]
+    baseline_acc_back = np.array(accuracies)[baseline_mask & ~front_mask]
     ours_scores = np.array(scores)[~baseline_mask]
     ours_acc = np.array(accuracies)[~baseline_mask]
     ours_q1 = np.array(q1s)[~baseline_mask]
     ours_scores_front = np.array(scores)[~baseline_mask & front_mask]
     ours_scores_back = np.array(scores)[~baseline_mask & ~front_mask]
+    ours_acc_front = np.array(accuracies)[~baseline_mask & front_mask]
+    ours_acc_back = np.array(accuracies)[~baseline_mask & ~front_mask]
 
-    # baseline_score_f = [55.6936, 62.7488, 83.6083, 66.7138, 65.8102, 55.8145]
-    # baseline_score_b = [91.0068, 60.4948, 63.1906, 63.9748, 63.2502, 42.1859]
-    # baseline_acc = [0.6, 0.9, 0.95, 0.9, 1, 0.95, 0.8, 0.85, 0.9, 0.85, 0.9, 0.95]
-    # baseline_q1 = [3, 5, 3, 4, 3, 4, 3, 3, 3, 3, 3, 3]
-    # ours_score_f = [48.1361, 55.4559, 46.1222, 40.5935, 45.5417, 35.9801]
-    # ours_score_b = [48.0332, 62.7061, 35.8121, 28.9236, 36.9414, 34.0126]
-    # ours_acc = [0.9, 0.75, 0.95, 1, 0.75, 0.95, 0.85, 0.95, 0.85, 1, 0.75, 1]
-    # ours_q1 = [4, 2, 3, 3, 1, 2, 1, 2, 2, 2, 2, 2]
-
-    # baseline = np.array(baseline_score_f + baseline_score_b)
-    # ours = np.array(ours_score_f + ours_score_b)
     # report mean and stds
     print("baseline: {} ± {}".format(baseline_scores.mean(), baseline_scores.std()))
     print("baseline acc: {} ± {}".format(np.mean(baseline_acc), np.std(baseline_acc)))
@@ -248,122 +241,54 @@ def guesschar_plot(src_path, dst_path):
     print("ours: {} ± {}".format(ours_scores.mean(), ours_scores.std()))
     print("ours acc: {} ± {}".format(np.mean(ours_acc), np.std(ours_acc)))
     print("ours q1: {} ± {}".format(np.mean(ours_q1), np.std(ours_q1)))
-    bins = np.histogram(np.hstack((baseline_scores, ours_scores)), bins=40)[
-        1
-    ]  # get the bin edges
-    plt.hist(
-        baseline_scores,
-        bins=bins,
-        alpha=0.5,
-        label="Naive",
-        color="blue",
+
+    quad_ratio_scores_front = baseline_scores_front / (
+        baseline_scores_front + ours_scores_front
     )
-    plt.hist(
-        ours_scores,
-        bins=bins,
-        alpha=0.5,
-        label="Ours",
-        color="orange",
+    quad_ratio_scores_back = baseline_scores_back / (
+        baseline_scores_back + ours_scores_back
     )
-    # bins = np.histogram(np.hstack((baseline_scores_front, baseline_scores_back, ours_scores_front, ours_scores_back)), bins=40)[
-    #     1
-    # ]
-    # plt.hist(
-    #     baseline_scores_front,
-    #     bins=bins,
-    #     alpha=0.5,
-    #     label="Naive, front",
-    #     color="blue",
-    # )
-    # plt.hist(
-    #     baseline_scores_back,
-    #     bins=bins,
-    #     alpha=0.5,
-    #     label="Naive, back",
-    #     color="teal",
-    # )
-    # plt.hist(
-    #     ours_scores_front,
-    #     bins=bins,
-    #     alpha=0.5,
-    #     label="Ours, front",
-    #     color="orange",
-    # )
-    # plt.hist(
-    #     ours_scores_back,
-    #     bins=bins,
-    #     alpha=0.5,
-    #     label="Ours, back",
-    #     color="red",
-    # )
+    sorted_quad_ratio_scores = np.sort(
+        np.concatenate((quad_ratio_scores_front, quad_ratio_scores_back))
+    )
+    quad_ratio_acc_front = baseline_acc_front / (baseline_acc_front + ours_acc_front)
+    quad_ratio_acc_back = baseline_acc_back / (baseline_acc_back + ours_acc_back)
+    sorted_quad_ratio_acc = np.sort(
+        np.concatenate((quad_ratio_acc_front, quad_ratio_acc_back))
+    )
+    # fig, axs = plt.subplots(3, 1, figsize=(7, 15))
+    plt.stairs(
+        sorted_quad_ratio_scores,
+        np.linspace(0, 1, len(sorted_quad_ratio_scores) + 1),
+        orientation="horizontal",
+        hatch="//",
+        label=r"$\frac{Baseline}{Baseline + Ours}$",
+    )
+    plt.stairs(
+        np.linspace(1, 1, len(sorted_quad_ratio_scores)),
+        np.linspace(0, 1, len(sorted_quad_ratio_scores) + 1),
+        baseline=sorted_quad_ratio_scores,
+        orientation="horizontal",
+        hatch="//",
+        label=r"$\frac{Ours}{Baseline + Ours}$",
+    )
     plt.legend()
-    plt.xlabel("Time [s]")
-    plt.ylabel("Sessions")
+    plt.xlabel("Normalized Total Game Time")
+    plt.ylabel("Games")
     plt.tight_layout()
+    plt.tick_params(
+        left=False, right=False, labelleft=False, labelbottom=True, bottom=True
+    )
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.vlines(x=0.5, ymin=0, ymax=1, color="r")
+    plt.text(0.47, 0.7, "Equal Time", rotation=90, verticalalignment="center")
     plt.savefig(str(dst_path / "guess_char_scores.png"))
     plt.cla()
     plt.clf()
 
-    plt.hist(baseline_acc, bins=20, alpha=0.5, label="Naive", color="blue")
-    plt.hist(ours_acc, bins=20, alpha=0.5, label="Ours", color="orange")
-    plt.legend()
-    plt.xlabel("Accuracy")
-    plt.ylabel("Sessions")
-    plt.tight_layout()
-    plt.savefig(str(dst_path / "guess_char_acuracies.png"))
-    plt.cla()
-    plt.clf()
-
-    # category_names = ["1", "2", "3", "4", "5"]
-    # results = {
-    #     "Naive": [
-    #         np.count_nonzero(baseline_q1 == 1),
-    #         np.count_nonzero(baseline_q1 == 2),
-    #         np.count_nonzero(baseline_q1 == 3),
-    #         np.count_nonzero(baseline_q1 == 4),
-    #         np.count_nonzero(baseline_q1 == 5),
-    #     ],
-    #     "Ours": [
-    #         np.count_nonzero(ours_q1 == 1),
-    #         np.count_nonzero(ours_q1 == 2),
-    #         np.count_nonzero(ours_q1 == 3),
-    #         np.count_nonzero(ours_q1 == 4),
-    #         np.count_nonzero(ours_q1 == 5),
-    #     ],
-    # }
-    # labels = list(results.keys())
-    # data = np.array(list(results.values()))
-    # data_cum = data.cumsum(axis=1)
-    # category_colors = plt.colormaps["RdYlGn"](np.linspace(0.15, 0.85, data.shape[1]))
-
-    # fig, ax = plt.subplots(figsize=(3, 9.2))
-    # ax.invert_yaxis()
-    # ax.xaxis.set_visible(False)
-    # ax.set_xlim(0, np.sum(data, axis=1).max())
-
-    # for i, (colname, color) in enumerate(zip(category_names, category_colors)):
-    #     widths = data[:, i]
-    #     starts = data_cum[:, i] - widths
-    #     rects = ax.bar(
-    #         labels, widths, left=starts, height=0.9, label=colname, color=color
-    #     )
-
-    #     r, g, b, _ = color
-    #     text_color = "white" if r * g * b < 0.5 else "darkgrey"
-    #     barlabels = [str(x) for x in widths]
-    #     for i in range(len(barlabels)):
-    #         if barlabels[i] == "0":
-    #             barlabels[i] = ""
-    #     ax.bar_label(rects, labels=barlabels, label_type="center", color=text_color)
-    # ax.legend(
-    #     ncols=len(category_names),
-    #     # bbox_to_anchor=(0, 1),
-    #     loc="lower left",
-    #     fontsize="small",
-    # )
-
     categories = (
-        "Naive",
+        "Baseline",
         "Ours",
     )
     weight_counts = {
@@ -383,7 +308,7 @@ def guesschar_plot(src_path, dst_path):
             [np.count_nonzero(baseline_q1 == 5), np.count_nonzero(ours_q1 == 5)]
         ),
     }
-    width = 0.5
+    width = 1.0
     fig, ax = plt.subplots(figsize=(3, 5))
     bottom = np.zeros(2)
 
@@ -397,8 +322,26 @@ def guesschar_plot(src_path, dst_path):
         ax.bar_label(p, labels=barlabels, label_type="center", color="white")
 
     ax.set_ylabel("Sessions")
-    ax.set_title("How hard was it to perform the task?\n (1 - easy, 5 - hard)")
-    ax.legend(loc="upper right")
+    ax.set_title("How difficult was the task?\n (1 - easy, 5 - hard)")
+    # ax.legend(
+    #     # ncol=5,
+    #     # loc="upper center",
+    #     # bbox_to_anchor=(0.5, 1.1),
+    #     fancybox=True,
+    #     shadow=True,
+    # )
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    handles, labels = ax.get_legend_handles_labels()
+    # see https://stackoverflow.com/questions/4700614/how-to-put-the-legend-outside-the-plot
+    # see https://stackoverflow.com/questions/34576059/reverse-the-order-of-a-legend
+    ax.legend(
+        handles[::-1],
+        labels[::-1],
+        fancybox=True,
+        shadow=True,
+        bbox_to_anchor=(1, 0.5),
+    )
     # remove y ticks
     ax.yaxis.set_visible(False)
     # plt.tight_layout()
