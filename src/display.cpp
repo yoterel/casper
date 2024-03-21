@@ -227,6 +227,7 @@ void DynaFlashProjector::show_buffer(const uint8_t *buffer)
 		{
 			if (m_verbose)
 				std::cout << "warning, frame drop is occuring (dropped: " << dropped << " so far)" << std::endl;
+			return; // todo: without this, huge latency in projection. investigate why
 		}
 		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
 		{
