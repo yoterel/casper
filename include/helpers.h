@@ -100,16 +100,14 @@ enum class LeapCalibrationSettings
 enum class CalibrationStateMachine
 {
     COLLECT = 0,
-    CALIBRATE = 1,
+    SOLVE = 1,
     SHOW = 2,
     MARK = 3,
 };
 enum class LeapCollectionSettings
 {
-    MANUAL_RAW = 0,
-    MANUAL_FINGER = 1,
-    AUTO_RAW = 2,
-    AUTO_FINGER = 3,
+    AUTO_RAW = 0,
+    AUTO_FINGER = 1,
 };
 enum class LeapMarkSettings
 {

@@ -397,7 +397,7 @@ bool use_coaxial_calib = false;
 int calibration_state = static_cast<int>(CalibrationStateMachine::COLLECT);
 int checkerboard_width = 10;
 int checkerboard_height = 7;
-int leap_collection_setting = static_cast<int>(LeapCollectionSettings::AUTO_RAW);
+int leap_collection_setting = static_cast<int>(LeapCollectionSettings::AUTO_FINGER);
 int leap_mark_setting = static_cast<int>(LeapMarkSettings::STREAM);
 bool leap_calib_use_ransac = false;
 int mark_bone_index = 17;
@@ -1236,7 +1236,7 @@ int main(int argc, char *argv[])
                     ready_to_collect = false;
                 break;
             }
-            case static_cast<int>(CalibrationStateMachine::CALIBRATE):
+            case static_cast<int>(CalibrationStateMachine::SOLVE):
             {
                 std::vector<std::vector<cv::Point3f>> objpoints;
                 std::vector<cv::Point3f> objp;
@@ -1324,7 +1324,7 @@ int main(int argc, char *argv[])
             {
                 switch (leap_collection_setting)
                 {
-                case static_cast<int>(LeapCollectionSettings::AUTO_RAW):
+                case static_cast<int>(LeapCollectionSettings::AUTO_RAW): // triangulates brightest point in leap images to extract a 3D point
                 {
                     std::vector<uint8_t> buffer1, buffer2;
                     uint32_t ignore1, ignore2;
@@ -1414,7 +1414,7 @@ int main(int argc, char *argv[])
                     }
                     break;
                 }
-                case static_cast<int>(LeapCollectionSettings::AUTO_FINGER):
+                case static_cast<int>(LeapCollectionSettings::AUTO_FINGER): // uses the high level API to get index tip as the extracted 3D point
                 {
                     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
                     {
@@ -1439,18 +1439,13 @@ int main(int argc, char *argv[])
                             vcolorShader.use();
                             vcolorShader.setMat4("MVP", glm::mat4(1.0f));
                             center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
-                            glm::vec2 vert = center_NDC;
-                            // vert.y = (vert.y + 1.0f) / 2.0f; // for display, use top of screen
-                            std::vector<glm::vec2> pc1 = {vert};
-                            PointCloud pointCloud(pc1, screen_verts_color_red);
-                            pointCloud.render(5.0f);
                         }
-                        if (joints_left.size() > 0)
+                        if (found_centroid)
                         {
-                            glm::vec3 cur_3d_point = joints_left[17]; // index tip
-                            triangulated = cur_3d_point;
-                            if (found_centroid)
+                            if (joints_left.size() > 0)
                             {
+                                glm::vec3 cur_3d_point = joints_left[17]; // index tip
+                                triangulated = cur_3d_point;
                                 glm::vec2 cur_2d_point = Helpers::NDCtoScreen(center_NDC, cam_width, cam_height, true);
                                 if (ready_to_collect)
                                 {
@@ -1461,46 +1456,29 @@ int main(int argc, char *argv[])
                                         ready_to_collect = false;
                                     }
                                 }
+                                glm::vec2 vert = center_NDC;
+                                std::vector<glm::vec2> pc1 = {vert};
+                                PointCloud pointCloud(pc1, screen_verts_color_green);
+                                pointCloud.render(5.0f);
+                            }
+                            else
+                            {
+                                glm::vec2 vert = center_NDC;
+                                // vert.y = (vert.y + 1.0f) / 2.0f; // for display, use top of screen
+                                std::vector<glm::vec2> pc1 = {vert};
+                                PointCloud pointCloud(pc1, screen_verts_color_red);
+                                pointCloud.render(5.0f);
                             }
                         }
-                        // render 3d point on leap image ... todo
-                        // vcolorShader.use();
-                        // vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                        // glm::vec2 vert1 = ?;
-                        // glm::vec2 vert2 = ?;
-                        // vert1.y = (vert1.y - 1.0f) / 2.0f; // use bottom left of screen
-                        // vert1.x = (vert1.x - 1.0f) / 2.0f; //
-                        // vert2.y = (vert2.y - 1.0f) / 2.0f; // use bottom right of screen
-                        // vert2.x = (vert2.x + 1.0f) / 2.0f; //
-                        // std::vector<glm::vec2> pc2 = {vert1, vert2};
-                        // PointCloud pointCloud2(pc2, screen_verts_color_red);
-                        // pointCloud2.render(5.0f);
                     }
                     break;
                 }
-                case static_cast<int>(LeapCollectionSettings::MANUAL_FINGER):
-                {
-                    camera.capture_single_image(ptrGrabResult);
-                    camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
-                    cv::flip(camImageOrig, camImage, 1);
-                    displayTexture.load((uint8_t *)camImage.data, true, cam_buffer_format);
-                    set_texture_shader(&textureShader, true, false, true);
-                    displayTexture.bind();
-                    fullScreenQuad.render();
-                    vcolorShader.use();
-                    vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                    std::vector<glm::vec2> test = {cur_screen_vert};
-                    PointCloud pointCloud(test, screen_verts_color_red);
-                    pointCloud.render(5.0f);
-                    break;
-                }
-
                 default:
                     break;
                 }
                 break;
             }
-            case static_cast<int>(CalibrationStateMachine::CALIBRATE):
+            case static_cast<int>(CalibrationStateMachine::SOLVE):
             {
                 std::vector<cv::Point2f> points_2d_cv;
                 std::vector<cv::Point3f> points_3d_cv;
@@ -1605,7 +1583,7 @@ int main(int argc, char *argv[])
             {
                 vcolorShader.use();
                 vcolorShader.setMat4("MVP", glm::mat4(1.0f));
-                // todo: move this logic to CalibrationStateMachine::CALIBRATE
+                // todo: move this logic to CalibrationStateMachine::SOLVE
                 std::vector<glm::vec2> NDCs;
                 std::vector<glm::vec2> NDCs_reprojected;
                 if (showInliersOnly)
@@ -6195,7 +6173,7 @@ void openIMGUIFrame()
                 {
                     if (imgpoints.size() >= n_points_cam_calib)
                     {
-                        calibration_state = static_cast<int>(CalibrationStateMachine::CALIBRATE);
+                        calibration_state = static_cast<int>(CalibrationStateMachine::SOLVE);
                     }
                 }
                 ImGui::Text("Camera Intrinsics");
@@ -6253,13 +6231,9 @@ void openIMGUIFrame()
                 ImGui::SliderInt("# Points to Collect", &n_points_leap_calib, 1000, 100000);
                 ImGui::Checkbox("Use RANSAC", &leap_calib_use_ransac);
                 ImGui::Text("Collection Procedure");
-                ImGui::RadioButton("Manual Raw", &leap_collection_setting, 0);
+                ImGui::RadioButton("Auto Raw", &leap_collection_setting, static_cast<int>(LeapCollectionSettings::AUTO_RAW));
                 ImGui::SameLine();
-                ImGui::RadioButton("Manual Finger", &leap_collection_setting, 1);
-                ImGui::SameLine();
-                ImGui::RadioButton("Auto Raw", &leap_collection_setting, 2);
-                ImGui::SameLine();
-                ImGui::RadioButton("Auto Finger", &leap_collection_setting, 3);
+                ImGui::RadioButton("Auto Finger", &leap_collection_setting, static_cast<int>(LeapCollectionSettings::AUTO_FINGER));
                 ImGui::SliderFloat("Binary Threshold", &leap_binary_threshold, 0.0f, 1.0f);
                 if (ImGui::IsItemActive())
                 {
@@ -6305,7 +6279,7 @@ void openIMGUIFrame()
                 {
                     if (points_2d.size() >= n_points_leap_calib)
                     {
-                        calibration_state = static_cast<int>(CalibrationStateMachine::CALIBRATE);
+                        calibration_state = static_cast<int>(CalibrationStateMachine::SOLVE);
                     }
                 }
                 if (calibrationSuccess)
