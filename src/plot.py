@@ -191,7 +191,7 @@ def jnd_plot(dst_path):
     plt.xlabel("Subject ID")
     plt.ylabel("JND [ms]")
     plt.tight_layout()
-    plt.savefig(str(dst_path / "jnd.png"))
+    plt.savefig(str(dst_path / "jnd.pdf"))
     plt.cla()
     plt.clf()
 
@@ -273,8 +273,8 @@ def guesschar_plot(src_path, dst_path):
         label=r"$\frac{Ours}{Baseline + Ours}$",
     )
     plt.legend()
-    plt.xlabel("Normalized Total Game Time")
-    plt.ylabel("Games")
+    plt.xlabel("Normalized Total Session Time")
+    plt.ylabel("Sessions")
     plt.tight_layout()
     plt.tick_params(
         left=False, right=False, labelleft=False, labelbottom=True, bottom=True
@@ -282,46 +282,59 @@ def guesschar_plot(src_path, dst_path):
     plt.xlim(0, 1)
     plt.ylim(0, 1)
     plt.vlines(x=0.5, ymin=0, ymax=1, color="r")
-    plt.text(0.47, 0.7, "Equal Time", rotation=90, verticalalignment="center")
-    plt.savefig(str(dst_path / "guess_char_scores.png"))
+    plt.text(0.47, 0.7, "Equal Session Time", rotation=90, verticalalignment="center")
+    plt.savefig(str(dst_path / "guess_char_scores.pdf"))
     plt.cla()
     plt.clf()
 
-    categories = (
-        "Baseline",
-        "Ours",
-    )
+    categories = (0.0, 5.0)
     weight_counts = {
         "1": np.array(
-            [np.count_nonzero(baseline_q1 == 1), np.count_nonzero(ours_q1 == 1)]
+            [np.count_nonzero(ours_q1 == 1), np.count_nonzero(baseline_q1 == 1)]
         ),
         "2": np.array(
-            [np.count_nonzero(baseline_q1 == 2), np.count_nonzero(ours_q1 == 2)]
+            [np.count_nonzero(ours_q1 == 2), np.count_nonzero(baseline_q1 == 2)]
         ),
         "3": np.array(
-            [np.count_nonzero(baseline_q1 == 3), np.count_nonzero(ours_q1 == 3)]
+            [np.count_nonzero(ours_q1 == 3), np.count_nonzero(baseline_q1 == 3)]
         ),
         "4": np.array(
-            [np.count_nonzero(baseline_q1 == 4), np.count_nonzero(ours_q1 == 4)]
+            [np.count_nonzero(ours_q1 == 4), np.count_nonzero(baseline_q1 == 4)]
         ),
         "5": np.array(
-            [np.count_nonzero(baseline_q1 == 5), np.count_nonzero(ours_q1 == 5)]
+            [np.count_nonzero(ours_q1 == 5), np.count_nonzero(baseline_q1 == 5)]
         ),
     }
-    width = 1.0
-    fig, ax = plt.subplots(figsize=(3, 5))
+    width = 5.0
+    fig, ax = plt.subplots(figsize=(8, 2))
+    ax.set_aspect("equal")
     bottom = np.zeros(2)
-
-    for boolean, weight_count in weight_counts.items():
-        p = ax.bar(categories, weight_count, width, label=boolean, bottom=bottom)
+    category_colors = plt.colormaps["inferno"](
+        np.linspace(0.15, 0.85, len(weight_counts))
+    )
+    for i, (boolean, weight_count) in enumerate(weight_counts.items()):
+        p = ax.barh(
+            categories,
+            weight_count,
+            width,
+            label=boolean,
+            left=bottom,
+            color=category_colors[i],
+        )
         bottom += weight_count
         barlabels = [str(x) for x in weight_count]
-        for i in range(len(barlabels)):
-            if barlabels[i] == "0":
-                barlabels[i] = ""
-        ax.bar_label(p, labels=barlabels, label_type="center", color="white")
-
-    ax.set_ylabel("Sessions")
+        for j in range(len(barlabels)):
+            if barlabels[j] == "0":
+                barlabels[j] = ""
+        ax.bar_label(
+            p,
+            labels=barlabels,
+            label_type="center",
+            color="white",
+        )
+    ax.set_yticks([0.0, 5.0], labels=["Ours", "Baseline"])
+    # ax.set_xticklabels([])
+    # ax.set_ylabel("Sessions")
     ax.set_title("How difficult was the task?\n (1 - easy, 5 - hard)")
     # ax.legend(
     #     # ncol=5,
@@ -330,22 +343,28 @@ def guesschar_plot(src_path, dst_path):
     #     fancybox=True,
     #     shadow=True,
     # )
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-    handles, labels = ax.get_legend_handles_labels()
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    # handles, labels = ax.get_legend_handles_labels()
     # see https://stackoverflow.com/questions/4700614/how-to-put-the-legend-outside-the-plot
     # see https://stackoverflow.com/questions/34576059/reverse-the-order-of-a-legend
+    # see https://matplotlib.org/stable/gallery/lines_bars_and_markers/horizontal_barchart_distribution.html
+    # see https://stackoverflow.com/questions/7965743/how-can-i-set-the-aspect-ratio
     ax.legend(
-        handles[::-1],
-        labels[::-1],
+        # handles[::-1],
+        # labels[::-1],
         fancybox=True,
         shadow=True,
-        bbox_to_anchor=(1, 0.5),
+        bbox_to_anchor=(0.5, -0.2),
+        loc="lower center",
+        ncols=len(weight_counts.items()),
     )
     # remove y ticks
-    ax.yaxis.set_visible(False)
+    # ax.yaxis.set_visible(False)
+    # remove x ticks
+    ax.xaxis.set_visible(False)
     # plt.tight_layout()
-    plt.savefig(str(dst_path / "guess_char_q1.png"))
+    plt.savefig(str(dst_path / "guess_char_q1.pdf"))
 
 
 if __name__ == "__main__":
