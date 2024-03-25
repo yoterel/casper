@@ -8,6 +8,7 @@ uniform float threshold = 0.01;
 uniform bool isGray = false;
 uniform bool justGreen = false;
 uniform bool onlyGreen = false;
+uniform bool gammaCorrection = false;
 void main()
 {
     vec4 col;
@@ -29,6 +30,11 @@ void main()
     }
     else
     {
+        if (gammaCorrection)
+        {
+            float gamma = 2.2;
+            col = pow(col, vec4(gamma));
+        }
 	    FragColor = col;
     }
 }

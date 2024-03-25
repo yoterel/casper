@@ -180,7 +180,8 @@ void set_texture_shader(Shader *textureShader,
                         int src = 0,
                         glm::mat4 model = glm::mat4(1.0f),
                         glm::mat4 projection = glm::mat4(1.0f),
-                        glm::mat4 view = glm::mat4(1.0f));
+                        glm::mat4 view = glm::mat4(1.0f),
+                        bool gammaCorrection = false);
 void set_skinned_shader(SkinningShader *skinnedShader,
                         glm::mat4 transform,
                         bool flipVer = false, bool flipHor = false,
@@ -1176,7 +1177,7 @@ int main(int argc, char *argv[])
             {
                 glViewport(0, 0, proj_width, proj_height); // set viewport
                 glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                set_texture_shader(&textureShader, false, false, false);
+                set_texture_shader(&textureShader, false, false, false, false, 0.035f, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), gamma_correct);
                 c2p_fbo.getTexture()->bind();
                 fullScreenQuad.render();
             }
@@ -2867,7 +2868,7 @@ bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid)
 }
 
 void set_texture_shader(Shader *textureShader, bool flipVer, bool flipHor, bool isGray, bool binary, float threshold,
-                        int src, glm::mat4 model, glm::mat4 projection, glm::mat4 view)
+                        int src, glm::mat4 model, glm::mat4 projection, glm::mat4 view, bool gammaCorrection)
 {
     textureShader->use();
     textureShader->setMat4("view", view);
@@ -2879,6 +2880,7 @@ void set_texture_shader(Shader *textureShader, bool flipVer, bool flipHor, bool 
     textureShader->setBool("binary", binary);
     textureShader->setBool("isGray", isGray);
     textureShader->setInt("src", src);
+    textureShader->setBool("gammaCorrection", gammaCorrection);
 }
 
 void set_skinned_shader(SkinningShader *skinnedShader,
@@ -5139,7 +5141,7 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
     /* render final output to screen */
     glViewport(0, 0, proj_width, proj_height);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    set_texture_shader(textureShader, false, false, false);
+    set_texture_shader(textureShader, false, false, false, false, 0.035f, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), gamma_correct);
     c2p_fbo.getTexture()->bind();
     fullScreenQuad.render();
 }
@@ -5249,7 +5251,7 @@ void handleGuessPoseGame(std::unordered_map<std::string, Shader *> &shaderMap,
     /* render final output to screen */
     glViewport(0, 0, proj_width, proj_height);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    set_texture_shader(textureShader, false, false, false);
+    set_texture_shader(textureShader, false, false, false, false, 0.035f, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), gamma_correct);
     c2p_fbo.getTexture()->bind();
     fullScreenQuad.render();
     // material_mode = static_cast<int>(MaterialMode::DIFFUSE);
