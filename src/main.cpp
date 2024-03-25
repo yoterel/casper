@@ -221,6 +221,7 @@ int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
 int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 bool use_shadow_mapping = false;
+float shadow_bias = 0.005f;
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
 float jfa_distance_threshold = 10.0f;
@@ -3549,6 +3550,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         {
             hands_fbo.unbind();
             // first pass for shadows
+            // glCullFace(GL_FRONT); // solves peter panning
             shadowmap_fbo.bind();
             skinnedShader->use();
             float near_plane = 1.0f, far_plane = 1000.0f;
@@ -3560,6 +3562,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
                                               glm::vec3(0.0f, 0.0f, -1.0f));
             set_skinned_shader(skinnedShader, lightProjection * lightView * global_scale);
             handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
+            // glCullFace(GL_BACK); // reset original culling face
             shadowmap_fbo.unbind();
             // debug pass to see depth map
             // hands_fbo.bind();
@@ -3570,7 +3573,10 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             // fullScreenQuad.render();
             // hands_fbo.saveColorToFile("test.png");
             // second pass for rendering
-            hands_fbo.bind();
+            if (isFirstHand)
+                hands_fbo.bind(true);
+            else
+                hands_fbo.bind(false);
             // dirLight.calcLocalDirection(bones2world[0]);
             // dirLight.setWorldDirection(debug_vec);
             // skinnedShader->SetDirectionalLight(dirLight);
@@ -3583,6 +3589,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             skinnedShader->setInt("shadowMap", 4);
             skinnedShader->setMat4("lightTransform", lightProjection * lightView);
             skinnedShader->setBool("useShadow", true);
+            skinnedShader->setFloat("shadowBias", shadow_bias);
         }
         else
         {
@@ -6564,6 +6571,7 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Material & Effects"))
         {
             ImGui::Checkbox("Hard Shadows", &use_shadow_mapping);
+            ImGui::SliderFloat("Shadow Bias", &shadow_bias, 0.001f, 0.1f);
             ImGui::SeparatorText("Material Type");
             ImGui::RadioButton("Diffuse", &material_mode, static_cast<int>(MaterialMode::DIFFUSE));
             ImGui::SameLine();
