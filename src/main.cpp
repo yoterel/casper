@@ -220,6 +220,7 @@ bool threshold_flag = false;
 int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
 int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+bool use_shadow_mapping = false;
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
 float jfa_distance_threshold = 10.0f;
@@ -500,6 +501,7 @@ FBO bake_fbo_left(1024, 1024, 4, false);
 FBO pre_bake_fbo(1024, 1024, 4, false);
 FBO deformed_bake_fbo(1024, 1024, 4, false);
 FBO sd_fbo(1024, 1024, 4, false);
+FBO shadowmap_fbo(1024, 1024, 1, false);
 FBO postprocess_fbo(dst_width, dst_height, 4, false);
 FBO postprocess_fbo2(dst_width, dst_height, 4, false);
 FBO dynamic_fbo(dst_width, dst_height, 4, false);
@@ -735,6 +737,7 @@ int main(int argc, char *argv[])
     pre_bake_fbo.init();
     deformed_bake_fbo.init();
     sd_fbo.init();
+    shadowmap_fbo.initDepthOnly();
     postprocess_fbo.init();
     postprocess_fbo2.init();
     dynamic_fbo.init();
@@ -2309,16 +2312,12 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
                                 cv::Mat &camera_intrinsics_cv,
                                 cv::Mat &camera_distortion_cv)
 {
-    // vp = virtual projector
-    // vc = virtual camera
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
     flipYZ[2][2] = -1.0f;
     cnpy::NpyArray points2d_npy, points3d_npy;
     cnpy::NpyArray w2c_user_npy, w2c_auto_npy;
-    // cnpy::npz_t projcam_npz;
     cnpy::npz_t cam_npz;
-    // bool user_defined = false; // if a user saved extrinsics, they are already in openGL format
     try
     {
         const fs::path user_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
@@ -3535,6 +3534,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
 {
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
     Shader *vcolorShader = shader_map["vcolorShader"];
+    Shader *textureShader = shader_map["textureShader"];
     // std::vector<glm::mat4> bones_to_world = isRightHand ? bones_to_world_right : bones_to_world_left;
     if (bones2world.size() > 0)
     {
@@ -3544,6 +3544,51 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         else
             hands_fbo.bind(false);
         glEnable(GL_DEPTH_TEST); // depth test on (todo: why is it off to begin with?)
+        // a first pass for depth if shadow mapping is enabled
+        if (use_shadow_mapping)
+        {
+            hands_fbo.unbind();
+            // first pass for shadows
+            shadowmap_fbo.bind();
+            skinnedShader->use();
+            float near_plane = 1.0f, far_plane = 1000.0f;
+            glm::vec3 palm_loc = glm::vec3(bones2world[0][3][0], bones2world[0][3][1], bones2world[0][3][2]);
+            glm::vec3 light_loc = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
+            glm::mat4 lightProjection = glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, near_plane, far_plane);
+            glm::mat4 lightView = glm::lookAt(light_loc,
+                                              palm_loc,
+                                              glm::vec3(0.0f, 0.0f, -1.0f));
+            set_skinned_shader(skinnedShader, lightProjection * lightView * global_scale);
+            handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
+            shadowmap_fbo.unbind();
+            // debug pass to see depth map
+            // hands_fbo.bind();
+            // set_texture_shader(textureShader, false, false, true);
+            // unsigned int depthMap = shadowmap_fbo.getDepthTexture();
+            // glActiveTexture(GL_TEXTURE0);
+            // glBindTexture(GL_TEXTURE_2D, depthMap);
+            // fullScreenQuad.render();
+            // hands_fbo.saveColorToFile("test.png");
+            // second pass for rendering
+            hands_fbo.bind();
+            // dirLight.calcLocalDirection(bones2world[0]);
+            // dirLight.setWorldDirection(debug_vec);
+            // skinnedShader->SetDirectionalLight(dirLight);
+            // glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
+            // skinnedShader->SetCameraLocalPos(camWorldPos);
+            skinnedShader->use();
+            unsigned int depthMap = shadowmap_fbo.getDepthTexture();
+            glActiveTexture(GL_TEXTURE4);
+            glBindTexture(GL_TEXTURE_2D, depthMap);
+            skinnedShader->setInt("shadowMap", 4);
+            skinnedShader->setMat4("lightTransform", lightProjection * lightView);
+            skinnedShader->setBool("useShadow", true);
+        }
+        else
+        {
+            skinnedShader->use();
+            skinnedShader->setBool("useShadow", false);
+        }
         switch (material_mode)
         {
         case static_cast<int>(MaterialMode::DIFFUSE):
@@ -6516,8 +6561,9 @@ void openIMGUIFrame()
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Material"))
+        if (ImGui::TreeNode("Material & Effects"))
         {
+            ImGui::Checkbox("Hard Shadows", &use_shadow_mapping);
             ImGui::SeparatorText("Material Type");
             ImGui::RadioButton("Diffuse", &material_mode, static_cast<int>(MaterialMode::DIFFUSE));
             ImGui::SameLine();
