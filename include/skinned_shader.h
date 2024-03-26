@@ -17,6 +17,9 @@ public:
               float diffuseIntensity = 0.0f) : Color(color),
                                                AmbientIntensity(ambientIntensity),
                                                DiffuseIntensity(diffuseIntensity) {}
+    void setColor(const glm::vec3 &color) { Color = color; }
+    void setAmbientIntensity(float ambientIntensity) { AmbientIntensity = ambientIntensity; }
+    void setDiffuseIntensity(float diffuseIntensity) { DiffuseIntensity = diffuseIntensity; }
     glm::vec3 Color;
     float AmbientIntensity;
     float DiffuseIntensity;

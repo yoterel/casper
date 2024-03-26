@@ -127,6 +127,9 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones2world_left_cur,
 bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &detected_left, bool &detected_right);
 bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
+void getLightTransform(glm::mat4 &lightProjection,
+                       glm::mat4 &lightView,
+                       const std::vector<glm::mat4> &bones2world);
 glm::vec3 triangulate(LeapCPP &leap, const glm::vec2 &leap1, const glm::vec2 &leap2);
 bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid);
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
@@ -220,6 +223,20 @@ bool threshold_flag = false;
 int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
 int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+int light_mode = static_cast<int>(LightMode::DIRECTIONAL);
+glm::vec3 light_color(255.0f / 255.0f, 255.0f / 255.0f, 255.0f / 255.0f);
+float light_theta = 0.0f;
+float light_phi = 0.0f;
+float light_radius = 1.0f;
+glm::vec3 light_at(0.0f, 0.0f, 0.0f);
+glm::vec3 light_to(0.0f, 0.0f, 0.0f);
+glm::vec3 light_up(0.0f, 0.0f, 1.0f);
+float light_near = 1.0f;
+float light_far = 1000.0f;
+float light_ambient_intensity = 1.0f;
+float light_diffuse_intensity = 1.0f;
+bool light_is_projector = false;
+bool light_relative = false;
 bool use_shadow_mapping = false;
 float shadow_bias = 0.005f;
 float deltaTime = 0.0f;
@@ -519,6 +536,8 @@ unsigned int gizmoVAO = 0;
 unsigned int gizmoVBO = 0;
 unsigned int frustrumVAO = 0;
 unsigned int frustrumVBO = 0;
+unsigned int cubeVAO = 0;
+unsigned int cubeVBO = 0;
 std::vector<glm::vec3> frustumCornerVertices;
 std::vector<glm::vec3> near_frustrum;
 std::vector<glm::vec3> mid_frustrum;
@@ -723,6 +742,7 @@ int main(int argc, char *argv[])
     Helpers::setupSkeletonBuffers(skeletonVAO, skeletonVBO);
     Helpers::setupGizmoBuffers(gizmoVAO, gizmoVBO);
     Helpers::setupFrustrumBuffers(frustrumVAO, frustrumVBO);
+    Helpers::setupCubeBuffers(cubeVAO, cubeVBO);
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
@@ -3525,6 +3545,32 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     c2p_fbo.unbind();
 }
 
+void getLightTransform(glm::mat4 &lightProjection,
+                       glm::mat4 &lightView,
+                       const std::vector<glm::mat4> &bones2world)
+{
+    if (light_is_projector)
+    {
+        lightProjection = gl_projector.getProjectionMatrix();
+        lightView = gl_projector.getViewMatrix();
+    }
+    else
+    {
+        glm::vec3 at = light_at;
+        glm::vec3 to = light_to;
+        if (light_relative)
+        {
+            glm::vec3 palm_loc = glm::vec3(bones2world[0][3][0], bones2world[0][3][1], bones2world[0][3][2]);
+            at += palm_loc;
+            to += palm_loc;
+        }
+        lightProjection = glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, light_near, light_far);
+        lightView = glm::lookAt(at,
+                                to,
+                                light_up);
+    }
+}
+
 void handleSkinning(const std::vector<glm::mat4> &bones2world,
                     bool isRightHand,
                     bool isFirstHand,
@@ -3553,13 +3599,8 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             // glCullFace(GL_FRONT); // solves peter panning
             shadowmap_fbo.bind();
             skinnedShader->use();
-            float near_plane = 1.0f, far_plane = 1000.0f;
-            glm::vec3 palm_loc = glm::vec3(bones2world[0][3][0], bones2world[0][3][1], bones2world[0][3][2]);
-            glm::vec3 light_loc = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
-            glm::mat4 lightProjection = glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, near_plane, far_plane);
-            glm::mat4 lightView = glm::lookAt(light_loc,
-                                              palm_loc,
-                                              glm::vec3(0.0f, 0.0f, -1.0f));
+            glm::mat4 lightProjection, lightView;
+            getLightTransform(lightProjection, lightView, bones2world);
             set_skinned_shader(skinnedShader, lightProjection * lightView * global_scale);
             handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
             // glCullFace(GL_BACK); // reset original culling face
@@ -3757,11 +3798,17 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             }
             break;
         }
-        case static_cast<int>(MaterialMode::GGX): // uses GGX material with the original diffuse texture loaded with mesh
+        case static_cast<int>(MaterialMode::GGX): // uses GGX-like material
         {
             skinnedShader->use();
+            dirLight.setColor(light_color);
+            dirLight.setAmbientIntensity(light_ambient_intensity);
+            dirLight.setDiffuseIntensity(light_diffuse_intensity);
+            dirLight.setWorldDirection(light_to - light_at);
+            glm::mat4 lightProjection, lightView;
+            getLightTransform(lightProjection, lightView, bones_to_world_right);
             // dirLight.setWorldDirection(debug_vec);
-            dirLight.calcLocalDirection(bones2world[0]);
+            dirLight.calcLocalDirection(lightView);
             skinnedShader->SetDirectionalLight(dirLight);
             glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
             skinnedShader->SetCameraLocalPos(camWorldPos);
@@ -5585,6 +5632,16 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
         glm::mat4 flycam_projection_transform = gl_flycamera.getProjectionMatrix();
         glm::mat4 cam_view_transform = gl_camera.getViewMatrix();
         glm::mat4 cam_projection_transform = gl_camera.getProjectionMatrix();
+        // very redundant, but redraw hand meshes
+        {
+            handleSkinning(bones_to_world_right, true, true, shader_map, rightHandModel, flycam_view_transform, flycam_projection_transform);
+            handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, shader_map, leftHandModel, flycam_view_transform, flycam_projection_transform);
+            glViewport(0, 0, proj_width, proj_height); // set viewport
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            set_texture_shader(textureShader, false, false, false, false, 0.035f, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), gamma_correct);
+            hands_fbo.getTexture()->bind();
+            fullScreenQuad.render();
+        }
         // draws some mesh (lit by camera input)
         {
             /* quad at vcam far plane, shined by vproj (perspective corrected) */
@@ -5629,10 +5686,9 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
         // draws cube at world origin
         {
             /* regular rgb cube */
-            // vcolorShader.use();
-            // vcolorShader.setMat4("projection", flycam_projection_transform);
-            // vcolorShader.setMat4("view", flycam_view_transform);
-            // vcolorShader.setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f)));
+            // vcolorShader->use();
+            // glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+            // vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
             // glEnable(GL_DEPTH_TEST);
             // glDisable(GL_CULL_FACE);
             // glBindVertexArray(cubeVAO);
@@ -5668,6 +5724,27 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
         }
         if (bones_to_world_right.size() > 0)
         {
+            // draw light location as a cube, and gizmo for light orientation. todo: slightly broken
+            {
+                vcolorShader->use();
+                glm::mat4 lightProjection, lightView;
+                getLightTransform(lightProjection, lightView, bones_to_world_right);
+                // vcolorShader->setMat4("projection", flycam_projection_transform);
+                // vcolorShader->setMat4("view", flycam_view_transform);
+                // vcolorShader->setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
+                lightView = glm::inverse(lightView);
+                glm::vec3 at = glm::vec3(lightView[3][0], lightView[3][1], lightView[3][2]);
+                glm::mat4 model = glm::translate(glm::mat4(1.0f), at);
+                model = glm::scale(model, glm::vec3(10.0f, 10.0f, 10.0f));
+                vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
+                vcolorShader->setBool("allWhite", true);
+                glBindVertexArray(cubeVAO);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+                model = glm::scale(lightView, glm::vec3(10.0f, 10.0f, 10.0f));
+                vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
+                glBindVertexArray(gizmoVAO);
+                glDrawArrays(GL_LINES, 0, 6);
+            }
             // draw skeleton as red lines
             {
                 // glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
@@ -5721,122 +5798,28 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 // glBindVertexArray(gizmoVAO);
                 // glDrawArrays(GL_LINES, 0, 6);
             }
-            // draw skinned mesh in 3D
-            {
-                switch (texture_mode)
-                {
-                case static_cast<int>(TextureMode::ORIGINAL):
-                {
-                    set_skinned_shader(skinnedShader,
-                                       flycam_projection_transform * flycam_view_transform * global_scale_right);
-                    rightHandModel.Render(*skinnedShader, bones_to_world_right, rotx, false, nullptr);
-                    break;
-                }
-                case static_cast<int>(TextureMode::FROM_FILE):
-                {
-                    break;
-                }
-                case static_cast<int>(TextureMode::PROJECTIVE):
-                {
-                    set_skinned_shader(skinnedShader,
-                                       flycam_projection_transform * flycam_view_transform * global_scale_right,
-                                       false, false, false, false, false, true, false, false,
-                                       cam_projection_transform * cam_view_transform * global_scale_right);
-                    rightHandModel.Render(*skinnedShader, bones_to_world_right, rotx, false, dynamicTexture, projectiveTexture);
-                    break;
-                }
-                case static_cast<int>(TextureMode::BAKED):
-                {
-                    set_skinned_shader(skinnedShader,
-                                       flycam_projection_transform * flycam_view_transform * global_scale_right,
-                                       false, false, false, false, false, false, false, false,
-                                       cam_projection_transform * cam_view_transform * global_scale_right);
-                    rightHandModel.Render(*skinnedShader, bones_to_world_right, rotx, false, bake_fbo_right.getTexture());
-                    break;
-                }
-                default:
-                    break;
-                }
-            }
         }
         if (bones_to_world_left.size() > 0)
         {
             // draw bones local coordinates as gizmos
             {
-                vcolorShader->use();
-                std::vector<glm::mat4> BoneToLocalTransforms;
-                leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
-                glBindVertexArray(gizmoVAO);
-                // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-                for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
-                {
-                    // in bind pose
-                    vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * rotx * BoneToLocalTransforms[i]);
-                    glDrawArrays(GL_LINES, 0, 6);
-                }
-                for (unsigned int i = 0; i < bones_to_world_left.size(); i++)
-                {
-                    // in leap motion pose
-                    vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * bones_to_world_left[i]);
-                    glDrawArrays(GL_LINES, 0, 6);
-                }
-            }
-            // draw skinned mesh in 3D
-            {
-                switch (texture_mode)
-                {
-                case static_cast<int>(TextureMode::ORIGINAL):
-                {
-                    skinnedShader->use();
-                    skinnedShader->SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
-                    skinnedShader->setBool("useProjector", false);
-                    skinnedShader->setBool("bake", false);
-                    skinnedShader->setBool("useGGX", false);
-                    skinnedShader->setBool("renderUV", false);
-                    skinnedShader->setBool("flipTexVertically", false);
-                    skinnedShader->setBool("flipTexHorizontally", false);
-                    skinnedShader->setBool("projectorIsSingleChannel", false);
-                    skinnedShader->setInt("src", 0);
-                    leftHandModel.Render(*skinnedShader, bones_to_world_left, rotx);
-                    break;
-                }
-                case static_cast<int>(TextureMode::FROM_FILE):
-                {
-                    break;
-                }
-                case static_cast<int>(TextureMode::PROJECTIVE):
-                {
-                    skinnedShader->use();
-                    skinnedShader->SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
-                    skinnedShader->setMat4("projTransform", cam_projection_transform * cam_view_transform * global_scale_left);
-                    skinnedShader->setBool("useProjector", true);
-                    skinnedShader->setBool("projectorOnly", false);
-                    skinnedShader->setBool("bake", false);
-                    skinnedShader->setBool("useGGX", false);
-                    skinnedShader->setBool("renderUV", false);
-                    skinnedShader->setBool("flipTexVertically", false);
-                    skinnedShader->setBool("flipTexHorizontally", false);
-                    skinnedShader->setBool("projectorIsSingleChannel", false);
-                    skinnedShader->setInt("src", 0);
-                    leftHandModel.Render(*skinnedShader, bones_to_world_left, rotx, false, dynamicTexture, projectiveTexture);
-                    break;
-                }
-                case static_cast<int>(TextureMode::BAKED):
-                {
-                    skinnedShader->use();
-                    skinnedShader->SetWorldTransform(flycam_projection_transform * flycam_view_transform * global_scale_left);
-                    skinnedShader->setBool("useProjector", false);
-                    skinnedShader->setBool("bake", false);
-                    skinnedShader->setBool("useGGX", false);
-                    skinnedShader->setBool("renderUV", false);
-                    skinnedShader->setBool("flipTexVertically", false);
-                    skinnedShader->setInt("src", 0);
-                    leftHandModel.Render(*skinnedShader, bones_to_world_left, rotx, false, bake_fbo_left.getTexture());
-                    break;
-                }
-                default:
-                    break;
-                }
+                // vcolorShader->use();
+                // std::vector<glm::mat4> BoneToLocalTransforms;
+                // leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                // glBindVertexArray(gizmoVAO);
+                // // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+                // for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
+                // {
+                //     // in bind pose
+                //     vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * rotx * BoneToLocalTransforms[i]);
+                //     glDrawArrays(GL_LINES, 0, 6);
+                // }
+                // for (unsigned int i = 0; i < bones_to_world_left.size(); i++)
+                // {
+                //     // in leap motion pose
+                //     vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * bones_to_world_left[i]);
+                //     glDrawArrays(GL_LINES, 0, 6);
+                // }
             }
         }
         // draws frustrum of camera (=vproj)
@@ -6567,11 +6550,62 @@ void openIMGUIFrame()
             }
             ImGui::TreePop();
         }
-        /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Material & Effects"))
+        if (ImGui::TreeNode("Light Controls"))
         {
             ImGui::Checkbox("Hard Shadows", &use_shadow_mapping);
             ImGui::SliderFloat("Shadow Bias", &shadow_bias, 0.001f, 0.1f);
+            ImGui::SeparatorText("Light Mode");
+            ImGui::RadioButton("Directional", &light_mode, static_cast<int>(LightMode::DIRECTIONAL));
+            ImGui::SameLine();
+            ImGui::RadioButton("Projector", &light_mode, static_cast<int>(LightMode::PROJECTOR));
+            switch (light_mode)
+            {
+            case static_cast<int>(LightMode::DIRECTIONAL):
+            {
+                ImGui::Checkbox("Light Is Projector", &light_is_projector);
+                ImGui::SameLine();
+                ImGui::Checkbox("Light Relative to Palm", &light_relative);
+                if (ImGui::Button("LightPos 2 CamPos"))
+                {
+                    glm::mat4 camView = gl_camera.getViewMatrix();
+                    light_at = glm::vec3(camView[3][0], camView[3][1], camView[3][2]);
+                }
+                ImGui::SliderFloat("Light Ambient Intensity", &light_ambient_intensity, 0.0f, 1.0f);
+                ImGui::SliderFloat("Light Diffuse Intensity", &light_diffuse_intensity, 0.0f, 1.0f);
+                ImGui::ColorEdit3("Light Color", &light_color.x, ImGuiColorEditFlags_NoOptions);
+                if (ImGui::SliderFloat("Light Rad", &light_radius, 0.0f, 500.0f))
+                {
+                    light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
+                                         light_radius * sin(light_theta) * sin(light_phi),
+                                         light_radius * cos(light_theta));
+                }
+                if (ImGui::SliderFloat("Light Theta", &light_theta, -3.14f, 3.14f))
+                {
+                    light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
+                                         light_radius * sin(light_theta) * sin(light_phi),
+                                         light_radius * cos(light_theta));
+                }
+                if (ImGui::SliderFloat("Light Phi", &light_phi, 0.0f, 2 * 3.14f))
+                {
+                    light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
+                                         light_radius * sin(light_theta) * sin(light_phi),
+                                         light_radius * cos(light_theta));
+                }
+                ImGui::SliderFloat3("Light At", &light_at.x, -1000.0f, 1000.0f);
+                ImGui::SliderFloat3("Light To", &light_to.x, -1000.0f, 1000.0f);
+                ImGui::SliderFloat3("Light Up", &light_up.x, -1.0f, 1.0f);
+                ImGui::SliderFloat("Light Near", &light_near, 0.1f, 1000.0f);
+                ImGui::SliderFloat("Light Far", &light_far, 0.1f, 1000.0f);
+                break;
+            }
+            default:
+                break;
+            }
+            ImGui::TreePop();
+        }
+        /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Material & Effects"))
+        {
             ImGui::SeparatorText("Material Type");
             ImGui::RadioButton("Diffuse", &material_mode, static_cast<int>(MaterialMode::DIFFUSE));
             ImGui::SameLine();
