@@ -16,6 +16,7 @@ public:
               unsigned int texture_color_format = GL_RGBA,
               unsigned int texture_interpolation_mode = GL_LINEAR,
               unsigned int texture_wrap_mode = GL_CLAMP_TO_BORDER);
+    void initDepthOnly();
     void bind(bool clear = true, glm::vec4 clear_color = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
     void unbind();
     void saveColorToFile(std::string filepath, bool flip_vertically = true);
@@ -23,6 +24,7 @@ public:
     std::vector<float> sampleDepthBuffer(std::vector<glm::vec2> sample_locations);
     std::vector<uint8_t> getBuffer(int n_channels);
     Texture *getTexture() { return &m_texture; };
+    unsigned int getDepthTexture();
 
 private:
     unsigned int m_width, m_height, m_channels;
@@ -30,5 +32,6 @@ private:
     Texture m_texture;
     unsigned int m_depthBuffer = 0;
     unsigned int m_FBO = 0;
+    bool m_depthOnly = false;
 };
 #endif

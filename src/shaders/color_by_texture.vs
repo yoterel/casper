@@ -6,8 +6,8 @@ out vec2 TexCoord;
 uniform bool flipVer = true;
 uniform bool flipHor = true;
 uniform mat4 projection;
-uniform mat4 model;
 uniform mat4 view;
+uniform mat4 model;
 
 void main()
 {

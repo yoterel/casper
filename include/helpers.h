@@ -84,6 +84,15 @@ enum class MaterialMode
     SKELETON = 2,
     PER_BONE_SCALAR = 3,
 };
+enum class LightMode
+{
+    AMBIENT = 0,
+    POINT = 1,
+    DIRECTIONAL = 2,
+    PROJECTOR = 3,
+    CUBEMAP = 4,
+    ENVMAP = 5,
+};
 enum class PostProcessMode
 {
     NONE = 0,

@@ -13,6 +13,7 @@ out vec2 TexCoord0;
 out vec3 ProjTexCoord;
 out vec3 Normal0;
 out vec3 LocalPos0;
+out vec4 LightPos0;
 
 //flat out ivec4 BoneIDs00;
 //flat out ivec2 BoneIDs11;
@@ -23,6 +24,7 @@ const int MAX_BONES = 50;
 
 uniform mat4 gTransform;
 uniform mat4 projTransform;
+uniform mat4 lightTransform;
 uniform mat4 gBones[MAX_BONES];
 uniform float gBoneMetric[MAX_BONES];
 uniform bool bake = false;
@@ -48,6 +50,8 @@ void main()
     }
     vec4 proj_pos = projTransform * pos;
     ProjTexCoord = vec3(proj_pos.x, proj_pos.y, proj_pos.z);
+    vec4 light_pos = lightTransform * pos;
+    LightPos0 = light_pos;
     Normal0 = Normal;
     LocalPos0 = vec3(pos);  // Position
     TexCoord0 = TexCoord;

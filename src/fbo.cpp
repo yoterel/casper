@@ -27,67 +27,61 @@ FBO::~FBO()
     }
 }
 
+void FBO::initDepthOnly()
+{
+    // this function is used for shadow mapping, as only depth is needed
+    m_depthOnly = true;
+    // create underlying framebuffer
+    glGenFramebuffers(1, &m_FBO);
+    // and a texture as depth attachment
+    // texture class doesn't support depth component yet, so we do it manually here
+    glGenTextures(1, &m_depthBuffer);
+    glBindTexture(GL_TEXTURE_2D, m_depthBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
+                 m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // bind and attach depth buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_depthBuffer, 0);
+    glDrawBuffer(GL_NONE); // signal no color buffer is used
+    glReadBuffer(GL_NONE); // signal no color buffer is used
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 void FBO::init(unsigned int input_color_format,
                unsigned int texture_color_format,
                unsigned int texture_interpolation_mode,
                unsigned int texture_wrap_mode)
 {
+    // create underlying framebuffer
+    glGenFramebuffers(1, &m_FBO);
+    // and a texture as color attachment
     m_texture.init(m_width, m_height, m_channels,
                    input_color_format,
                    texture_color_format,
                    texture_interpolation_mode,
                    texture_wrap_mode);
-    // glGenTextures(1, &m_texture);
-    glGenRenderbuffers(1, &m_depthBuffer);
-    glGenFramebuffers(1, &m_FBO);
-
-    // glBindTexture(GL_TEXTURE_2D, m_texture);
-    // //  set the texture wrapping parameters
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    // //  set texture filtering parameters
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // if (m_channels == 4)
-    // {
-    //     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-    // }
-    // else
-    // {
-    //     if (m_channels == 3)
-    //     {
-    //         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
-    //     }
-    //     else
-    //     {
-    //         if (m_channels == 2)
-    //         {
-    //             glTexImage2D(GL_TEXTURE_2D, 0, GL_RG, m_width, m_height, 0, GL_RG, GL_FLOAT, 0);
-    //         }
-    //         else
-    //         {
-    //             std::cout << "FBO ERROR: Unsupported number of channels." << std::endl;
-    //             exit(1);
-    //         }
-    //     }
-    // }
-
+    // and a RBO attachment for depth
+    glGenRenderbuffers(1, &m_depthBuffer); // todo: this is fast to write into but very slow for reading out from for depth queries...
     glBindRenderbuffer(GL_RENDERBUFFER, m_depthBuffer);
-    //  allocate storage
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_width, m_height);
-    //  clean up
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, m_width, m_height); //  allocate storage
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);                                          //  cleanup
 
+    // attach the attachments to the framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture.getTexture(), 0);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthBuffer);
 
+    // check status
     GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
     {
         std::cout << "ERROR: Incomplete framebuffer status." << std::endl;
     }
+    // cleanup
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -98,8 +92,15 @@ void FBO::bind(bool clear, glm::vec4 clear_color)
     if (clear)
     {
         glViewport(0, 0, m_width, m_height);
-        glClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        if (m_depthOnly)
+        {
+            glClear(GL_DEPTH_BUFFER_BIT);
+        }
+        else
+        {
+            glClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
     }
 }
 
@@ -111,6 +112,11 @@ void FBO::unbind()
 // saves the color buffer to file
 void FBO::saveColorToFile(std::string filepath, bool flip_vertically)
 {
+    if (m_depthOnly)
+    {
+        std::cout << "FBO ERROR: Cannot save color buffer of depth-only FBO." << std::endl;
+        return;
+    }
     std::vector<unsigned char> buffer(m_width * m_height * 4);
     GLsizei stride = 4 * m_width;
     this->bind(false);
@@ -175,6 +181,11 @@ std::vector<float> FBO::sampleDepthBuffer(std::vector<glm::vec2> sample_location
 // width and height are determined by framebuffer size.
 std::vector<uint8_t> FBO::getBuffer(int n_channels)
 {
+    if (m_depthOnly)
+    {
+        std::cout << "FBO ERROR: Cannot get color buffer of depth-only FBO." << std::endl;
+        exit(1);
+    }
     int texFormat;
     switch (n_channels)
     {
@@ -201,4 +212,17 @@ std::vector<uint8_t> FBO::getBuffer(int n_channels)
     glReadPixels(0, 0, m_width, m_height, texFormat, GL_UNSIGNED_BYTE, buffer.data());
     this->unbind();
     return buffer;
+}
+
+unsigned int FBO::getDepthTexture()
+{
+    if (m_depthOnly)
+    {
+        return m_depthBuffer;
+    }
+    else
+    {
+        std::cout << "FBO ERROR: Cannot get depth as a texture, as RBO is being used (you should init with initDepthOnly())." << std::endl;
+        exit(1);
+    };
 }
