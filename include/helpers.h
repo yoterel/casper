@@ -43,6 +43,7 @@ public:
     static std::vector<glm::vec3> accumulate(const std::vector<std::vector<glm::vec3>> &a, bool normalize = true);
     static glm::mat4 interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale = false, bool isRightHand = false);
     static bool isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform);
+    static void loadEXR(std::string path);
 
 private:
     Helpers();

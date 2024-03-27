@@ -607,7 +607,7 @@ int main(int argc, char *argv[])
         ("mesh", "A .fbx mesh file to use for skinning",                                                                         //
          cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                             //
         ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                 //
-        ("emesh", "A .fbx mesh file to use as an extra (used in some apps)",                                                     //
+        ("emesh", "A .fbx mesh file to use for hot swapping (used in some apps)",                                                //
          cxxopts::value<std::string>()->default_value("../../resource/GuessCharGame_palm.fbx"))                                  //
         ("h,help", "Prints usage")                                                                                               //
         ;

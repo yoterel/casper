@@ -10,3 +10,4 @@ resource/calibrations/cam_calibration/*.png
 third-party/imgui/examples
 third-party/imgui/docs
 resource/GenericHand.blend1
+resource/pbr

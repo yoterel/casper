@@ -188,11 +188,14 @@ void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
         {
             const aiVector3D &pNormal = paiMesh->mNormals[i];
             m_Normals.push_back(glm::vec3(pNormal.x, pNormal.y, pNormal.z));
+            const aiVector3D &pTangents = paiMesh->mTangents[i];
+            m_Tangents.push_back(glm::vec3(pTangents.x, pTangents.y, pTangents.z));
         }
         else
         {
-            aiVector3D Normal(0.0f, 1.0f, 0.0f);
+            aiVector3D Normal(0.0f, 0.0f, 1.0f);
             m_Normals.push_back(glm::vec3(Normal.x, Normal.y, Normal.z));
+            m_Tangents.push_back(glm::vec3(Normal.x, Normal.y, Normal.z));
         }
 
         const aiVector3D &pTexCoord = paiMesh->HasTextureCoords(0) ? paiMesh->mTextureCoords[0][i] : Zero3D;
@@ -452,6 +455,11 @@ void SkinnedModel::PopulateBuffers()
     glBufferData(GL_ARRAY_BUFFER, sizeof(m_Normals[0]) * m_Normals.size(), &m_Normals[0], GL_STATIC_DRAW);
     glEnableVertexAttribArray(NORMAL_LOCATION);
     glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_Buffers[TANGENT_VB]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(m_Normals[0]) * m_Tangents.size(), &m_Tangents[0], GL_STATIC_DRAW);
+    glEnableVertexAttribArray(TANGENT_LOCATION);
+    glVertexAttribPointer(TANGENT_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
     glBindBuffer(GL_ARRAY_BUFFER, m_Buffers[BONE_VB]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(m_Bones[0]) * m_Bones.size(), &m_Bones[0], GL_STATIC_DRAW);

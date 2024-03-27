@@ -20,6 +20,7 @@
 #define INVALID_MATERIAL 0xFFFFFFFF
 #define ASSIMP_LOAD_FLAGS (aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices)
 #define MAX_NUM_BONES_PER_VERTEX 6
+
 #define POSITION_LOCATION 0
 #define VERTEX_COLOR_LOCATION 1
 #define TEX_COORD_LOCATION 2
@@ -28,6 +29,7 @@
 #define BONE_ID_LOCATION1 5
 #define BONE_WEIGHT_LOCATION0 6
 #define BONE_WEIGHT_LOCATION1 7
+#define TANGENT_LOCATION 8
 
 enum BUFFER_TYPE
 {
@@ -37,7 +39,8 @@ enum BUFFER_TYPE
     NORMAL_VB = 3,
     BONE_VB = 4,
     VERTEX_COLOR_VB = 5,
-    NUM_BUFFERS = 6
+    TANGENT_VB = 6,
+    NUM_BUFFERS = 7
 };
 
 struct BasicMeshEntry
@@ -191,6 +194,7 @@ private:
     // Temporary space for vertex stuff before we load them into the GPU
     std::vector<glm::vec3> m_Positions;
     std::vector<glm::vec3> m_Normals;
+    std::vector<glm::vec3> m_Tangents;
     std::vector<glm::vec2> m_TexCoords;
     std::vector<glm::vec3> m_VertColors;
     std::vector<unsigned int> m_Indices;

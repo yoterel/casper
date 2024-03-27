@@ -9,6 +9,7 @@ in vec3 Normal0;
 in vec3 LocalPos0;
 in vec3 metricColor;
 in vec4 LightPos0;
+in vec3 Tangent0;
 // flat in ivec4 BoneIDs00;
 // flat in ivec2 BoneIDs11;
 // in vec4 Weights00;
@@ -56,6 +57,7 @@ struct Material
     vec3 DiffuseColor;
     vec3 SpecularColor;
 };
+
 uniform DirectionalLight gDirectionalLight;
 uniform int gNumPointLights = 0;
 uniform PointLight gPointLights[MAX_POINT_LIGHTS];
@@ -63,6 +65,7 @@ uniform int gNumSpotLights = 0;
 uniform SpotLight gSpotLights[MAX_SPOT_LIGHTS];
 uniform Material gMaterial;
 uniform sampler2D gSamplerSpecularExponent;
+uniform sampler2D gNormalMap;
 uniform vec3 gCameraLocalPos;
 uniform sampler2D src;
 uniform sampler2D projector;
@@ -94,6 +97,21 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     // float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
     return shadow;
 }  
+
+vec3 CalcBumpedNormal()
+{
+    vec3 Normal = normalize(Normal0);
+    vec3 Tangent = normalize(Tangent0);
+    Tangent = normalize(Tangent - dot(Tangent, Normal) * Normal);
+    vec3 Bitangent = cross(Tangent, Normal);
+    vec3 BumpMapNormal = texture(gNormalMap, TexCoord0).xyz;
+    BumpMapNormal = 2.0 * BumpMapNormal - vec3(1.0, 1.0, 1.0);
+    vec3 NewNormal;
+    mat3 TBN = mat3(Tangent, Bitangent, Normal);
+    NewNormal = TBN * BumpMapNormal;
+    NewNormal = normalize(NewNormal);
+    return NewNormal;
+}
 
 vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 projectiveColor)
 {
@@ -198,6 +216,7 @@ void main()
                 }
             }
             vec3 Normal = normalize(Normal0);
+            // vec3 Normal = CalcBumpedNormal();
             vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
 
             for (int i = 0 ;i < gNumPointLights ;i++) {

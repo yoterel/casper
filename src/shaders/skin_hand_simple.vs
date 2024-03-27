@@ -8,12 +8,14 @@ layout (location = 4) in ivec4 BoneIDs0;
 layout (location = 5) in ivec2 BoneIDs1;
 layout (location = 6) in vec4 Weights0;
 layout (location = 7) in vec2 Weights1;
+layout (location = 8) in vec3 Tangent;
 
 out vec2 TexCoord0;
 out vec3 ProjTexCoord;
 out vec3 Normal0;
 out vec3 LocalPos0;
 out vec4 LightPos0;
+out vec3 Tangent0;
 
 //flat out ivec4 BoneIDs00;
 //flat out ivec2 BoneIDs11;
@@ -53,6 +55,7 @@ void main()
     vec4 light_pos = lightTransform * pos;
     LightPos0 = light_pos;
     Normal0 = Normal;
+    Tangent0 = (gWorld * vec4(Tangent, 0.0)).xyz;
     LocalPos0 = vec3(pos);  // Position
     TexCoord0 = TexCoord;
     if (useMetric)
