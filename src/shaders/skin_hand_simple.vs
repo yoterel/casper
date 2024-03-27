@@ -55,7 +55,7 @@ void main()
     vec4 light_pos = lightTransform * pos;
     LightPos0 = light_pos;
     Normal0 = Normal;
-    Tangent0 = (gWorld * vec4(Tangent, 0.0)).xyz;
+    Tangent0 = Tangent;
     LocalPos0 = vec3(pos);  // Position
     TexCoord0 = TexCoord;
     if (useMetric)

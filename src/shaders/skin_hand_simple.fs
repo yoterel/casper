@@ -65,7 +65,7 @@ uniform int gNumSpotLights = 0;
 uniform SpotLight gSpotLights[MAX_SPOT_LIGHTS];
 uniform Material gMaterial;
 uniform sampler2D gSamplerSpecularExponent;
-uniform sampler2D gNormalMap;
+uniform sampler2D normalMap;
 uniform vec3 gCameraLocalPos;
 uniform sampler2D src;
 uniform sampler2D projector;
@@ -104,7 +104,7 @@ vec3 CalcBumpedNormal()
     vec3 Tangent = normalize(Tangent0);
     Tangent = normalize(Tangent - dot(Tangent, Normal) * Normal);
     vec3 Bitangent = cross(Tangent, Normal);
-    vec3 BumpMapNormal = texture(gNormalMap, TexCoord0).xyz;
+    vec3 BumpMapNormal = texture(normalMap, TexCoord0).xyz;
     BumpMapNormal = 2.0 * BumpMapNormal - vec3(1.0, 1.0, 1.0);
     vec3 NewNormal;
     mat3 TBN = mat3(Tangent, Bitangent, Normal);
@@ -215,8 +215,8 @@ void main()
                     projColor = texture(projector, vec2(u, v)).rgba;
                 }
             }
-            vec3 Normal = normalize(Normal0);
-            // vec3 Normal = CalcBumpedNormal();
+            // vec3 Normal = normalize(Normal0);
+            vec3 Normal = CalcBumpedNormal();
             vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
 
             for (int i = 0 ;i < gNumPointLights ;i++) {

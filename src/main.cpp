@@ -495,6 +495,7 @@ std::vector<std::string> texturePaths{
     "../../resource",
     "../../resource/images",
     "../../resource/baked_textures",
+    "../../resource/pbr/wood",
 };
 std::unordered_map<std::string, Texture *> texturePack;
 std::string curSelectedTexture = "uv";
@@ -503,6 +504,7 @@ std::string userStudySelectedTexture = "uv";
 SkinnedModel *extraLeftHandModel = nullptr;
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
+Texture *normalMap = nullptr;
 Texture *bakedTextureLeft = nullptr;
 Texture *bakedTextureRight = nullptr;
 FBO hands_fbo(dst_width, dst_height, 4, false);
@@ -822,6 +824,7 @@ int main(int argc, char *argv[])
     }
     projectiveTexture = texturePack["uv"];
     dynamicTexture = texturePack["uv"];
+    normalMap = texturePack["wood_floor_deck_nor_gl_1k"];
     const fs::path bakeFileLeftPath{bakeFileLeft};
     const fs::path bakeFileRightPath{bakeFileRight};
     if (fs::exists(bakeFileLeftPath))
@@ -3816,7 +3819,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             {
             case static_cast<int>(TextureMode::ORIGINAL):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr, nullptr, normalMap);
                 break;
             case static_cast<int>(TextureMode::BAKED):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
@@ -3835,7 +3838,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
                 dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, nullptr, normalMap);
                 break;
             case static_cast<int>(TextureMode::CAMERA):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, true, true, true, false, false,

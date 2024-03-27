@@ -18,7 +18,7 @@
 #include "fbo.h"
 
 #define INVALID_MATERIAL 0xFFFFFFFF
-#define ASSIMP_LOAD_FLAGS (aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices)
+#define ASSIMP_LOAD_FLAGS (aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace)
 #define MAX_NUM_BONES_PER_VERTEX 6
 
 #define POSITION_LOCATION 0
@@ -137,7 +137,8 @@ public:
     void Render(Shader &shader, unsigned int camTex, bool useFBO);
     void Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                 const glm::mat4 &local_to_world, const bool use_bones = false,
-                Texture *customDiffuseTexture = nullptr, Texture *customProjectiveTexture = nullptr);
+                Texture *customDiffuseTexture = nullptr, Texture *customProjectiveTexture = nullptr,
+                Texture *customNormalMap = nullptr);
     const Material &GetMaterial();
     void GetBoneTransforms(std::vector<glm::mat4> &transforms, const std::vector<glm::mat4> &leap_bone_transforms, const glm::mat4 &local_to_world, const bool use_bones = false);
     glm::vec3 getCenterOfMass();

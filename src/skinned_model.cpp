@@ -542,7 +542,8 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
 }
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                           const glm::mat4 &local_to_world, const bool use_bones,
-                          Texture *customDiffuseTexture, Texture *customProjectiveTexture)
+                          Texture *customDiffuseTexture, Texture *customProjectiveTexture,
+                          Texture *customNormalMap)
 {
     shader.use();
     shader.SetMaterial(GetMaterial());
@@ -560,7 +561,7 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
 
         assert(MaterialIndex < m_Materials.size());
 
-        if (customDiffuseTexture != NULL)
+        if (customDiffuseTexture != nullptr)
         {
             customDiffuseTexture->bind(GL_TEXTURE0);
         }
@@ -571,10 +572,15 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
                 m_Materials[MaterialIndex].pDiffuse->bind(GL_TEXTURE0);
             }
         }
-        if (customProjectiveTexture != NULL)
+        if (customProjectiveTexture != nullptr)
         {
             customProjectiveTexture->bind(GL_TEXTURE1);
             shader.setInt("projector", 1);
+        }
+        if (customNormalMap != nullptr)
+        {
+            customNormalMap->bind(GL_TEXTURE2);
+            shader.setInt("normalMap", 2);
         }
         if (m_Materials[MaterialIndex].pSpecularExponent)
         {
