@@ -225,10 +225,10 @@ int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 int light_mode = static_cast<int>(LightMode::DIRECTIONAL);
 glm::vec3 light_color(255.0f / 255.0f, 255.0f / 255.0f, 255.0f / 255.0f);
-float light_theta = 0.0f;
-float light_phi = 0.0f;
-float light_radius = 1.0f;
-glm::vec3 light_at(0.0f, 0.0f, 0.0f);
+float light_theta = 2.0f;
+float light_phi = 4.3f;
+float light_radius = 150.0f;
+glm::vec3 light_at(-45.0f, -131.0f, -61.0f);
 glm::vec3 light_to(0.0f, 0.0f, 0.0f);
 glm::vec3 light_up(0.0f, 0.0f, 1.0f);
 float light_near = 1.0f;
@@ -236,8 +236,12 @@ float light_far = 1000.0f;
 float light_ambient_intensity = 1.0f;
 float light_diffuse_intensity = 1.0f;
 bool light_is_projector = false;
-bool light_relative = false;
+bool light_relative = true;
 bool use_shadow_mapping = false;
+bool use_diffuse_mapping = true;
+bool use_normal_mapping = true;
+// bool use_disp_mapping = false;
+bool use_arm_mapping = false;
 float shadow_bias = 0.005f;
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
@@ -505,6 +509,8 @@ SkinnedModel *extraLeftHandModel = nullptr;
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *normalMap = nullptr;
+Texture *armMap = nullptr;
+Texture *dispMap = nullptr;
 Texture *bakedTextureLeft = nullptr;
 Texture *bakedTextureRight = nullptr;
 FBO hands_fbo(dst_width, dst_height, 4, false);
@@ -825,6 +831,8 @@ int main(int argc, char *argv[])
     projectiveTexture = texturePack["uv"];
     dynamicTexture = texturePack["uv"];
     normalMap = texturePack["wood_floor_deck_nor_gl_1k"];
+    armMap = texturePack["wood_floor_deck_arm_1k"];
+    // dispMap = texturePack["wood_floor_deck_disp_1k"];
     const fs::path bakeFileLeftPath{bakeFileLeft};
     const fs::path bakeFileRightPath{bakeFileRight};
     if (fs::exists(bakeFileLeftPath))
@@ -3813,13 +3821,16 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             // dirLight.setWorldDirection(debug_vec);
             dirLight.calcLocalDirection(lightView);
             skinnedShader->SetDirectionalLight(dirLight);
+            skinnedShader->setBool("useNormalMap", use_normal_mapping);
+            skinnedShader->setBool("useArmMap", use_arm_mapping);
+            // skinnedShader->setBool("useDispMap", use_disp_mapping);
             glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
             skinnedShader->SetCameraLocalPos(camWorldPos);
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr, nullptr, normalMap);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr, nullptr, normalMap, armMap, dispMap);
                 break;
             case static_cast<int>(TextureMode::BAKED):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
@@ -3838,7 +3849,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
                 dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, nullptr, normalMap);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, nullptr, normalMap, armMap, dispMap);
                 break;
             case static_cast<int>(TextureMode::CAMERA):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, true, true, true, false, false,
@@ -6633,6 +6644,13 @@ void openIMGUIFrame()
                 gameFrameCount = 0;
                 prevGameFrameCount = 0;
             }
+            ImGui::SeparatorText("GGX Effects");
+            ImGui::Checkbox("Diffuse Mapping", &use_diffuse_mapping);
+            ImGui::SameLine();
+            ImGui::Checkbox("Normal Mapping", &use_normal_mapping);
+            // ImGui::Checkbox("Displacement Mapping", &use_disp_mapping);
+            ImGui::SameLine();
+            ImGui::Checkbox("AO/Roughness/Metallic Mapping", &use_arm_mapping);
             if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {
                 std::vector<std::string> keys;

@@ -401,37 +401,40 @@ void SkinnedModel::LoadColors(const aiMaterial *pMaterial, int index)
         std::cout << "Assimp shading model: " << ShadingModel << std::endl;
     }
 
-    if (pMaterial->Get(AI_MATKEY_COLOR_AMBIENT, AmbientColor) == AI_SUCCESS)
-    {
-        std::cout << "Loaded ambient color: [" << AmbientColor.r << " " << AmbientColor.g << " " << AmbientColor.b << "]" << std::endl;
-        m_Materials[index].AmbientColor.r = AmbientColor.r;
-        m_Materials[index].AmbientColor.g = AmbientColor.g;
-        m_Materials[index].AmbientColor.b = AmbientColor.b;
-    }
-    else
-    {
-        m_Materials[index].AmbientColor = AllOnes;
-    }
+    m_Materials[index].AmbientColor = AllOnes;
+    m_Materials[index].DiffuseColor = AllOnes;
+    m_Materials[index].SpecularColor = AllOnes;
+    // if (pMaterial->Get(AI_MATKEY_COLOR_AMBIENT, AmbientColor) == AI_SUCCESS)
+    // {
+    //     std::cout << "Loaded ambient color: [" << AmbientColor.r << " " << AmbientColor.g << " " << AmbientColor.b << "]" << std::endl;
+    //     m_Materials[index].AmbientColor.r = AmbientColor.r;
+    //     m_Materials[index].AmbientColor.g = AmbientColor.g;
+    //     m_Materials[index].AmbientColor.b = AmbientColor.b;
+    // }
+    // else
+    // {
+    //     m_Materials[index].AmbientColor = AllOnes;
+    // }
 
-    aiColor3D DiffuseColor(0.0f, 0.0f, 0.0f);
+    // aiColor3D DiffuseColor(0.0f, 0.0f, 0.0f);
 
-    if (pMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, DiffuseColor) == AI_SUCCESS)
-    {
-        std::cout << "Loaded diffuse color: [" << DiffuseColor.r << " " << DiffuseColor.g << " " << DiffuseColor.b << "]" << std::endl;
-        m_Materials[index].DiffuseColor.r = DiffuseColor.r;
-        m_Materials[index].DiffuseColor.g = DiffuseColor.g;
-        m_Materials[index].DiffuseColor.b = DiffuseColor.b;
-    }
+    // if (pMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, DiffuseColor) == AI_SUCCESS)
+    // {
+    //     std::cout << "Loaded diffuse color: [" << DiffuseColor.r << " " << DiffuseColor.g << " " << DiffuseColor.b << "]" << std::endl;
+    //     m_Materials[index].DiffuseColor.r = DiffuseColor.r;
+    //     m_Materials[index].DiffuseColor.g = DiffuseColor.g;
+    //     m_Materials[index].DiffuseColor.b = DiffuseColor.b;
+    // }
 
-    aiColor3D SpecularColor(0.0f, 0.0f, 0.0f);
+    // aiColor3D SpecularColor(0.0f, 0.0f, 0.0f);
 
-    if (pMaterial->Get(AI_MATKEY_COLOR_SPECULAR, SpecularColor) == AI_SUCCESS)
-    {
-        std::cout << "Loaded specular color: [" << SpecularColor.r << " " << SpecularColor.g << " " << SpecularColor.b << "]" << std::endl;
-        m_Materials[index].SpecularColor.r = SpecularColor.r;
-        m_Materials[index].SpecularColor.g = SpecularColor.g;
-        m_Materials[index].SpecularColor.b = SpecularColor.b;
-    }
+    // if (pMaterial->Get(AI_MATKEY_COLOR_SPECULAR, SpecularColor) == AI_SUCCESS)
+    // {
+    //     std::cout << "Loaded specular color: [" << SpecularColor.r << " " << SpecularColor.g << " " << SpecularColor.b << "]" << std::endl;
+    //     m_Materials[index].SpecularColor.r = SpecularColor.r;
+    //     m_Materials[index].SpecularColor.g = SpecularColor.g;
+    //     m_Materials[index].SpecularColor.b = SpecularColor.b;
+    // }
 }
 
 void SkinnedModel::PopulateBuffers()
@@ -542,8 +545,11 @@ void SkinnedModel::Render(Shader &shader, unsigned int camTex, bool useFBO)
 }
 void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &bones_to_world,
                           const glm::mat4 &local_to_world, const bool use_bones,
-                          Texture *customDiffuseTexture, Texture *customProjectiveTexture,
-                          Texture *customNormalMap)
+                          Texture *customDiffuseTexture,
+                          Texture *customProjectiveTexture,
+                          Texture *customNormalMap,
+                          Texture *customARMMap,
+                          Texture *customDisplacementMap)
 {
     shader.use();
     shader.SetMaterial(GetMaterial());
@@ -581,6 +587,16 @@ void SkinnedModel::Render(SkinningShader &shader, const std::vector<glm::mat4> &
         {
             customNormalMap->bind(GL_TEXTURE2);
             shader.setInt("normalMap", 2);
+        }
+        if (customARMMap != nullptr)
+        {
+            customNormalMap->bind(GL_TEXTURE3);
+            shader.setInt("armMap", 3);
+        }
+        if (customDisplacementMap != nullptr)
+        {
+            customNormalMap->bind(GL_TEXTURE4);
+            shader.setInt("dispMap", 4);
         }
         if (m_Materials[MaterialIndex].pSpecularExponent)
         {

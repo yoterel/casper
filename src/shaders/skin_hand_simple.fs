@@ -66,6 +66,8 @@ uniform SpotLight gSpotLights[MAX_SPOT_LIGHTS];
 uniform Material gMaterial;
 uniform sampler2D gSamplerSpecularExponent;
 uniform sampler2D normalMap;
+uniform sampler2D armMap;
+// uniform sampler2D dispMap;
 uniform vec3 gCameraLocalPos;
 uniform sampler2D src;
 uniform sampler2D projector;
@@ -81,6 +83,9 @@ uniform float ambientCoeff = 0.0;
 uniform sampler2D shadowMap;
 uniform bool useShadow = false;
 uniform float shadowBias = 0.005;
+uniform bool useNormalMap = false;
+uniform bool useArmMap = false;
+// uniform bool useDispMap = false;
 
 float ShadowCalculation(vec4 fragPosLightSpace)
 {
@@ -115,9 +120,20 @@ vec3 CalcBumpedNormal()
 
 vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 projectiveColor)
 {
+    float armAmbient = 1.0f;
+    float armRoughness = 1.0f;
+    float armMetalic = 1.0f;
+    if (useArmMap)
+    {
+        vec3 armColor = texture(armMap, TexCoord0).rgb;
+        armAmbient = armColor.r;
+        armRoughness = armColor.g;
+        armMetalic = armColor.b;
+    }
     vec4 AmbientColor = vec4(Light.Color, 1.0f) *
                         Light.AmbientIntensity *
-                        vec4(gMaterial.AmbientColor, 1.0f);
+                        vec4(gMaterial.AmbientColor, 1.0f) *
+                        armAmbient;
 
     float DiffuseFactor = dot(Normal, -LightDirection);
 
@@ -140,7 +156,8 @@ vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 p
             SpecularColor = vec4(Light.Color, 1.0f) *
                             Light.DiffuseIntensity * // using the diffuse intensity for diffuse/specular
                             vec4(gMaterial.SpecularColor, 1.0f) *
-                            SpecularFactor;
+                            SpecularFactor * 
+                            (1-armRoughness);
         }
     }
 
@@ -215,8 +232,11 @@ void main()
                     projColor = texture(projector, vec2(u, v)).rgba;
                 }
             }
-            // vec3 Normal = normalize(Normal0);
-            vec3 Normal = CalcBumpedNormal();
+            vec3 Normal;
+            if (useNormalMap)
+                Normal = CalcBumpedNormal();
+            else
+                Normal = normalize(Normal0);
             vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
 
             for (int i = 0 ;i < gNumPointLights ;i++) {
