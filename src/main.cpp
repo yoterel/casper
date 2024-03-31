@@ -538,6 +538,7 @@ Texture camTexture;
 glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 DirectionalLight dirLight(glm::vec3(1.0f, 1.0f, 1.0f), 1.0f, 1.0f, glm::vec3(0.0f, -1.0f, -1.0f));
+bool skeleton_as_gizmos = true;
 unsigned int skeletonVAO = 0;
 unsigned int skeletonVBO = 0;
 unsigned int gizmoVAO = 0;
@@ -3512,6 +3513,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     if (show_landmarks)
     {
+        float landmarkSize = 10.0f;
         vcolorShader->use();
         std::vector<glm::vec2> leap_joints_left = Helpers::project_points(joints_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
         std::vector<glm::vec2> leap_joints_right = Helpers::project_points(joints_right, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
@@ -3529,18 +3531,18 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             vcolorShader->setMat4("MVP", glm::mat4(1.0f));
         PointCloud cloud_left(leap_joints_left_filtered, screen_verts_color_white);
         PointCloud cloud_right(leap_joints_right_filtered, screen_verts_color_white);
-        cloud_left.render(5.0f);
-        cloud_right.render(5.0f);
+        cloud_left.render(landmarkSize);
+        cloud_right.render(landmarkSize);
         if (use_mls)
         {
             PointCloud cloud_src_input_left(ControlPointsP_input_left, screen_verts_color_red);
             PointCloud cloud_src_input_right(ControlPointsP_input_right, screen_verts_color_red);
             PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);
             PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta);
-            cloud_src_input_left.render(5.0f);
-            cloud_src_input_right.render(5.0f);
-            cloud_src.render(5.0f);
-            cloud_dst.render(5.0f);
+            cloud_src_input_left.render(landmarkSize);
+            cloud_src_input_right.render(landmarkSize);
+            cloud_src.render(landmarkSize);
+            cloud_dst.render(landmarkSize);
         }
         else
         {
@@ -3548,8 +3550,8 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             {
                 PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);
                 PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta);
-                cloud_src.render(5.0f);
-                cloud_dst.render(5.0f);
+                cloud_src.render(landmarkSize);
+                cloud_dst.render(landmarkSize);
             }
         }
     }
@@ -3865,20 +3867,45 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         }
         case static_cast<int>(MaterialMode::SKELETON): // mesh is rendered as a skeleton connecting the joints
         {
-            glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-            std::vector<glm::vec3> skele_for_upload;
-            glm::vec3 green = glm::vec3(0.0f, 1.0f, 0.0f);
-            std::vector<glm::vec3> my_joints = isRightHand ? joints_right : joints_left;
-            for (int i = 0; i < my_joints.size(); i++)
+            if (skeleton_as_gizmos)
             {
-                skele_for_upload.push_back(my_joints[i]);
-                skele_for_upload.push_back(green);
+                vcolorShader->use();
+                vcolorShader->setBool("allWhite", false);
+                std::vector<glm::mat4> BoneToLocalTransforms;
+                handModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                glBindVertexArray(gizmoVAO);
+                // in bind pose
+                // for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
+                // {
+
+                //     vcolorShader->setMat4("MVP", cam_projection_transform * cam_view_transform * rotx * BoneToLocalTransforms[i]);
+                //     glDrawArrays(GL_LINES, 0, 6);
+                // }
+                // in leap motion pose
+                for (unsigned int i = 0; i < bones2world.size(); i++)
+                {
+                    vcolorShader->setMat4("MVP", cam_projection_transform * cam_view_transform * bones2world[i]);
+                    glDrawArrays(GL_LINES, 0, 6);
+                }
             }
-            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skele_for_upload.size(), skele_for_upload.data(), GL_STATIC_DRAW);
-            vcolorShader->use();
-            vcolorShader->setMat4("MVP", cam_projection_transform * cam_view_transform * global_scale);
-            glBindVertexArray(skeletonVAO);
-            glDrawArrays(GL_LINES, 0, static_cast<int>(skele_for_upload.size() / 2));
+            else
+            {
+                glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
+                std::vector<glm::vec3> skele_for_upload;
+                glm::vec3 green = glm::vec3(0.0f, 1.0f, 0.0f);
+                std::vector<glm::vec3> my_joints = isRightHand ? joints_right : joints_left;
+                for (int i = 0; i < my_joints.size(); i++)
+                {
+                    skele_for_upload.push_back(my_joints[i]);
+                    skele_for_upload.push_back(green);
+                }
+                glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skele_for_upload.size(), skele_for_upload.data(), GL_STATIC_DRAW);
+                vcolorShader->use();
+                vcolorShader->setBool("allWhite", false);
+                vcolorShader->setMat4("MVP", cam_projection_transform * cam_view_transform * global_scale);
+                glBindVertexArray(skeletonVAO);
+                glDrawArrays(GL_LINES, 0, static_cast<int>(skele_for_upload.size() / 2));
+            }
             break;
         }
         case static_cast<int>(MaterialMode::PER_BONE_SCALAR):
@@ -5781,28 +5808,6 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 // vcolorShader.setMat4("model", bones_to_world[0]);
                 // glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
             }
-            // draw bones local coordinates as gizmos
-            {
-                // vcolorShader.use();
-                // vcolorShader.setMat4("projection", flycam_projection_transform);
-                // vcolorShader.setMat4("view", flycam_view_transform);
-                // std::vector<glm::mat4> BoneToLocalTransforms;
-                // leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
-                // glBindVertexArray(gizmoVAO);
-                // // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-                // for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
-                // {
-                //     // in bind pose
-                //     vcolorShader.setMat4("model", rotx * BoneToLocalTransforms[i]);
-                //     glDrawArrays(GL_LINES, 0, 6);
-                // }
-                // for (unsigned int i = 0; i < bones_to_world_right.size(); i++)
-                // {
-                //     // in leap motion pose
-                //     vcolorShader.setMat4("model", bones_to_world_right[i]);
-                //     glDrawArrays(GL_LINES, 0, 6);
-                // }
-            }
             // draw gizmo for palm orientation
             {
                 // vcolorShader.use();
@@ -6628,6 +6633,16 @@ void openIMGUIFrame()
             ImGui::RadioButton("Skeleton", &material_mode, static_cast<int>(MaterialMode::SKELETON));
             ImGui::SameLine();
             ImGui::RadioButton("Per Bone Scalar", &material_mode, static_cast<int>(MaterialMode::PER_BONE_SCALAR));
+            switch (material_mode)
+            {
+            case static_cast<int>(MaterialMode::SKELETON):
+            {
+                ImGui::Checkbox("Skeleton as Gizmos", &skeleton_as_gizmos);
+                break;
+            }
+            default:
+                break;
+            }
             ImGui::SeparatorText("Diffuse Texture Type");
             ImGui::RadioButton("Original", &texture_mode, static_cast<int>(TextureMode::ORIGINAL));
             ImGui::SameLine();
