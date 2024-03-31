@@ -231,12 +231,12 @@ void main()
                     projColor = texture(projector, vec2(u, v)).rgb;
                 }
             }
-            vec3 Normal;
+            vec3 Normal;  // looks like normal is computed in world space for bind pose...
             if (useNormalMap)
                 Normal = CalcBumpedNormal();
             else
                 Normal = normalize(Normal0);
-            vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
+            vec4 TotalLight = CalcDirectionalLight(Normal, projColor);  // light data should be in world space
 
             for (int i = 0; i < gNumPointLights; i++) {
                 TotalLight += CalcPointLight(gPointLights[i], Normal);

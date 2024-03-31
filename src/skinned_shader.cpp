@@ -156,7 +156,7 @@ void SkinningShader::SetDirectionalLight(const DirectionalLight &Light)
     glUniform3f(dirLightLoc.Color, Light.Color.x, Light.Color.y, Light.Color.z);
     glUniform1f(dirLightLoc.AmbientIntensity, Light.AmbientIntensity);
     glUniform1f(dirLightLoc.DiffuseIntensity, Light.DiffuseIntensity);
-    glm::vec3 LocalDirection = Light.getLocalDirection();
+    glm::vec3 LocalDirection = Light.getWorldDirection();
     glUniform3f(dirLightLoc.Direction, LocalDirection.x, LocalDirection.y, LocalDirection.z);
 }
 

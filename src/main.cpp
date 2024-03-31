@@ -547,6 +547,7 @@ unsigned int frustrumVAO = 0;
 unsigned int frustrumVBO = 0;
 unsigned int cubeVAO = 0;
 unsigned int cubeVBO = 0;
+unsigned int cubeEBO = 0;
 std::vector<glm::vec3> frustumCornerVertices;
 std::vector<glm::vec3> near_frustrum;
 std::vector<glm::vec3> mid_frustrum;
@@ -751,7 +752,7 @@ int main(int argc, char *argv[])
     Helpers::setupSkeletonBuffers(skeletonVAO, skeletonVBO);
     Helpers::setupGizmoBuffers(gizmoVAO, gizmoVBO);
     Helpers::setupFrustrumBuffers(frustrumVAO, frustrumVBO);
-    Helpers::setupCubeBuffers(cubeVAO, cubeVBO);
+    Helpers::setupCubeBuffers(cubeVAO, cubeVBO, cubeEBO);
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
@@ -3821,13 +3822,14 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             glm::mat4 lightProjection, lightView;
             getLightTransform(lightProjection, lightView, bones_to_world_right);
             // dirLight.setWorldDirection(debug_vec);
-            dirLight.calcLocalDirection(lightView);
+            dirLight.calcLocalDirection(glm::inverse(lightView));
             skinnedShader->SetDirectionalLight(dirLight);
             skinnedShader->setBool("useNormalMap", use_normal_mapping);
             skinnedShader->setBool("useArmMap", use_arm_mapping);
             // skinnedShader->setBool("useDispMap", use_disp_mapping);
-            glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
-            skinnedShader->SetCameraLocalPos(camWorldPos);
+            glm::mat4 cam2world = glm::inverse(cam_view_transform);
+            glm::vec3 camPos = glm::vec3(cam2world[3][0], cam2world[3][1], cam2world[3][2]);
+            skinnedShader->SetCameraLocalPos(camPos);
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL):
@@ -5724,44 +5726,21 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
             // glBindVertexArray(gizmoVAO);
             // glDrawArrays(GL_LINES, 0, 6);
         }
-        // draws cube at world origin
+        // draws unit cube at world origin
         {
-            /* regular rgb cube */
-            // vcolorShader->use();
-            // glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-            // vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
-            // glEnable(GL_DEPTH_TEST);
-            // glDisable(GL_CULL_FACE);
-            // glBindVertexArray(cubeVAO);
-            // glDrawArrays(GL_TRIANGLES, 0, 36);
-            // glEnable(GL_CULL_FACE);
-            /* bake projective texture */
-            // if (baked)
-            // {
-            //     textureShader.use();
-            //     textureShader.setBool("flipVer", false);
-            //     textureShader.setBool("flipHor", false);
-            //     textureShader.setMat4("projection", flycam_projection_transform);
-            //     textureShader.setMat4("view", flycam_view_transform);
-            //     textureShader.setMat4("model", glm::mat4(1.0f));
-            //     textureShader.setBool("binary", false);
-            //     textureShader.setInt("src", 0);
-            //     bake_fbo.getTexture()->bind();
-            // }
-            // else
-            // {
-            //     projectorOnlyShader.use();
-            //     projectorOnlyShader.setBool("flipVer", false);
-            //     // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-            //     projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-            //     projectorOnlyShader.setMat4("projTransform", proj_projection_transform * proj_view_transform);
-            //     projectorOnlyShader.setBool("binary", false);
-            //     projectorOnlyShader.setInt("src", 0);
-            //     dynamicTexture->bind();
-            // }
-            // glEnable(GL_DEPTH_TEST);
-            // glBindVertexArray(tcubeVAO);
-            // glDrawArrays(GL_TRIANGLES, 0, 36);
+            vcolorShader->use();
+            glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+            vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
+            vcolorShader->setBool("allWhite", false);
+            glBindVertexArray(cubeVAO);
+            glDrawElements(GL_TRIANGLES,    // primitive type
+                           36,              // # of indices
+                           GL_UNSIGNED_INT, // data type
+                           (void *)0);
+            model = glm::scale(glm::mat4(1.0f), glm::vec3(15.0f, 15.0f, 15.0f));
+            vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
+            glBindVertexArray(gizmoVAO);
+            glDrawArrays(GL_LINES, 0, 6);
         }
         if (bones_to_world_right.size() > 0)
         {
@@ -5773,15 +5752,18 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 // vcolorShader->setMat4("projection", flycam_projection_transform);
                 // vcolorShader->setMat4("view", flycam_view_transform);
                 // vcolorShader->setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
-                lightView = glm::inverse(lightView);
-                glm::vec3 at = glm::vec3(lightView[3][0], lightView[3][1], lightView[3][2]);
-                glm::mat4 model = glm::translate(glm::mat4(1.0f), at);
-                model = glm::scale(model, glm::vec3(10.0f, 10.0f, 10.0f));
+                glm::mat4 light2world = glm::inverse(lightView);
+                // glm::vec3 at = glm::vec3(light2world[3][0], light2world[3][1], light2world[3][2]);
+                // glm::mat4 model = glm::translate(glm::mat4(1.0f), at);
+                glm::mat4 model = glm::scale(light2world, glm::vec3(10.0f, 10.0f, 10.0f));
                 vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
-                vcolorShader->setBool("allWhite", true);
+                vcolorShader->setBool("allWhite", false);
                 glBindVertexArray(cubeVAO);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
-                model = glm::scale(lightView, glm::vec3(10.0f, 10.0f, 10.0f));
+                glDrawElements(GL_TRIANGLES,    // primitive type
+                               36,              // # of indices
+                               GL_UNSIGNED_INT, // data type
+                               (void *)0);
+                model = glm::scale(light2world, glm::vec3(15.0f, 15.0f, 15.0f));
                 vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
                 glBindVertexArray(gizmoVAO);
                 glDrawArrays(GL_LINES, 0, 6);

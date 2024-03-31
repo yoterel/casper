@@ -41,24 +41,24 @@ void main()
     BoneTransform     += gBones[BoneIDs1[0]] * Weights1[0];
     BoneTransform     += gBones[BoneIDs1[1]] * Weights1[1];
     
-    vec4 pos = BoneTransform * vec4(Position, 1.0);
+    vec4 pos = BoneTransform * vec4(Position, 1.0);  // pos is world position = bone2world * vertices (in bone space)
     if (bake)
     {
         gl_Position = vec4((TexCoord.x*2) - 1, (TexCoord.y*2) - 1, 0.0, 1.0);
     }
     else
     {
-        gl_Position = gTransform * pos;
+        gl_Position = gTransform * pos;  // project to screen space
     }
     vec4 proj_pos = projTransform * pos;
     ProjTexCoord = vec3(proj_pos.x, proj_pos.y, proj_pos.z);
-    vec4 light_pos = lightTransform * pos;
+    vec4 light_pos = lightTransform * pos;  // project to light space
     LightPos0 = light_pos;
     Normal0 = Normal;
     Tangent0 = Tangent;
-    LocalPos0 = vec3(pos);  // Position
+    LocalPos0 = vec3(pos);  // This is world position...todo change name
     TexCoord0 = TexCoord;
-    if (useMetric)
+    if (useMetric)  // this is by far the ugliest piece of code in this project to find which bone is most influencing the vertex
     {
         int selectedBoneID = BoneIDs0[0];
         int maxIndex = 0;
