@@ -3483,12 +3483,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
                                       leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
-                                      &postprocess_fbo, masking_threshold, jfa_distance_threshold, jfa_seam_threshold);
+                                      &postprocess_fbo, masking_threshold, jfa_distance_threshold, jfa_seam_threshold, mask_bg_color);
         else
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, uv_fbo.getTexture()->getTexture(),
                                       leftHandTexture->getTexture(),
                                       camTexture.getTexture(),
-                                      &postprocess_fbo, masking_threshold, jfa_distance_threshold, jfa_seam_threshold);
+                                      &postprocess_fbo, masking_threshold, jfa_distance_threshold, jfa_seam_threshold, mask_bg_color);
         break;
     }
     default:
