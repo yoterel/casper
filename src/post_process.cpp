@@ -448,7 +448,7 @@ void PostProcess::jump_flood_uv(Shader &jfaInit, Shader &jfa, Shader &uv_NN_shad
     uv_NN_shader.setBool("flipMaskVer", true);
     uv_NN_shader.setBool("flipMaskHor", true);
     uv_NN_shader.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
-    uv_NN_shader.setVec3("bgColor", glm::vec3(0.0f, 0.0f, 1.0f));
+    uv_NN_shader.setVec3("bgColor", bgColor);
     m_quad.render();
     if (target_fbo != NULL)
     {
@@ -523,7 +523,7 @@ void PostProcess::jump_flood(Shader &jfaInit, Shader &jfa, Shader &NN_shader,
     NN_shader.setBool("flipMaskVer", true);
     NN_shader.setBool("flipMaskHor", true);
     NN_shader.setVec2("resolution", glm::vec2(m_dstWidth, m_dstHeight));
-    NN_shader.setVec3("bgColor", glm::vec3(0.0f, 0.0f, 1.0f));
+    NN_shader.setVec3("bgColor", bgColor);
     m_quad.render();
     // result will be contained in the first ping pong buffer texture
     if (target_fbo != NULL)
