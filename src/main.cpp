@@ -3820,6 +3820,13 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         case static_cast<int>(MaterialMode::GGX): // uses GGX-like material
         {
             skinnedShader->use();
+            if (surround_light)
+            {
+                light_phi += surround_light_speed;
+            }
+            light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
+                                 light_radius * sin(light_theta) * sin(light_phi),
+                                 light_radius * cos(light_theta));
             dirLight.setColor(light_color);
             dirLight.setAmbientIntensity(light_ambient_intensity);
             dirLight.setDiffuseIntensity(light_diffuse_intensity);
@@ -6594,17 +6601,8 @@ void openIMGUIFrame()
             default:
                 break;
             }
-            if (ImGui::Checkbox("Surround Light", &surround_light))
-            {
-                ImGui::SliderFloat("Surround Light Speed", &surround_light_speed, 0.001f, 0.01f);
-            }
-            if (surround_light)
-            {
-                light_phi += surround_light;
-            }
-            light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
-                                 light_radius * sin(light_theta) * sin(light_phi),
-                                 light_radius * cos(light_theta));
+            ImGui::Checkbox("Surround Light", &surround_light);
+            ImGui::SliderFloat("Surround Light Speed", &surround_light_speed, 0.001f, 0.01f);
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
