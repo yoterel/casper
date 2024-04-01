@@ -233,15 +233,17 @@ glm::vec3 light_to(0.0f, 0.0f, 0.0f);
 glm::vec3 light_up(0.0f, 0.0f, 1.0f);
 float light_near = 1.0f;
 float light_far = 1000.0f;
-float light_ambient_intensity = 1.0f;
+float light_ambient_intensity = 0.2f;
 float light_diffuse_intensity = 1.0f;
 bool light_is_projector = false;
+bool surround_light = false;
+float surround_light_speed = 0.001f;
 bool light_relative = true;
 bool use_shadow_mapping = false;
 bool use_diffuse_mapping = true;
 bool use_normal_mapping = true;
 // bool use_disp_mapping = false;
-bool use_arm_mapping = false;
+bool use_arm_mapping = true;
 float shadow_bias = 0.005f;
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
@@ -6556,6 +6558,8 @@ void openIMGUIFrame()
             ImGui::Checkbox("Hard Shadows", &use_shadow_mapping);
             ImGui::SliderFloat("Shadow Bias", &shadow_bias, 0.001f, 0.1f);
             ImGui::SeparatorText("Light Mode");
+            ImGui::RadioButton("Point", &light_mode, static_cast<int>(LightMode::POINT));
+            ImGui::SameLine();
             ImGui::RadioButton("Directional", &light_mode, static_cast<int>(LightMode::DIRECTIONAL));
             ImGui::SameLine();
             ImGui::RadioButton("Projector", &light_mode, static_cast<int>(LightMode::PROJECTOR));
@@ -6574,27 +6578,12 @@ void openIMGUIFrame()
                 ImGui::SliderFloat("Light Ambient Intensity", &light_ambient_intensity, 0.0f, 1.0f);
                 ImGui::SliderFloat("Light Diffuse Intensity", &light_diffuse_intensity, 0.0f, 1.0f);
                 ImGui::ColorEdit3("Light Color", &light_color.x, ImGuiColorEditFlags_NoOptions);
-                if (ImGui::SliderFloat("Light Rad", &light_radius, 0.0f, 500.0f))
-                {
-                    light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
-                                         light_radius * sin(light_theta) * sin(light_phi),
-                                         light_radius * cos(light_theta));
-                }
-                if (ImGui::SliderFloat("Light Theta", &light_theta, -3.14f, 3.14f))
-                {
-                    light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
-                                         light_radius * sin(light_theta) * sin(light_phi),
-                                         light_radius * cos(light_theta));
-                }
-                if (ImGui::SliderFloat("Light Phi", &light_phi, 0.0f, 2 * 3.14f))
-                {
-                    light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
-                                         light_radius * sin(light_theta) * sin(light_phi),
-                                         light_radius * cos(light_theta));
-                }
-                ImGui::SliderFloat3("Light At", &light_at.x, -1000.0f, 1000.0f);
-                ImGui::SliderFloat3("Light To", &light_to.x, -1000.0f, 1000.0f);
-                ImGui::SliderFloat3("Light Up", &light_up.x, -1.0f, 1.0f);
+                ImGui::SliderFloat("Light Rad", &light_radius, 0.0f, 500.0f);
+                ImGui::SliderFloat("Light Theta", &light_theta, -3.14f, 3.14f);
+                ImGui::SliderFloat("Light Phi", &light_phi, 0.0f, 2 * 3.14f);
+                // ImGui::SliderFloat3("Light At", &light_at.x, -1000.0f, 1000.0f);
+                // ImGui::SliderFloat3("Light To", &light_to.x, -1000.0f, 1000.0f);
+                // ImGui::SliderFloat3("Light Up", &light_up.x, -1.0f, 1.0f);
                 ImGui::SliderFloat("Light Near", &light_near, 0.1f, 1000.0f);
                 ImGui::SliderFloat("Light Far", &light_far, 0.1f, 1000.0f);
                 break;
@@ -6602,6 +6591,17 @@ void openIMGUIFrame()
             default:
                 break;
             }
+            if (ImGui::Checkbox("Surround Light", &surround_light))
+            {
+                ImGui::SliderFloat("Surround Light Speed", &surround_light_speed, 0.001f, 0.01f);
+            }
+            if (surround_light)
+            {
+                light_phi += surround_light;
+            }
+            light_at = glm::vec3(light_radius * sin(light_theta) * cos(light_phi),
+                                 light_radius * sin(light_theta) * sin(light_phi),
+                                 light_radius * cos(light_theta));
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
