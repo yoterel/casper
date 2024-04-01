@@ -13,6 +13,7 @@ uniform bool maskIsGray = false;
 uniform float threshold = 0.01;
 uniform float distThreshold = 50.0;
 uniform float seamThreshold = 0.1;
+uniform vec3 bgColor;
 
 void main()
 {
@@ -33,8 +34,8 @@ void main()
         float dist = distance(loc.xy, gl_FragCoord.xy); // compute distance to nearest seed in pixel space
         if (dist >= distThreshold)
         {
-            discard;
-            // FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+            // discard;
+            FragColor = vec4(bgColor, 1.0);
         }
         else
         {
@@ -58,6 +59,6 @@ void main()
             FragColor = texture(unwrapped, new_uv); // sample unwrapped texture using new uv
         }
     } else {  // background
-        FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        FragColor = vec4(bgColor, 1.0);
     }
 }

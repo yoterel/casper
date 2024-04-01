@@ -3,6 +3,7 @@ out vec4 FragColor;
 in vec2 TexCoord;
 
 uniform sampler2D src;
+uniform vec3 bgColor;
 uniform bool binary = false;
 uniform float threshold = 0.01;
 uniform bool isGray = false;
@@ -20,6 +21,8 @@ void main()
         col = vec4(0.0, col.r, 0.0, 1.0);
     if (onlyGreen)
         col = vec4(0.0, 1.0, 0.0, 1.0);
+    if (col.a != 1.0)
+        col = vec4(bgColor, 1.0);
     if (binary)
     {
         float avg = (col.r + col.g + col.b) * 0.333333;
@@ -33,7 +36,7 @@ void main()
         if (gammaCorrection)
         {
             float gamma = 2.2;
-            col = pow(col, vec4(gamma));
+            col = pow(col, vec4(gamma, gamma, gamma, 1.0));
         }
 	    FragColor = col;
     }

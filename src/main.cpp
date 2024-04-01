@@ -184,7 +184,8 @@ void set_texture_shader(Shader *textureShader,
                         glm::mat4 model = glm::mat4(1.0f),
                         glm::mat4 projection = glm::mat4(1.0f),
                         glm::mat4 view = glm::mat4(1.0f),
-                        bool gammaCorrection = false);
+                        bool gammaCorrection = false,
+                        glm::vec3 bgColor = glm::vec3(0.0f));
 void set_skinned_shader(SkinningShader *skinnedShader,
                         glm::mat4 transform,
                         bool flipVer = false, bool flipHor = false,
@@ -2903,7 +2904,7 @@ bool extract_centroid(cv::Mat binary_image, glm::vec2 &centeroid)
 }
 
 void set_texture_shader(Shader *textureShader, bool flipVer, bool flipHor, bool isGray, bool binary, float threshold,
-                        int src, glm::mat4 model, glm::mat4 projection, glm::mat4 view, bool gammaCorrection)
+                        int src, glm::mat4 model, glm::mat4 projection, glm::mat4 view, bool gammaCorrection, glm::vec3 bgColor)
 {
     textureShader->use();
     textureShader->setMat4("view", view);
@@ -2916,6 +2917,7 @@ void set_texture_shader(Shader *textureShader, bool flipVer, bool flipHor, bool 
     textureShader->setBool("isGray", isGray);
     textureShader->setInt("src", src);
     textureShader->setBool("gammaCorrection", gammaCorrection);
+    textureShader->setVec3("bgColor", bgColor);
 }
 
 void set_skinned_shader(SkinningShader *skinnedShader,
@@ -3423,7 +3425,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         else
             hands_fbo.getTexture()->bind();
         // render
-        set_texture_shader(textureShader, false, false, false);
+        set_texture_shader(textureShader, false, false, false, false, masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), false, mask_bg_color);
         fullScreenQuad.render(false, false, true);
         // if (skeleton_vertices.size() > 0)
         // {
@@ -3464,13 +3466,14 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     {
         if (use_mls)
             postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
-                                   mls_fbo.getTexture()->getTexture(), camTexture.getTexture(),
-                                   &postprocess_fbo, masking_threshold, jfa_distance_threshold);
+                                   mls_fbo.getTexture()->getTexture(),
+                                   camTexture.getTexture(),
+                                   &postprocess_fbo, masking_threshold, jfa_distance_threshold, mask_bg_color);
         else
             postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
                                    hands_fbo.getTexture()->getTexture(),
                                    camTexture.getTexture(),
-                                   &postprocess_fbo, masking_threshold, jfa_distance_threshold);
+                                   &postprocess_fbo, masking_threshold, jfa_distance_threshold, mask_bg_color);
         break;
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
