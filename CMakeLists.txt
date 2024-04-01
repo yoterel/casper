@@ -83,7 +83,6 @@ add_executable(ahand
     src/skinned_shader.cpp
     src/post_process.cpp
     src/utils.cpp
-    src/cuda/cuda2gl.cu
     src/cnpy.cpp
     src/point_cloud.cpp
     src/fbo.cpp

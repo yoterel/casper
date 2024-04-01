@@ -9,13 +9,11 @@ in vec3 Normal0;
 in vec3 LocalPos0;
 in vec3 metricColor;
 in vec4 LightPos0;
-// flat in ivec4 BoneIDs00;
-// flat in ivec2 BoneIDs11;
-// in vec4 Weights00;
-// in vec2 Weights11;
-// in vec3 ourColor;
+in vec3 Tangent0;
 out vec4 FragColor;
 
+
+// define some structs
 struct BaseLight
 {
     vec3 Color;
@@ -56,6 +54,7 @@ struct Material
     vec3 DiffuseColor;
     vec3 SpecularColor;
 };
+
 uniform DirectionalLight gDirectionalLight;
 uniform int gNumPointLights = 0;
 uniform PointLight gPointLights[MAX_POINT_LIGHTS];
@@ -63,6 +62,9 @@ uniform int gNumSpotLights = 0;
 uniform SpotLight gSpotLights[MAX_SPOT_LIGHTS];
 uniform Material gMaterial;
 uniform sampler2D gSamplerSpecularExponent;
+uniform sampler2D normalMap;
+uniform sampler2D armMap;
+// uniform sampler2D dispMap;
 uniform vec3 gCameraLocalPos;
 uniform sampler2D src;
 uniform sampler2D projector;
@@ -78,7 +80,12 @@ uniform float ambientCoeff = 0.0;
 uniform sampler2D shadowMap;
 uniform bool useShadow = false;
 uniform float shadowBias = 0.005;
+uniform bool useNormalMap = false;
+uniform bool useArmMap = false;
+// uniform bool useDispMap = false;
 
+
+// function to calculate shadow using shadow mapping
 float ShadowCalculation(vec4 fragPosLightSpace)
 {
     // perform perspective divide
@@ -95,21 +102,49 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     return shadow;
 }  
 
-vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 projectiveColor)
+// function to calculate bumped normals using normal map
+vec3 CalcBumpedNormal()
 {
-    vec4 AmbientColor = vec4(Light.Color, 1.0f) *
+    vec3 Normal = normalize(Normal0);
+    vec3 Tangent = normalize(Tangent0);
+    Tangent = normalize(Tangent - dot(Tangent, Normal) * Normal);
+    vec3 Bitangent = cross(Tangent, Normal);
+    vec3 BumpMapNormal = texture(normalMap, TexCoord0).xyz;
+    BumpMapNormal = 2.0 * BumpMapNormal - vec3(1.0, 1.0, 1.0);
+    vec3 NewNormal;
+    mat3 TBN = mat3(Tangent, Bitangent, Normal);
+    NewNormal = TBN * BumpMapNormal;
+    NewNormal = normalize(NewNormal);
+    return NewNormal;
+}
+
+// function to calculate basic lighting
+vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec3 projectiveColor)
+{
+    float armAmbient = 1.0;
+    float armRoughness = 1.0;
+    float armMetalic = 1.0;
+    if (useArmMap)
+    {
+        vec3 armColor = texture(armMap, TexCoord0).rgb;
+        armAmbient = armColor.r;
+        armRoughness = armColor.g;
+        armMetalic = armColor.b;
+    }
+    vec3 AmbientColor = Light.Color *
                         Light.AmbientIntensity *
-                        vec4(gMaterial.AmbientColor, 1.0f);
+                        gMaterial.AmbientColor *
+                        armAmbient;
 
     float DiffuseFactor = dot(Normal, -LightDirection);
 
-    vec4 DiffuseColor = vec4(0, 0, 0, 0);
-    vec4 SpecularColor = vec4(0, 0, 0, 0);
+    vec3 DiffuseColor = vec3(0, 0, 0);
+    vec3 SpecularColor = vec3(0, 0, 0);
 
     if (DiffuseFactor > 0) {
-        DiffuseColor = vec4(Light.Color, 1.0f) *
+        DiffuseColor = Light.Color *
                        Light.DiffuseIntensity *
-                       vec4(gMaterial.DiffuseColor, 1.0f) *
+                       gMaterial.DiffuseColor *
                        DiffuseFactor * projectiveColor;
 
         vec3 PixelToCamera = normalize(gCameraLocalPos - LocalPos0);
@@ -119,18 +154,17 @@ vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec4 p
             // float SpecularExponent = texture2D(gSamplerSpecularExponent, TexCoord0).r * 255.0;
             float SpecularExponent = 1.0;
             SpecularFactor = pow(SpecularFactor, SpecularExponent);
-            SpecularColor = vec4(Light.Color, 1.0f) *
+            SpecularColor = Light.Color *
                             Light.DiffuseIntensity * // using the diffuse intensity for diffuse/specular
-                            vec4(gMaterial.SpecularColor, 1.0f) *
-                            SpecularFactor;
+                            gMaterial.SpecularColor *
+                            SpecularFactor * 
+                            (1-armRoughness);
         }
     }
-
-    return (AmbientColor + DiffuseColor + SpecularColor);
+    return vec4(AmbientColor + DiffuseColor + SpecularColor, 1.0);
 }
 
-
-vec4 CalcDirectionalLight(vec3 Normal, vec4 projectiveColor)
+vec4 CalcDirectionalLight(vec3 Normal, vec3 projectiveColor)
 {
     return CalcLightInternal(gDirectionalLight.Base, gDirectionalLight.Direction, Normal, projectiveColor);
 }
@@ -141,7 +175,7 @@ vec4 CalcPointLight(PointLight l, vec3 Normal)
     float Distance = length(LightDirection);
     LightDirection = normalize(LightDirection);
 
-    vec4 Color = CalcLightInternal(l.Base, LightDirection, Normal, vec4(1.0, 1.0, 1.0, 1.0));
+    vec4 Color = CalcLightInternal(l.Base, LightDirection, Normal, vec3(1.0, 1.0, 1.0));
     float Attenuation =  l.Atten.Constant +
                          l.Atten.Linear * Distance +
                          l.Atten.Exp * Distance * Distance;
@@ -172,9 +206,9 @@ void main()
     }
     else
     {
-        if (useGGX)
+        if (useGGX)  // here computation of light is done in world space
         {
-            vec4 projColor = vec4(1.0, 1.0, 1.0, 1.0);
+            vec3 projColor = vec3(1.0, 1.0, 1.0);
             if (useProjector)
             {
                 float u = (ProjTexCoord.x / ProjTexCoord.z + 1.0) * 0.5;
@@ -190,21 +224,25 @@ void main()
                 
                 if (projectorIsSingleChannel)
                 {
-                    projColor = texture(projector, vec2(u, v)).rrrr;
+                    projColor = texture(projector, vec2(u, v)).rrr;
                 }
                 else
                 {
-                    projColor = texture(projector, vec2(u, v)).rgba;
+                    projColor = texture(projector, vec2(u, v)).rgb;
                 }
             }
-            vec3 Normal = normalize(Normal0);
-            vec4 TotalLight = CalcDirectionalLight(Normal, projColor);
+            vec3 Normal;
+            if (useNormalMap)
+                Normal = CalcBumpedNormal();
+            else
+                Normal = normalize(Normal0);
+            vec4 TotalLight = CalcDirectionalLight(Normal, projColor);  // light data should be in world space
 
-            for (int i = 0 ;i < gNumPointLights ;i++) {
+            for (int i = 0; i < gNumPointLights; i++) {
                 TotalLight += CalcPointLight(gPointLights[i], Normal);
             }
 
-            for (int i = 0 ;i < gNumSpotLights ;i++) {
+            for (int i = 0; i < gNumSpotLights; i++) {
                 TotalLight += CalcSpotLight(gSpotLights[i], Normal);
             }
             FragColor = texture2D(src, TexCoord0.xy) * TotalLight;
@@ -261,10 +299,7 @@ void main()
                     {
                         vec4 diffuse_color = texture(src, TexCoord0);
                         FragColor = diffuse_color;
-                    }
-                    
-                    
-                    
+                    }  
                 }
             }
         }

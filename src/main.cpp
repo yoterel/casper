@@ -225,10 +225,10 @@ int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
 int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
 int light_mode = static_cast<int>(LightMode::DIRECTIONAL);
 glm::vec3 light_color(255.0f / 255.0f, 255.0f / 255.0f, 255.0f / 255.0f);
-float light_theta = 0.0f;
-float light_phi = 0.0f;
-float light_radius = 1.0f;
-glm::vec3 light_at(0.0f, 0.0f, 0.0f);
+float light_theta = 2.0f;
+float light_phi = 4.3f;
+float light_radius = 150.0f;
+glm::vec3 light_at(-45.0f, -131.0f, -61.0f);
 glm::vec3 light_to(0.0f, 0.0f, 0.0f);
 glm::vec3 light_up(0.0f, 0.0f, 1.0f);
 float light_near = 1.0f;
@@ -236,8 +236,12 @@ float light_far = 1000.0f;
 float light_ambient_intensity = 1.0f;
 float light_diffuse_intensity = 1.0f;
 bool light_is_projector = false;
-bool light_relative = false;
+bool light_relative = true;
 bool use_shadow_mapping = false;
+bool use_diffuse_mapping = true;
+bool use_normal_mapping = true;
+// bool use_disp_mapping = false;
+bool use_arm_mapping = false;
 float shadow_bias = 0.005f;
 float deltaTime = 0.0f;
 float masking_threshold = 0.035f;
@@ -495,6 +499,7 @@ std::vector<std::string> texturePaths{
     "../../resource",
     "../../resource/images",
     "../../resource/baked_textures",
+    "../../resource/pbr/wood",
 };
 std::unordered_map<std::string, Texture *> texturePack;
 std::string curSelectedTexture = "uv";
@@ -503,6 +508,9 @@ std::string userStudySelectedTexture = "uv";
 SkinnedModel *extraLeftHandModel = nullptr;
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
+Texture *normalMap = nullptr;
+Texture *armMap = nullptr;
+Texture *dispMap = nullptr;
 Texture *bakedTextureLeft = nullptr;
 Texture *bakedTextureRight = nullptr;
 FBO hands_fbo(dst_width, dst_height, 4, false);
@@ -530,6 +538,7 @@ Texture camTexture;
 glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 DirectionalLight dirLight(glm::vec3(1.0f, 1.0f, 1.0f), 1.0f, 1.0f, glm::vec3(0.0f, -1.0f, -1.0f));
+bool skeleton_as_gizmos = true;
 unsigned int skeletonVAO = 0;
 unsigned int skeletonVBO = 0;
 unsigned int gizmoVAO = 0;
@@ -538,6 +547,7 @@ unsigned int frustrumVAO = 0;
 unsigned int frustrumVBO = 0;
 unsigned int cubeVAO = 0;
 unsigned int cubeVBO = 0;
+unsigned int cubeEBO = 0;
 std::vector<glm::vec3> frustumCornerVertices;
 std::vector<glm::vec3> near_frustrum;
 std::vector<glm::vec3> mid_frustrum;
@@ -607,7 +617,7 @@ int main(int argc, char *argv[])
         ("mesh", "A .fbx mesh file to use for skinning",                                                                         //
          cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                             //
         ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                 //
-        ("emesh", "A .fbx mesh file to use as an extra (used in some apps)",                                                     //
+        ("emesh", "A .fbx mesh file to use for hot swapping (used in some apps)",                                                //
          cxxopts::value<std::string>()->default_value("../../resource/GuessCharGame_palm.fbx"))                                  //
         ("h,help", "Prints usage")                                                                                               //
         ;
@@ -742,7 +752,7 @@ int main(int argc, char *argv[])
     Helpers::setupSkeletonBuffers(skeletonVAO, skeletonVBO);
     Helpers::setupGizmoBuffers(gizmoVAO, gizmoVBO);
     Helpers::setupFrustrumBuffers(frustrumVAO, frustrumVBO);
-    Helpers::setupCubeBuffers(cubeVAO, cubeVBO);
+    Helpers::setupCubeBuffers(cubeVAO, cubeVBO, cubeEBO);
     unsigned int pbo[2] = {0};
     initGLBuffers(pbo);
     hands_fbo.init();
@@ -822,6 +832,9 @@ int main(int argc, char *argv[])
     }
     projectiveTexture = texturePack["uv"];
     dynamicTexture = texturePack["uv"];
+    normalMap = texturePack["wood_floor_deck_nor_gl_1k"];
+    armMap = texturePack["wood_floor_deck_arm_1k"];
+    // dispMap = texturePack["wood_floor_deck_disp_1k"];
     const fs::path bakeFileLeftPath{bakeFileLeft};
     const fs::path bakeFileRightPath{bakeFileRight};
     if (fs::exists(bakeFileLeftPath))
@@ -922,7 +935,7 @@ int main(int argc, char *argv[])
     Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_BufferA.fs");
     Shader shaderToyGameBufferB("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_BufferB.fs");
     Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_Image.fs");
-    SkinningShader skinnedShader("../../src/shaders/skin_hand_simple.vs", "../../src/shaders/skin_hand_simple.fs");
+    SkinningShader skinnedShader("../../src/shaders/skin.vs", "../../src/shaders/skin.fs");
     std::unordered_map<std::string, Shader *> shaderMap = {
         {"NNShader", &NNShader},
         {"uv_NNShader", &uv_NNShader},
@@ -1333,7 +1346,7 @@ int main(int argc, char *argv[])
             fullScreenQuad.render();
             PointCloud cloud(cur_screen_verts, screen_verts_color_red);
             vcolorShader.use();
-            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+            vcolorShader.setMat4("mvp", glm::mat4(1.0f));
             cloud.render();
             break;
         }
@@ -1388,7 +1401,7 @@ int main(int argc, char *argv[])
                                 found_centroid = true;
                                 // render point on centroid in camera image
                                 vcolorShader.use();
-                                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                                vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                                 center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
                                 glm::vec2 vert = center_NDC;
                                 vert.y = (vert.y + 1.0f) / 2.0f; // for display, use top of screen
@@ -1423,7 +1436,7 @@ int main(int argc, char *argv[])
                                 }
                                 // render point on centroid in left leap image
                                 vcolorShader.use();
-                                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                                vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                                 glm::vec2 vert1 = center_NDC_leap1;
                                 glm::vec2 vert2 = center_NDC_leap2;
                                 vert1.y = (vert1.y - 1.0f) / 2.0f; // use bottom left of screen
@@ -1462,7 +1475,7 @@ int main(int argc, char *argv[])
                             found_centroid = true;
                             // render point on centroid in camera image
                             vcolorShader.use();
-                            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                            vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                             center_NDC = Helpers::ScreenToNDC(center, cam_width, cam_height, true);
                         }
                         if (found_centroid)
@@ -1607,7 +1620,7 @@ int main(int argc, char *argv[])
             case static_cast<int>(CalibrationStateMachine::SHOW):
             {
                 vcolorShader.use();
-                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                 // todo: move this logic to CalibrationStateMachine::SOLVE
                 std::vector<glm::vec2> NDCs;
                 std::vector<glm::vec2> NDCs_reprojected;
@@ -1679,7 +1692,7 @@ int main(int argc, char *argv[])
                                 reprojected = Helpers::ScreenToNDC(reprojected, cam_width, cam_height, true);
                                 ////
                                 vcolorShader.use();
-                                vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                                vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                                 glm::vec2 vert1 = center_NDC_leap1;
                                 glm::vec2 vert2 = center_NDC_leap2;
                                 glm::vec2 vert3 = reprojected[0];
@@ -1714,7 +1727,7 @@ int main(int argc, char *argv[])
                         displayTexture.bind();
                         fullScreenQuad.render();
                         vcolorShader.use();
-                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                        vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                         PointCloud pointCloud(marked_reprojected, screen_verts_color_red);
                         pointCloud.render();
                         break;
@@ -1735,7 +1748,7 @@ int main(int argc, char *argv[])
                             set_texture_shader(&textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
-                            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                            vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                             std::vector<glm::vec2> test = {cur_screen_vert};
                             PointCloud pointCloud(test, screen_verts_color_red);
                             pointCloud.render(5.0f);
@@ -1758,7 +1771,7 @@ int main(int argc, char *argv[])
                             set_texture_shader(&textureShader, true, false, true);
                             fullScreenQuad.render();
                             vcolorShader.use();
-                            vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                            vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                             std::vector<glm::vec2> test = {cur_screen_vert};
                             PointCloud pointCloud(test, screen_verts_color_red);
                             pointCloud.render(5.0f);
@@ -1782,7 +1795,7 @@ int main(int argc, char *argv[])
                     if (joints_right.size() > 0)
                     {
                         vcolorShader.use();
-                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                        vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                         std::vector<cv::Point3f> points_3d_cv;
                         for (int i = 0; i < joints_right.size(); i++)
                         {
@@ -1812,7 +1825,7 @@ int main(int argc, char *argv[])
                     if (joints_right.size() > 0)
                     {
                         vcolorShader.use();
-                        vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+                        vcolorShader.setMat4("mvp", glm::mat4(1.0f));
                         std::vector<cv::Point3f> points_3d_cv;
                         points_3d_cv.push_back(cv::Point3f(joints_right[mark_bone_index].x, joints_right[mark_bone_index].y, joints_right[mark_bone_index].z));
                         std::vector<cv::Point2f> reprojected_cv;
@@ -2912,7 +2925,7 @@ void set_skinned_shader(SkinningShader *skinnedShader,
                         bool useMetric, std::vector<float> scalarPerBone, int src)
 {
     skinnedShader->use();
-    skinnedShader->SetWorldTransform(transform);
+    skinnedShader->setMat4("mvp", transform);
     skinnedShader->setBool("flipTexVertically", flipVer);
     skinnedShader->setBool("flipTexHorizontally", flipHor);
     skinnedShader->setBool("useGGX", useGGX);
@@ -3413,7 +3426,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         // if (skeleton_vertices.size() > 0)
         // {
         //     vcolorShader.use();
-        //     vcolorShader.setMat4("MVP", glm::mat4(1.0f));
+        //     vcolorShader.setMat4("mvp", glm::mat4(1.0f));
         //     std::vector<glm::vec2> skele_verts = Helpers::project_points(skeleton_vertices, glm::mat4(1.0f), cam_view_transform, cam_projection_transform);
         //     PointCloud cloud3(skele_verts, screen_verts_color_green);
         //     cloud3.render();
@@ -3501,6 +3514,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     if (show_landmarks)
     {
+        float landmarkSize = 10.0f;
         vcolorShader->use();
         std::vector<glm::vec2> leap_joints_left = Helpers::project_points(joints_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
         std::vector<glm::vec2> leap_joints_right = Helpers::project_points(joints_right, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
@@ -3513,23 +3527,23 @@ void handlePostProcess(SkinnedModel &leftHandModel,
                 leap_joints_right_filtered.push_back(leap_joints_right[leap_selection_vector[i]]);
         }
         if (use_coaxial_calib)
-            vcolorShader->setMat4("MVP", c2p_homography);
+            vcolorShader->setMat4("mvp", c2p_homography);
         else
-            vcolorShader->setMat4("MVP", glm::mat4(1.0f));
+            vcolorShader->setMat4("mvp", glm::mat4(1.0f));
         PointCloud cloud_left(leap_joints_left_filtered, screen_verts_color_white);
         PointCloud cloud_right(leap_joints_right_filtered, screen_verts_color_white);
-        cloud_left.render(5.0f);
-        cloud_right.render(5.0f);
+        cloud_left.render(landmarkSize);
+        cloud_right.render(landmarkSize);
         if (use_mls)
         {
             PointCloud cloud_src_input_left(ControlPointsP_input_left, screen_verts_color_red);
             PointCloud cloud_src_input_right(ControlPointsP_input_right, screen_verts_color_red);
             PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);
             PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta);
-            cloud_src_input_left.render(5.0f);
-            cloud_src_input_right.render(5.0f);
-            cloud_src.render(5.0f);
-            cloud_dst.render(5.0f);
+            cloud_src_input_left.render(landmarkSize);
+            cloud_src_input_right.render(landmarkSize);
+            cloud_src.render(landmarkSize);
+            cloud_dst.render(landmarkSize);
         }
         else
         {
@@ -3537,8 +3551,8 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             {
                 PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);
                 PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta);
-                cloud_src.render(5.0f);
-                cloud_dst.render(5.0f);
+                cloud_src.render(landmarkSize);
+                cloud_dst.render(landmarkSize);
             }
         }
     }
@@ -3805,18 +3819,22 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             dirLight.setAmbientIntensity(light_ambient_intensity);
             dirLight.setDiffuseIntensity(light_diffuse_intensity);
             dirLight.setWorldDirection(light_to - light_at);
-            glm::mat4 lightProjection, lightView;
-            getLightTransform(lightProjection, lightView, bones_to_world_right);
+            // glm::mat4 lightProjection, lightView;
+            // getLightTransform(lightProjection, lightView, bones_to_world_right);
             // dirLight.setWorldDirection(debug_vec);
-            dirLight.calcLocalDirection(lightView);
-            skinnedShader->SetDirectionalLight(dirLight);
-            glm::vec3 camWorldPos = glm::vec3(cam_view_transform[3][0], cam_view_transform[3][1], cam_view_transform[3][2]);
-            skinnedShader->SetCameraLocalPos(camWorldPos);
+            // dirLight.calcLocalDirection(glm::inverse(lightView));
+            skinnedShader->SetDirectionalLight(dirLight); // set direction in world space
+            skinnedShader->setBool("useNormalMap", use_normal_mapping);
+            skinnedShader->setBool("useArmMap", use_arm_mapping);
+            // skinnedShader->setBool("useDispMap", use_disp_mapping);
+            glm::mat4 cam2world = glm::inverse(cam_view_transform);
+            glm::vec3 camPos = glm::vec3(cam2world[3][0], cam2world[3][1], cam2world[3][2]);
+            skinnedShader->SetCameraLocalPos(camPos);
             switch (texture_mode)
             {
             case static_cast<int>(TextureMode::ORIGINAL):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, nullptr, nullptr, normalMap, armMap, dispMap);
                 break;
             case static_cast<int>(TextureMode::BAKED):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
@@ -3835,7 +3853,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
                 dynamicTexture = texturePack[curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture);
+                handModel.Render(*skinnedShader, bones2world, rotx, false, dynamicTexture, nullptr, normalMap, armMap, dispMap);
                 break;
             case static_cast<int>(TextureMode::CAMERA):
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, true, true, true, false, false,
@@ -3851,20 +3869,45 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         }
         case static_cast<int>(MaterialMode::SKELETON): // mesh is rendered as a skeleton connecting the joints
         {
-            glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
-            std::vector<glm::vec3> skele_for_upload;
-            glm::vec3 green = glm::vec3(0.0f, 1.0f, 0.0f);
-            std::vector<glm::vec3> my_joints = isRightHand ? joints_right : joints_left;
-            for (int i = 0; i < my_joints.size(); i++)
+            if (skeleton_as_gizmos)
             {
-                skele_for_upload.push_back(my_joints[i]);
-                skele_for_upload.push_back(green);
+                vcolorShader->use();
+                vcolorShader->setBool("allWhite", false);
+                std::vector<glm::mat4> BoneToLocalTransforms;
+                handModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
+                glBindVertexArray(gizmoVAO);
+                // in bind pose
+                // for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
+                // {
+
+                //     vcolorShader->setMat4("mvp", cam_projection_transform * cam_view_transform * rotx * BoneToLocalTransforms[i]);
+                //     glDrawArrays(GL_LINES, 0, 6);
+                // }
+                // in leap motion pose
+                for (unsigned int i = 0; i < bones2world.size(); i++)
+                {
+                    vcolorShader->setMat4("mvp", cam_projection_transform * cam_view_transform * bones2world[i]);
+                    glDrawArrays(GL_LINES, 0, 6);
+                }
             }
-            glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skele_for_upload.size(), skele_for_upload.data(), GL_STATIC_DRAW);
-            vcolorShader->use();
-            vcolorShader->setMat4("MVP", cam_projection_transform * cam_view_transform * global_scale);
-            glBindVertexArray(skeletonVAO);
-            glDrawArrays(GL_LINES, 0, static_cast<int>(skele_for_upload.size() / 2));
+            else
+            {
+                glBindBuffer(GL_ARRAY_BUFFER, skeletonVBO);
+                std::vector<glm::vec3> skele_for_upload;
+                glm::vec3 green = glm::vec3(0.0f, 1.0f, 0.0f);
+                std::vector<glm::vec3> my_joints = isRightHand ? joints_right : joints_left;
+                for (int i = 0; i < my_joints.size(); i++)
+                {
+                    skele_for_upload.push_back(my_joints[i]);
+                    skele_for_upload.push_back(green);
+                }
+                glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * skele_for_upload.size(), skele_for_upload.data(), GL_STATIC_DRAW);
+                vcolorShader->use();
+                vcolorShader->setBool("allWhite", false);
+                vcolorShader->setMat4("mvp", cam_projection_transform * cam_view_transform * global_scale);
+                glBindVertexArray(skeletonVAO);
+                glDrawArrays(GL_LINES, 0, static_cast<int>(skele_for_upload.size() / 2));
+            }
             break;
         }
         case static_cast<int>(MaterialMode::PER_BONE_SCALAR):
@@ -5683,44 +5726,21 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
             // glBindVertexArray(gizmoVAO);
             // glDrawArrays(GL_LINES, 0, 6);
         }
-        // draws cube at world origin
+        // draws unit cube at world origin
         {
-            /* regular rgb cube */
-            // vcolorShader->use();
-            // glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-            // vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
-            // glEnable(GL_DEPTH_TEST);
-            // glDisable(GL_CULL_FACE);
-            // glBindVertexArray(cubeVAO);
-            // glDrawArrays(GL_TRIANGLES, 0, 36);
-            // glEnable(GL_CULL_FACE);
-            /* bake projective texture */
-            // if (baked)
-            // {
-            //     textureShader.use();
-            //     textureShader.setBool("flipVer", false);
-            //     textureShader.setBool("flipHor", false);
-            //     textureShader.setMat4("projection", flycam_projection_transform);
-            //     textureShader.setMat4("view", flycam_view_transform);
-            //     textureShader.setMat4("model", glm::mat4(1.0f));
-            //     textureShader.setBool("binary", false);
-            //     textureShader.setInt("src", 0);
-            //     bake_fbo.getTexture()->bind();
-            // }
-            // else
-            // {
-            //     projectorOnlyShader.use();
-            //     projectorOnlyShader.setBool("flipVer", false);
-            //     // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-            //     projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-            //     projectorOnlyShader.setMat4("projTransform", proj_projection_transform * proj_view_transform);
-            //     projectorOnlyShader.setBool("binary", false);
-            //     projectorOnlyShader.setInt("src", 0);
-            //     dynamicTexture->bind();
-            // }
-            // glEnable(GL_DEPTH_TEST);
-            // glBindVertexArray(tcubeVAO);
-            // glDrawArrays(GL_TRIANGLES, 0, 36);
+            vcolorShader->use();
+            glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+            vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform * model);
+            vcolorShader->setBool("allWhite", false);
+            glBindVertexArray(cubeVAO);
+            glDrawElements(GL_TRIANGLES,    // primitive type
+                           36,              // # of indices
+                           GL_UNSIGNED_INT, // data type
+                           (void *)0);
+            model = glm::scale(glm::mat4(1.0f), glm::vec3(15.0f, 15.0f, 15.0f));
+            vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform * model);
+            glBindVertexArray(gizmoVAO);
+            glDrawArrays(GL_LINES, 0, 6);
         }
         if (bones_to_world_right.size() > 0)
         {
@@ -5732,16 +5752,19 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 // vcolorShader->setMat4("projection", flycam_projection_transform);
                 // vcolorShader->setMat4("view", flycam_view_transform);
                 // vcolorShader->setMat4("model", glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f)));
-                lightView = glm::inverse(lightView);
-                glm::vec3 at = glm::vec3(lightView[3][0], lightView[3][1], lightView[3][2]);
-                glm::mat4 model = glm::translate(glm::mat4(1.0f), at);
-                model = glm::scale(model, glm::vec3(10.0f, 10.0f, 10.0f));
-                vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
-                vcolorShader->setBool("allWhite", true);
+                glm::mat4 light2world = glm::inverse(lightView);
+                // glm::vec3 at = glm::vec3(light2world[3][0], light2world[3][1], light2world[3][2]);
+                // glm::mat4 model = glm::translate(glm::mat4(1.0f), at);
+                glm::mat4 model = glm::scale(light2world, glm::vec3(10.0f, 10.0f, 10.0f));
+                vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform * model);
+                vcolorShader->setBool("allWhite", false);
                 glBindVertexArray(cubeVAO);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
-                model = glm::scale(lightView, glm::vec3(10.0f, 10.0f, 10.0f));
-                vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * model);
+                glDrawElements(GL_TRIANGLES,    // primitive type
+                               36,              // # of indices
+                               GL_UNSIGNED_INT, // data type
+                               (void *)0);
+                model = glm::scale(light2world, glm::vec3(15.0f, 15.0f, 15.0f));
+                vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform * model);
                 glBindVertexArray(gizmoVAO);
                 glDrawArrays(GL_LINES, 0, 6);
             }
@@ -5767,28 +5790,6 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 // vcolorShader.setMat4("model", bones_to_world[0]);
                 // glDrawArrays(GL_TRIANGLE_FAN, 0, 52);
             }
-            // draw bones local coordinates as gizmos
-            {
-                // vcolorShader.use();
-                // vcolorShader.setMat4("projection", flycam_projection_transform);
-                // vcolorShader.setMat4("view", flycam_view_transform);
-                // std::vector<glm::mat4> BoneToLocalTransforms;
-                // leftHandModel.GetLocalToBoneTransforms(BoneToLocalTransforms, true, true);
-                // glBindVertexArray(gizmoVAO);
-                // // glm::mat4 scaler = glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f));
-                // for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
-                // {
-                //     // in bind pose
-                //     vcolorShader.setMat4("model", rotx * BoneToLocalTransforms[i]);
-                //     glDrawArrays(GL_LINES, 0, 6);
-                // }
-                // for (unsigned int i = 0; i < bones_to_world_right.size(); i++)
-                // {
-                //     // in leap motion pose
-                //     vcolorShader.setMat4("model", bones_to_world_right[i]);
-                //     glDrawArrays(GL_LINES, 0, 6);
-                // }
-            }
             // draw gizmo for palm orientation
             {
                 // vcolorShader.use();
@@ -5811,13 +5812,13 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 // for (unsigned int i = 0; i < BoneToLocalTransforms.size(); i++)
                 // {
                 //     // in bind pose
-                //     vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * rotx * BoneToLocalTransforms[i]);
+                //     vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform * rotx * BoneToLocalTransforms[i]);
                 //     glDrawArrays(GL_LINES, 0, 6);
                 // }
                 // for (unsigned int i = 0; i < bones_to_world_left.size(); i++)
                 // {
                 //     // in leap motion pose
-                //     vcolorShader->setMat4("MVP", flycam_projection_transform * flycam_view_transform * bones_to_world_left[i]);
+                //     vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform * bones_to_world_left[i]);
                 //     glDrawArrays(GL_LINES, 0, 6);
                 // }
             }
@@ -6614,6 +6615,16 @@ void openIMGUIFrame()
             ImGui::RadioButton("Skeleton", &material_mode, static_cast<int>(MaterialMode::SKELETON));
             ImGui::SameLine();
             ImGui::RadioButton("Per Bone Scalar", &material_mode, static_cast<int>(MaterialMode::PER_BONE_SCALAR));
+            switch (material_mode)
+            {
+            case static_cast<int>(MaterialMode::SKELETON):
+            {
+                ImGui::Checkbox("Skeleton as Gizmos", &skeleton_as_gizmos);
+                break;
+            }
+            default:
+                break;
+            }
             ImGui::SeparatorText("Diffuse Texture Type");
             ImGui::RadioButton("Original", &texture_mode, static_cast<int>(TextureMode::ORIGINAL));
             ImGui::SameLine();
@@ -6630,6 +6641,13 @@ void openIMGUIFrame()
                 gameFrameCount = 0;
                 prevGameFrameCount = 0;
             }
+            ImGui::SeparatorText("GGX Effects");
+            ImGui::Checkbox("Diffuse Mapping", &use_diffuse_mapping);
+            ImGui::SameLine();
+            ImGui::Checkbox("Normal Mapping", &use_normal_mapping);
+            // ImGui::Checkbox("Displacement Mapping", &use_disp_mapping);
+            ImGui::SameLine();
+            ImGui::Checkbox("AO/Roughness/Metallic Mapping", &use_arm_mapping);
             if (ImGui::BeginCombo("Mesh Texture", curSelectedTexture.c_str(), 0))
             {
                 std::vector<std::string> keys;

@@ -35,7 +35,7 @@ public:
     static std::vector<glm::vec3> project_points_w_depth(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupFrustrumBuffers(unsigned int &VAO, unsigned int &VBO);
-    static void setupCubeBuffers(unsigned int &VAO, unsigned int &VBO);
+    static void setupCubeBuffers(unsigned int &VAO, unsigned int &VBO, unsigned int &EBO);
     static void setupCubeTexturedBuffers(unsigned int &VAO, unsigned int &VBO1, unsigned int &VBO2);
     static void setupSkeletonBuffers(unsigned int &VAO, unsigned int &VBO);
     static float MSE(const std::vector<glm::vec2> &a, const std::vector<glm::vec2> &b /*, std::vector<float> &mse*/);
@@ -43,6 +43,7 @@ public:
     static std::vector<glm::vec3> accumulate(const std::vector<std::vector<glm::vec3>> &a, bool normalize = true);
     static glm::mat4 interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale = false, bool isRightHand = false);
     static bool isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform);
+    static void loadEXR(std::string path);
 
 private:
     Helpers();
