@@ -10,13 +10,10 @@ in vec3 LocalPos0;
 in vec3 metricColor;
 in vec4 LightPos0;
 in vec3 Tangent0;
-// flat in ivec4 BoneIDs00;
-// flat in ivec2 BoneIDs11;
-// in vec4 Weights00;
-// in vec2 Weights11;
-// in vec3 ourColor;
 out vec4 FragColor;
 
+
+// define some structs
 struct BaseLight
 {
     vec3 Color;
@@ -87,6 +84,8 @@ uniform bool useNormalMap = false;
 uniform bool useArmMap = false;
 // uniform bool useDispMap = false;
 
+
+// function to calculate shadow using shadow mapping
 float ShadowCalculation(vec4 fragPosLightSpace)
 {
     // perform perspective divide
@@ -103,6 +102,7 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     return shadow;
 }  
 
+// function to calculate bumped normals using normal map
 vec3 CalcBumpedNormal()
 {
     vec3 Normal = normalize(Normal0);
@@ -118,6 +118,7 @@ vec3 CalcBumpedNormal()
     return NewNormal;
 }
 
+// function to calculate basic lighting
 vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec3 projectiveColor)
 {
     float armAmbient = 1.0;
@@ -163,7 +164,6 @@ vec4 CalcLightInternal(BaseLight Light, vec3 LightDirection, vec3 Normal, vec3 p
     return vec4(AmbientColor + DiffuseColor + SpecularColor, 1.0);
 }
 
-
 vec4 CalcDirectionalLight(vec3 Normal, vec3 projectiveColor)
 {
     return CalcLightInternal(gDirectionalLight.Base, gDirectionalLight.Direction, Normal, projectiveColor);
@@ -206,7 +206,7 @@ void main()
     }
     else
     {
-        if (useGGX)
+        if (useGGX)  // here computation of light is done in world space
         {
             vec3 projColor = vec3(1.0, 1.0, 1.0);
             if (useProjector)
@@ -231,7 +231,7 @@ void main()
                     projColor = texture(projector, vec2(u, v)).rgb;
                 }
             }
-            vec3 Normal;  // looks like normal is computed in world space for bind pose...
+            vec3 Normal;
             if (useNormalMap)
                 Normal = CalcBumpedNormal();
             else
@@ -299,10 +299,7 @@ void main()
                     {
                         vec4 diffuse_color = texture(src, TexCoord0);
                         FragColor = diffuse_color;
-                    }
-                    
-                    
-                    
+                    }  
                 }
             }
         }

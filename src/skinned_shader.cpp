@@ -10,7 +10,7 @@ void DirectionalLight::calcLocalDirection(const glm::mat4 &localToWorld)
 
 SkinningShader::SkinningShader(const std::string &vertexPath, const std::string &fragmentPath, const std::string &geometryPath) : Shader(vertexPath, fragmentPath, geometryPath)
 {
-    worldTransformLoc = GetUniformLocation("gTransform");
+    worldTransformLoc = GetUniformLocation("mvp");
     // projectorTransformLoc = GetUniformLocation("gProjectorTransform");
     samplerLoc = GetUniformLocation("src");
     // samplerSpecularExponentLoc = GetUniformLocation("gSamplerSpecularExponent");
@@ -156,8 +156,8 @@ void SkinningShader::SetDirectionalLight(const DirectionalLight &Light)
     glUniform3f(dirLightLoc.Color, Light.Color.x, Light.Color.y, Light.Color.z);
     glUniform1f(dirLightLoc.AmbientIntensity, Light.AmbientIntensity);
     glUniform1f(dirLightLoc.DiffuseIntensity, Light.DiffuseIntensity);
-    glm::vec3 LocalDirection = Light.getWorldDirection();
-    glUniform3f(dirLightLoc.Direction, LocalDirection.x, LocalDirection.y, LocalDirection.z);
+    glm::vec3 worldDir = Light.getWorldDirection();
+    glUniform3f(dirLightLoc.Direction, worldDir.x, worldDir.y, worldDir.z);
 }
 
 void SkinningShader::SetCameraLocalPos(const glm::vec3 &CameraLocalPos)
