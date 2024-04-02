@@ -408,7 +408,7 @@ float leap_binary_threshold = 0.3f;
 bool leap_threshold_flag = false;
 int64_t targetFrameTime = 0;
 double whole = 0.0;
-LEAP_CLOCK_REBASER clockSynchronizer;
+// LEAP_CLOCK_REBASER clockSynchronizer;
 std::vector<glm::vec3> joints_left, joints_right;
 std::vector<glm::mat4> bones_to_world_left, bones_to_world_right;
 std::vector<uint32_t> left_fingers_extended, right_fingers_extended;
@@ -1011,7 +1011,7 @@ int main(int argc, char *argv[])
             use_projector = false;
         }
     }
-    LeapCreateClockRebaser(&clockSynchronizer);
+    // LeapCreateClockRebaser(&clockSynchronizer);
     // load calibration results if they exist
     Camera_Mode camera_mode = freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
     if (loadLeapCalibrationResults(proj_project, cam_project,
@@ -1074,11 +1074,11 @@ int main(int argc, char *argv[])
         currentAppTime = t_app.getElapsedTimeInSec(); // glfwGetTime();
         deltaTime = static_cast<float>(currentAppTime - previousAppTime);
         previousAppTime = currentAppTime;
-        if (!leap_poll_mode)
-        {
-            std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-            LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
-        }
+        // if (!leap_poll_mode)
+        // {
+        //     std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+        //     LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime());
+        // }
         frameCount++;
         /* display stats */
         if (currentAppTime - previousSecondAppTime >= 1.0)
@@ -2715,7 +2715,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         leftFingersExtended.clear();
         rightFingersExtended.clear();
         // Get the buffer size needed to hold the tracking data
-        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), targetFrameTime + magic_time_delay, &targetFrameSize);
+        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), LeapGetNow() + magic_time_delay, &targetFrameSize);
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapGetFrameSize() returned " << retVal << std::endl;
@@ -2724,7 +2724,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         // Allocate enough memory
         frame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
         // Get the frame data
-        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), targetFrameTime + magic_time_delay, frame, targetFrameSize);
+        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), LeapGetNow() + magic_time_delay, frame, targetFrameSize);
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapInterpolateFrame() returned " << retVal << std::endl;
@@ -3339,12 +3339,12 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
 LEAP_STATUS handleLeapInput()
 {
     LEAP_STATUS leap_status;
-    if (!leap_poll_mode)
-    {
-        // sync leap clock
-        std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-        LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-    }
+    // if (!leap_poll_mode)
+    // {
+    //     // sync leap clock
+    //     std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+    //     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
+    // }
     leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay);
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
@@ -4529,10 +4529,10 @@ void handleMLSAsync(Shader &gridShader)
                                 if (mls_forecast)
                                 {
                                     // sync leap clock
-                                    std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-                                    LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime()); // sync clocks
-                                    std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-                                    LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
+                                    // std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+                                    // LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime()); // sync clocks
+                                    // std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
+                                    // LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                     std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                     std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
                                     LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay_mls);
