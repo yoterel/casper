@@ -4365,14 +4365,16 @@ void handleMLSAsync(Shader &gridShader)
         {
             if (!mls_running && !mls_succeed)
             {
+                // no mls thread is running and no mls thread results are waiting to be processed, so launch a new mls thread
                 if (joints_left.size() > 0 || joints_right.size() > 0)
                 {
+                    // the joints are extrapolations to compensate for full system latency.
+                    // todo: use joints that are extrapolations for the time the camera frame was taken, slightly more in the past than the full system latency
                     bool isRightHandVis = joints_right.size() > 0;
                     bool isLeftHandVis = joints_left.size() > 0;
-                    // std::vector<glm::vec3> joints = isRightHand ? joints_right : joints_left;
                     std::vector<glm::vec3> to_project_left;
                     std::vector<glm::vec3> to_project_right;
-                    // use only selected control points
+                    // use only predefined control points
                     if (isLeftHandVis)
                     {
                         for (int i = 0; i < leap_selection_vector.size(); i++)
@@ -4393,6 +4395,8 @@ void handleMLSAsync(Shader &gridShader)
                     // t_profile.start();
                     if (mls_depth_test)
                     {
+                        // some control points are occluded according to leap, we don't want to use them for mls
+                        // we need to do this on main thread, since we need to sample the depth buffer
                         projected_with_depth_left = Helpers::project_points_w_depth(to_project_left,
                                                                                     glm::mat4(1.0f),
                                                                                     gl_camera.getViewMatrix(),
@@ -4407,10 +4411,10 @@ void handleMLSAsync(Shader &gridShader)
                         rendered_depths_right = hands_fbo.sampleDepthBuffer(screen_space); // todo: make async
                     }
                     // t_profile.stop();
-                    if (run_mls.joinable())
+                    if (run_mls.joinable()) // make sure the previous mls thread is done
                         run_mls.join();
                     mls_running = true;
-                    camImage = camImageOrig.clone();
+                    camImage = camImageOrig.clone(); // use copy for thread, as the main thread will continue to modify the original
                     run_mls = std::thread([to_project_left, projected_with_depth_left, rendered_depths_left, isLeftHandVis,
                                            to_project_right, projected_with_depth_right, rendered_depths_right, isRightHandVis]() { // send (forecasted) leap joints to MP
                         t_mls_thread.start();
@@ -4428,6 +4432,7 @@ void handleMLSAsync(Shader &gridShader)
                             std::vector<glm::vec2> projected_diff_left(projected_left.size(), glm::vec2(0.0f, 0.0f));
                             std::vector<glm::vec2> projected_diff_right(projected_right.size(), glm::vec2(0.0f, 0.0f));
                             bool mp_detected_left, mp_detected_right;
+                            // launch the 2D landmark tracker (~17ms blocking operation)
                             if (mp_predict(camImage, totalFrameCount, mp_glm_left, mp_glm_right, mp_detected_left, mp_detected_right))
                             {
                                 if (useRightHand)
@@ -4461,6 +4466,7 @@ void handleMLSAsync(Shader &gridShader)
                                         // return;
                                     }
                                 }
+                                // perform smoothing over predicted control points
                                 if (mls_cp_smooth_window > 0)
                                 {
                                     int diff;
@@ -4486,9 +4492,7 @@ void handleMLSAsync(Shader &gridShader)
                                     pred_glm_left = std::move(cur_pred_glm_left);
                                     pred_glm_right = std::move(cur_pred_glm_right);
                                 }
-                                // perform smoothing over control points (when mls_cp_smooth_window > 0)
-
-                                // possibly use kalman to filter/predict the measurements, since mp takes ~17ms to run
+                                // possibly use kalman to temporally filter the predicted control points, since landmark detection takes ~17ms to run
                                 if (use_mp_kalman)
                                 {
                                     // get the time passed since the last frame
@@ -4502,13 +4506,6 @@ void handleMLSAsync(Shader &gridShader)
                                         measurement.at<float>(1) = pred_glm_left[i].y;
                                         cv::Mat corr = kalman_filters_left[i].correct(measurement);
                                         cv::Mat forecast = kalman_filters_left[i].forecast(kalman_lookahead);
-                                        // if (i == 0)
-                                        // {
-                                        //     std::cout << "pred: " << pred << std::endl;
-                                        //     std::cout << "meas: " << measurement << std::endl;
-                                        //     std::cout << "corr: " << corr << std::endl;
-                                        //     std::cout << "forecast: " << forecast << std::endl;
-                                        // }
                                         kalman_forecast_left.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
                                     }
                                     pred_glm_left = std::move(kalman_forecast_left);
@@ -4520,13 +4517,6 @@ void handleMLSAsync(Shader &gridShader)
                                         measurement.at<float>(1) = pred_glm_right[i].y;
                                         cv::Mat corr = kalman_filters_right[i].correct(measurement);
                                         cv::Mat forecast = kalman_filters_right[i].forecast(kalman_lookahead);
-                                        // if (i == 0)
-                                        // {
-                                        //     std::cout << "pred: " << pred << std::endl;
-                                        //     std::cout << "meas: " << measurement << std::endl;
-                                        //     std::cout << "corr: " << corr << std::endl;
-                                        //     std::cout << "forecast: " << forecast << std::endl;
-                                        // }
                                         kalman_forecast_right.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
                                     }
                                     pred_glm_right = std::move(kalman_forecast_right);
