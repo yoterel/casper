@@ -147,8 +147,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          bool leap_poll_mode,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp,
-                         double &appTimeStamp,
-                         int magic_time_delay);
+                         double &appTimeStamp);
 LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones,
                                     std::vector<glm::vec3> &joints,
                                     uint64_t frameCounter,
@@ -394,8 +393,8 @@ uint64_t leap_cur_frame_id = 0;
 uint32_t leap_width = 640;
 uint32_t leap_height = 240;
 bool useFingerWidth = false;
-int magic_leap_time_delay = 10000;     // us
-int magic_leap_time_delay_mls = 10000; // us
+int32_t magic_leap_time_delay = 10000;     // us
+int32_t magic_leap_time_delay_mls = 10000; // us
 float leap_global_scaler = 1.0f;
 float magic_leap_scale_factor = 10.0f;
 float leap_arm_local_scaler = 0.019f;
@@ -406,7 +405,6 @@ float magic_arm_offset = -140.0f;
 float magic_arm_forward_offset = -170.0f;
 float leap_binary_threshold = 0.3f;
 bool leap_threshold_flag = false;
-int64_t targetFrameTime = 0;
 double whole = 0.0;
 // LEAP_CLOCK_REBASER clockSynchronizer;
 std::vector<glm::vec3> joints_left, joints_right;
@@ -583,6 +581,7 @@ std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7,
 std::vector<std::vector<glm::vec2>> prev_pred_glm_left, prev_pred_glm_right;
 bool mls_succeed = false;
 bool mls_running = false;
+bool mls_probe_recent_leap = false;
 bool use_mls = true;
 bool postprocess_blur = false;
 int mls_mode = static_cast<int>(MLSMode::CONTROL_POINTS1);
@@ -2667,8 +2666,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          bool leap_poll_mode,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp,
-                         double &appTimeStamp,
-                         int magic_time_delay)
+                         double &appTimeStamp)
 {
     //  some defs
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -2715,7 +2713,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         leftFingersExtended.clear();
         rightFingersExtended.clear();
         // Get the buffer size needed to hold the tracking data
-        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), LeapGetNow() + magic_time_delay, &targetFrameSize);
+        eLeapRS retVal = LeapGetFrameSize(*leap.getConnectionHandle(), LeapGetNow() + targetFrameTime, &targetFrameSize);
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapGetFrameSize() returned " << retVal << std::endl;
@@ -2724,7 +2722,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         // Allocate enough memory
         frame = (LEAP_TRACKING_EVENT *)malloc((size_t)targetFrameSize);
         // Get the frame data
-        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), LeapGetNow() + magic_time_delay, frame, targetFrameSize);
+        retVal = LeapInterpolateFrame(*leap.getConnectionHandle(), LeapGetNow() + targetFrameTime, frame, targetFrameSize);
         if (retVal != eLeapRS_Success)
         {
             // std::cout << "ERROR: LeapInterpolateFrame() returned " << retVal << std::endl;
@@ -3345,7 +3343,7 @@ LEAP_STATUS handleLeapInput()
     //     std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
     //     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
     // }
-    leap_status = getLeapFrame(leap, targetFrameTime, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay);
+    leap_status = getLeapFrame(leap, magic_leap_time_delay, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp);
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
@@ -3543,8 +3541,8 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         {
             PointCloud cloud_src_input_left(ControlPointsP_input_left, screen_verts_color_red);
             PointCloud cloud_src_input_right(ControlPointsP_input_right, screen_verts_color_red);
-            PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);
-            PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta);
+            PointCloud cloud_src(ControlPointsP_glm, screen_verts_color_cyan);    // leap joints, from when mls was computed
+            PointCloud cloud_dst(ControlPointsQ_glm, screen_verts_color_magenta); // landmarks, from when mls was computed
             cloud_src_input_left.render(landmarkSize);
             cloud_src_input_right.render(landmarkSize);
             cloud_src.render(landmarkSize);
@@ -4363,10 +4361,33 @@ void handleMLSAsync(Shader &gridShader)
         // this allows for a more up-to-date deformation grid, but leads to jittery results
         case static_cast<int>(MLSMode::CONTROL_POINTS1):
         {
-            if (!mls_running && !mls_succeed)
+            if (!mls_running && !mls_succeed) // no mls thread is running and no mls thread results are waiting to be processed, so begin to launch a new mls thread
             {
-                // no mls thread is running and no mls thread results are waiting to be processed, so launch a new mls thread
-                if (joints_left.size() > 0 || joints_right.size() > 0)
+                bool anyHandPresent = false;
+                if (mls_probe_recent_leap)
+                {
+                    std::vector<glm::mat4> cur_left_bones, cur_right_bones;
+                    std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
+                    LEAP_STATUS status = getLeapFrame(leap, magic_leap_time_delay_mls, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp);
+                    if (status == LEAP_STATUS::LEAP_NEWFRAME)
+                    {
+                        if ((cur_vertices_left.size() > 0) || (cur_vertices_right.size() > 0))
+                        {
+                            joints_left = cur_vertices_left;
+                            joints_right = cur_vertices_right;
+                            anyHandPresent = true;
+                        }
+                    }
+                }
+                else
+                {
+                    if (joints_left.size() > 0 || joints_right.size() > 0)
+                    {
+                        anyHandPresent = true;
+                    }
+                }
+
+                if (anyHandPresent)
                 {
                     // the joints are extrapolations to compensate for full system latency.
                     // todo: use joints that are extrapolations for the time the camera frame was taken, slightly more in the past than the full system latency
@@ -4535,7 +4556,7 @@ void handleMLSAsync(Shader &gridShader)
                                     // LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                     std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                     std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-                                    LEAP_STATUS status = getLeapFrame(leap, targetFrameTime, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp, magic_leap_time_delay_mls);
+                                    LEAP_STATUS status = getLeapFrame(leap, magic_leap_time_delay_mls, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp);
                                     if (status == LEAP_STATUS::LEAP_NEWFRAME)
                                     {
                                         if ((cur_vertices_left.size() > 0) && (useLeftHand))
@@ -4671,9 +4692,9 @@ void handleMLSAsync(Shader &gridShader)
                         mls_running = false;
                         t_mls_thread.stop();
                     });
-                } // if (skeleton_vertices.size() > 0)
-            }     // if (!mls_running && !mls_succeed)
-            if (mls_succeed)
+                }            // if (skeleton_vertices.size() > 0)
+            }                // if (!mls_running && !mls_succeed)
+            if (mls_succeed) // a mls thread has finished and results are ready to be uploaded to the GPU
             {
                 deformationGrid.updateGLBuffers();
                 mls_succeed = false;
@@ -6837,10 +6858,13 @@ void openIMGUIFrame()
             ImGui::Checkbox("Show MLS grid", &show_mls_grid);
             ImGui::SameLine();
             ImGui::Checkbox("Forecast MP w LEAP", &mls_forecast);
+            ImGui::SameLine();
+            ImGui::Checkbox("Probe Recent Leap Frame", &mls_probe_recent_leap);
             ImGui::SliderInt("MLS CP Smooth window", &mls_cp_smooth_window, 0, 10);
             ImGui::SliderFloat("MLS grid shader thresh.", &mls_grid_shader_threshold, 0.0f, 1.0f);
             ImGui::SliderInt("MLS Grid Smooth window", &mls_grid_smooth_window, 0, 10);
-            ImGui::SliderInt("MLS Leap Prediction [us]", &magic_leap_time_delay_mls, -50000, 50000);
+            ImGui::SliderInt("Leap dt [us]", &magic_leap_time_delay, -50000, 50000);
+            ImGui::SliderInt("Leap dt (mls) [us]", &magic_leap_time_delay_mls, -50000, 50000);
             if (ImGui::Checkbox("Kalman Filter", &use_mp_kalman))
             {
                 if (use_mp_kalman)
@@ -6897,7 +6921,8 @@ void openIMGUIFrame()
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
             ImGui::SameLine();
             ImGui::Checkbox("Use Arm Bone", &leap_use_arm);
-            ImGui::SliderInt("Leap Prediction [us]", &magic_leap_time_delay, -50000, 50000);
+            ImGui::SliderInt("Leap dt [us]", &magic_leap_time_delay, -50000, 50000);
+            ImGui::SliderInt("Leap dt (mls) [us]", &magic_leap_time_delay_mls, -50000, 50000);
             ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
             ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
