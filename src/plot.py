@@ -93,6 +93,17 @@ def jnd_process_images(src_path, mask_path, dst_path):
 
 
 def jnd_plot(dst_path):
+    SMALL_SIZE = 8
+    MEDIUM_SIZE = 10
+    BIGGER_SIZE = 12
+
+    plt.rc("font", size=BIGGER_SIZE)  # controls default text sizes
+    plt.rc("axes", titlesize=BIGGER_SIZE)  # fontsize of the axes title
+    plt.rc("axes", labelsize=BIGGER_SIZE)  # fontsize of the x and y labels
+    plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc("legend", fontsize=BIGGER_SIZE)  # legend fontsize
+    plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
     baseline = np.array(
         [4.2255, 3.1405, 3.8625, 3.5545, 2.7795, 4.8805, 0.217, 0.926, 3.3805, 3.8665]
     )
@@ -208,7 +219,7 @@ def guesschar_plot(src_path, dst_path):
         for i, line in enumerate(csvFile):
             if i == 0:
                 continue
-            sid, _, method, palm, score, accuracy, q1 = line
+            sid, method, palm, score, accuracy, q1 = line
             if score != "":
                 sids.append(sid)
                 methods.append(method)
@@ -256,7 +267,77 @@ def guesschar_plot(src_path, dst_path):
     sorted_quad_ratio_acc = np.sort(
         np.concatenate((quad_ratio_acc_front, quad_ratio_acc_back))
     )
-    # fig, axs = plt.subplots(3, 1, figsize=(7, 15))
+
+    # scatter plots
+    SMALL_SIZE = 8
+    MEDIUM_SIZE = 10
+    BIGGER_SIZE = 12
+
+    plt.rc("font", size=BIGGER_SIZE)  # controls default text sizes
+    plt.rc("axes", titlesize=BIGGER_SIZE)  # fontsize of the axes title
+    plt.rc("axes", labelsize=BIGGER_SIZE)  # fontsize of the x and y labels
+    plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc("legend", fontsize=BIGGER_SIZE)  # legend fontsize
+    plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    # score
+    plt.scatter(baseline_scores_front, ours_scores_front, label="Front Palm")
+    plt.scatter(baseline_scores_back, ours_scores_back, label="Back Palm")
+    # plot red line for equal scores from x to xlim
+    plt.plot(
+        baseline_scores_front,
+        baseline_scores_front,
+        color="r",
+        label="Equal Time",
+    )
+    plt.xlabel("Baseline Session Time [s]")
+    plt.ylabel("Ours Session Time [s]")
+    plt.legend()
+    plt.savefig(str(dst_path / "guess_char_scores_scatter.pdf"))
+    plt.cla()
+    plt.clf()
+    # q1
+    # plt.scatter(baseline_q1, ours_q1)
+    # # plot red line for equal scores from x to xlim
+    # plt.plot(
+    #     baseline_q1,
+    #     baseline_q1,
+    #     color="r",
+    #     label="Equal Difficulty",
+    # )
+    # plt.xlabel("Baseline Q1 [1-5]")
+    # plt.ylabel("Ours Q1 [1-5]")
+    # plt.title("How difficult was the task? [1 - easy, 5 - hard]")
+    # plt.legend()
+    # plt.savefig(str(dst_path / "guess_char_q1_scatter.pdf"))
+    # plt.cla()
+    # plt.clf()
+
+    # heatmap plot
+    # first sum the baselineq1 and ours q1 responses into a matrix
+    response_matrix = np.zeros((5, 5))
+    for i in range(5):
+        for j in range(5):
+            response_matrix[i, j] = np.count_nonzero(
+                (baseline_q1 == j + 1) & (ours_q1 == i + 1)
+            )
+    # normalize
+    # response_matrix = response_matrix / response_matrix.sum()
+    for i in range(5):
+        for j in range(5):
+            text = plt.text(
+                j, i, int(response_matrix[i, j]), ha="center", va="center", color="w"
+            )
+    plt.imshow(response_matrix, cmap="coolwarm", interpolation="nearest")
+    # plt.colorbar()
+    plt.xlabel("Baseline")
+    plt.ylabel("Ours")
+    plt.xticks(np.arange(5), np.arange(1, 6))
+    plt.yticks(np.arange(5), np.arange(1, 6))
+    plt.title("How difficult was the task? [1 - easy, 5 - hard]")
+    plt.savefig(str(dst_path / "guess_char_q1_heatmap.pdf"))
+
+    # bar plots
     plt.stairs(
         sorted_quad_ratio_scores,
         np.linspace(0, 1, len(sorted_quad_ratio_scores) + 1),
@@ -376,7 +457,7 @@ if __name__ == "__main__":
     # dst_path = Path("C:/Users/sens/Desktop/ahand/images/jnd_processed")
     # jnd_process_images(src_path, mask_path, dst_path)
 
-    # jnd_plot(Path("C:/Users/sens/Desktop/ahand/images/jnd_processed"))
+    jnd_plot(Path("C:/Users/sens/Desktop/ahand/images/jnd_processed"))
     guesschar_plot(
         Path("C:/Users/sens/Desktop/ahand/guess_char_results.csv"),
         Path("C:/Users/sens/Desktop/ahand/images/"),
