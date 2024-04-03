@@ -209,6 +209,7 @@ bool use_cuda = false;
 bool simulated_camera = false;
 bool freecam_mode = false;
 bool use_pbo = true;
+bool double_pbo = false;
 bool use_projector = false;
 bool gamma_correct = false;
 bool use_screen = true;
@@ -1858,26 +1859,44 @@ int main(int argc, char *argv[])
         if (use_projector)
         {
             // send result to projector queue
-            glReadBuffer(GL_FRONT);
-            if (use_pbo) // todo: investigate better way to download asynchornously
+            glReadBuffer(GL_BACK);
+            if (use_pbo || double_pbo) // todo: investigate better way to download asynchornously
             {
-                t_download.start();
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[totalFrameCount % 2]); // todo: replace with totalFrameCount
-                glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
-                t_download.stop();
-
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(totalFrameCount + 1) % 2]);
-                GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
-                if (src)
+                if (double_pbo)
                 {
-                    // std::vector<uint8_t> data(src, src + image_size);
-                    // tmpdata.assign(src, src + image_size);
-                    // std::copy(src, src + tmpdata.size(), tmpdata.begin());
-                    memcpy(colorBuffer, src, projected_image_size);
-                    projector_queue.try_enqueue(colorBuffer);
-                    glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
+                    t_download.start();
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[totalFrameCount % 2]); // todo: replace with totalFrameCount
+                    glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
+                    t_download.stop();
+
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(totalFrameCount + 1) % 2]);
+                    GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+                    if (src)
+                    {
+                        // std::vector<uint8_t> data(src, src + image_size);
+                        // tmpdata.assign(src, src + image_size);
+                        // std::copy(src, src + tmpdata.size(), tmpdata.begin());
+                        memcpy(colorBuffer, src, projected_image_size);
+                        projector_queue.try_enqueue(colorBuffer);
+                        glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
+                    }
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
                 }
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+                else
+                {
+                    t_download.start();
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[0]); // todo: replace with totalFrameCount
+                    glReadPixels(0, 0, proj_width, proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
+                    GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+                    if (src)
+                    {
+                        memcpy(colorBuffer, src, projected_image_size);
+                        projector_queue.try_enqueue(colorBuffer);
+                        glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
+                    }
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+                    t_download.stop();
+                }
             }
             else
             {
@@ -6117,6 +6136,7 @@ void openIMGUIFrame()
             }
             ImGui::SameLine();
             ImGui::Checkbox("PBO", &use_pbo);
+            ImGui::Checkbox("Double PBO", &double_pbo);
             ImGui::SeparatorText("Operation Mode");
             if (ImGui::RadioButton("Normal", &operation_mode, static_cast<int>(OperationMode::NORMAL)))
             {
