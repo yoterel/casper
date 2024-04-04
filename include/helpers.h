@@ -41,9 +41,9 @@ public:
     static float MSE(const std::vector<glm::vec2> &a, const std::vector<glm::vec2> &b /*, std::vector<float> &mse*/);
     static std::vector<glm::vec2> accumulate(const std::vector<std::vector<glm::vec2>> &a, bool normalize = true);
     static std::vector<glm::vec3> accumulate(const std::vector<std::vector<glm::vec3>> &a, bool normalize = true);
+    static std::vector<glm::mat4> accumulate(const std::vector<std::vector<glm::mat4>> &a, bool normalize = true);
     static glm::mat4 interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale = false, bool isRightHand = false);
     static bool isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform);
-    static void loadEXR(std::string path);
 
 private:
     Helpers();
@@ -155,4 +155,53 @@ enum class GameSessionType
     A = 0,
     B = 1,
 };
+
+template <typename T>
+std::vector<float> linear_spacing(T start, T end, int num)
+{
+    std::vector<float> linspaced;
+    if (num == 0)
+    {
+        return linspaced;
+    }
+    if (num == 1)
+    {
+        linspaced.push_back(start);
+        return linspaced;
+    }
+
+    float delta = (end - start) / (num - 1);
+
+    for (int i = 0; i < num - 1; ++i)
+    {
+        linspaced.push_back(start + delta * i);
+    }
+    linspaced.push_back(end);
+    return linspaced;
+}
+
+template <typename T>
+std::vector<int32_t> integer_linear_spacing(T start, T end, int num)
+{
+    std::vector<int32_t> linspaced;
+    if (num == 0)
+    {
+        return linspaced;
+    }
+    if (num == 1)
+    {
+        linspaced.push_back(static_cast<int32_t>(start));
+        return linspaced;
+    }
+
+    float delta = (end - start) / (num - 1);
+
+    for (int i = 0; i < num - 1; ++i)
+    {
+        linspaced.push_back(static_cast<int32_t>(start + delta * i));
+    }
+    linspaced.push_back(static_cast<int32_t>(end));
+    return linspaced;
+}
+
 #endif // HELPERS_H

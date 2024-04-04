@@ -569,11 +569,37 @@ std::vector<glm::vec3> Helpers::accumulate(const std::vector<std::vector<glm::ve
 {
     if (a.size() == 0)
     {
-        std::cout << "ERROR: vector of vectors must have at least one vector." << std::endl;
+        // std::cout << "ERROR: vector of vectors must have at least one vector." << std::endl;
         return std::vector<glm::vec3>();
     }
     unsigned long long reduce_size = a[0].size();
     std::vector<glm::vec3> accumulator(reduce_size, glm::vec3(0.0f, 0.0f, 0.0f));
+    for (int i = 0; i < a.size(); i++)
+    {
+        for (int j = 0; j < reduce_size; j++)
+        {
+            accumulator[j] += a[i][j];
+        }
+    }
+    if (normalize)
+    {
+        for (int i = 0; i < accumulator.size(); i++)
+        {
+            accumulator[i] /= a.size();
+        }
+    }
+    return accumulator;
+}
+
+std::vector<glm::mat4> Helpers::accumulate(const std::vector<std::vector<glm::mat4>> &a, bool normalize)
+{
+    if (a.size() == 0)
+    {
+        // std::cout << "ERROR: vector of vectors must have at least one vector." << std::endl;
+        return std::vector<glm::mat4>();
+    }
+    unsigned long long reduce_size = a[0].size();
+    std::vector<glm::mat4> accumulator(reduce_size, glm::mat4(0.0f));
     for (int i = 0; i < a.size(); i++)
     {
         for (int j = 0; j < reduce_size; j++)

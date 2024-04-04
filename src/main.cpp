@@ -61,6 +61,7 @@ namespace fs = std::filesystem;
 void openIMGUIFrame();
 void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat simulatedImage);
 LEAP_STATUS handleLeapInput();
+LEAP_STATUS handleLeapInput(int num_frames);
 void saveLeapData(LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images);
 void saveSession(std::string savepath, bool record_images);
 void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_timestamp, bool record_images);
@@ -276,7 +277,7 @@ unsigned int n_bones = 0;
 const unsigned int num_texels = proj_width * proj_height;
 const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
 cv::Mat white_image(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
-Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_interp, t_profile;
+Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_interp, t_profile0, t_profile1;
 std::thread producer, consumer, run_sd, run_mls;
 std::string meshFile;
 std::string extraMeshFile;
@@ -394,6 +395,8 @@ uint64_t leap_cur_frame_id = 0;
 uint32_t leap_width = 640;
 uint32_t leap_height = 240;
 bool useFingerWidth = false;
+int32_t leap_accumulate_frames = 3;
+int32_t leap_accumulate_spread = 1000;     // us
 int32_t magic_leap_time_delay = 10000;     // us
 int32_t magic_leap_time_delay_mls = 10000; // us
 float leap_global_scaler = 1.0f;
@@ -1098,7 +1101,8 @@ int main(int argc, char *argv[])
                 std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
                 std::cout << "mls: " << t_mls.averageLapInMilliSec() << std::endl;
                 std::cout << "mls thread: " << t_mls_thread.averageLapInMilliSec() << std::endl;
-                // std::cout << "profile: " << t_profile.averageLapInMilliSec() << std::endl;
+                // std::cout << "profile0: " << t_profile0.averageLapInMilliSec() << std::endl;
+                // std::cout << "profile1: " << t_profile1.averageLapInMilliSec() << std::endl;
                 std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
                 std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
                 std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
@@ -1119,7 +1123,8 @@ int main(int argc, char *argv[])
             t_pp.reset();
             t_mls.reset();
             t_mls_thread.reset();
-            // t_profile.reset();
+            // t_profile0.reset();
+            // t_profile1.reset();
             t_debug.reset();
         }
         /* deal with user input */
@@ -1173,7 +1178,7 @@ int main(int argc, char *argv[])
 
             /* deal with leap input */
             t_leap.start();
-            LEAP_STATUS leap_status = handleLeapInput();
+            LEAP_STATUS leap_status = handleLeapInput(leap_accumulate_frames);
             if (record_session)
             {
                 if ((t_app.getElapsedTimeInSec() - recordStartTime) > recordDuration)
@@ -2688,6 +2693,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          double &appTimeStamp)
 {
     //  some defs
+    // t_profile1.start();
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 roty = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 flip_x = glm::mat4(1.0f);
@@ -2703,6 +2709,9 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
     glm::mat4 scalar = glm::scale(glm::mat4(1.0f), glm::vec3(magic_leap_scale_factor));
     uint64_t targetFrameSize = 0;
     LEAP_TRACKING_EVENT *frame = nullptr;
+    // t_profile1.stop();
+    // std::cout << "init defs: " << t_profile1.averageLapInMilliSec() << std::endl;
+    // t_profile1.start();
     if (leap_poll_mode)
     {
         frame = leap.getFrame();
@@ -2750,10 +2759,13 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
         curFrameTimeStamp = frame->info.timestamp;
         appTimeStamp = t_app.getElapsedTimeInMilliSec();
     }
+    // t_profile1.stop();
+    // std::cout << "get_frame: " << t_profile1.averageLapInMilliSec() << std::endl;
     // Use the data...
     //  std::cout << "frame id: " << interpolatedFrame->tracking_frame_id << std::endl;
     //  std::cout << "frame delay (us): " << (long long int)LeapGetNow() - interpolatedFrame->info.timestamp << std::endl;
     //  std::cout << "frame hands: " << interpolatedFrame->nHands << std::endl;
+    // t_profile1.start();
     for (uint32_t h = 0; h < frame->nHands; h++)
     {
         LEAP_HAND *hand = &frame->pHands[h];
@@ -2868,10 +2880,15 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
             // grab_angle_left = grab_angle;
         }
     }
+    // t_profile1.stop();
+    // t_profile1.start();
+    // std::cout << "parse_frame: " << t_profile1.averageLapInMilliSec() << std::endl;
     // Free the allocated buffer when done.
     if (leap_poll_mode)
         free(frame->pHands);
     free(frame);
+    // t_profile1.stop();
+    // std::cout << "inside_get_leap: " << t_profile1.getElapsedTimeInMilliSec() << std::endl;
     return LEAP_STATUS::LEAP_NEWFRAME;
 }
 
@@ -3149,8 +3166,8 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
         }
         else
         {
-            camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
             camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, cam_buffer_format);
+            camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
         }
     }
     else
@@ -3353,6 +3370,54 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
         }
     }
 }
+
+LEAP_STATUS handleLeapInput(int num_frames)
+{
+    LEAP_STATUS leap_status;
+    if (leap_poll_mode)
+        num_frames = 1;
+    std::vector<std::vector<glm::mat4>> tmp_bones_to_world_left, tmp_bones_to_world_right;
+    std::vector<std::vector<glm::vec3>> tmp_joints_left, tmp_joints_right;
+    std::vector<int32_t> time_delays = integer_linear_spacing(magic_leap_time_delay - leap_accumulate_spread, magic_leap_time_delay + leap_accumulate_spread, num_frames);
+    // t_profile0.start();
+    for (int i = 0; i < num_frames; i++)
+    {
+        leap_status = getLeapFrame(leap, time_delays[i], bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp);
+        if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
+        {
+            if (joints_left.size() > 0)
+            {
+                tmp_joints_left.push_back(std::move(joints_left));
+                tmp_bones_to_world_left.push_back(std::move(bones_to_world_left));
+            }
+            if (joints_right.size() > 0)
+            {
+                tmp_bones_to_world_right.push_back(std::move(bones_to_world_right));
+                tmp_joints_right.push_back(std::move(joints_right));
+            }
+        }
+        else
+        {
+            return leap_status;
+        }
+    }
+    // t_profile0.stop();
+    // std::cout << "outside_get_leap: " << t_profile0.getElapsedTimeInMilliSec() << std::endl;
+    joints_left = Helpers::accumulate(tmp_joints_left);
+    joints_right = Helpers::accumulate(tmp_joints_right);
+    bones_to_world_left = Helpers::accumulate(tmp_bones_to_world_left);
+    bones_to_world_right = Helpers::accumulate(tmp_bones_to_world_right);
+    // for (int i = 0; i < bones_to_world_left.size(); i++)
+    // {
+    //     joints_left.push_back(glm::vec3(bones_to_world_left[i][3]));
+    // }
+    // for (int i = 0; i < bones_to_world_right.size(); i++)
+    // {
+    //     joints_right.push_back(glm::vec3(bones_to_world_right[i][3]));
+    // }
+    return leap_status;
+}
+
 LEAP_STATUS handleLeapInput()
 {
     LEAP_STATUS leap_status;
@@ -3363,6 +3428,14 @@ LEAP_STATUS handleLeapInput()
     //     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
     // }
     leap_status = getLeapFrame(leap, magic_leap_time_delay, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, leap_poll_mode, curFrameID, curFrameTimeStamp, curAppFrameTimeStamp);
+    // for (int i = 0; i < bones_to_world_left.size(); i++)
+    // {
+    //     joints_left.push_back(glm::vec3(bones_to_world_left[i][3]));
+    // }
+    // for (int i = 0; i < bones_to_world_right.size(); i++)
+    // {
+    //     joints_right.push_back(glm::vec3(bones_to_world_right[i][3]));
+    // }
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(leap_global_scaler));
@@ -5685,13 +5758,13 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                                    cam_view_transform,
                                    cam_projection_transform))
                     {
-                        t_profile.stop();
-                        t_profile.stop();
-                        std::cout << "video playback time: " << t_profile.getElapsedTimeInMilliSec() << " ms" << std::endl;
+                        t_profile0.stop();
+                        t_profile0.stop();
+                        std::cout << "video playback time: " << t_profile0.getElapsedTimeInMilliSec() << " ms" << std::endl;
                         videoFrameCountCont = 0.0f;
                         is_first_in_video_pair = true;
                         texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                        t_profile.start();
+                        t_profile0.start();
                     }
                 }
             }
@@ -6924,6 +6997,10 @@ void openIMGUIFrame()
             {
                 leap.setPollMode(leap_poll_mode);
             }
+            ImGui::SliderInt("Leap Accumulate Frames", &leap_accumulate_frames, 1, 50);
+            ImGui::SliderInt("Leap Accumulate Spread", &leap_accumulate_spread, 10, 5000);
+            ImGui::SliderInt("Leap dt [us]", &magic_leap_time_delay, -50000, 50000);
+            ImGui::SliderInt("Leap dt (mls) [us]", &magic_leap_time_delay_mls, -50000, 50000);
             if (ImGui::RadioButton("Desktop", &leap_tracking_mode, 0))
             {
                 leap.setTrackingMode(eLeapTrackingMode_Desktop);
@@ -6941,8 +7018,6 @@ void openIMGUIFrame()
             ImGui::Checkbox("Use Finger Width", &useFingerWidth);
             ImGui::SameLine();
             ImGui::Checkbox("Use Arm Bone", &leap_use_arm);
-            ImGui::SliderInt("Leap dt [us]", &magic_leap_time_delay, -50000, 50000);
-            ImGui::SliderInt("Leap dt (mls) [us]", &magic_leap_time_delay_mls, -50000, 50000);
             ImGui::SliderFloat("Leap Global Scale", &leap_global_scaler, 0.1f, 10.0f);
             ImGui::SliderFloat("Leap Bone Scale", &magic_leap_scale_factor, 1.0f, 20.0f);
             ImGui::SliderFloat("Leap Wrist Offset", &magic_wrist_offset, -100.0f, 100.0f);
@@ -7009,7 +7084,7 @@ void openIMGUIFrame()
                     video_reached_end = true;
                     is_first_in_video_pair = true;
                     use_coaxial_calib = false;
-                    t_profile.start();
+                    t_profile0.start();
                     texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                 }
             }
