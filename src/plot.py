@@ -272,6 +272,7 @@ def guesschar_plot(src_path, dst_path):
     SMALL_SIZE = 8
     MEDIUM_SIZE = 10
     BIGGER_SIZE = 12
+    HUGE_SIZE = 16
 
     plt.rc("font", size=BIGGER_SIZE)  # controls default text sizes
     plt.rc("axes", titlesize=BIGGER_SIZE)  # fontsize of the axes title
@@ -280,19 +281,66 @@ def guesschar_plot(src_path, dst_path):
     plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
     plt.rc("legend", fontsize=BIGGER_SIZE)  # legend fontsize
     plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     # score
-    plt.scatter(baseline_scores_front, ours_scores_front, label="Front Palm")
-    plt.scatter(baseline_scores_back, ours_scores_back, label="Back Palm")
+    plt.scatter(
+        baseline_scores_front / 20,
+        ours_scores_front / 20,
+        label="Front Palm",
+        color="blue",
+        alpha=0.8,
+    )
+    plt.scatter(
+        baseline_scores_back / 20,
+        ours_scores_back / 20,
+        label="Back Palm",
+        color="orange",
+        alpha=0.8,
+    )
+    plt.scatter(
+        (baseline_scores_front / 20).mean(),
+        (ours_scores_front / 20).mean(),
+        color="blue",
+        marker="x",
+        s=80,
+    )
+    plt.annotate(
+        "Mean",
+        xy=((baseline_scores_front / 20).mean(), (ours_scores_front / 20).mean()),
+        color="k",
+        xytext=(5, -10),
+        textcoords="offset points",
+    )
+    plt.scatter(
+        (baseline_scores_back / 20).mean(),
+        (ours_scores_back / 20).mean(),
+        color="orange",
+        marker="x",
+        s=80,
+    )
+    plt.annotate(
+        "Mean",
+        xy=((baseline_scores_back.mean() / 20), (ours_scores_back / 20).mean()),
+        color="k",
+        xytext=(5, -15),
+        textcoords="offset points",
+    )
+    _, right = plt.xlim()
+    _, top = plt.ylim()
+    plt.xlim(0, max(right, top))
+    plt.ylim(0, max(right, top))
     # plot red line for equal scores from x to xlim
     plt.plot(
-        baseline_scores_front,
-        baseline_scores_front,
+        [0, max(right, top)],
+        [0, max(right, top)],
         color="r",
         label="Equal Time",
     )
-    plt.xlabel("Baseline Session Time [s]")
-    plt.ylabel("Ours Session Time [s]")
+    plt.xlabel("Baseline Average Round Time [s]")
+    plt.ylabel("Ours Average Round Time [s]")
+    # set x and y limits
     plt.legend()
+    plt.tight_layout()
     plt.savefig(str(dst_path / "guess_char_scores_scatter.pdf"))
     plt.cla()
     plt.clf()
@@ -367,8 +415,8 @@ def guesschar_plot(src_path, dst_path):
     plt.savefig(str(dst_path / "guess_char_scores.pdf"))
     plt.cla()
     plt.clf()
-
-    categories = (0.0, 5.0)
+    width = 10.0
+    categories = (0.0, width)
     weight_counts = {
         "1": np.array(
             [np.count_nonzero(ours_q1 == 1), np.count_nonzero(baseline_q1 == 1)]
@@ -386,11 +434,20 @@ def guesschar_plot(src_path, dst_path):
             [np.count_nonzero(ours_q1 == 5), np.count_nonzero(baseline_q1 == 5)]
         ),
     }
-    width = 5.0
+
+    plt.rc("font", size=BIGGER_SIZE)  # controls default text sizes
+    plt.rc("axes", titlesize=HUGE_SIZE)  # fontsize of the axes title
+    plt.rc("axes", labelsize=HUGE_SIZE)  # fontsize of the x and y labels
+    # plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    # plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc("legend", fontsize=BIGGER_SIZE)  # legend fontsize
+    plt.rc("figure", titlesize=HUGE_SIZE)  # fontsize of the figure title
+    plt.rc("xtick", labelsize=HUGE_SIZE)  # fontsize of the tick labels
+    plt.rc("ytick", labelsize=HUGE_SIZE)  # fontsize of the tick labels
     fig, ax = plt.subplots(figsize=(8, 2))
     ax.set_aspect("equal")
     bottom = np.zeros(2)
-    category_colors = plt.colormaps["inferno"](
+    category_colors = plt.colormaps["coolwarm"](
         np.linspace(0.15, 0.85, len(weight_counts))
     )
     for i, (boolean, weight_count) in enumerate(weight_counts.items()):
@@ -411,9 +468,9 @@ def guesschar_plot(src_path, dst_path):
             p,
             labels=barlabels,
             label_type="center",
-            color="white",
+            color="k",
         )
-    ax.set_yticks([0.0, 5.0], labels=["Ours", "Baseline"])
+    ax.set_yticks([0.0, width], labels=["Ours", "Baseline"])
     # ax.set_xticklabels([])
     # ax.set_ylabel("Sessions")
     ax.set_title("How difficult was the task?\n (1 - easy, 5 - hard)")
@@ -444,7 +501,7 @@ def guesschar_plot(src_path, dst_path):
     # ax.yaxis.set_visible(False)
     # remove x ticks
     ax.xaxis.set_visible(False)
-    # plt.tight_layout()
+    plt.tight_layout()
     plt.savefig(str(dst_path / "guess_char_q1.pdf"))
 
 
@@ -457,7 +514,7 @@ if __name__ == "__main__":
     # dst_path = Path("C:/Users/sens/Desktop/ahand/images/jnd_processed")
     # jnd_process_images(src_path, mask_path, dst_path)
 
-    jnd_plot(Path("C:/Users/sens/Desktop/ahand/images/jnd_processed"))
+    # jnd_plot(Path("C:/Users/sens/Desktop/ahand/images/jnd_processed"))
     guesschar_plot(
         Path("C:/Users/sens/Desktop/ahand/guess_char_results.csv"),
         Path("C:/Users/sens/Desktop/ahand/images/"),
