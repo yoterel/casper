@@ -3202,6 +3202,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         maskShader->use();
         maskShader->setVec3("bgColor", es.mask_bg_color);
         maskShader->setVec3("fgColor", es.mask_fg_color);
+        maskShader->setFloat("alpha", es.mask_alpha);
         maskShader->setVec3("missingInfoColor", es.mask_missing_info_color);
         maskShader->setVec3("unusedInfoColor", es.mask_unused_info_color);
         maskShader->setBool("fgSingleColor", es.mask_fg_single_color);
@@ -3268,6 +3269,16 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     if (es.show_landmarks)
     {
+        if (es.mls_succeeded_this_frame)
+        {
+            std::vector<glm::vec2> tmp;
+            tmp.push_back(glm::vec2(0.0f, 0.0f));
+            PointCloud cloud_src(tmp, es.screen_verts_color_red);
+            vcolorShader->use();
+            vcolorShader->setMat4("mvp", glm::mat4(1.0f));
+            cloud_src.render(10.0f);
+            es.mls_succeeded_this_frame = false;
+        }
         float landmarkSize = 10.0f;
         vcolorShader->use();
         std::vector<glm::vec2> leap_joints_left = Helpers::project_points(joints_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
@@ -4453,6 +4464,7 @@ void handleMLSAsync(Shader &gridShader)
                 ControlPointsQ_glm = Helpers::cv2glm(ControlPointsQ);
                 ControlPointsP_input_left = std::move(ControlPointsP_input_glm_left);
                 ControlPointsP_input_right = std::move(ControlPointsP_input_glm_right);
+                es.mls_succeeded_this_frame = true;
                 // if (mls_thread.joinable())
                 //     mls_thread.join();
             }
@@ -6601,6 +6613,7 @@ void openIMGUIFrame()
             ImGui::ColorEdit3("Missing Info Color", &es.mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Unused Info Color", &es.mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::Checkbox("FG single color", &es.mask_fg_single_color);
+            ImGui::SliderFloat("Alpha Blending", &es.mask_alpha, 0.0f, 1.0f);
             ImGui::Checkbox("Threshold Camera", &es.threshold_flag2);
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &es.use_mls);

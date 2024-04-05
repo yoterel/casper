@@ -13,19 +13,36 @@ bool SaveToDisk::init()
 		return true;
 	}
 	m_close_signal = false;
-	m_thread = std::thread([this]() { //, &projector
-		std::cout << "Consumer started" << std::endl;
+	m_work_thread = std::thread([this]() { //, &projector
+		std::cout << "Work Thread Started" << std::endl;
 		uint8_t *image;
 		bool sucess;
 		while (!this->m_close_signal)
 		{
-			sucess = m_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
+			sucess = this->m_work_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
 			if (sucess)
 			{
-				this->show_buffer_internal(image);
+				this->show_buffer_internal(image, true);
 			}
 		}
-		std::cout << "Consumer finished" << std::endl;
+		std::cout << "Work Thread Finished" << std::endl;
+	});
+	m_copy_thread = std::thread([this]() { //, &projector
+		std::cout << "Copy Thread Started" << std::endl;
+		uint8_t *image;
+		bool sucess;
+		while (!this->m_close_signal)
+		{
+			sucess = this->m_copy_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
+			if (sucess)
+			{
+				int n_pixels = m_width * m_height * 3;
+				uint8_t *pBuf = (uint8_t *)malloc(n_pixels * sizeof(uint8_t));
+				memcpy(pBuf, image, n_pixels);
+				this->m_work_queue.try_enqueue(pBuf);
+			}
+		}
+		std::cout << "Copy Thread finished" << std::endl;
 	});
 	m_initialized = true;
 	return true;
@@ -41,13 +58,16 @@ void SaveToDisk::show(const cv::Mat frame)
 	show_buffer_internal(frame.data, false);
 };
 
-void SaveToDisk::show_buffer(uint8_t *buffer)
+uint8_t *SaveToDisk::get_buffer()
 {
-	// quickly copy buffer and enqueue it
 	int n_pixels = m_width * m_height * 3;
 	uint8_t *pBuf = (uint8_t *)malloc(n_pixels * sizeof(uint8_t));
-	memcpy(pBuf, buffer, n_pixels * sizeof(uint8_t));
-	m_queue.try_enqueue(pBuf);
+	return pBuf;
+}
+
+void SaveToDisk::show_buffer(uint8_t *buffer)
+{
+	m_copy_queue.try_enqueue(buffer);
 };
 
 void SaveToDisk::show_buffer_internal(uint8_t *buffer, bool free_buffer)
@@ -72,7 +92,8 @@ void SaveToDisk::kill()
 	{
 		m_initialized = false;
 		m_close_signal = true;
-		m_thread.join();
+		m_work_thread.join();
+		m_copy_thread.join();
 	}
 };
 
@@ -292,6 +313,19 @@ void DynaFlashProjector::show(cv::Mat frame)
 void DynaFlashProjector::show_buffer(uint8_t *buffer)
 {
 	m_projector_queue.try_enqueue(buffer);
+}
+
+uint8_t *DynaFlashProjector::get_buffer()
+{
+	uint8_t *pBuf_orig = nullptr;
+	char *pBuf_casted = static_cast<char *>(static_cast<void *>(pBuf_orig));
+	if (pDynaFlash->GetFrameBuffer(&pBuf_casted, &nGetFrameCnt) != STATUS_SUCCESSFUL)
+	{
+		if (m_verbose)
+			std::cout << "GetFrameBuffer Error\n";
+		gracefully_close();
+	}
+	return pBuf_orig;
 }
 
 void DynaFlashProjector::show_buffer_internal(uint8_t *buffer)

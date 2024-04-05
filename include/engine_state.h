@@ -67,6 +67,7 @@ public:
     float jfa_distance_threshold = 10.0f;
     float jfa_seam_threshold = 0.5f;
     glm::vec3 mask_bg_color = glm::vec3(0.0f, 0.0f, 0.0f);
+    float mask_alpha = 1.0f;
     glm::vec3 mask_fg_color = glm::vec3(64.0f / 255.0f, 176.0f / 255.0f, 166.0f / 255.0f);
     glm::vec3 mask_missing_info_color = glm::vec3(47.0f / 255.0f, 103.0f / 255.0f, 177.0f / 255.0f);
     glm::vec3 mask_unused_info_color = glm::vec3(191.0f / 255.0f, 44.0f / 255.0f, 35.0f / 255.0f);
@@ -317,6 +318,7 @@ public:
     std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
     bool mls_succeed = false;
+    bool mls_succeeded_this_frame = false;
     bool mls_running = false;
     bool mls_probe_recent_leap = false;
     bool use_mls = true;

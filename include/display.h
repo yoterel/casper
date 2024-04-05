@@ -35,6 +35,7 @@ public:
     int get_height() { return m_height; };
     virtual std::size_t get_queue_size() { return 0; };
     virtual bool init() { return true; };
+    virtual uint8_t *get_buffer() { return nullptr; };
     virtual void show(){};
     virtual void show(cv::Mat frame){};
     virtual void show_buffer(uint8_t *buffer){};
@@ -51,24 +52,28 @@ class SaveToDisk : public Display
 {
 public:
     SaveToDisk(std::string dst, int height, int width, int channels = 3, bool verbose = false) : Display(height, width, channels, verbose),
-                                                                                                 m_queue(5000),
+                                                                                                 m_copy_queue(5000),
+                                                                                                 m_work_queue(5000),
                                                                                                  m_dst(dst),
                                                                                                  white_image(DYNA_FRAME_WIDTH, DYNA_FRAME_HEIGHT, CV_8UC3, cv::Scalar(255, 255, 255)){};
     bool init();
+    uint8_t *get_buffer();
     void show();
     void show(cv::Mat frame);
     void show_buffer(uint8_t *buffer);
     void show_buffer_internal(uint8_t *buffer, bool free_buffer = true);
     void kill();
     void setDestination(std::string dst) { m_dst = dst; };
-    std::size_t get_queue_size() { return m_queue.size_approx(); };
+    std::size_t get_queue_size() { return m_work_queue.size_approx(); };
     int frame_counter = 0;
     // void setSaveToDisk(bool save_to_disk) { m_save_to_disk = save_to_disk; };
 
 private:
     std::string m_dst;
-    moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> m_queue;
-    std::thread m_thread;
+    moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> m_copy_queue;
+    moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> m_work_queue;
+    std::thread m_copy_thread;
+    std::thread m_work_thread;
     bool m_close_signal = false;
     cv::Mat white_image;
     bool m_initialized = false;
@@ -88,6 +93,7 @@ public:
         gracefully_close();
     };
     bool init();
+    uint8_t *get_buffer();
     void show();
     void show(cv::Mat frame);
     void show_buffer(uint8_t *buffer);

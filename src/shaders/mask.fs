@@ -13,6 +13,7 @@ uniform vec3 missingInfoColor = vec3(1.0, 0.0, 0.0);
 uniform vec3 unusedInfoColor = vec3(1.0, 0.0, 1.0);
 uniform vec3 bgColor = vec3(0.0, 0.0, 0.0);
 uniform vec3 fgColor = vec3(0.0, 0.0, 0.0);
+uniform float alpha = 1.0;
 void main()
 {
     vec2 mask_uv = TexCoord;
@@ -26,7 +27,7 @@ void main()
     else
         maskCol = texture(mask, mask_uv);
     float avgMask = (maskCol.r + maskCol.g + maskCol.b) * 0.333333;
-    FragColor = texture(src, TexCoord); // sample texture using the locations of the nearest seeds
+    FragColor = mix(maskCol, texture(src, TexCoord), alpha); // sample texture using the locations of the nearest seeds
     if (avgMask >= threshold) // if cam pixel is "on"
     { 
         if (FragColor.w == 0.0) // but render doesn't have info
