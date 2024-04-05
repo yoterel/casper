@@ -1,5 +1,6 @@
 #include "display.h"
 #include <filesystem>
+#include <iostream>
 
 namespace fs = std::filesystem;
 
@@ -15,20 +16,14 @@ bool SaveToDisk::init()
 	m_thread = std::thread([this]() { //, &projector
 		std::cout << "Consumer started" << std::endl;
 		uint8_t *image;
-		// std::vector<uint8_t> image;
-		// int stride = 3 * proj_width;
-		// stride += (stride % 4) ? (4 - stride % 4) : 0;
 		bool sucess;
 		while (!this->m_close_signal)
 		{
 			sucess = m_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
 			if (sucess)
 			{
-				// std::cout << "Consumer got image" << std::endl;
 				this->show_buffer_internal(image);
 			}
-			// projector.show_buffer(image.data());
-			// stbi_write_png("test.png", proj_width, proj_height, 3, image.data(), stride);
 		}
 		std::cout << "Consumer finished" << std::endl;
 	});
@@ -43,28 +38,30 @@ void SaveToDisk::show()
 
 void SaveToDisk::show(const cv::Mat frame)
 {
-	show_buffer_internal(frame.data);
+	show_buffer_internal(frame.data, false);
 };
 
 void SaveToDisk::show_buffer(uint8_t *buffer)
 {
-	m_queue.try_enqueue(buffer);
+	// quickly copy buffer and enqueue it
+	int n_pixels = m_width * m_height * 3;
+	uint8_t *pBuf = (uint8_t *)malloc(n_pixels * sizeof(uint8_t));
+	memcpy(pBuf, buffer, n_pixels * sizeof(uint8_t));
+	m_queue.try_enqueue(pBuf);
 };
 
-void SaveToDisk::show_buffer_internal(uint8_t *buffer)
+void SaveToDisk::show_buffer_internal(uint8_t *buffer, bool free_buffer)
 {
 	if (m_initialized)
 	{
-		int n_pixels = m_width * m_height * 3;
-		uint8_t *pBuf = (uint8_t *)malloc(n_pixels * sizeof(uint8_t));
-		memcpy(pBuf, buffer, n_pixels * sizeof(uint8_t));
 		fs::path parent_folder_path(m_dst);
 		fs::path image_path = parent_folder_path / fs::path(std::format("{:06d}", frame_counter) + std::string(".png"));
 		int stride = 3 * m_width;
 		stride += (stride % 4) ? (4 - stride % 4) : 0;
 		stbi_flip_vertically_on_write(true);
-		stbi_write_png(image_path.string().c_str(), m_width, m_height, 3, pBuf, stride);
-		free(pBuf);
+		stbi_write_png(image_path.string().c_str(), m_width, m_height, 3, buffer, stride);
+		if (free_buffer)
+			free(buffer);
 		frame_counter++;
 	}
 };
@@ -170,9 +167,6 @@ bool DynaFlashProjector::init()
 	m_projector_thread = std::thread([this]() { //, &projector
 		std::cout << "Consumer started" << std::endl;
 		uint8_t *image;
-		// std::vector<uint8_t> image;
-		// int stride = 3 * proj_width;
-		// stride += (stride % 4) ? (4 - stride % 4) : 0;
 		bool sucess;
 		while (!this->m_close_signal)
 		{
@@ -182,8 +176,6 @@ bool DynaFlashProjector::init()
 				// std::cout << "Consumer got image" << std::endl;
 				this->show_buffer_internal(image);
 			}
-			// projector.show_buffer(image.data());
-			// stbi_write_png("test.png", proj_width, proj_height, 3, image.data(), stride);
 		}
 		std::cout << "Consumer finished" << std::endl;
 	});

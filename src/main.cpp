@@ -36,6 +36,8 @@
 #include "user_study.h"
 #include "guess_pose_game.h"
 #include "guess_char_game.h"
+#include "grid.h"
+#include "moving_least_squares.h"
 #include "MidiControllerAPI.h"
 #ifdef _DEBUG
 #undef _DEBUG
@@ -54,8 +56,6 @@
 #include "stb_image_write.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include "grid.h"
-#include "moving_least_squares.h"
 namespace fs = std::filesystem;
 
 /* forward declarations */
@@ -3190,7 +3190,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::CAM_FEED):
     {
-        set_texture_shader(textureShader, true, true, true, es.threshold_flag, es.masking_threshold);
+        set_texture_shader(textureShader, true, true, true, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
         camTexture.bind();
         postprocess_fbo.bind();
         fullScreenQuad.render();
@@ -5840,32 +5840,22 @@ void openIMGUIFrame()
         {
             if (ImGui::Checkbox("Use Projector", &es.use_projector))
             {
-                if (es.simulated_projector)
+                if (es.use_projector)
                 {
                     if (!projector->init())
                     {
                         std::cerr << "Failed to initialize projector\n";
                         es.use_projector = false;
                     }
-                    SaveToDisk *p = dynamic_cast<SaveToDisk *>(projector);
-                    if (es.use_projector)
-                        p->setSaveToDisk(true);
-                    else
-                        p->setSaveToDisk(false);
-                }
-                else
-                {
-                    if (es.use_projector)
+                    if (!es.simulated_projector)
                     {
-                        if (!projector->init())
-                        {
-                            std::cerr << "Failed to initialize projector\n";
-                            es.use_projector = false;
-                        }
                         c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
                         es.use_coaxial_calib = true;
                     }
-                    else
+                }
+                else
+                {
+                    if (!es.simulated_projector)
                     {
                         projector->kill();
                         es.use_coaxial_calib = false;
@@ -6611,6 +6601,7 @@ void openIMGUIFrame()
             ImGui::ColorEdit3("Missing Info Color", &es.mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Unused Info Color", &es.mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::Checkbox("FG single color", &es.mask_fg_single_color);
+            ImGui::Checkbox("Threshold Camera", &es.threshold_flag2);
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &es.use_mls);
             ImGui::RadioButton("CP1", &es.mls_mode, static_cast<int>(MLSMode::CONTROL_POINTS1));

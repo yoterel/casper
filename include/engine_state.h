@@ -35,6 +35,7 @@ public:
     bool jfauv_right_hand = false;
     bool mask_fg_single_color = false;
     bool threshold_flag = false;
+    bool threshold_flag2 = false;
     int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
     int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
     int material_mode = static_cast<int>(MaterialMode::DIFFUSE);

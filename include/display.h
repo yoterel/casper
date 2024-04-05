@@ -58,21 +58,21 @@ public:
     void show();
     void show(cv::Mat frame);
     void show_buffer(uint8_t *buffer);
-    void show_buffer_internal(uint8_t *buffer);
+    void show_buffer_internal(uint8_t *buffer, bool free_buffer = true);
     void kill();
     void setDestination(std::string dst) { m_dst = dst; };
     std::size_t get_queue_size() { return m_queue.size_approx(); };
-    void setSaveToDisk(bool save_to_disk) { m_save_to_disk = save_to_disk; };
+    int frame_counter = 0;
+    // void setSaveToDisk(bool save_to_disk) { m_save_to_disk = save_to_disk; };
 
 private:
     std::string m_dst;
-    int frame_counter = 0;
     moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> m_queue;
     std::thread m_thread;
     bool m_close_signal = false;
     cv::Mat white_image;
     bool m_initialized = false;
-    bool m_save_to_disk = false;
+    // bool m_save_to_disk = false;
 };
 
 class DynaFlashProjector : public Display
