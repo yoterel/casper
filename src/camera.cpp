@@ -7,12 +7,12 @@ class CConfigurationEventPrinter : public CConfigurationEventHandler
 public:
     void OnAttach(CInstantCamera & /*camera*/)
     {
-        std::cout << "Baser API: OnAttach event" << std::endl;
+        // std::cout << "Baser API: OnAttach event" << std::endl;
     }
 
     void OnAttached(CInstantCamera &camera)
     {
-        std::cout << "Baser API: OnAttached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << "Baser API: OnAttached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnOpen(CInstantCamera &camera)
@@ -22,7 +22,7 @@ public:
 
     void OnOpened(CInstantCamera &camera)
     {
-        std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << "OnOpened event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnGrabStart(CInstantCamera &camera)
@@ -32,7 +32,7 @@ public:
 
     void OnGrabStarted(CInstantCamera &camera)
     {
-        std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << "OnGrabStarted event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnGrabStop(CInstantCamera &camera)
@@ -42,7 +42,7 @@ public:
 
     void OnGrabStopped(CInstantCamera &camera)
     {
-        std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << "OnGrabStopped event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnClose(CInstantCamera &camera)
@@ -52,7 +52,7 @@ public:
 
     void OnClosed(CInstantCamera &camera)
     {
-        std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << "OnClosed event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnDestroy(CInstantCamera &camera)
@@ -62,17 +62,17 @@ public:
 
     void OnDestroyed(CInstantCamera & /*camera*/)
     {
-        std::cout << "OnDestroyed event" << std::endl;
+        // std::cout << "OnDestroyed event" << std::endl;
     }
 
     void OnDetach(CInstantCamera &camera)
     {
-        std::cout << "Baser API: OnDetach event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << "Baser API: OnDetach event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnDetached(CInstantCamera &camera)
     {
-        std::cout << "Baser API: OnDetached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
+        // std::cout << "Baser API: OnDetached event for device " << camera.GetDeviceInfo().GetModelName() << std::endl;
     }
 
     void OnGrabError(CInstantCamera &camera, const char *errorMessage)

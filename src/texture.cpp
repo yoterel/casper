@@ -40,15 +40,15 @@ bool Texture::init_from_file(unsigned int texture_interpolation_mode, unsigned i
     else
         stbi_set_flip_vertically_on_load(0);
     std::filesystem::path p = m_fileName;
-    std::cout << "Loading texture: " << std::filesystem::absolute(p) << std::endl;
+    // std::cout << "Loading texture: " << std::filesystem::absolute(p) << std::endl;
     unsigned char *image_data = stbi_load(m_fileName.c_str(), &m_imageWidth, &m_imageHeight, &m_imageBPP, 0);
     if (!image_data)
     {
-        std::cout << "Can't load texture from '" << m_fileName << "' - " << stbi_failure_reason() << std::endl;
-        exit(0);
+        std::cout << "Can't load texture from '" << std::filesystem::absolute(p) << "' - " << stbi_failure_reason() << std::endl;
+        exit(1);
     }
     m_sizeTexData = sizeof(GLubyte) * m_imageWidth * m_imageHeight * m_imageBPP;
-    std::cout << "Width " << m_imageWidth << ", height " << m_imageHeight << ", bpp " << m_imageBPP << std::endl;
+    // std::cout << "Width " << m_imageWidth << ", height " << m_imageHeight << ", bpp " << m_imageBPP << std::endl;
     if (m_imageBPP == 1)
     {
         initInternal(image_data, GL_RED, GL_RED, texture_interpolation_mode, texture_wrap_mode);

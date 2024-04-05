@@ -7,11 +7,7 @@
 class EngineState // dumb dumb engine state container
 {
 public:
-    EngineState()
-    {
-        n_cam_channels = cam_color_mode ? 4 : 1;
-        cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
-    }
+    EngineState() {}
     const unsigned int proj_width = 1024;
     const unsigned int proj_height = 768;
     const unsigned int cam_width = 720;
@@ -20,10 +16,11 @@ public:
     const unsigned int projected_image_size = num_texels * 3 * sizeof(uint8_t);
     bool debug_mode = false;
     bool cam_space = false;
-    bool close_signal = false;
     bool cmd_line_stats = false;
     bool use_cuda = false;
     bool simulated_camera = false;
+    bool simulated_projector = false;
+    int proj_channel_order = simulated_projector ? GL_RGB : GL_BGR;
     bool freecam_mode = false;
     bool use_pbo = true;
     bool double_pbo = false;
@@ -225,6 +222,15 @@ public:
     bool showReprojections = false;
     bool showTestPoints = false;
     bool calibrationSuccess = false;
+    std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
+                                           {-1.0f, -1.0f},
+                                           {1.0f, -1.0f},
+                                           {1.0f, 1.0f}};
+    std::vector<glm::vec2> cur_screen_verts = {{-1.0f, 1.0f},
+                                               {-1.0f, -1.0f},
+                                               {1.0f, -1.0f},
+                                               {1.0f, 1.0f}};
+    glm::vec2 cur_screen_vert = {0.0f, 0.0f};
     std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
     std::vector<glm::vec3> screen_verts_color_green = {{0.0f, 1.0f, 0.0f}};
     std::vector<glm::vec3> screen_verts_color_blue = {{0.0f, 0.0f, 1.0f}};
@@ -277,8 +283,8 @@ public:
          {0.0f, 1.5f, -1.0f},
          {1.0f, 1.0f, -1.0f}}};
     // camera controls
-    unsigned int n_cam_channels;
-    unsigned int cam_buffer_format;
+    unsigned int n_cam_channels = cam_color_mode ? 4 : 1;
+    unsigned int cam_buffer_format = cam_color_mode ? GL_RGBA : GL_RED;
     float exposure = 1850.0f; // 1850.0f;
     int dst_width = cam_space ? cam_width : proj_width;
     int dst_height = cam_space ? cam_height : proj_height;

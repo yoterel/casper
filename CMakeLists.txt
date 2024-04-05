@@ -45,6 +45,7 @@ nanobind_add_module(dynaflash
 target_compile_definitions(dynaflash PRIVATE PYTHON_BINDINGS_BUILD)
 target_include_directories(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_include_directories(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+target_include_directories(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 target_link_libraries(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 target_link_libraries(dynaflash PRIVATE ${OpenCV_LIBS})
 

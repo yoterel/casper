@@ -7,6 +7,8 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/normal.hpp>
+#include <filesystem>
+#include "texture.h"
 #include "display.h"
 #include "readerwritercircularbuffer.h"
 #include "cxxopts.h"
@@ -23,8 +25,6 @@
 #include "post_process.h"
 #include "utils.h"
 #include "cnpy.h"
-#include "stb_image_write.h"
-#include <filesystem>
 #include "helpers.h"
 #include "dear_widgets.h"
 #include "imgui.h"
@@ -198,7 +198,7 @@ std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_t
 /* global engine state */
 EngineState es;
 Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_interp, t_profile0, t_profile1;
-std::thread projector_thread, sd_thread, mls_thread;
+std::thread sd_thread, mls_thread;
 GuessPoseGame guessPoseGame = GuessPoseGame();
 GuessCharGame guessCharGame = GuessCharGame();
 UserStudy user_study = UserStudy();
@@ -241,24 +241,15 @@ std::vector<glm::vec2> points_2d, points_2d_inliners;
 std::vector<glm::vec2> points_2d_reprojected, points_2d_inliers_reprojected;
 std::vector<std::vector<cv::Point2f>> imgpoints;
 cv::Mat camera_intrinsics_cv, camera_distortion_cv;
-std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
-                                       {-1.0f, -1.0f},
-                                       {1.0f, -1.0f},
-                                       {1.0f, 1.0f}};
-std::vector<glm::vec2> cur_screen_verts = {{-1.0f, 1.0f},
-                                           {-1.0f, -1.0f},
-                                           {1.0f, -1.0f},
-                                           {1.0f, 1.0f}};
-glm::vec2 cur_screen_vert = {0.0f, 0.0f};
 glm::vec2 marked_2d_pos1, marked_2d_pos2;
 std::vector<glm::vec3> triangulated_marked;
 std::vector<glm::vec2> marked_reprojected;
 cv::Mat tvec_calib, rvec_calib;
 // camera/projector controls
-DynaFlashProjector projector(true, false);
+Display *projector = nullptr;
 BaslerCamera camera;
 moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
-moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
+// moodycamel::BlockingReaderWriterCircularBuffer<uint8_t *> projector_queue(20);
 GLCamera gl_flycamera;
 GLCamera gl_projector;
 GLCamera gl_camera;
@@ -349,6 +340,7 @@ int main(int argc, char *argv[])
         ("mesh", "A .fbx mesh file to use for skinning",                                                                         //
          cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                             //
         ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                 //
+        ("simproj", "A simulated projector is used", cxxopts::value<bool>()->default_value("false"))                             //
         ("emesh", "A .fbx mesh file to use for hot swapping (used in some apps)",                                                //
          cxxopts::value<std::string>()->default_value("../../resource/GuessCharGame_palm.fbx"))                                  //
         ("h,help", "Prints usage")                                                                                               //
@@ -364,6 +356,8 @@ int main(int argc, char *argv[])
         es.meshFile = result["mesh"].as<std::string>();
         es.extraMeshFile = result["emesh"].as<std::string>();
         es.simulated_camera = result["simcam"].as<bool>();
+        es.simulated_projector = result["simproj"].as<bool>();
+        es.proj_channel_order = es.simulated_projector ? GL_RGB : GL_BGR;
         std::unordered_map<std::string, int> mode_map{
             {"normal", static_cast<int>(OperationMode::NORMAL)},
             {"user_study", static_cast<int>(OperationMode::USER_STUDY)},
@@ -506,6 +500,7 @@ int main(int argc, char *argv[])
     dynamic_fbo.init();
     mls_fbo.init(GL_RGBA, GL_RGBA32F); // will possibly store uv_fbo, so must be 32F
     c2p_fbo.init();
+    std::cout << "Loading Meshes..." << std::endl;
     SkinnedModel leftHandModel(es.meshFile,
                                es.userTextureFile,
                                es.proj_width, es.proj_height,
@@ -537,6 +532,7 @@ int main(int argc, char *argv[])
         break;
     }
     // load all image files from supplied texture paths to GPU
+    std::cout << "Loading Textures..." << std::endl;
     for (auto &it : es.texturePaths)
     {
         if (!fs::is_directory(it))
@@ -685,10 +681,17 @@ int main(int argc, char *argv[])
     displayTexture.init(es.cam_width, es.cam_height, es.n_cam_channels);
     camTexture.init(es.cam_width, es.cam_height, es.n_cam_channels);
     toBakeTexture.init(es.dst_width, es.dst_height, 4);
-    // flowTexture.init(cam_width, cam_height, 2);
+    if (es.simulated_projector)
+    {
+        projector = new SaveToDisk("../../debug/video/", es.proj_height, es.proj_width);
+    }
+    else
+    {
+        projector = new DynaFlashProjector(true, false);
+    }
     if (es.use_projector)
     {
-        if (!projector.init())
+        if (!projector->init())
         {
             std::cerr << "Failed to initialize projector\n";
             es.use_projector = false;
@@ -697,6 +700,7 @@ int main(int argc, char *argv[])
     // LeapCreateClockRebaser(&clockSynchronizer);
     // load calibration results if they exist
     Camera_Mode camera_mode = es.freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
+    std::cout << "Loading calibration results..." << std::endl;
     if (loadLeapCalibrationResults(proj_project, cam_project,
                                    w2c_auto, w2c_user,
                                    points_2d, points_3d,
@@ -707,7 +711,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cout << "Using hard-coded values for camera and projector settings" << std::endl;
+        std::cout << "Failed. Using hard-coded values for camera and projector settings" << std::endl;
         gl_projector = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
                                 glm::vec3(0.0f, 0.0f, 0.0f),
                                 glm::vec3(0.0f, 1.0f, 0.0f),
@@ -721,34 +725,16 @@ int main(int argc, char *argv[])
                                 glm::vec3(0.0f, 1.0f, 0.0f),
                                 camera_mode, es.proj_width, es.proj_height, 1500.0f, 50.0f);
     }
-    loadCoaxialCalibrationResults(cur_screen_verts);
-    c2p_homography = PostProcess::findHomography(cur_screen_verts);
+    loadCoaxialCalibrationResults(es.cur_screen_verts);
+    c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
     /* thread loops */
     // camera.init(camera_queue, close_signal, cam_height, cam_width, exposure);
     /* real producer */
     camera.init_poll(es.cam_height, es.cam_width, es.exposure);
-    std::cout << "Using real camera to produce images" << std::endl;
-    projector.show();
+    projector->show();
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    camera.balance_white();
+    // camera.balance_white();
     camera.acquire();
-    // image projector_thread
-    projector_thread = std::thread([]() { //, &projector
-        uint8_t *image;
-        // std::vector<uint8_t> image;
-        // int stride = 3 * proj_width;
-        // stride += (stride % 4) ? (4 - stride % 4) : 0;
-        bool sucess;
-        while (!es.close_signal)
-        {
-            sucess = projector_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
-            if (sucess)
-                projector.show_buffer(image);
-            // projector.show_buffer(image.data());
-            // stbi_write_png("test.png", proj_width, proj_height, 3, image.data(), stride);
-        }
-        std::cout << "Consumer finish" << std::endl;
-    });
     /* main loop */
     while (!glfwWindowShouldClose(window))
     {
@@ -789,7 +775,7 @@ int main(int argc, char *argv[])
                 // std::cout << "project time: " << t4.averageLap() << std::endl;
                 std::cout << "cam q1 size: " << camera_queue.size_approx() << std::endl;
                 // std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
-                std::cout << "proj q size: " << projector_queue.size_approx() << std::endl;
+                std::cout << "proj q size: " << projector->get_queue_size() << std::endl;
             }
             frameCount = 0;
             previousSecondAppTime = currentAppTime;
@@ -1006,8 +992,8 @@ int main(int argc, char *argv[])
             std::vector<cv::Point2f> origpts, newpts;
             for (int i = 0; i < 4; ++i)
             {
-                origpts.push_back(cv::Point2f(screen_verts[i].x, screen_verts[i].y));
-                newpts.push_back(cv::Point2f(cur_screen_verts[i].x, cur_screen_verts[i].y));
+                origpts.push_back(cv::Point2f(es.screen_verts[i].x, es.screen_verts[i].y));
+                newpts.push_back(cv::Point2f(es.cur_screen_verts[i].x, es.cur_screen_verts[i].y));
             }
             cv::Mat1f hom = cv::getPerspectiveTransform(origpts, newpts, cv::DECOMP_SVD);
             cv::Mat1f perspective = cv::Mat::zeros(4, 4, CV_32F);
@@ -1022,17 +1008,17 @@ int main(int argc, char *argv[])
             perspective.at<float>(3, 3) = hom.at<float>(2, 2);
             for (int i = 0; i < 4; ++i)
             {
-                cv::Vec4f cord = cv::Vec4f(screen_verts[i].x, screen_verts[i].y, 0.0f, 1.0f);
+                cv::Vec4f cord = cv::Vec4f(es.screen_verts[i].x, es.screen_verts[i].y, 0.0f, 1.0f);
                 cv::Mat tmp = perspective * cv::Mat(cord);
-                cur_screen_verts[i].x = tmp.at<float>(0, 0) / tmp.at<float>(3, 0);
-                cur_screen_verts[i].y = tmp.at<float>(1, 0) / tmp.at<float>(3, 0);
+                es.cur_screen_verts[i].x = tmp.at<float>(0, 0) / tmp.at<float>(3, 0);
+                es.cur_screen_verts[i].y = tmp.at<float>(1, 0) / tmp.at<float>(3, 0);
             }
             glm::mat4 viewMatrix;
             GLMHelpers::CV2GLM(perspective, &viewMatrix);
             set_texture_shader(&textureShader, true, true, true, false, es.masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f), viewMatrix);
             camTexture.bind();
             fullScreenQuad.render();
-            PointCloud cloud(cur_screen_verts, es.screen_verts_color_red);
+            PointCloud cloud(es.cur_screen_verts, es.screen_verts_color_red);
             vcolorShader.use();
             vcolorShader.setMat4("mvp", glm::mat4(1.0f));
             cloud.render();
@@ -1437,7 +1423,7 @@ int main(int argc, char *argv[])
                             fullScreenQuad.render();
                             vcolorShader.use();
                             vcolorShader.setMat4("mvp", glm::mat4(1.0f));
-                            std::vector<glm::vec2> test = {cur_screen_vert};
+                            std::vector<glm::vec2> test = {es.cur_screen_vert};
                             PointCloud pointCloud(test, es.screen_verts_color_red);
                             pointCloud.render(5.0f);
                         }
@@ -1460,7 +1446,7 @@ int main(int argc, char *argv[])
                             fullScreenQuad.render();
                             vcolorShader.use();
                             vcolorShader.setMat4("mvp", glm::mat4(1.0f));
-                            std::vector<glm::vec2> test = {cur_screen_vert};
+                            std::vector<glm::vec2> test = {es.cur_screen_vert};
                             PointCloud pointCloud(test, es.screen_verts_color_red);
                             pointCloud.render(5.0f);
                         }
@@ -1551,7 +1537,7 @@ int main(int argc, char *argv[])
                 {
                     t_download.start();
                     glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[es.totalFrameCount % 2]); // todo: replace with totalFrameCount
-                    glReadPixels(0, 0, es.proj_width, es.proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
+                    glReadPixels(0, 0, es.proj_width, es.proj_height, es.proj_channel_order, GL_UNSIGNED_BYTE, 0);
                     t_download.stop();
 
                     glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[(es.totalFrameCount + 1) % 2]);
@@ -1562,7 +1548,7 @@ int main(int argc, char *argv[])
                         // tmpdata.assign(src, src + image_size);
                         // std::copy(src, src + tmpdata.size(), tmpdata.begin());
                         memcpy(colorBuffer, src, es.projected_image_size);
-                        projector_queue.try_enqueue(colorBuffer);
+                        projector->show_buffer(colorBuffer); // this assumes show_buffer is faster than render cycle, or performs internal copy.
                         glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
                     }
                     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -1571,12 +1557,12 @@ int main(int argc, char *argv[])
                 {
                     t_download.start();
                     glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[0]); // todo: replace with totalFrameCount
-                    glReadPixels(0, 0, es.proj_width, es.proj_height, GL_BGR, GL_UNSIGNED_BYTE, 0);
+                    glReadPixels(0, 0, es.proj_width, es.proj_height, es.proj_channel_order, GL_UNSIGNED_BYTE, 0);
                     GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
                     if (src)
                     {
                         memcpy(colorBuffer, src, es.projected_image_size);
-                        projector_queue.try_enqueue(colorBuffer);
+                        projector->show_buffer(colorBuffer); // this assumes show_buffer is faster than render cycle, or performs internal copy.
                         glUnmapBuffer(GL_PIXEL_PACK_BUFFER); // release pointer to the mapped buffer
                     }
                     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -1586,10 +1572,10 @@ int main(int argc, char *argv[])
             else
             {
                 t_download.start();
-                glReadPixels(0, 0, es.proj_width, es.proj_height, GL_BGR, GL_UNSIGNED_BYTE, colorBuffer);
+                glReadPixels(0, 0, es.proj_width, es.proj_height, es.proj_channel_order, GL_UNSIGNED_BYTE, colorBuffer);
                 t_download.stop();
                 // std::vector<uint8_t> data(colorBuffer, colorBuffer + image_size);
-                projector_queue.try_enqueue(colorBuffer);
+                projector->show_buffer(colorBuffer); // this assumes show_buffer is faster than render cycle, or performs internal copy.
             }
         }
         // glCheckError();
@@ -1619,10 +1605,7 @@ int main(int argc, char *argv[])
         mls_thread.join();
     if (sd_thread.joinable())
         sd_thread.join();
-    es.close_signal = true;
-    projector_thread.join();
-    if (es.use_projector)
-        projector.kill();
+    projector->kill();
     camera.kill();
     glfwTerminate();
     delete[] colorBuffer;
@@ -1796,7 +1779,7 @@ void process_input(GLFWwindow *window)
                     if (es.ready_to_collect && joints_right.size() > 0)
                     {
                         points_3d.push_back(joints_right[17]);
-                        glm::vec2 cur_2d_point = Helpers::NDCtoScreen(cur_screen_vert, es.cam_width, es.cam_height, false);
+                        glm::vec2 cur_2d_point = Helpers::NDCtoScreen(es.cur_screen_vert, es.cam_width, es.cam_height, false);
                         points_2d.push_back(cur_2d_point);
                     }
                     break;
@@ -1807,11 +1790,11 @@ void process_input(GLFWwindow *window)
                     {
                         if (es.leap_calibration_mark_state == 1)
                         {
-                            marked_2d_pos1 = cur_screen_vert;
+                            marked_2d_pos1 = es.cur_screen_vert;
                         }
                         if (es.leap_calibration_mark_state == 2)
                         {
-                            marked_2d_pos2 = cur_screen_vert;
+                            marked_2d_pos2 = es.cur_screen_vert;
                             glm::vec3 pos_3d = triangulate(leap, marked_2d_pos1, marked_2d_pos2);
                             triangulated_marked.push_back(pos_3d);
                             std::vector<cv::Point3f> points_3d_cv{cv::Point3f(pos_3d.x, pos_3d.y, pos_3d.z)};
@@ -1970,9 +1953,9 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         // glm::vec2 mouse_pos = glm::vec2((2.0f * xpos / proj_width) - 1.0f, -1.0f * ((2.0f * ypos / proj_height) - 1.0f));
         glm::vec2 mouse_pos = Helpers::ScreenToNDC(glm::vec2(xpos, ypos), es.proj_width, es.proj_height, true);
         float cur_min_dist = 100.0f;
-        for (int i = 0; i < cur_screen_verts.size(); i++)
+        for (int i = 0; i < es.cur_screen_verts.size(); i++)
         {
-            glm::vec2 v = glm::vec2(cur_screen_verts[i]);
+            glm::vec2 v = glm::vec2(es.cur_screen_verts[i]);
 
             float dist = glm::distance(v, mouse_pos);
             if (dist < cur_min_dist)
@@ -1984,8 +1967,8 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         es.min_dist = cur_min_dist;
         if (es.dragging)
         {
-            cur_screen_verts[es.dragging_vert].x = mouse_pos.x;
-            cur_screen_verts[es.dragging_vert].y = mouse_pos.y;
+            es.cur_screen_verts[es.dragging_vert].x = mouse_pos.x;
+            es.cur_screen_verts[es.dragging_vert].y = mouse_pos.y;
         }
         break;
     }
@@ -1994,7 +1977,7 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         glm::vec2 mouse_pos_NDC = Helpers::ScreenToNDC(glm::vec2(xpos, ypos), es.proj_width, es.proj_height, true);
         if (es.dragging)
         {
-            cur_screen_vert = mouse_pos_NDC;
+            es.cur_screen_vert = mouse_pos_NDC;
         }
         break;
     }
@@ -2117,8 +2100,8 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     glm::mat3 camera_intrinsics = glm::make_mat3(camera_intrinsics_raw.data());
     // cv::Mat camera_intrinsics_cv = cv::Mat(3, 3, CV_64F, camera_intrinsics_raw.data());
     // cv::Mat camera_distortion_cv = cv::Mat(1, camera_distortion_raw.size(), CV_64F, camera_distortion_raw.data());
-    std::cout << "camera_distortion: " << camera_distortion_cv << std::endl;
-    std::cout << "camera_intrinsics: " << camera_intrinsics_cv << std::endl;
+    // std::cout << "camera_distortion: " << camera_distortion_cv << std::endl;
+    // std::cout << "camera_intrinsics: " << camera_intrinsics_cv << std::endl;
     cv::initUndistortRectifyMap(camera_intrinsics_cv, camera_distortion_cv, cv::Mat(), camera_intrinsics_cv, cv::Size(es.cam_width, es.cam_height), CV_32FC1, undistort_map1, undistort_map2);
     float cfx = camera_intrinsics[0][0];
     float cfy = camera_intrinsics[1][1];
@@ -5857,20 +5840,36 @@ void openIMGUIFrame()
         {
             if (ImGui::Checkbox("Use Projector", &es.use_projector))
             {
-                if (es.use_projector)
+                if (es.simulated_projector)
                 {
-                    if (!projector.init())
+                    if (!projector->init())
                     {
                         std::cerr << "Failed to initialize projector\n";
                         es.use_projector = false;
                     }
-                    c2p_homography = PostProcess::findHomography(cur_screen_verts);
-                    es.use_coaxial_calib = true;
+                    SaveToDisk *p = dynamic_cast<SaveToDisk *>(projector);
+                    if (es.use_projector)
+                        p->setSaveToDisk(true);
+                    else
+                        p->setSaveToDisk(false);
                 }
                 else
                 {
-                    projector.kill();
-                    es.use_coaxial_calib = false;
+                    if (es.use_projector)
+                    {
+                        if (!projector->init())
+                        {
+                            std::cerr << "Failed to initialize projector\n";
+                            es.use_projector = false;
+                        }
+                        c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
+                        es.use_coaxial_calib = true;
+                    }
+                    else
+                    {
+                        projector->kill();
+                        es.use_coaxial_calib = false;
+                    }
                 }
             }
             ImGui::SameLine();
@@ -5919,7 +5918,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             if (ImGui::RadioButton("Leap Calibration", &es.operation_mode, static_cast<int>(OperationMode::LEAP)))
             {
-                projector.kill();
+                projector->kill();
                 es.use_projector = false;
                 leap.setImageMode(true);
                 leap.setPollMode(true);
@@ -6034,15 +6033,15 @@ void openIMGUIFrame()
             {
                 if (ImGui::Button("Save Coaxial Calibration"))
                 {
-                    cnpy::npy_save("../../resource/calibrations/coaxial_calibration/coax_user.npy", cur_screen_verts.data(), {4, 2}, "w");
+                    cnpy::npy_save("../../resource/calibrations/coaxial_calibration/coax_user.npy", es.cur_screen_verts.data(), {4, 2}, "w");
                 }
                 if (ImGui::BeginTable("Cam2Proj Vertices", 2))
                 {
                     std::vector<glm::vec2> tmpVerts;
                     if (es.use_coaxial_calib)
-                        tmpVerts = cur_screen_verts;
+                        tmpVerts = es.cur_screen_verts;
                     else
-                        tmpVerts = screen_verts;
+                        tmpVerts = es.screen_verts;
                     for (int row = 0; row < tmpVerts.size(); row++)
                     {
                         ImGui::TableNextRow();
@@ -6188,7 +6187,7 @@ void openIMGUIFrame()
             if (ImGui::Checkbox("Use Coaxial Calib", &es.use_coaxial_calib))
             {
                 if (es.use_coaxial_calib)
-                    c2p_homography = PostProcess::findHomography(cur_screen_verts);
+                    c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
             }
             ImGui::Text("Cam2World (row major, OpenGL convention)");
             if (ImGui::BeginTable("Cam2World", 4))
