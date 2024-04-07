@@ -362,9 +362,39 @@ target_link_libraries(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dy
 # target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
 # target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
 # target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
-######################################### opencv benchmark example program
+######################################### download benchmark example program
+add_executable(benchmark_download
+    src/benchmark_download.cpp
+    src/timer.cpp
+    third-party/imgui/imgui.cpp
+    third-party/imgui/imgui_draw.cpp
+    third-party/imgui/imgui_tables.cpp
+    third-party/imgui/imgui_widgets.cpp
+    third-party/imgui/imgui_demo.cpp
+    third-party/imgui/backends/imgui_impl_glfw.cpp
+    third-party/imgui/backends/imgui_impl_opengl3.cpp
+    third-party/imgui/misc/cpp/imgui_stdlib.cpp
+    third-party/glad${GLAD_VER}/src/glad.c
+)
+target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# pylon
+target_link_libraries(benchmark_download PRIVATE pylon::pylon)
+# opencv
+target_link_libraries(benchmark_download PRIVATE ${OpenCV_LIBS})
+# GLFW
+target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+target_link_libraries(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# GLAD
+target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# imgui
+target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
+target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
+target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
+# glm
+target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+######################################### optical flow benchmark example program
 # add_executable(benchmark_example
-#     src/benchmark.cpp
+#     src/benchmark_flow.cpp
 #     src/timer.cpp
 # )
 # target_include_directories(benchmark_example PRIVATE "${PROJECT_SOURCE_DIR}/include")

@@ -1677,15 +1677,15 @@ std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_t
 void initGLBuffers(unsigned int *pbo)
 {
     // set up vertex data parameter
-    void *data = malloc(es.projected_image_size);
+    // void *data = malloc(es.projected_image_size);
     // create ping pong pbos
     glGenBuffers(2, pbo);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[0]);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, es.projected_image_size, data, GL_STREAM_READ);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo[1]);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, es.projected_image_size, data, GL_STREAM_READ);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    free(data);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[0]);
+    glBufferData(GL_PIXEL_PACK_BUFFER, es.projected_image_size, 0, GL_STREAM_READ);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[1]);
+    glBufferData(GL_PIXEL_PACK_BUFFER, es.projected_image_size, 0, GL_STREAM_READ);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    // free(data);
 }
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
