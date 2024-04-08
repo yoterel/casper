@@ -850,7 +850,7 @@ int main(int argc, char *argv[])
 
             /* deal with leap input */
             t_leap.start();
-            LEAP_STATUS leap_status = handleLeapInput(es.leap_accumulate_frames);
+            LEAP_STATUS leap_status = handleLeapInput();
             if (es.record_session)
             {
                 if ((t_app.getElapsedTimeInSec() - es.recordStartTime) > es.recordDuration)
@@ -2189,6 +2189,7 @@ LEAP_STATUS getLeapFramePreRecorded(std::vector<glm::mat4> &bones,
 
 void loadImagesFromFolder(std::string loadpath)
 {
+    recordedImages.clear();
     fs::path video_path(loadpath);
     int frame_size = es.cam_width * es.cam_height * 1;
     int counter = 0;
@@ -2201,7 +2202,9 @@ void loadImagesFromFolder(std::string loadpath)
         //     std::cout << "too many images in folder" << std::endl;
         //     exit(1);
         // }
-        cv::Mat image = cv::imread(entry.path().string(), cv::IMREAD_GRAYSCALE);
+        cv::Mat origImage = cv::imread(entry.path().string(), cv::IMREAD_GRAYSCALE);
+        cv::Mat image;
+        cv::flip(origImage, image, 1);
         recordedImages.push_back(image);
         // pFrameData[counter] = (uint8_t *)malloc(frame_size);
         // memcpy((void *)pFrameData[counter], (void *)image.data, frame_size);
@@ -2915,7 +2918,9 @@ void saveSession(std::string savepath, bool record_images)
         for (int i = 0; i < recordedImages.size(); i++)
         {
             fs::path image_path = savepath_path / fs::path(std::format("{:06d}", savedCameraTimestamps[i]) + std::string("_cam.png"));
-            cv::imwrite(image_path.string(), recordedImages[i]);
+            cv::Mat image;
+            cv::flip(recordedImages[i], image, 1);
+            cv::imwrite(image_path.string(), image);
         }
     }
 }
@@ -2958,6 +2963,8 @@ void saveSession(std::string savepath, LEAP_STATUS leap_status, uint64_t image_t
             {
                 // also save the current camera image and finger joints
                 fs::path image_path = savepath_path / fs::path(std::format("{:06d}", image_timestamp) + std::string("_cam.png"));
+                cv::Mat image;
+                cv::flip(camImageOrig, image, 1);
                 cv::imwrite(image_path.string(), camImageOrig);
             }
         }
@@ -5550,9 +5557,9 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *gridShader = shader_map["gridShader"];
     // interpolate hand pose to the required latency
     t_interp.start();
-    std::vector<glm::mat4> bones2world_left_cur, bones2world_left_lag;
-    std::vector<glm::mat4> bones2world_right_cur, bones2world_right_lag;
-    bool success = handleInterpolateFrames(bones2world_left_cur, bones2world_right_cur, bones2world_left_lag, bones2world_right_lag, false);
+    std::vector<glm::mat4> bones2world_left_future, bones2world_left_cur;
+    std::vector<glm::mat4> bones2world_right_future, bones2world_right_cur;
+    bool success = handleInterpolateFrames(bones2world_left_future, bones2world_right_future, bones2world_left_cur, bones2world_right_cur, false);
     if (!success)
     {
         es.video_reached_end = true;
@@ -5566,16 +5573,13 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     int interp_index = upper_iter - session_timestamps.begin();
     camImageOrig = recordedImages[interp_index];
     camTexture.load((uint8_t *)camImageOrig.data, true, es.cam_buffer_format);
-    set_texture_shader(textureShader, false, false, true);
-    camTexture.bind();
-    fullScreenQuad.render();
     t_camera.stop();
     // skin the mesh
     t_skin.start();
 
     t_skin.start();
-    handleSkinning(bones_to_world_right, true, true, shader_map, rightHandModel, cam_view_transform, cam_projection_transform);
-    handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
+    handleSkinning(bones2world_right_cur, true, true, shader_map, rightHandModel, cam_view_transform, cam_projection_transform);
+    handleSkinning(bones2world_left_cur, false, bones2world_right_cur.size() == 0, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
     t_skin.stop();
 
     // /* deal with bake request */
