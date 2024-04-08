@@ -121,12 +121,21 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shader_map,
                      TextModel &textModel,
                      glm::mat4 &cam_view_transform,
                      glm::mat4 &cam_projection_transform);
-bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, std::vector<glm::mat4> &session, bool isRightHand, bool interpolate);
+bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, const std::vector<glm::mat4> &session, bool isRightHand);
+bool getMostRecentSkeleton(float time,
+                           std::vector<glm::mat4> &bones_out,
+                           std::vector<glm::vec3> &joints_out,
+                           const std::vector<glm::mat4> &bones_session,
+                           const std::vector<glm::vec3> &joints_session,
+                           bool isRightHand);
+bool handleGetMostRecentSkeleton(std::vector<glm::mat4> &bones2world_left,
+                                 std::vector<glm::vec3> &joints_left,
+                                 std::vector<glm::mat4> &bones2world_right,
+                                 std::vector<glm::vec3> &joints_right);
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones2world_left_cur,
                              std::vector<glm::mat4> &bones2world_right_cur,
                              std::vector<glm::mat4> &bones2world_left_lag,
-                             std::vector<glm::mat4> &bones2world_right_lag,
-                             bool interpolate);
+                             std::vector<glm::mat4> &bones2world_right_lag);
 bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &detected_left, bool &detected_right);
 bool mp_predict_single(cv::Mat origImage, std::vector<glm::vec2> &left, std::vector<glm::vec2> &right, bool &left_detected, bool &right_detected);
 void create_virtual_cameras(GLCamera &gl_flycamera, GLCamera &gl_projector, GLCamera &gl_camera);
@@ -203,7 +212,7 @@ void initKalmanFilters();
 std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_to_world, const std::vector<glm::mat4> &required_pose_bones_to_world);
 /* global engine state */
 EngineState es;
-Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_interp, t_profile0, t_profile1;
+Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_profile0, t_profile1;
 std::thread sd_thread, mls_thread;
 GuessPoseGame guessPoseGame = GuessPoseGame();
 GuessCharGame guessCharGame = GuessCharGame();
@@ -2221,10 +2230,14 @@ bool loadSession()
     fs::path recording_path = fs::path(recordings) / fs::path(es.recording_name);
     fs::path bones_left_path = recording_path / fs::path(std::string("bones_left.npy"));
     fs::path bones_right_path = recording_path / fs::path(std::string("bones_right.npy"));
+    fs::path joints_left_path = recording_path / fs::path(std::string("joints_left.npy"));
+    fs::path joints_right_path = recording_path / fs::path(std::string("joints_right.npy"));
     fs::path timestamps_path = recording_path / fs::path(std::string("timestamps.npy"));
-    cnpy::NpyArray bones_left_npy, bones_right_npy, timestamps_npy;
+    cnpy::NpyArray bones_left_npy, bones_right_npy, joints_left_npy, joints_right_npy, timestamps_npy;
     std::vector<glm::mat4> raw_session_bones_left, raw_session_bones_right;
+    std::vector<glm::vec3> raw_session_joints_left, raw_session_joints_right;
     bool found_bones = false;
+    bool found_joints = false;
     if (fs::exists(bones_left_path))
     {
         bones_left_npy = cnpy::npy_load(bones_left_path.string());
@@ -2249,6 +2262,30 @@ bool loadSession()
     {
         return false;
     }
+    if (fs::exists(joints_left_path))
+    {
+        joints_left_npy = cnpy::npy_load(joints_left_path.string());
+        std::vector<float> raw_data = joints_left_npy.as_vec<float>();
+        for (int i = 0; i < raw_data.size(); i += 3)
+        {
+            raw_session_joints_left.push_back(glm::make_vec3(raw_data.data() + i));
+        }
+        found_joints = true;
+    }
+    if (fs::exists(joints_right_path))
+    {
+        joints_right_npy = cnpy::npy_load(joints_right_path.string());
+        std::vector<float> raw_data = joints_right_npy.as_vec<float>();
+        for (int i = 0; i < raw_data.size(); i += 3)
+        {
+            raw_session_joints_right.push_back(glm::make_vec3(raw_data.data() + i));
+        }
+        found_joints = true;
+    }
+    if (!found_joints)
+    {
+        return false;
+    }
     std::vector<float> raw_session_timestamps;
     if (fs::exists(timestamps_path))
     {
@@ -2268,6 +2305,8 @@ bool loadSession()
     es.total_session_time_stamps = raw_session_timestamps.size();
     session_bones_left = raw_session_bones_left;
     session_bones_right = raw_session_bones_right;
+    session_joints_left = raw_session_joints_left;
+    session_joints_right = raw_session_joints_right;
     session_timestamps = raw_session_timestamps;
     loadImagesFromFolder(recording_path.string());
     if (es.maxVideoFrameCount == raw_session_timestamps.size())
@@ -3144,6 +3183,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         maskShader->setVec3("bgColor", es.mask_bg_color);
         maskShader->setVec3("fgColor", es.mask_fg_color);
         maskShader->setFloat("alpha", es.mask_alpha);
+        maskShader->setBool("missingColorIsCamera", es.mask_missing_color_is_camera);
         maskShader->setVec3("missingInfoColor", es.mask_missing_info_color);
         maskShader->setVec3("unusedInfoColor", es.mask_unused_info_color);
         maskShader->setBool("fgSingleColor", es.mask_fg_single_color);
@@ -4745,71 +4785,85 @@ void handleMLSAsync(Shader &gridShader)
     }
 }
 
-bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, std::vector<glm::mat4> &session, bool isRightHand, bool interpolate)
+bool handleGetMostRecentSkeleton(std::vector<glm::mat4> &bones2world_left,
+                                 std::vector<glm::vec3> &joints_left,
+                                 std::vector<glm::mat4> &bones2world_right,
+                                 std::vector<glm::vec3> &joints_right)
+{
+    if (es.videoFrameCountCont >= session_timestamps.back())
+        return false;
+    // deal with lagged timestamp (will be used for projection)
+    if (!getMostRecentSkeleton(es.videoFrameCountCont, bones2world_left, joints_left, session_bones_left, session_joints_left, false))
+        return false;
+    if (!getMostRecentSkeleton(es.videoFrameCountCont, bones2world_right, joints_right, session_bones_right, session_joints_right, true))
+        return false;
+    return true;
+}
+
+bool getMostRecentSkeleton(float time, std::vector<glm::mat4> &bones_out,
+                           std::vector<glm::vec3> &joints_out,
+                           const std::vector<glm::mat4> &bones_session,
+                           const std::vector<glm::vec3> &joints_session,
+                           bool isRightHand)
 {
     auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), time);
     int interp_index = upper_iter - session_timestamps.begin();
     if (interp_index >= session_timestamps.size())
         return false;
-    if (interpolate)
-    {
-        float interp1 = session_timestamps[interp_index - 1];
-        float interp2 = session_timestamps[interp_index];
-        float interp_factor = (time - interp1) / (interp2 - interp1);
-        std::vector<glm::mat4> bones2world_interp1, bones2world_interp2;
+    std::vector<glm::mat4> bones2world;
+    std::vector<glm::vec3> joints;
+    bones_out.clear();
+    joints_out.clear();
+    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_out, joints_out, interp_index - 1, es.total_session_time_stamps, bones_session, joints_session);
+    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+        return false;
+}
+bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, const std::vector<glm::mat4> &session, bool isRightHand)
+{
+    auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), time);
+    int interp_index = upper_iter - session_timestamps.begin();
+    if (interp_index >= session_timestamps.size())
+        return false;
+    float interp1 = session_timestamps[interp_index - 1];
+    float interp2 = session_timestamps[interp_index];
+    float interp_factor = (time - interp1) / (interp2 - interp1);
+    std::vector<glm::mat4> bones2world_interp1, bones2world_interp2;
 
-        std::vector<glm::vec3> dummy_joints;
-        std::vector<glm::vec3> dummy_session_joints;
-        LEAP_STATUS leap_status = getLeapFramePreRecorded(bones2world_interp1, dummy_joints, interp_index - 1, es.total_session_time_stamps, session, dummy_session_joints);
-        if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-            return false;
-        leap_status = getLeapFramePreRecorded(bones2world_interp2, dummy_joints, interp_index, es.total_session_time_stamps, session, dummy_session_joints);
-        if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-            return false;
-        bones_out.clear();
-        for (int i = 0; i < bones2world_interp2.size(); i++)
-        {
-            glm::mat4 interpolated = Helpers::interpolate(bones2world_interp1[i], bones2world_interp2[i], interp_factor, true, isRightHand);
-            bones_out.push_back(interpolated);
-        }
-    }
-    else
+    std::vector<glm::vec3> dummy_joints;
+    std::vector<glm::vec3> dummy_session_joints;
+    LEAP_STATUS leap_status = getLeapFramePreRecorded(bones2world_interp1, dummy_joints, interp_index - 1, es.total_session_time_stamps, session, dummy_session_joints);
+    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+        return false;
+    leap_status = getLeapFramePreRecorded(bones2world_interp2, dummy_joints, interp_index, es.total_session_time_stamps, session, dummy_session_joints);
+    if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
+        return false;
+    bones_out.clear();
+    for (int i = 0; i < bones2world_interp2.size(); i++)
     {
-        std::vector<glm::mat4> bones2world;
-        std::vector<glm::vec3> dummy_joints;
-        std::vector<glm::vec3> dummy_session_joints;
-        LEAP_STATUS leap_status = getLeapFramePreRecorded(bones2world, dummy_joints, interp_index, es.total_session_time_stamps, session, dummy_session_joints);
-        if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
-            return false;
-        bones_out.clear();
-        for (int i = 0; i < bones2world.size(); i++)
-        {
-            bones_out.push_back(bones2world[i]);
-        }
+        glm::mat4 interpolated = Helpers::interpolate(bones2world_interp1[i], bones2world_interp2[i], interp_factor, true, isRightHand);
+        bones_out.push_back(interpolated);
     }
-
     return true;
 }
 
 bool handleInterpolateFrames(std::vector<glm::mat4> &bones2world_left_cur,
                              std::vector<glm::mat4> &bones2world_right_cur,
                              std::vector<glm::mat4> &bones2world_left_lag,
-                             std::vector<glm::mat4> &bones2world_right_lag,
-                             bool interpolate)
+                             std::vector<glm::mat4> &bones2world_right_lag)
 {
     float required_time_lag = es.videoFrameCountCont;
     float required_time_cur = (es.vid_simulated_latency_ms * es.vid_playback_speed) + required_time_lag;
     if (required_time_cur >= session_timestamps.back())
         return false;
     // deal with lagged timestamp (will be used for projection)
-    if (!interpolateBones(required_time_lag, bones2world_left_lag, session_bones_left, false, interpolate))
+    if (!interpolateBones(required_time_lag, bones2world_left_lag, session_bones_left, false))
         return false;
-    if (!interpolateBones(required_time_lag, bones2world_right_lag, session_bones_right, true, interpolate))
+    if (!interpolateBones(required_time_lag, bones2world_right_lag, session_bones_right, true))
         return false;
     // deal with current timestamp (will be used as camera image)
-    if (!interpolateBones(required_time_cur, bones2world_left_cur, session_bones_left, false, interpolate))
+    if (!interpolateBones(required_time_cur, bones2world_left_cur, session_bones_left, false))
         return false;
-    if (!interpolateBones(required_time_cur, bones2world_right_cur, session_bones_right, true, interpolate))
+    if (!interpolateBones(required_time_cur, bones2world_right_cur, session_bones_right, true))
         return false;
     return true;
 }
@@ -5556,21 +5610,21 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     // Shader *textShader = shader_map["textShader"];
     Shader *gridShader = shader_map["gridShader"];
     // interpolate hand pose to the required latency
-    t_interp.start();
-    std::vector<glm::mat4> bones2world_left_future, bones2world_left_cur;
-    std::vector<glm::mat4> bones2world_right_future, bones2world_right_cur;
-    bool success = handleInterpolateFrames(bones2world_left_future, bones2world_right_future, bones2world_left_cur, bones2world_right_cur, false);
+    t_leap.start();
+    std::vector<glm::mat4> bones2world_left, bones2world_right;
+    // std::vector<glm::vec3> jointsLeft, jointsRight;
+    bool success = handleGetMostRecentSkeleton(bones2world_left, joints_left, bones2world_right, joints_right);
     if (!success)
     {
         es.video_reached_end = true;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         return false;
     }
-    t_interp.stop();
+    t_leap.stop();
     // produce fake camera image (left hand only)
     t_camera.start();
     auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), es.videoFrameCountCont);
-    int interp_index = upper_iter - session_timestamps.begin();
+    int interp_index = upper_iter - session_timestamps.begin() - 1;
     camImageOrig = recordedImages[interp_index];
     camTexture.load((uint8_t *)camImageOrig.data, true, es.cam_buffer_format);
     t_camera.stop();
@@ -5578,8 +5632,8 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     t_skin.start();
 
     t_skin.start();
-    handleSkinning(bones2world_right_cur, true, true, shader_map, rightHandModel, cam_view_transform, cam_projection_transform);
-    handleSkinning(bones2world_left_cur, false, bones2world_right_cur.size() == 0, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
+    handleSkinning(bones2world_right, true, true, shader_map, rightHandModel, cam_view_transform, cam_projection_transform);
+    handleSkinning(bones2world_left, false, bones2world_right.size() == 0, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
     t_skin.stop();
 
     // /* deal with bake request */
@@ -5630,10 +5684,10 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *overlayShader = shader_map["overlayShader"];
     Shader *textShader = shader_map["textShader"];
     // interpolate hand pose to the required latency
-    t_interp.start();
+    t_leap.start();
     std::vector<glm::mat4> bones2world_left_cur, bones2world_left_lag;
     std::vector<glm::mat4> bones2world_right_cur, bones2world_right_lag;
-    bool success = handleInterpolateFrames(bones2world_left_cur, bones2world_right_cur, bones2world_left_lag, bones2world_right_lag, true);
+    bool success = handleInterpolateFrames(bones2world_left_cur, bones2world_right_cur, bones2world_left_lag, bones2world_right_lag);
     if (!success)
     {
         es.video_reached_end = true;
@@ -5641,7 +5695,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         return false;
     }
-    t_interp.stop();
+    t_leap.stop();
     // produce fake camera image (left hand only)
     t_camera.start();
     // first render the mesh normally with a skin texture
@@ -6494,7 +6548,10 @@ void openIMGUIFrame()
             ImGui::ColorEdit3("Missing Info Color", &es.mask_missing_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::ColorEdit3("Unused Info Color", &es.mask_unused_info_color.x, ImGuiColorEditFlags_NoOptions);
             ImGui::Checkbox("FG single color", &es.mask_fg_single_color);
-            ImGui::SliderFloat("Alpha Blending", &es.mask_alpha, 0.0f, 1.0f);
+            ImGui::SameLine();
+            ImGui::Checkbox("Missing Info Is Camera", &es.mask_missing_color_is_camera);
+            ImGui::SameLine();
+            // ImGui::SliderFloat("Alpha Blending", &es.mask_alpha, 0.0f, 1.0f);
             ImGui::Checkbox("Threshold Camera", &es.threshold_flag2);
             ImGui::SeparatorText("MLS");
             ImGui::Checkbox("MLS", &es.use_mls);

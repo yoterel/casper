@@ -34,6 +34,7 @@ public:
     bool undistortCamera = false;
     bool jfauv_right_hand = false;
     bool mask_fg_single_color = false;
+    bool mask_missing_color_is_camera = false;
     bool threshold_flag = false;
     bool threshold_flag2 = false;
     int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
