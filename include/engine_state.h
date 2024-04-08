@@ -80,6 +80,7 @@ public:
     unsigned int displayBoneIndex = 0;
     int64_t totalFrameCount = 0;
     int64_t maxVideoFrameCount = 0;
+    bool canUseRecordedImages = false;
     int64_t curFrameID = 0;
     int64_t curFrameTimeStamp = 0;
     bool space_modifier = false;
@@ -136,22 +137,18 @@ public:
     bool gameUseRightHand = false;
     // user study controls
     bool run_user_study = false;
-    bool run_user_study_random = false;
-    bool user_study_break = false;
     bool force_latency = false;
-    bool dont_randomize = false;
     int humanChoice = 1;
     bool video_reached_end = true;
     bool is_first_in_video_pair = true;
     double prev_vid_time;
     double cur_vid_time;
-    int vid_motion_type = -1;
-    float cached_simulated_latency_ms = 1.0f;
     std::pair<int, int> video_pair;
     float vid_simulated_latency_ms = 1.0f;
     float initial_simulated_latency_ms = 20.0f;
     // record & playback controls
     bool debug_playback = false;
+    bool playback_with_images = false;
     float pseudo_vid_playback_speed = 1.1f;
     float vid_playback_speed = 1.0f;
     float projection_mix_ratio = 0.4f;
@@ -168,6 +165,7 @@ public:
     bool two_hand_recording = false;
     int recordedHand = static_cast<int>(Hand::LEFT);
     float recordStartTime = 0.0;
+    float projectStartTime = 0.0;
     float recordDuration = 5.0;
     bool record_single_pose = false;
     bool record_every_frame = false;
