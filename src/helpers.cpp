@@ -4,6 +4,7 @@
 #include "shader.h"
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <numeric>
 
 std::vector<glm::vec2> Helpers::vec3to2(std::vector<glm::vec3> vec)
 {
@@ -615,6 +616,17 @@ std::vector<glm::mat4> Helpers::accumulate(const std::vector<std::vector<glm::ma
         }
     }
     return accumulator;
+}
+
+float Helpers::average(std::vector<float> &v)
+{
+    if (v.empty())
+    {
+        return 0;
+    }
+
+    auto const count = static_cast<float>(v.size());
+    return std::reduce(v.begin(), v.end()) / count;
 }
 
 glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale, bool isRightHand)

@@ -212,7 +212,7 @@ void initKalmanFilters();
 std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_to_world, const std::vector<glm::mat4> &required_pose_bones_to_world);
 /* global engine state */
 EngineState es;
-Timer t_camera, t_leap, t_skin, t_swap, t_download, t_warp, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_profile0, t_profile1;
+Timer t_camera, t_leap, t_skin, t_swap, t_download, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_profile0, t_profile1;
 std::thread sd_thread, mls_thread;
 GuessPoseGame guessPoseGame = GuessPoseGame();
 GuessCharGame guessCharGame = GuessCharGame();
@@ -784,14 +784,16 @@ int main(int argc, char *argv[])
                 std::cout << "mls thread: " << t_mls_thread.averageLapInMilliSec() << std::endl;
                 // std::cout << "profile0: " << t_profile0.averageLapInMilliSec() << std::endl;
                 // std::cout << "profile1: " << t_profile1.averageLapInMilliSec() << std::endl;
-                std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
+                // std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
                 std::cout << "swap buffers: " << t_swap.averageLapInMilliSec() << std::endl;
                 std::cout << "GPU->CPU: " << t_download.averageLapInMilliSec() << std::endl;
                 // std::cout << "project time: " << t4.averageLap() << std::endl;
                 std::cout << "cam q1 size: " << camera_queue.size_approx() << std::endl;
                 // std::cout << "cam q2 size: " << camera_queue_cv.size() << std::endl;
                 std::cout << "proj q size: " << projector->get_queue_size() << std::endl;
+                std::cout << "mls ops: " << Helpers::average(es.mls_succeed_counters) << std::endl;
             }
+            es.mls_succeed_counters.clear();
             frameCount = 0;
             previousSecondAppTime = currentAppTime;
             t_camera.reset();
@@ -799,7 +801,7 @@ int main(int argc, char *argv[])
             t_skin.reset();
             t_swap.reset();
             t_download.reset();
-            t_warp.reset();
+            // t_warp.reset();
             t_misc.reset();
             t_pp.reset();
             t_mls.reset();
@@ -3250,16 +3252,15 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     if (es.show_landmarks)
     {
-        if (es.mls_succeeded_this_frame)
-        {
-            std::vector<glm::vec2> tmp;
-            tmp.push_back(glm::vec2(0.0f, 0.0f));
-            PointCloud cloud_src(tmp, es.screen_verts_color_red);
-            vcolorShader->use();
-            vcolorShader->setMat4("mvp", glm::mat4(1.0f));
-            cloud_src.render(10.0f);
-            es.mls_succeeded_this_frame = false;
-        }
+        // if (es.mls_succeed_counter > 0)
+        // {
+        //     std::vector<glm::vec2> tmp;
+        //     tmp.push_back(glm::vec2(0.0f, 0.0f));
+        //     PointCloud cloud_src(tmp, es.screen_verts_color_red);
+        //     vcolorShader->use();
+        //     vcolorShader->setMat4("mvp", glm::mat4(1.0f));
+        //     cloud_src.render(10.0f);
+        // }
         float landmarkSize = 10.0f;
         vcolorShader->use();
         std::vector<glm::vec2> leap_joints_left = Helpers::project_points(joints_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
@@ -4817,6 +4818,7 @@ bool getMostRecentSkeleton(float time, std::vector<glm::mat4> &bones_out,
     LEAP_STATUS leap_status = getLeapFramePreRecorded(bones_out, joints_out, interp_index - 1, es.total_session_time_stamps, bones_session, joints_session);
     if (leap_status != LEAP_STATUS::LEAP_NEWFRAME)
         return false;
+    return true;
 }
 bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, const std::vector<glm::mat4> &session, bool isRightHand)
 {
@@ -5553,7 +5555,6 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
         {
             if (es.showProjector)
             {
-                t_warp.start();
                 std::vector<glm::vec3> projNearVerts(4);
                 // std::vector<glm::vec3> projMidVerts(4);
                 std::vector<glm::vec3> projFarVerts(4);
@@ -5573,7 +5574,6 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                 set_texture_shader(textureShader, false, false, false, false, es.masking_threshold, 0, glm::mat4(1.0f), flycam_projection_transform, flycam_view_transform);
                 c2p_fbo.getTexture()->bind();
                 projNearQuad.render();
-                t_warp.stop();
             }
         }
         // draws debug text
@@ -5644,6 +5644,11 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     /* run MLS on MP prediction to reduce bias */
     t_mls.start();
     handleMLSAsync(*gridShader);
+    if (es.mls_succeeded_this_frame)
+    {
+        es.mls_succeed_counter += 1;
+        es.mls_succeeded_this_frame = false;
+    }
     t_mls.stop();
 
     /* post process fbo using camera input */
@@ -5667,6 +5672,13 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     // {
     //     textModel.Render(*textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     // }
+    if (interp_index != es.playback_prev_frame) // this frame was a new camera frame
+    {
+        // collect some stats
+        es.mls_succeed_counters.push_back(static_cast<float>(es.mls_succeed_counter));
+        es.mls_succeed_counter = 0;
+    }
+    es.playback_prev_frame = interp_index;
     t_debug.stop();
     es.videoFrameCountCont += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
     return true;

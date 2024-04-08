@@ -149,6 +149,7 @@ public:
     float initial_simulated_latency_ms = 20.0f;
     // record & playback controls
     bool debug_playback = false;
+    uint32_t playback_prev_frame = 0;
     bool playback_with_images = false;
     float pseudo_vid_playback_speed = 1.1f;
     float vid_playback_speed = 1.0f;
@@ -318,6 +319,8 @@ public:
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
     bool mls_succeed = false;
     bool mls_succeeded_this_frame = false;
+    int mls_succeed_counter = 0;
+    std::vector<float> mls_succeed_counters;
     bool mls_running = false;
     bool mls_probe_recent_leap = false;
     bool use_mls = true;
