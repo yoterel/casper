@@ -25,6 +25,7 @@ public:
     bool use_pbo = true;
     bool double_pbo = false;
     bool use_projector = false;
+    bool project_this_frame = true;
     bool gamma_correct = false;
     bool use_screen = true;
     bool cam_color_mode = false;
@@ -149,7 +150,7 @@ public:
     float initial_simulated_latency_ms = 20.0f;
     // record & playback controls
     bool debug_playback = false;
-    uint32_t playback_prev_frame = 0;
+    int32_t playback_prev_frame = -1;
     bool playback_with_images = false;
     float pseudo_vid_playback_speed = 1.1f;
     float vid_playback_speed = 1.0f;
@@ -158,6 +159,7 @@ public:
     float videoFrameCountCont = 0.0f;
     bool recordImages = false;
     std::string recording_name = "all_10s";
+    std::string output_recording_name = "video";
     std::string subject_name = "subject1";
     std::string loaded_session_name = "";
     bool pre_recorded_session_loaded = false;
@@ -320,6 +322,9 @@ public:
     bool mls_succeed = false;
     bool mls_succeeded_this_frame = false;
     int mls_succeed_counter = 0;
+    int mls_every = 1;
+    int mls_n_latency_frames = 0;
+    bool mls_blocking = false;
     std::vector<float> mls_succeed_counters;
     bool mls_running = false;
     bool mls_probe_recent_leap = false;
