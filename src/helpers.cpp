@@ -628,6 +628,20 @@ float Helpers::average(std::vector<float> &v)
     auto const count = static_cast<float>(v.size());
     return std::reduce(v.begin(), v.end()) / count;
 }
+glm::vec2 Helpers::average(std::vector<glm::vec2> &v)
+{
+    glm::vec2 accumulator = glm::vec2(0.0f, 0.0f);
+    if (v.empty())
+    {
+        return accumulator;
+    }
+    auto const count = static_cast<float>(v.size());
+    for (int i = 0; i < v.size(); i++)
+    {
+        accumulator += v[i];
+    }
+    return accumulator / count;
+}
 
 glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale, bool isRightHand)
 {

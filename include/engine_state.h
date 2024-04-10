@@ -338,7 +338,10 @@ public:
     bool use_mp_kalman = false;
     float prev_mls_time = 0.0f;
     bool mls_forecast = false;
+    bool mls_global_forecast = false;
     float mls_grid_shader_threshold = 1.0f;
+    glm::vec2 mls_shift = glm::vec2(0.0f, 0.0f);
+    glm::vec2 prev_com = glm::vec2(0.0f, 0.0f);
     float kalman_process_noise = 0.01f;
     float kalman_measurement_noise = 0.0001f;
     float mls_depth_threshold = 30.0f;

@@ -43,6 +43,7 @@ public:
     static std::vector<glm::vec3> accumulate(const std::vector<std::vector<glm::vec3>> &a, bool normalize = true);
     static std::vector<glm::mat4> accumulate(const std::vector<std::vector<glm::mat4>> &a, bool normalize = true);
     static float average(std::vector<float> &v);
+    static glm::vec2 average(std::vector<glm::vec2> &v);
     static glm::mat4 interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale = false, bool isRightHand = false);
     static bool isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform);
 
