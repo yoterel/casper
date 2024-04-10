@@ -93,8 +93,8 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           bool flipHorizontal,
                           bool projSingleChannel,
                           bool ignoreGlobalScale);
-void handleMLS(Shader &gridShader, bool blocking = false, bool solve = true);
-void solveMLSGrid(bool blocking = false);
+void handleMLS(Shader &gridShader, bool blocking = false, bool solve = true, bool simulation = false);
+void solveMLSGrid(bool blocking = false, bool simulation = false);
 cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
                                std::vector<cv::Point2f> &Q,
                                int deformation_mode, float alpha,
@@ -4096,7 +4096,7 @@ cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
     return fv;
 }
 
-void solveMLSGrid(bool blocking)
+void solveMLSGrid(bool blocking, bool simulation)
 {
     switch (es.mls_mode)
     {
@@ -4180,7 +4180,7 @@ void solveMLSGrid(bool blocking)
                 es.mls_running = true;
                 camImage = camImageOrig.clone(); // use copy for thread, as the main thread will continue to modify the original
                 mls_thread = std::thread([to_project_left, projected_with_depth_left, rendered_depths_left, isLeftHandVis,
-                                          to_project_right, projected_with_depth_right, rendered_depths_right, isRightHandVis]() { // send (forecasted) leap joints to MP
+                                          to_project_right, projected_with_depth_right, rendered_depths_right, isRightHandVis, simulation]() { //
                     t_mls_thread.start();
                     try
                     {
@@ -4292,15 +4292,19 @@ void solveMLSGrid(bool blocking)
                             // possibly, use current leap info to move mp/leap keypoints
                             if (es.mls_forecast)
                             {
-                                // sync leap clock
-                                // std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-                                // LeapUpdateRebase(clockSynchronizer, static_cast<int64_t>(whole), leap.LeapGetTime()); // sync clocks
-                                // std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-                                // LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime); // translate app clock to leap clock
                                 std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                 std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-                                LEAP_STATUS status = getLeapFrame(leap, es.magic_leap_time_delay_mls, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
-                                if (status == LEAP_STATUS::LEAP_NEWFRAME)
+                                bool success;
+                                if (simulation)
+                                {
+                                    success = handleGetMostRecentSkeleton(cur_left_bones, cur_vertices_left, cur_right_bones, cur_vertices_right);
+                                }
+                                else
+                                {
+                                    LEAP_STATUS status = getLeapFrame(leap, es.magic_leap_time_delay_mls, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
+                                    success = status == LEAP_STATUS::LEAP_NEWFRAME;
+                                }
+                                if (success)
                                 {
                                     if ((cur_vertices_left.size() > 0) && (useLeftHand))
                                     {
@@ -4398,7 +4402,7 @@ void solveMLSGrid(bool blocking)
                                     if (visible_landmarks_left[i])
                                     {
                                         ControlPointsP.push_back(leap_keypoints_left[i]);
-                                        ControlPointsQ.push_back(mp_keypoints_left[i]); //  + diff_keypoints[i]
+                                        ControlPointsQ.push_back(mp_keypoints_left[i] + diff_keypoints_left[i]); //  + diff_keypoints[i]
                                     }
                                 }
                             if (useRightHand)
@@ -4407,7 +4411,7 @@ void solveMLSGrid(bool blocking)
                                     if (visible_landmarks_right[i])
                                     {
                                         ControlPointsP.push_back(leap_keypoints_right[i]);
-                                        ControlPointsQ.push_back(mp_keypoints_right[i]); //  + diff_keypoints[i]
+                                        ControlPointsQ.push_back(mp_keypoints_right[i] + diff_keypoints_right[i]); //  + diff_keypoints[i]
                                     }
                                 }
                             /* <can be done by mls thread or main thread> */
@@ -4760,13 +4764,13 @@ void solveMLSGrid(bool blocking)
     }
 }
 
-void handleMLS(Shader &gridShader, bool blocking, bool solve)
+void handleMLS(Shader &gridShader, bool blocking, bool solve, bool simulation)
 {
     if (es.use_mls)
     {
         // solve grid using landmark detection and projected leap joints
         if (solve)
-            solveMLSGrid(blocking);
+            solveMLSGrid(blocking, simulation);
         // possibly upload new grid to GPU (solveMLSGrid might not have finsihed or even be called)
         if (es.mls_succeed) // a mls thread has finished and results are ready to be uploaded to the GPU
         {
@@ -5655,6 +5659,7 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
 
     /* run MLS on MP prediction to reduce bias */
     t_mls.start();
+    // this sets up conditions for if we simulate mls running every n frames, or for previous frames (latency)
     bool solve_mls_condition = (most_recent_index % es.mls_every == 0) && (most_recent_index != es.playback_prev_frame);
     if ((es.mls_n_latency_frames != 0) && solve_mls_condition)
     {
@@ -5667,7 +5672,7 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
         bool success = handleGetMostRecentSkeleton(bones2world_left, joints_left, bones2world_right, joints_right);
         es.videoFrameCountCont = curSimTime;
     }
-    handleMLS(*gridShader, es.mls_blocking, solve_mls_condition);
+    handleMLS(*gridShader, es.mls_blocking, solve_mls_condition, true);
     if (es.mls_succeeded_this_frame)
     {
         es.mls_succeed_counter += 1;
