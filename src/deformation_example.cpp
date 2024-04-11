@@ -18,9 +18,9 @@ namespace fs = std::filesystem;
 // globals
 
 std::vector<cv::Point2f> ControlPointsP = {cv::Point2f(-0.95, -0.95), cv::Point2f(-0.95, 0.95), cv::Point2f(0.95, 0.95),
-                                           cv::Point2f(0.95, -0.95), cv::Point2f(0.51, 0.0), cv::Point2f(-0.51, -0.0)};
+                                           cv::Point2f(0.95, -0.95), cv::Point2f(0.0, 0.0)};
 std::vector<cv::Point2f> ControlPointsQ = {cv::Point2f(-0.95, -0.95), cv::Point2f(-0.95, 0.95), cv::Point2f(0.95, 0.95),
-                                           cv::Point2f(0.95, -0.95), cv::Point2f(0.6, 0.0), cv::Point2f(-0.6, -0.0)};
+                                           cv::Point2f(0.95, -0.95), cv::Point2f(0.0, 0.0)};
 const int grid_x_point_count = 21;
 const int grid_y_point_count = 21;
 const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
@@ -33,9 +33,13 @@ float mls_alpha = 1.0;
 float mls_grid_shader_threshold = 1.0;
 int mls_grid_smooth_window = 1;
 bool dragging = false;
+bool dragging_right = false;
 int dragging_vert = 0;
+int dragging_vert_right = 0;
 int closest_vert = 0;
+int closest_vert_right = 0;
 float min_dist = 100000.0f;
+float min_dist_right = 100000.0f;
 // forward declarations
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
@@ -161,6 +165,56 @@ void processInput(GLFWwindow *window)
         deformation_mode = static_cast<int>(DeformationMode::NONE);
         objChanged = true;
     }
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    {
+        mls_alpha += 0.01;
+        std::cout << "alpha: " << mls_alpha << std::endl;
+        objChanged = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    {
+        mls_alpha -= 0.01;
+        std::cout << "alpha: " << mls_alpha << std::endl;
+        objChanged = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    {
+        for (int i = 0; i < ControlPointsQ.size(); i++)
+        {
+            if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+                ControlPointsP[i].x -= 0.01;
+            else
+            {
+                if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+                    ControlPointsQ[i].x -= 0.01;
+                else
+                {
+                    ControlPointsP[i].x -= 0.01;
+                    ControlPointsQ[i].x -= 0.01;
+                }
+            }
+        }
+        objChanged = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    {
+        for (int i = 0; i < ControlPointsQ.size(); i++)
+        {
+            if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+                ControlPointsP[i].x += 0.01;
+            else
+            {
+                if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+                    ControlPointsQ[i].x += 0.01;
+                else
+                {
+                    ControlPointsP[i].x += 0.01;
+                    ControlPointsQ[i].x += 0.01;
+                }
+            }
+        }
+        objChanged = true;
+    }
 }
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
@@ -168,9 +222,12 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
     float ypos = static_cast<float>(yposIn);
     // glm::vec2 mouse_pos = glm::vec2((2.0f * xpos / proj_width) - 1.0f, -1.0f * ((2.0f * ypos / proj_height) - 1.0f));
     glm::vec2 mouse_pos = Helpers::ScreenToNDC(glm::vec2(xpos, ypos), SCR_WIDTH, SCR_HEIGHT, true);
-    if (dragging)
+    if (dragging || dragging_right)
     {
-        ControlPointsQ[dragging_vert] = cv::Point2f(mouse_pos.x, mouse_pos.y);
+        if (dragging)
+            ControlPointsQ[dragging_vert] = cv::Point2f(mouse_pos.x, mouse_pos.y);
+        else
+            ControlPointsP[dragging_vert_right] = cv::Point2f(mouse_pos.x, mouse_pos.y);
         objChanged = true;
     }
     else
@@ -187,6 +244,18 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
             }
         }
         min_dist = cur_min_dist;
+        cur_min_dist = 100.0f;
+        for (int i = 0; i < ControlPointsP.size(); i++)
+        {
+            glm::vec2 v = glm::vec2(ControlPointsP[i].x, ControlPointsP[i].y);
+            float dist = glm::distance(v, mouse_pos);
+            if (dist < cur_min_dist)
+            {
+                cur_min_dist = dist;
+                closest_vert_right = i;
+            }
+        }
+        min_dist_right = cur_min_dist;
     }
 }
 
@@ -219,6 +288,21 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
     {
         dragging = false;
+    }
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+    {
+        if (dragging_right == false)
+        {
+            if (min_dist_right < 1.0f)
+            {
+                dragging_right = true;
+                dragging_vert_right = closest_vert_right;
+            }
+        }
+    }
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE)
+    {
+        dragging_right = false;
     }
 }
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
