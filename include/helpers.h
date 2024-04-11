@@ -143,6 +143,7 @@ enum class DeformationMode
     RIGID = 0,
     SIMILARITY = 1,
     AFFINE = 2,
+    NONE = 3,
 };
 
 enum class MLSMode
