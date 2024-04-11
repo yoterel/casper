@@ -6772,6 +6772,12 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Initial Latency [ms]", &es.initial_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Video Playback Speed", &es.vid_playback_speed, 0.1f, 10.0f);         // will take into account the simulated latency
             ImGui::SliderFloat("Video Playback Limiter", &es.pseudo_vid_playback_speed, 0.0f, 1.5f); // will just speed things up, without taking into account the simulated latency
+            if (ImGui::Button("Step 1 Frame"))
+            {
+                auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), es.videoFrameCountCont);
+                int32_t most_recent_index = upper_iter - session_timestamps.begin() - 1;
+                es.videoFrameCountCont = session_timestamps[most_recent_index + 1];
+            }
             ImGui::SliderFloat("Mixer Ratio", &es.projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &es.skin_brightness, 0.0f, 1.0f);
             if (ImGui::Checkbox("Debug Playback", &es.debug_playback))

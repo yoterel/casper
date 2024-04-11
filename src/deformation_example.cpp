@@ -40,6 +40,7 @@ int closest_vert = 0;
 int closest_vert_right = 0;
 float min_dist = 100000.0f;
 float min_dist_right = 100000.0f;
+glm::vec2 mls_shift = glm::vec2(0.0f, 0.0f);
 // forward declarations
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
@@ -112,7 +113,7 @@ int main(int argc, char *argv[])
         gridShader->setInt("src", 0);
         gridShader->setFloat("threshold", mls_grid_shader_threshold);
         gridShader->setBool("flipVer", false);
-        // gridShader.setVec2("shift", es.mls_shift);
+        gridShader->setVec2("shift", mls_shift);
         deformationGrid.render();
         std::vector<glm::vec3> screen_verts_color_red = {{1.0f, 0.0f, 0.0f}};
         std::vector<glm::vec3> screen_verts_color_green = {{0.0f, 1.0f, 0.0f}};
@@ -164,6 +165,22 @@ void processInput(GLFWwindow *window)
     {
         deformation_mode = static_cast<int>(DeformationMode::NONE);
         objChanged = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+    {
+        mls_shift.y += 0.01;
+    }
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+    {
+        mls_shift.y -= 0.01;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+    {
+        mls_shift.x -= 0.01;
+    }
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+    {
+        mls_shift.x += 0.01;
     }
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
     {
