@@ -21,6 +21,9 @@
 #include "timer.h"
 #include "point_cloud.h"
 #include "leapCPP.h"
+#include "opencv2/cudawarping.hpp"
+#include "opencv2/cudaimgproc.hpp"
+#include "opencv2/cudaoptflow.hpp"
 #include "text.h"
 #include "post_process.h"
 #include "utils.h"
@@ -94,6 +97,7 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           bool projSingleChannel,
                           bool ignoreGlobalScale);
 void handleMLS(Shader &gridShader, bool blocking = false, bool solve = true, bool simulation = false);
+void handleOF();
 void solveMLSGrid(bool blocking = false, bool simulation = false);
 cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
                                std::vector<cv::Point2f> &Q,
@@ -213,7 +217,7 @@ void initKalmanFilters();
 std::vector<float> computeDistanceFromPose(const std::vector<glm::mat4> &bones_to_world, const std::vector<glm::mat4> &required_pose_bones_to_world);
 /* global engine state */
 EngineState es;
-Timer t_camera, t_leap, t_skin, t_swap, t_download, t_app, t_misc, t_debug, t_pp, t_mls, t_mls_thread, t_bake, t_profile0, t_profile1;
+Timer t_camera, t_leap, t_skin, t_swap, t_download, t_app, t_misc, t_debug, t_pp, t_mls, t_of, t_mls_thread, t_bake, t_profile0, t_profile1;
 std::thread sd_thread, mls_thread;
 GuessPoseGame guessPoseGame = GuessPoseGame();
 GuessCharGame guessCharGame = GuessCharGame();
@@ -269,7 +273,13 @@ moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> camera_queue(20);
 GLCamera gl_flycamera;
 GLCamera gl_projector;
 GLCamera gl_camera;
+cv::Mat camImagePrev;
+cv::Mat flow, rawFlow;
 cv::Mat camImage, camImageOrig, undistort_map1, undistort_map2;
+cv::cuda::GpuMat gcur, gprev;
+cv::cuda::GpuMat gflow;
+cv::Ptr<cv::cuda::FarnebackOpticalFlow> fbof;
+cv::Ptr<cv::cuda::NvidiaOpticalFlow_2_0> nvof;
 glm::mat4 w2c_auto, w2c_user;
 glm::mat4 proj_project;
 glm::mat4 cam_project;
@@ -285,6 +295,7 @@ Texture *armMap = nullptr;
 Texture *dispMap = nullptr;
 Texture *bakedTextureLeft = nullptr;
 Texture *bakedTextureRight = nullptr;
+Texture *OFTexture = nullptr;
 Texture toBakeTexture;
 Texture camTexture;
 FBO hands_fbo(es.dst_width, es.dst_height, 4, false);
@@ -692,8 +703,9 @@ int main(int argc, char *argv[])
     CGrabResultPtr ptrGrabResult;
     camTexture = Texture();
     toBakeTexture = Texture();
-    // Texture flowTexture = Texture();
     Texture displayTexture = Texture();
+    OFTexture = new Texture();
+    OFTexture->init(es.cam_width / es.of_resize_factor, es.cam_height / es.of_resize_factor, 3);
     displayTexture.init(es.cam_width, es.cam_height, es.n_cam_channels);
     camTexture.init(es.cam_width, es.cam_height, es.n_cam_channels);
     toBakeTexture.init(es.dst_width, es.dst_height, 4);
@@ -783,6 +795,7 @@ int main(int argc, char *argv[])
                 std::cout << "post process: " << t_pp.averageLapInMilliSec() << std::endl;
                 std::cout << "mls: " << t_mls.averageLapInMilliSec() << std::endl;
                 std::cout << "mls thread: " << t_mls_thread.averageLapInMilliSec() << std::endl;
+                std::cout << "of: " << t_of.averageLapInMilliSec() << std::endl;
                 // std::cout << "profile0: " << t_profile0.averageLapInMilliSec() << std::endl;
                 // std::cout << "profile1: " << t_profile1.averageLapInMilliSec() << std::endl;
                 // std::cout << "warp: " << t_warp.averageLapInMilliSec() << std::endl;
@@ -807,6 +820,7 @@ int main(int argc, char *argv[])
             t_pp.reset();
             t_mls.reset();
             t_mls_thread.reset();
+            t_of.reset();
             // t_profile0.reset();
             // t_profile1.reset();
             t_debug.reset();
@@ -897,6 +911,11 @@ int main(int argc, char *argv[])
             t_mls.start();
             handleMLS(gridShader);
             t_mls.stop();
+
+            /* run Optical Flow */
+            t_of.start();
+            handleOF();
+            t_of.stop();
 
             /* post process fbo using camera input */
             t_pp.start();
@@ -3173,8 +3192,16 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::CAM_FEED):
     {
-        set_texture_shader(textureShader, true, true, true, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
-        camTexture.bind();
+        if (es.use_of)
+        {
+            set_texture_shader(textureShader, true, true, false, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
+            OFTexture->bind();
+        }
+        else
+        {
+            set_texture_shader(textureShader, true, true, true, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
+            camTexture.bind();
+        }
         postprocess_fbo.bind();
         fullScreenQuad.render();
         postprocess_fbo.unbind();
@@ -4287,6 +4314,7 @@ void solveMLSGrid(bool blocking, bool simulation)
                             {
                                 std::vector<glm::mat4> cur_left_bones, cur_right_bones;
                                 std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
+                                std::vector<uint32_t> cur_left_fingers_extended, cur_right_fingers_extended;
                                 bool success;
                                 if (simulation)
                                 {
@@ -4294,7 +4322,7 @@ void solveMLSGrid(bool blocking, bool simulation)
                                 }
                                 else
                                 {
-                                    LEAP_STATUS status = getLeapFrame(leap, es.magic_leap_time_delay_mls, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, left_fingers_extended, right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
+                                    LEAP_STATUS status = getLeapFrame(leap, es.magic_leap_time_delay_mls, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, cur_left_fingers_extended, cur_right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
                                     success = status == LEAP_STATUS::LEAP_NEWFRAME;
                                 }
                                 if (success)
@@ -4819,6 +4847,129 @@ void handleMLS(Shader &gridShader, bool blocking, bool solve, bool simulation)
         // deformationGrid.renderGridLines();
         mls_fbo.unbind(); // mls_fbo
         glEnable(GL_CULL_FACE);
+    }
+}
+
+void updateOFParams()
+{
+    camImagePrev = cv::Mat::zeros(es.of_downsize.height, es.of_downsize.width, CV_8UC1);
+    flow = cv::Mat(es.of_downsize, CV_32FC2);
+    rawFlow = cv::Mat(es.of_downsize, CV_32FC2);
+    switch (es.of_mode)
+    {
+    case static_cast<int>(OFMode::FB_CPU):
+    {
+        break;
+    }
+    case static_cast<int>(OFMode::FB_GPU):
+    {
+        gprev.upload(camImagePrev);
+        gflow.upload(flow);
+        fbof = cv::cuda::FarnebackOpticalFlow::create(5, 0.5, false, 15, 3, 5, 1.2, cv::OPTFLOW_USE_INITIAL_FLOW);
+        break;
+    }
+    case static_cast<int>(OFMode::NV_GPU):
+    {
+        // flow = cv::Mat(es.of_downsize, CV_32FC2);
+        nvof = cv::cuda::NvidiaOpticalFlow_2_0::create(es.of_downsize,
+                                                       cv::cuda::NvidiaOpticalFlow_2_0::NV_OF_PERF_LEVEL_SLOW,
+                                                       cv::cuda::NvidiaOpticalFlow_2_0::NV_OF_OUTPUT_VECTOR_GRID_SIZE_1,
+                                                       cv::cuda::NvidiaOpticalFlow_2_0::NV_OF_HINT_VECTOR_GRID_SIZE_1,
+                                                       true, // set to true !
+                                                       false);
+        // int gridSize = nvof->getGridSize();
+        // std::cout << "gridSize: " << gridSize << std::endl;
+        flow = cv::Mat(es.of_downsize, CV_16FC2);
+        rawFlow = cv::Mat(es.of_downsize, CV_32FC2);
+        // gprev.upload(camImagePrev);
+        // gflow.upload(flow);
+        break;
+    }
+    default:
+        break;
+    }
+    if (OFTexture != nullptr)
+    {
+        delete OFTexture;
+        OFTexture = new Texture();
+        OFTexture->init(es.of_downsize.width, es.of_downsize.height, 3);
+    }
+    es.totalFrameCountOF = 0;
+}
+
+void handleOF()
+{
+    // apply OF on camera image
+    if (es.use_of)
+    {
+        cv::Mat image;
+        if (es.of_resize_factor != 1)
+        {
+            cv::resize(camImageOrig, image, es.of_downsize);
+        }
+        else
+        {
+            image = camImageOrig;
+        }
+        switch (es.of_mode)
+        {
+        case static_cast<int>(OFMode::FB_CPU):
+        {
+            cv::calcOpticalFlowFarneback(camImagePrev, image, flow, 0.5, 3, 15, 3, 5, 1.2, cv::OPTFLOW_USE_INITIAL_FLOW);
+            camImagePrev = image.clone();
+            // cv::resize(camImageOrig, camImagePrev, es.of_downsize);
+            break;
+        }
+        case static_cast<int>(OFMode::FB_GPU):
+        {
+            if (es.totalFrameCountOF % 2 == 0)
+            {
+                gcur.upload(image);
+                fbof->calc(gprev, gcur, gflow);
+            }
+            else
+            {
+                gprev.upload(image);
+                fbof->calc(gcur, gprev, gflow);
+            }
+            gflow.download(flow);
+            break;
+        }
+        case static_cast<int>(OFMode::NV_GPU):
+        {
+            nvof->calc(image, camImagePrev, rawFlow);
+            nvof->convertToFloat(rawFlow, flow);
+            camImagePrev = image.clone();
+            break;
+        }
+        default:
+            break;
+        }
+        es.totalFrameCountOF += 1;
+        // apply optical flow
+        if (es.show_of)
+        {
+            camImagePrev = image.clone();
+            cv::Mat mask, fullChannel;
+            cv::threshold(camImagePrev, mask, static_cast<int>(es.masking_threshold * 255), 255, cv::THRESH_BINARY);
+            // image.copyTo(fullChannelMasked, mask);
+            cv::cvtColor(camImagePrev, fullChannel, cv::COLOR_GRAY2RGB);
+            for (int y = 0; y < image.rows - 1; y += 10)
+            {
+                for (int x = 0; x < image.cols - 1; x += 10)
+                {
+                    if (mask.at<uchar>(y, x) == 0)
+                        continue;
+                    const cv::Point2f flowatxy = flow.at<cv::Point2f>(y, x) * 5;
+                    cv::line(fullChannel, cv::Point(x, y), cv::Point(cvRound(x + flowatxy.x), cvRound(y + flowatxy.y)), cv::Scalar(0, 255, 0), 2);
+                    cv::circle(fullChannel, cv::Point(x, y), 1, cv::Scalar(0, 0, 255), -1);
+                }
+            }
+            OFTexture->load((uint8_t *)fullChannel.data, true, GL_RGB);
+
+            // cv::imwrite("of.png", fullChannel);
+            // es.use_of = false;
+        }
     }
 }
 
@@ -6603,6 +6754,49 @@ void openIMGUIFrame()
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
+        if (ImGui::TreeNode("Optical Flow"))
+        {
+            ImGui::SeparatorText("Optical Flow");
+            if (ImGui::Checkbox("Use OF", &es.use_of))
+            {
+                if (es.use_of)
+                {
+                    updateOFParams();
+                }
+            }
+            if (ImGui::RadioButton("Farneback CPU", &es.of_mode, static_cast<int>(OFMode::FB_CPU)))
+            {
+                updateOFParams();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Farneback GPU", &es.of_mode, static_cast<int>(OFMode::FB_GPU)))
+            {
+                updateOFParams();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Nvidia GPU", &es.of_mode, static_cast<int>(OFMode::NV_GPU)))
+            {
+                updateOFParams();
+            }
+            if (ImGui::SliderInt("Resize Factor", &es.of_resize_factor_exp, 0, 3))
+            {
+                es.of_resize_factor = std::pow(2, es.of_resize_factor_exp);
+                es.of_downsize = cv::Size(es.cam_width / es.of_resize_factor, es.cam_height / es.of_resize_factor);
+                updateOFParams();
+            }
+            ImGui::Checkbox("Show OF", &es.show_of);
+            // ImGui::SameLine();
+            // ImGui::RadioButton("Farneback + Lucas-Kanade", &es.optical_flow_mode, static_cast<int>(OpticalFlowMode::FARNEBACK_LUCAS_KANADE));
+            // ImGui::SeparatorText("Farneback");
+            // ImGui::SliderInt("WinSize", &es.farneback_winSize, 1, 10);
+            // ImGui::SliderInt("Iterations", &es.farneback_iterations, 1, 10);
+            // ImGui::SliderInt("PolyN", &es.farneback_polyN, 1, 10);
+            // ImGui::SliderFloat("PolySigma", &es.farneback_polySigma, 0.1f, 10.0f);
+            // ImGui::SeparatorText("Lucas-Kanade");
+            // ImGui::SliderInt("LK WinSize", &es.lk_winSize, 1, 10);
+            // ImGui::SliderInt("LK Iterations", &es.lk_iterations, 1, 10);
+            ImGui::TreePop();
+        }
         if (ImGui::TreeNode("Post Process"))
         {
             ImGui::SeparatorText("Post Processing Mode");

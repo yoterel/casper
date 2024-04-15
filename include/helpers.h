@@ -159,6 +159,13 @@ enum class GameSessionType
     B = 1,
 };
 
+enum class OFMode
+{
+    FB_CPU = 0,
+    FB_GPU = 1,
+    NV_GPU = 2,
+};
+
 template <typename T>
 std::vector<float> linear_spacing(T start, T end, int num)
 {

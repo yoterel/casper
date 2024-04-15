@@ -334,7 +334,7 @@ public:
     bool show_landmarks = false;
     bool show_mls_grid = false;
     int mls_cp_smooth_window = 0;
-    int mls_grid_smooth_window = 5;
+    int mls_grid_smooth_window = 0;
     bool use_mp_kalman = false;
     float prev_mls_time = 0.0f;
     bool mls_forecast = false;
@@ -348,5 +348,13 @@ public:
     bool mls_depth_test = true;
     float kalman_lookahead = 17.0f;
     int deformation_mode = static_cast<int>(DeformationMode::RIGID);
+    // of controls
+    bool use_of = false;
+    bool show_of = false;
+    int of_mode = static_cast<int>(OFMode::FB_CPU);
+    uint64_t totalFrameCountOF = 0;
+    int of_resize_factor = 1;
+    int of_resize_factor_exp = 1;
+    cv::Size of_downsize = cv::Size(cam_width / of_resize_factor, cam_height / of_resize_factor);
 };
 #endif // ENGINE_STATE_H
