@@ -24,7 +24,6 @@ public:
     void setSubjectResponse(int response);
     int getAttempts() { return attempts; };
     void setAttempts(int newAttempts) { attempts = newAttempts; };
-    void setDontRandomize(bool dont_randomize) { dontRandomize = dont_randomize; };
     int getPairAttempts() { return pair_attempts; };
 
 private:

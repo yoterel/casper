@@ -4,6 +4,7 @@
 #include "shader.h"
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <numeric>
 
 std::vector<glm::vec2> Helpers::vec3to2(std::vector<glm::vec3> vec)
 {
@@ -569,7 +570,7 @@ std::vector<glm::vec3> Helpers::accumulate(const std::vector<std::vector<glm::ve
 {
     if (a.size() == 0)
     {
-        std::cout << "ERROR: vector of vectors must have at least one vector." << std::endl;
+        // std::cout << "ERROR: vector of vectors must have at least one vector." << std::endl;
         return std::vector<glm::vec3>();
     }
     unsigned long long reduce_size = a[0].size();
@@ -589,6 +590,57 @@ std::vector<glm::vec3> Helpers::accumulate(const std::vector<std::vector<glm::ve
         }
     }
     return accumulator;
+}
+
+std::vector<glm::mat4> Helpers::accumulate(const std::vector<std::vector<glm::mat4>> &a, bool normalize)
+{
+    if (a.size() == 0)
+    {
+        // std::cout << "ERROR: vector of vectors must have at least one vector." << std::endl;
+        return std::vector<glm::mat4>();
+    }
+    unsigned long long reduce_size = a[0].size();
+    std::vector<glm::mat4> accumulator(reduce_size, glm::mat4(0.0f));
+    for (int i = 0; i < a.size(); i++)
+    {
+        for (int j = 0; j < reduce_size; j++)
+        {
+            accumulator[j] += a[i][j];
+        }
+    }
+    if (normalize)
+    {
+        for (int i = 0; i < accumulator.size(); i++)
+        {
+            accumulator[i] /= a.size();
+        }
+    }
+    return accumulator;
+}
+
+float Helpers::average(std::vector<float> &v)
+{
+    if (v.empty())
+    {
+        return 0;
+    }
+
+    auto const count = static_cast<float>(v.size());
+    return std::reduce(v.begin(), v.end()) / count;
+}
+glm::vec2 Helpers::average(std::vector<glm::vec2> &v)
+{
+    glm::vec2 accumulator = glm::vec2(0.0f, 0.0f);
+    if (v.empty())
+    {
+        return accumulator;
+    }
+    auto const count = static_cast<float>(v.size());
+    for (int i = 0; i < v.size(); i++)
+    {
+        accumulator += v[i];
+    }
+    return accumulator / count;
 }
 
 glm::mat4 Helpers::interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale, bool isRightHand)

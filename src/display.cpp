@@ -1,7 +1,110 @@
 #include "display.h"
+#include <filesystem>
+#include <iostream>
+
+namespace fs = std::filesystem;
+
+bool SaveToDisk::init()
+{
+	if (m_initialized)
+	{
+		if (m_verbose)
+			std::cout << "Already initialized." << std::endl;
+		return true;
+	}
+	m_close_signal = false;
+	m_work_thread = std::thread([this]() { //, &projector
+		std::cout << "Work Thread Started" << std::endl;
+		uint8_t *image;
+		bool sucess;
+		while (!this->m_close_signal)
+		{
+			sucess = this->m_work_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
+			if (sucess)
+			{
+				this->show_buffer_internal(image, true);
+			}
+		}
+		std::cout << "Work Thread Finished" << std::endl;
+	});
+	m_copy_thread = std::thread([this]() { //, &projector
+		std::cout << "Copy Thread Started" << std::endl;
+		uint8_t *image;
+		bool sucess;
+		while (!this->m_close_signal)
+		{
+			sucess = this->m_copy_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
+			if (sucess)
+			{
+				int n_pixels = m_width * m_height * 3;
+				uint8_t *pBuf = (uint8_t *)malloc(n_pixels * sizeof(uint8_t));
+				memcpy(pBuf, image, n_pixels);
+				this->m_work_queue.try_enqueue(pBuf);
+			}
+		}
+		std::cout << "Copy Thread finished" << std::endl;
+	});
+	m_initialized = true;
+	return true;
+};
+
+void SaveToDisk::show()
+{
+	show(white_image);
+};
+
+void SaveToDisk::show(const cv::Mat frame)
+{
+	show_buffer_internal(frame.data, false);
+};
+
+uint8_t *SaveToDisk::get_buffer()
+{
+	int n_pixels = m_width * m_height * 3;
+	uint8_t *pBuf = (uint8_t *)malloc(n_pixels * sizeof(uint8_t));
+	return pBuf;
+}
+
+void SaveToDisk::show_buffer(uint8_t *buffer)
+{
+	m_copy_queue.try_enqueue(buffer);
+};
+
+void SaveToDisk::show_buffer_internal(uint8_t *buffer, bool free_buffer)
+{
+	if (m_initialized)
+	{
+		fs::path parent_folder_path(m_dst);
+		fs::path image_path = parent_folder_path / fs::path(std::format("{:06d}", frame_counter) + std::string(".png"));
+		int stride = 3 * m_width;
+		stride += (stride % 4) ? (4 - stride % 4) : 0;
+		stbi_flip_vertically_on_write(true);
+		stbi_write_png(image_path.string().c_str(), m_width, m_height, 3, buffer, stride);
+		if (free_buffer)
+			free(buffer);
+		frame_counter++;
+	}
+};
+
+void SaveToDisk::kill()
+{
+	if (m_initialized)
+	{
+		m_initialized = false;
+		m_close_signal = true;
+		m_work_thread.join();
+		m_copy_thread.join();
+	}
+};
 
 bool DynaFlashProjector::init()
 {
+	if (initialized)
+	{
+		if (m_verbose)
+			std::cout << "DynaFlash already initialized." << std::endl;
+		return true;
+	}
 	// apparently this is needed or else the projector will not work. perhaps dynaflash can't tolerate page faults?
 	if (!SetProcessWorkingSetSizeEx(::GetCurrentProcess(), (2000UL * 1024 * 1024), (3000UL * 1024 * 1024), QUOTA_LIMITS_HARDWS_MIN_ENABLE))
 	{
@@ -81,6 +184,22 @@ bool DynaFlashProjector::init()
 		gracefully_close();
 		return false;
 	}
+	m_close_signal = false;
+	m_projector_thread = std::thread([this]() { //, &projector
+		std::cout << "Consumer started" << std::endl;
+		uint8_t *image;
+		bool sucess;
+		while (!this->m_close_signal)
+		{
+			sucess = m_projector_queue.wait_dequeue_timed(image, std::chrono::milliseconds(100));
+			if (sucess)
+			{
+				// std::cout << "Consumer got image" << std::endl;
+				this->show_buffer_internal(image);
+			}
+		}
+		std::cout << "Consumer finished" << std::endl;
+	});
 	initialized = true;
 	return true;
 }
@@ -134,6 +253,8 @@ void DynaFlashProjector::gracefully_close()
 {
 	if (initialized)
 	{
+		m_close_signal = true;
+		m_projector_thread.join();
 		/* first set flag and sleep (let other threads finish) */
 		// todo protect shared projector buffer with mutex instead
 		initialized = false;
@@ -179,45 +300,35 @@ void DynaFlashProjector::print_version()
 	}
 }
 
-void DynaFlashProjector::show(const cv::Mat frame)
+void DynaFlashProjector::show()
 {
-	if (initialized)
-	{
-		// pFrameData = (char *)malloc(frame_size);
-		// if (pFrameData == NULL){
-		// 	std::cout << "frame buffer is NULL" << std::endl;
-		// 	exit(0);
-		// }
-		// memcpy((void *)pFrameData, (void *)frame.data, frame_size);
-		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		int dropped = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
-		if (dropped > 100)
-		{
-			if (m_verbose)
-				std::cout << "warning, frame drop is occuring (dropped: " << dropped << " so far)" << std::endl;
-		}
-		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
-		{
-			if (m_verbose)
-				std::cout << "GetFrameBuffer Error\n";
-			gracefully_close();
-		}
-		if ((pBuf != NULL) && (nGetFrameCnt != 0))
-		{
-			// std::cout << "frame count: " << nGetFrameCnt << std::endl;
-			memcpy(pBuf, frame.data, frame_size);
-			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
-			{
-				if (m_verbose)
-					std::cout << "PostFrameBuffer Error\n";
-				gracefully_close();
-			}
-		}
-		// free((void *)pFrameData);
-	}
+	show(white_image);
 }
 
-void DynaFlashProjector::show_buffer(const uint8_t *buffer)
+void DynaFlashProjector::show(cv::Mat frame)
+{
+	show_buffer_internal(frame.data);
+}
+
+void DynaFlashProjector::show_buffer(uint8_t *buffer)
+{
+	m_projector_queue.try_enqueue(buffer);
+}
+
+uint8_t *DynaFlashProjector::get_buffer()
+{
+	uint8_t *pBuf_orig = nullptr;
+	char *pBuf_casted = static_cast<char *>(static_cast<void *>(pBuf_orig));
+	if (pDynaFlash->GetFrameBuffer(&pBuf_casted, &nGetFrameCnt) != STATUS_SUCCESSFUL)
+	{
+		if (m_verbose)
+			std::cout << "GetFrameBuffer Error\n";
+		gracefully_close();
+	}
+	return pBuf_orig;
+}
+
+void DynaFlashProjector::show_buffer_internal(uint8_t *buffer)
 {
 	if (initialized)
 	{
@@ -247,35 +358,5 @@ void DynaFlashProjector::show_buffer(const uint8_t *buffer)
 			}
 		}
 		// free((void *)pFrameData);
-	}
-}
-
-void DynaFlashProjector::show()
-{
-	if (initialized)
-	{
-		pDynaFlash->GetStatus(&stDynaFlashStatus);
-		int dropped = stDynaFlashStatus.InputFrames - stDynaFlashStatus.OutputFrames;
-		if (dropped > 100)
-		{
-			if (m_verbose)
-				std::cout << "warning, frame drop is occuring (dropped: " << dropped << " so far)" << std::endl;
-		}
-		if (pDynaFlash->GetFrameBuffer(&pBuf, &nGetFrameCnt) != STATUS_SUCCESSFUL)
-		{
-			if (m_verbose)
-				std::cout << "GetFrameBuffer Error\n";
-			gracefully_close();
-		}
-		if ((pBuf != NULL) && (nGetFrameCnt != 0))
-		{
-			memcpy(pBuf, white_image.data, frame_size);
-			if (pDynaFlash->PostFrameBuffer(1) != STATUS_SUCCESSFUL)
-			{
-				if (m_verbose)
-					std::cout << "PostFrameBuffer Error\n";
-				gracefully_close();
-			}
-		}
 	}
 }

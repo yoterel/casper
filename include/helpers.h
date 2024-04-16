@@ -41,9 +41,11 @@ public:
     static float MSE(const std::vector<glm::vec2> &a, const std::vector<glm::vec2> &b /*, std::vector<float> &mse*/);
     static std::vector<glm::vec2> accumulate(const std::vector<std::vector<glm::vec2>> &a, bool normalize = true);
     static std::vector<glm::vec3> accumulate(const std::vector<std::vector<glm::vec3>> &a, bool normalize = true);
+    static std::vector<glm::mat4> accumulate(const std::vector<std::vector<glm::mat4>> &a, bool normalize = true);
+    static float average(std::vector<float> &v);
+    static glm::vec2 average(std::vector<glm::vec2> &v);
     static glm::mat4 interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale = false, bool isRightHand = false);
     static bool isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform);
-    static void loadEXR(std::string path);
 
 private:
     Helpers();
@@ -135,12 +137,14 @@ enum class OperationMode
     LEAP = 4,
     GUESS_POSE_GAME = 5,
     GUESS_CHAR_GAME = 6,
+    SIMULATION = 7,
 };
 enum class DeformationMode
 {
     RIGID = 0,
     SIMILARITY = 1,
     AFFINE = 2,
+    NONE = 3,
 };
 
 enum class MLSMode
@@ -155,4 +159,60 @@ enum class GameSessionType
     A = 0,
     B = 1,
 };
+
+enum class OFMode
+{
+    FB_CPU = 0,
+    FB_GPU = 1,
+    NV_GPU = 2,
+};
+
+template <typename T>
+std::vector<float> linear_spacing(T start, T end, int num)
+{
+    std::vector<float> linspaced;
+    if (num == 0)
+    {
+        return linspaced;
+    }
+    if (num == 1)
+    {
+        linspaced.push_back(start);
+        return linspaced;
+    }
+
+    float delta = (end - start) / (num - 1);
+
+    for (int i = 0; i < num - 1; ++i)
+    {
+        linspaced.push_back(start + delta * i);
+    }
+    linspaced.push_back(end);
+    return linspaced;
+}
+
+template <typename T>
+std::vector<int32_t> integer_linear_spacing(T start, T end, int num)
+{
+    std::vector<int32_t> linspaced;
+    if (num == 0)
+    {
+        return linspaced;
+    }
+    if (num == 1)
+    {
+        linspaced.push_back(static_cast<int32_t>(start));
+        return linspaced;
+    }
+
+    float delta = (end - start) / (num - 1);
+
+    for (int i = 0; i < num - 1; ++i)
+    {
+        linspaced.push_back(static_cast<int32_t>(start + delta * i));
+    }
+    linspaced.push_back(static_cast<int32_t>(end));
+    return linspaced;
+}
+
 #endif // HELPERS_H

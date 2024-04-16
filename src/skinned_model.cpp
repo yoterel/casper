@@ -48,7 +48,7 @@ bool SkinnedModel::LoadMesh(const std::string &Filename)
 
     bool Ret = false;
     std::filesystem::path p = Filename;
-    std::cout << "Loading mesh: " << std::filesystem::absolute(p) << std::endl;
+    // std::cout << "Loading mesh: " << std::filesystem::absolute(p) << std::endl;
     pScene = Importer.ReadFile(Filename.c_str(), ASSIMP_LOAD_FLAGS);
 
     if (pScene)
@@ -287,7 +287,7 @@ bool SkinnedModel::InitMaterials(const aiScene *pScene, const std::string &Filen
 
     bool Ret = true;
 
-    printf("Num materials: %d\n", pScene->mNumMaterials);
+    // std::cout << "Num materials: " << pScene->mNumMaterials << std::endl;
 
     // Initialize the materials
     for (unsigned int i = 0; i < pScene->mNumMaterials; i++)
@@ -398,7 +398,7 @@ void SkinnedModel::LoadColors(const aiMaterial *pMaterial, int index)
     int ShadingModel = 0;
     if (pMaterial->Get(AI_MATKEY_SHADING_MODEL, ShadingModel) == AI_SUCCESS)
     {
-        std::cout << "Assimp shading model: " << ShadingModel << std::endl;
+        // std::cout << "Assimp shading model: " << ShadingModel << std::endl;
     }
 
     m_Materials[index].AmbientColor = AllOnes;
