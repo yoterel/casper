@@ -99,8 +99,8 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
 void handleMLS(Shader &gridShader, bool blocking = false, bool solve = true, bool simulation = false);
 void handleOF();
 void solveMLSGrid(bool blocking = false, bool simulation = false);
-cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
-                               std::vector<cv::Point2f> &Q,
+cv::Mat computeGridDeformation(const std::vector<cv::Point2f> &P,
+                               const std::vector<cv::Point2f> &Q,
                                int deformation_mode, float alpha,
                                Grid &grid);
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
@@ -2248,6 +2248,7 @@ void loadImagesFromFolder(std::string loadpath)
     fs::path video_path(loadpath);
     int frame_size = es.cam_width * es.cam_height * 1;
     int counter = 0;
+    std::cout << "Loading Images From: " << video_path.string() << " ..." << std::endl;
     for (const auto &entry : fs::directory_iterator(video_path))
     {
         if (entry.path().extension() != ".png")
@@ -2263,7 +2264,6 @@ void loadImagesFromFolder(std::string loadpath)
         recordedImages.push_back(image);
         // pFrameData[counter] = (uint8_t *)malloc(frame_size);
         // memcpy((void *)pFrameData[counter], (void *)image.data, frame_size);
-        std::cout << entry.path() << std::endl;
         counter += 1;
     }
     es.maxVideoFrameCount = counter;
@@ -4091,8 +4091,8 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
     }
 }
 
-cv::Mat computeGridDeformation(std::vector<cv::Point2f> &P,
-                               std::vector<cv::Point2f> &Q,
+cv::Mat computeGridDeformation(const std::vector<cv::Point2f> &P,
+                               const std::vector<cv::Point2f> &Q,
                                int deformation_mode, float alpha,
                                Grid &grid)
 {
@@ -4974,30 +4974,35 @@ void handleOF()
         }
         es.totalFrameCountOF += 1;
         // move control points using the flow
-        std::vector<cv::Point2f> cp = Helpers::glm2cv(ControlPointsP_glm);
-        std::vector<cv::Point2f> cq = Helpers::glm2cv(ControlPointsQ_glm);
+        std::vector<glm::vec2> cp = Helpers::NDCtoScreen(ControlPointsP_glm, es.of_downsize.width, es.of_downsize.height);
+        std::vector<glm::vec2> cq = Helpers::NDCtoScreen(ControlPointsQ_glm, es.of_downsize.width, es.of_downsize.height);
         int roi = 20;
-        if (cp.size() > 0)
+        if (cq.size() > 0)
         {
-            for (int i = 0; i < cp.size(); i++)
+            for (int i = 0; i < cq.size(); i++)
             {
-                cv::Point2f p = cp[i];
-                cv::Point2f q = cq[i];
+                glm::vec2 p = cp[i];
+                glm::vec2 q = cq[i];
+                // get average flow in roi
                 cv::Mat roi_rect(flow, cv::Rect(static_cast<int>(std::round(q.x - (roi / 2))),
                                                 static_cast<int>(std::round(q.y - (roi / 2))),
                                                 roi, roi));
-                auto avg_flow = cv::mean(roi_rect);
-                cv::Point2f flow_at_p = flow.at<cv::Point2f>(p.y, p.x);
-                cv::Point2f new_p = p + flow_at_p;
-                cp[i] = new_p;
-                cv::Point2f flow_at_q = flow.at<cv::Point2f>(q.y, q.x);
-                cv::Point2f new_q = q + flow_at_q;
-                cq[i] = new_q;
+                cv::Scalar avg_flow = cv::mean(roi_rect);
+                // std::cout << avg_flow << std::endl;
+                glm::vec2 dxdy(avg_flow[0], avg_flow[1]);
+                // std::cout << "dxdy " << dxdy.x << dxdy.y << std::endl;
+                // cv::Point2f flow_at_p = flow.at<cv::Point2f>(p.y, p.x);
+                // std::cout << "oldp " << cp[i].x << cp[i].y << std::endl;
+                cp[i] = p - dxdy;
+                // std::cout << "newp " << cp[i].x << cp[i].y << std::endl;
+                // cv::Point2f flow_at_q = flow.at<cv::Point2f>(q.y, q.x);
+                cq[i] = q - dxdy;
             }
-            ControlPointsP_glm = Helpers::cv2glm(cp);
-            ControlPointsQ_glm = Helpers::cv2glm(cq);
+            ControlPointsP_glm = Helpers::ScreenToNDC(cp, es.of_downsize.width, es.of_downsize.height);
+            ControlPointsQ_glm = Helpers::ScreenToNDC(cq, es.of_downsize.width, es.of_downsize.height);
+
             // compute new deformation
-            cv::Mat fv = computeGridDeformation(cp, cq, es.deformation_mode, es.mls_alpha, deformationGrid);
+            cv::Mat fv = computeGridDeformation(Helpers::glm2cv(ControlPointsP_glm), Helpers::glm2cv(ControlPointsQ_glm), es.deformation_mode, es.mls_alpha, deformationGrid);
             // update grid points for render
             deformationGrid.constructDeformedGridSmooth(fv, es.mls_grid_smooth_window);
             deformationGrid.updateGLBuffers();
