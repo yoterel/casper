@@ -912,11 +912,6 @@ int main(int argc, char *argv[])
             handleMLS(gridShader);
             t_mls.stop();
 
-            /* run Optical Flow */
-            t_of.start();
-            handleOF();
-            t_of.stop();
-
             /* post process fbo using camera input */
             t_pp.start();
             handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
@@ -3192,7 +3187,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::CAM_FEED):
     {
-        if (es.use_of)
+        if (es.use_of && es.show_of)
         {
             set_texture_shader(textureShader, true, true, false, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
             OFTexture->bind();
@@ -4461,21 +4456,6 @@ void solveMLSGrid(bool blocking, bool simulation)
                                             ControlPointsQ.push_back(mp_keypoints_right[i] + diff_keypoints_right[i]);
                                     }
                                 }
-                            /* <can be done by mls thread or main thread> */
-                            // deform grid using control points
-                            if (ControlPointsP.size() > 0)
-                            {
-                                // compute deformation
-                                cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, es.deformation_mode, es.mls_alpha, deformationGrid);
-                                // update grid points for render
-                                deformationGrid.constructDeformedGridSmooth(fv, es.mls_grid_smooth_window);
-                            }
-                            else
-                            {
-                                // update grid points for render
-                                deformationGrid.constructGrid();
-                            }
-                            /* end of <can be done by mls thread or main thread> */
                             es.mls_succeed = true;
                         }
                     }
@@ -4821,6 +4801,21 @@ void handleMLS(Shader &gridShader, bool blocking, bool solve, bool simulation)
         // possibly upload new grid to GPU (solveMLSGrid might not have finsihed or even be called)
         if (es.mls_succeed) // a mls thread has finished and results are ready to be uploaded to the GPU
         {
+            /* <can be done by mls thread or main thread> */
+            // deform grid using control points
+            if (ControlPointsP.size() > 0)
+            {
+                // compute deformation
+                cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, es.deformation_mode, es.mls_alpha, deformationGrid);
+                // update grid points for render
+                deformationGrid.constructDeformedGridSmooth(fv, es.mls_grid_smooth_window);
+            }
+            else
+            {
+                // update grid points for render
+                deformationGrid.constructGrid();
+            }
+            /* end of <can be done by mls thread or main thread> */
             deformationGrid.updateGLBuffers();
             es.mls_succeed = false;
             // es.mls_shift = glm::vec2(0.0f, 0.0f);
@@ -4917,7 +4912,6 @@ void handleOF()
         {
             cv::calcOpticalFlowFarneback(camImagePrev, image, flow, 0.5, 3, 15, 3, 5, 1.2, cv::OPTFLOW_USE_INITIAL_FLOW);
             camImagePrev = image.clone();
-            // cv::resize(camImageOrig, camImagePrev, es.of_downsize);
             break;
         }
         case static_cast<int>(OFMode::FB_GPU):
@@ -4946,7 +4940,35 @@ void handleOF()
             break;
         }
         es.totalFrameCountOF += 1;
-        // apply optical flow
+        // move control points using the flow
+        std::vector<cv::Point2f> cp = Helpers::glm2cv(ControlPointsP_glm);
+        std::vector<cv::Point2f> cq = Helpers::glm2cv(ControlPointsQ_glm);
+        int roi = 20;
+        if (cp.size() > 0)
+        {
+            for (int i = 0; i < cp.size(); i++)
+            {
+                cv::Point2f p = cp[i];
+                cv::Point2f q = cq[i];
+                cv::Mat roi_rect(flow, cv::Rect(static_cast<int>(std::round(q.x - (roi / 2))),
+                                                static_cast<int>(std::round(q.y - (roi / 2))),
+                                                roi, roi));
+                auto avg_flow = cv::mean(roi_rect);
+                cv::Point2f flow_at_p = flow.at<cv::Point2f>(p.y, p.x);
+                cv::Point2f new_p = p + flow_at_p;
+                cp[i] = new_p;
+                cv::Point2f flow_at_q = flow.at<cv::Point2f>(q.y, q.x);
+                cv::Point2f new_q = q + flow_at_q;
+                cq[i] = new_q;
+            }
+            ControlPointsP_glm = Helpers::cv2glm(cp);
+            ControlPointsQ_glm = Helpers::cv2glm(cq);
+            // compute new deformation
+            cv::Mat fv = computeGridDeformation(cp, cq, es.deformation_mode, es.mls_alpha, deformationGrid);
+            // update grid points for render
+            deformationGrid.constructDeformedGridSmooth(fv, es.mls_grid_smooth_window);
+            deformationGrid.updateGLBuffers();
+        }
         if (es.show_of)
         {
             camImagePrev = image.clone();
@@ -5821,6 +5843,11 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     handleSkinning(bones2world_left, false, bones2world_right.size() == 0, shader_map, leftHandModel, cam_view_transform, cam_projection_transform);
     t_skin.stop();
 
+    /* run Optical Flow */
+    t_of.start();
+    if (new_frame)
+        handleOF();
+    t_of.stop();
     // /* deal with bake request */
     // t_bake.start();
     // handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);

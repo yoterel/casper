@@ -1,22 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
-set(Python_EXECUTABLE "C:/Users/sens/AppData/Local/Programs/Python/Python311/python.exe")  # 558: C:/Users/sens/miniconda3/envs/sd/python.exe  559: C:/Users/sens/.conda/envs/sandbox/python.exe
-# set(Python_ROOT_DIR "C:/Users/sens/miniconda3/envs/sd/")
+set(Python_EXECUTABLE "C:/Users/sens/AppData/Local/Programs/Python/Python311/python.exe")  # replace with a python environment with numpy, mediapipe, and dev tools installed
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
-set(ONNXRUNTIME_ROOTDIR "C:/src/onnxruntime-win-x64-gpu-1.16.3")
-set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")
-set(OPENCV_COMPILER "vc15")
-# set(OpenCV_DIR "C:/OpenCV_Build/install_debug")
-# set(OPENCV_COMPILER "vc16")
-# set(CUDA_EXAMPLES "C:/src/cuda-samples")
-# set(CUDA_NPP_LIBS_LOC "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64")  # 11.8, 12.2
-# set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/")  # 11.8, 12.2
-# set(CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/third-party/opencv" ${CMAKE_PREFIX_PATH})
-cmake_policy(SET CMP0074 NEW)    # respect <PACKAGE>_ROOT variables in "find_package"
+set(OpenCV_DIR "C:/OpenCV/build/install")  # replace with opencv install path (e.g. "${CMAKE_SOURCE_DIR}/third-party/opencv")
+set(OPENCV_COMPILER "vc16")  # replace with opencv compiler
+file(TO_CMAKE_PATH "$ENV{CUDA_PATH}" CUDA_TOOLKIT_ROOT_DIR)  # replaces # set(CUDA_TOOLKIT_ROOT_DIR $ENV{CUDA_PATH}) for normalizing the path
+cmake_policy(SET CMP0074 NEW)  # respect <PACKAGE>_ROOT variables in "find_package"
+# add_compile_definitions(CV_IGNORE_DEBUG_BUILD_GUARD)
 include(CMakePrintHelpers)
 project(augmented_hands VERSION 0.1 LANGUAGES C CXX)
-#project(augmented_hands LANGUAGES CUDA CXX)
 find_package(Python 3.9 COMPONENTS Interpreter Development NumPy REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
 find_package(OpenCV 4.6.0 EXACT REQUIRED)
@@ -31,7 +24,7 @@ find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
 # message(PYTHON_LIBRARIES="${PYTHON_LIBRARIES}")
 # message(Python_LIBRARY_DIRS="${Python_LIBRARY_DIRS}")
 # message(Python_RUNTIME_LIBRARY_DIRS="${Python_RUNTIME_LIBRARY_DIRS}")
-################ nanobind
+################ nanobind boilerplate
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
   OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NB_DIR)
@@ -106,30 +99,7 @@ add_executable(ahand
     third-party/imgui/misc/cpp/imgui_stdlib.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
-# target_compile_definitions(ahand PRIVATE STB_IMAGE_IMPLEMENTATION STB_IMAGE_WRITE_IMPLEMENTATION)
-# target_compile_definitions(ahand PRIVATE CV_IGNORE_DEBUG_BUILD_GUARD)
-set_target_properties(ahand PROPERTIES CUDA_ARCHITECTURES "72")
 target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# cuda
-target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common")
-target_include_directories(ahand PRIVATE "$ENV{CUDA_PATH}/include")
-# target_link_libraries(ahand PRIVATE "$ENV{CUDA_PATH}/lib/x64/cudart.lib")
-# target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common")
-# target_include_directories(ahand PRIVATE "C:/src/cuda-samples/Common/FreeImage/Dist/x64")
-# npp
-target_include_directories(ahand PRIVATE "${CUDA_EXAMPLES}/Common/UtilNPP")
-# target_link_libraries(ahand PRIVATE 
-#                         "${CUDA_NPP_LIBS_LOC}/nppc.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppial.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppicc.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppidei.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppif.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppig.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppim.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppist.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppisu.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/nppitc.lib"
-#                         "${CUDA_NPP_LIBS_LOC}/npps.lib")
 # pylon
 target_link_libraries(ahand PRIVATE pylon::pylon)
 # opencv
@@ -363,35 +333,35 @@ target_link_libraries(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dy
 # target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
 # target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 ######################################### download benchmark example program
-add_executable(benchmark_download
-    src/benchmark_download.cpp
-    src/timer.cpp
-    third-party/imgui/imgui.cpp
-    third-party/imgui/imgui_draw.cpp
-    third-party/imgui/imgui_tables.cpp
-    third-party/imgui/imgui_widgets.cpp
-    third-party/imgui/imgui_demo.cpp
-    third-party/imgui/backends/imgui_impl_glfw.cpp
-    third-party/imgui/backends/imgui_impl_opengl3.cpp
-    third-party/imgui/misc/cpp/imgui_stdlib.cpp
-    third-party/glad${GLAD_VER}/src/glad.c
-)
-target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# pylon
-target_link_libraries(benchmark_download PRIVATE pylon::pylon)
-# opencv
-target_link_libraries(benchmark_download PRIVATE ${OpenCV_LIBS})
-# GLFW
-target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
-target_link_libraries(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
-# GLAD
-target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
-# imgui
-target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
-target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
-target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
-# glm
-target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+# add_executable(benchmark_download
+#     src/benchmark_download.cpp
+#     src/timer.cpp
+#     third-party/imgui/imgui.cpp
+#     third-party/imgui/imgui_draw.cpp
+#     third-party/imgui/imgui_tables.cpp
+#     third-party/imgui/imgui_widgets.cpp
+#     third-party/imgui/imgui_demo.cpp
+#     third-party/imgui/backends/imgui_impl_glfw.cpp
+#     third-party/imgui/backends/imgui_impl_opengl3.cpp
+#     third-party/imgui/misc/cpp/imgui_stdlib.cpp
+#     third-party/glad${GLAD_VER}/src/glad.c
+# )
+# target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# # pylon
+# target_link_libraries(benchmark_download PRIVATE pylon::pylon)
+# # opencv
+# target_link_libraries(benchmark_download PRIVATE ${OpenCV_LIBS})
+# # GLFW
+# target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+# target_link_libraries(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+# # GLAD
+# target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+# # imgui
+# target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
+# target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
+# target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
+# # glm
+# target_include_directories(benchmark_download PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
 ######################################### optical flow benchmark example program
 # add_executable(benchmark_example
 #     src/benchmark_flow.cpp
