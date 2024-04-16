@@ -126,6 +126,12 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shader_map,
                      TextModel &textModel,
                      glm::mat4 &cam_view_transform,
                      glm::mat4 &cam_projection_transform);
+void handleSimulation(std::unordered_map<std::string, Shader *> &shaderMap,
+                      SkinnedModel &leftHandModel,
+                      SkinnedModel &rightHandModel,
+                      TextModel &textModel,
+                      glm::mat4 &cam_view_transform,
+                      glm::mat4 &cam_projection_transform);
 bool interpolateBones(float time, std::vector<glm::mat4> &bones_out, const std::vector<glm::mat4> &session, bool isRightHand);
 bool getMostRecentSkeleton(float time,
                            std::vector<glm::mat4> &bones_out,
@@ -392,7 +398,8 @@ int main(int argc, char *argv[])
             {"coax_calib", static_cast<int>(OperationMode::COAXIAL)},
             {"leap_calib", static_cast<int>(OperationMode::LEAP)},
             {"guess_char_game", static_cast<int>(OperationMode::GUESS_CHAR_GAME)},
-            {"guess_pose_game", static_cast<int>(OperationMode::GUESS_POSE_GAME)}};
+            {"guess_pose_game", static_cast<int>(OperationMode::GUESS_POSE_GAME)},
+            {"simulation", static_cast<int>(OperationMode::SIMULATION)}};
         // check if mode is valid
         if (mode_map.find(result["mode"].as<std::string>()) == mode_map.end())
         {
@@ -539,6 +546,18 @@ int main(int argc, char *argv[])
                                 false);
     switch (es.operation_mode) // set some default values for user study depending on cmd line
     {
+    case static_cast<int>(OperationMode::SIMULATION):
+    {
+        es.postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
+        es.mask_missing_color_is_camera = true;
+        es.mask_unused_info_color = es.mask_bg_color;
+        es.mls_blocking = true;
+        es.deformation_mode = static_cast<int>(DeformationMode::SIMILARITY);
+        es.simulated_projector = true;
+        es.simulated_camera = true;
+        es.pseudo_vid_playback_speed = 0.1f;
+        break;
+    }
     case static_cast<int>(OperationMode::USER_STUDY):
     {
         es.postprocess_mode = static_cast<int>(PostProcessMode::NONE);
@@ -941,6 +960,16 @@ int main(int argc, char *argv[])
                             textModel,
                             cam_view_transform,
                             cam_projection_transform);
+            break;
+        }
+        case static_cast<int>(OperationMode::SIMULATION):
+        {
+            handleSimulation(shaderMap,
+                             leftHandModel,
+                             rightHandModel,
+                             textModel,
+                             cam_view_transform,
+                             cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::GUESS_POSE_GAME): // a game to guess the hand pose using visual color cues
@@ -2329,6 +2358,10 @@ bool loadSession()
     if (es.maxVideoFrameCount == raw_session_timestamps.size())
     {
         es.canUseRecordedImages = true;
+    }
+    else
+    {
+        es.canUseRecordedImages = false;
     }
     es.pre_recorded_session_loaded = true;
     es.loaded_session_name = es.recording_name;
@@ -5418,6 +5451,33 @@ void handleGuessPoseGame(std::unordered_map<std::string, Shader *> &shaderMap,
     }
 }
 
+void handleSimulation(std::unordered_map<std::string, Shader *> &shaderMap,
+                      SkinnedModel &leftHandModel,
+                      SkinnedModel &rightHandModel,
+                      TextModel &textModel,
+                      glm::mat4 &cam_view_transform,
+                      glm::mat4 &cam_projection_transform)
+{
+    if (es.pre_recorded_session_loaded) // a video was loaded
+    {
+        if (es.debug_playback)
+        {
+            if (es.canUseRecordedImages)
+            {
+                if (!playVideoReal(shaderMap,
+                                   leftHandModel,
+                                   rightHandModel,
+                                   textModel,
+                                   cam_view_transform,
+                                   cam_projection_transform))
+                {
+                    es.videoFrameCountCont = 0.0f;
+                }
+            }
+        }
+    }
+}
+
 void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                      GLFWwindow *window,
                      SkinnedModel &leftHandModel,
@@ -5485,35 +5545,21 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
         {
             if (es.debug_playback)
             {
-                if (es.playback_with_images && es.canUseRecordedImages)
+
+                if (!playVideo(shaderMap,
+                               leftHandModel,
+                               rightHandModel,
+                               textModel,
+                               cam_view_transform,
+                               cam_projection_transform))
                 {
-                    if (!playVideoReal(shaderMap,
-                                       leftHandModel,
-                                       rightHandModel,
-                                       textModel,
-                                       cam_view_transform,
-                                       cam_projection_transform))
-                    {
-                        es.videoFrameCountCont = 0.0f;
-                    }
-                }
-                else
-                {
-                    if (!playVideo(shaderMap,
-                                   leftHandModel,
-                                   rightHandModel,
-                                   textModel,
-                                   cam_view_transform,
-                                   cam_projection_transform))
-                    {
-                        t_profile0.stop();
-                        t_profile0.stop();
-                        std::cout << "video playback time: " << t_profile0.getElapsedTimeInMilliSec() << " ms" << std::endl;
-                        es.videoFrameCountCont = 0.0f;
-                        es.is_first_in_video_pair = true;
-                        es.texture_mode = static_cast<int>(TextureMode::FROM_FILE);
-                        t_profile0.start();
-                    }
+                    t_profile0.stop();
+                    t_profile0.stop();
+                    std::cout << "video playback time: " << t_profile0.getElapsedTimeInMilliSec() << " ms" << std::endl;
+                    es.videoFrameCountCont = 0.0f;
+                    es.is_first_in_video_pair = true;
+                    es.texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                    t_profile0.start();
                 }
             }
         }
@@ -6093,6 +6139,35 @@ void openIMGUIFrame()
                 leap.setPollMode(false);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
+                es.simulated_camera = false;
+                if (es.simulated_projector)
+                {
+                    es.simulated_projector = false;
+                    es.proj_channel_order = es.simulated_projector ? GL_RGB : GL_BGR;
+                    delete projector;
+                    projector = new DynaFlashProjector(true, false);
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Simulation", &es.operation_mode, static_cast<int>(OperationMode::SIMULATION)))
+            {
+                leap.setImageMode(false);
+                leap.setPollMode(false);
+                es.use_mls = true;
+                es.debug_mode = false;
+                es.postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
+                es.mask_missing_color_is_camera = true;
+                es.mask_unused_info_color = es.mask_bg_color;
+                es.mls_blocking = true;
+                es.deformation_mode = static_cast<int>(DeformationMode::SIMILARITY);
+                if (!es.simulated_projector)
+                {
+                    es.simulated_projector = true;
+                    es.proj_channel_order = es.simulated_projector ? GL_RGB : GL_BGR;
+                    delete projector;
+                    projector = new SaveToDisk("../../debug/video/", es.proj_height, es.proj_width);
+                }
+                es.simulated_camera = true;
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("User Study", &es.operation_mode, static_cast<int>(OperationMode::USER_STUDY)))
@@ -6988,7 +7063,7 @@ void openIMGUIFrame()
             ImGui::InputText("Raw Recording Name", &es.recording_name);
             ImGui::InputText("Output Recording Name", &es.output_recording_name);
             ImGui::SeparatorText("Playback");
-            ImGui::Checkbox("Playback w Images", &es.playback_with_images);
+            // ImGui::Checkbox("Playback w Images", &es.playback_with_images);
             ImGui::SliderFloat("Desired Latency [ms]", &es.vid_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Initial Latency [ms]", &es.initial_simulated_latency_ms, 0.0f, 50.0f);
             ImGui::SliderFloat("Video Playback Speed", &es.vid_playback_speed, 0.1f, 10.0f);         // will take into account the simulated latency

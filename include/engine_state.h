@@ -151,14 +151,14 @@ public:
     // record & playback controls
     bool debug_playback = false;
     int32_t playback_prev_frame = -1;
-    bool playback_with_images = false;
+    // bool playback_with_images = false;
     float pseudo_vid_playback_speed = 1.1f;
     float vid_playback_speed = 1.0f;
     float projection_mix_ratio = 0.4f;
     float skin_brightness = 0.5f;
     float videoFrameCountCont = 0.0f;
     bool recordImages = false;
-    std::string recording_name = "all_10s";
+    std::string recording_name = "test"; // all_10s
     std::string output_recording_name = "video";
     std::string subject_name = "subject1";
     std::string loaded_session_name = "";

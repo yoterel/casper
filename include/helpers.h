@@ -137,6 +137,7 @@ enum class OperationMode
     LEAP = 4,
     GUESS_POSE_GAME = 5,
     GUESS_CHAR_GAME = 6,
+    SIMULATION = 7,
 };
 enum class DeformationMode
 {
