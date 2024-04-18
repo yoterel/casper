@@ -14,14 +14,14 @@ void testControlNet();
 
 int main(int argc, char *argv[])
 {
-    testStableDiffusion();
+    // testStableDiffusion();
     testControlNet();
     return 0;
 }
 
 void testControlNet()
 {
-    fs::path item_dir = "C:/repos/augmented_hand/resource/recordings/control_sd_dataset/018440";
+    fs::path item_dir = "../../resource/recordings/control_sd_dataset/018440";
     fs::path mask_path = item_dir / "mask.png";
 
     // Load input image
