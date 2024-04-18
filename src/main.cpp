@@ -322,7 +322,7 @@ FBO bake_fbo_right(1024, 1024, 4, false);
 FBO bake_fbo_left(1024, 1024, 4, false);
 FBO pre_bake_fbo(1024, 1024, 4, false);
 FBO deformed_bake_fbo(1024, 1024, 4, false);
-FBO sd_fbo(1024, 1024, 4, false);
+FBO sd_fbo(512, 512, 4, false);
 FBO shadowmap_fbo(1024, 1024, 1, false);
 FBO postprocess_fbo(es.dst_width, es.dst_height, 4, false);
 FBO postprocess_fbo2(es.dst_width, es.dst_height, 4, false);
@@ -3878,6 +3878,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   glm::mat4 cam_projection_transform)
 {
     Shader *textureShader = shader_map["textureShader"];
+    Shader *thresholdAlphaShader = shader_map["thresholdAlphaShader"];
     Shader *gridShader = shader_map["gridShader"];
     if ((bones_to_world_right.size() > 0) || (bones_to_world_left.size() > 0))
     {
@@ -3897,9 +3898,19 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     else
                         hands_fbo.getTexture()->bind();
                     // render
-                    set_texture_shader(textureShader, false, false, false, false, es.masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), false, es.mask_bg_color);
-                    fullScreenQuad.render(false, false, true);
+                    thresholdAlphaShader->use();
+                    thresholdAlphaShader->setMat4("view", glm::mat4(1.0));
+                    thresholdAlphaShader->setMat4("projection", glm::mat4(1.0));
+                    thresholdAlphaShader->setMat4("model", glm::mat4(1.0));
+                    thresholdAlphaShader->setFloat("threshold", 0.5);
+                    thresholdAlphaShader->setBool("flipHor", false);
+                    thresholdAlphaShader->setBool("flipVer", true);
+                    thresholdAlphaShader->setBool("isGray", false);
+                    thresholdAlphaShader->setBool("binary", true);
+                    thresholdAlphaShader->setInt("src", 0);
+                    fullScreenQuad.render();
                     sd_fbo.unbind();
+                    // sd_fbo.saveColorToFile("test.png", false);
                     std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
                     if (sd_thread.joinable())
                         sd_thread.join();
