@@ -11,7 +11,7 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-void Diffuse::print_backend_config()
+void StableDiffusionClient::print_backend_config()
 {
     try
     {
@@ -30,11 +30,11 @@ void Diffuse::print_backend_config()
     }
 }
 
-std::vector<uint8_t> Diffuse::txt2img(const std::string prompt,
-                                      int &width_out, int &height_out,
-                                      int seed,
-                                      int width_in, int height_in,
-                                      bool OpenCVDecode) // if OpenCVDecode output channels will be BGR
+std::vector<uint8_t> StableDiffusionClient::txt2img(const std::string prompt,
+                                                    int &width_out, int &height_out,
+                                                    int seed,
+                                                    int width_in, int height_in,
+                                                    bool OpenCVDecode) // if OpenCVDecode output channels will be BGR
 {
     // std::cout << "using prompt: " << prompt << std::endl;
     json j2 = {
@@ -112,15 +112,15 @@ std::vector<uint8_t> Diffuse::txt2img(const std::string prompt,
     }
 }
 
-std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
-                                      int &width_out, int &height_out,
-                                      const std::vector<uint8_t> &img,
-                                      const std::vector<uint8_t> &mask,
-                                      int seed,
-                                      int width_in, int height_in, int channels_in,
-                                      int width_request, int height_request,
-                                      bool inputIsPNGEncoded, bool OpenCVDecode,
-                                      int mask_mode) // if OpenCVDecode output channels will be BGR
+std::vector<uint8_t> StableDiffusionClient::img2img(const std::string prompt,
+                                                    int &width_out, int &height_out,
+                                                    const std::vector<uint8_t> &img,
+                                                    const std::vector<uint8_t> &mask,
+                                                    int seed,
+                                                    int width_in, int height_in, int channels_in,
+                                                    int width_request, int height_request,
+                                                    bool inputIsPNGEncoded, bool OpenCVDecode,
+                                                    int mask_mode) // if OpenCVDecode output channels will be BGR
 {
     std::string encoded_buffer, encoded_mask_buffer;
     if (inputIsPNGEncoded)
@@ -206,13 +206,13 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
     return data;
 }
 
-std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
-                                      int &width_out, int &height_out,
-                                      cv::Mat img,
-                                      cv::Mat mask,
-                                      int seed,
-                                      int width_request, int height_request,
-                                      bool OpenCVDecode, int mask_mode) // if OpenCVDecode output channels will be BGR
+std::vector<uint8_t> StableDiffusionClient::img2img(const std::string prompt,
+                                                    int &width_out, int &height_out,
+                                                    cv::Mat img,
+                                                    cv::Mat mask,
+                                                    int seed,
+                                                    int width_request, int height_request,
+                                                    bool OpenCVDecode, int mask_mode) // if OpenCVDecode output channels will be BGR
 {
     std::vector<uint8_t> img_buffer, mask_buffer;
     cv::imencode(".png", img, img_buffer);
@@ -226,7 +226,7 @@ std::vector<uint8_t> Diffuse::img2img(const std::string prompt,
                    true, OpenCVDecode, mask_mode);
 }
 
-std::vector<uint8_t> Diffuse::decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV)
+std::vector<uint8_t> StableDiffusionClient::decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV)
 {
     std::vector<uint8_t> data;
     if (useOpenCV)
@@ -255,7 +255,7 @@ std::vector<uint8_t> Diffuse::decode_png(const std::string &png_data, int &width
     return data;
 }
 
-std::vector<uint8_t> Diffuse::encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels)
+std::vector<uint8_t> StableDiffusionClient::encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels)
 {
     int out_len;
     stbi_flip_vertically_on_write(false);
@@ -267,52 +267,52 @@ std::vector<uint8_t> Diffuse::encode_png(const std::vector<uint8_t> &raw_data, c
 ControlNetPayload ControlNetPayload::get_preset_payload(int preset_num)
 {
     std::unordered_map<int, ControlNetPayload> presets = {
-        {1, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.5,
+        {1, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                               0.3, 0.8)},
-        {2, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.5,
+        {2, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                               0.3, 0.8)},
-        {3, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.5,
+        {3, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                               0.3, 0.8)},
-        {4, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.8,
+        {4, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.3, 0.8)},
-        {5, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.8,
+        {5, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.3, 0.8)},
-        {6, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M Karras", "canny", 2,
+        {6, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 2,
                               0.3, 0.8)},
-        {7, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M Karras", "canny", 2,
+        {7, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 2,
                               0.3, 0.8)},
-        {8, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.8,
+        {8, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.5, 0.8)},
-        {9, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.8,
+        {9, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.5, 0.8)},
-        {10, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M Karras", "canny", 2,
+        {10, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 2,
                                0.5, 0.8)},
-        {11, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M Karras", "canny", 2,
+        {11, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 2,
                                0.5, 0.8)},
-        {12, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.5,
+        {12, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                                1, 0.8)},
-        {13, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.8,
+        {13, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                                1, 0.8)},
-        {14, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M Karras", "canny", 1.5,
+        {14, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                                1, 0.8)},
         {15, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 5, 3, 512,
-                               512, "DPM++ SDE Karras", "canny", 1.5, 0.3, 0.8)},
+                               512, "DPM++ SDE", "canny", 1.5, 0.3, 0.8)},
         {16, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 5, 3, 512,
-                               512, "DPM++ SDE Karras", "canny", 1.8, 1, 0.8)},
+                               512, "DPM++ SDE", "canny", 1.8, 1, 0.8)},
         {17, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
-                               512, "DPM++ SDE Karras", "canny", 1.5, 0.3, 0.8)},
+                               512, "DPM++ SDE", "canny", 1.5, 0.3, 0.8)},
         {18, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
-                               512, "DPM++ SDE Karras", "canny", 1.8, 0.3, 0.8)},
+                               512, "DPM++ SDE", "canny", 1.8, 0.3, 0.8)},
         {19, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
-                               512, 512, "DPM++ SDE Karras", "canny", 2, 0.3, 0.8)},
+                               512, 512, "DPM++ SDE", "canny", 2, 0.3, 0.8)},
         {20, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
-                               512, "DPM++ SDE Karras", "canny", 1.8, 0.5, 0.8)},
+                               512, "DPM++ SDE", "canny", 1.8, 0.5, 0.8)},
         {21, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
-                               512, 512, "DPM++ SDE Karras", "canny", 2, 0.5, 0.8)},
+                               512, 512, "DPM++ SDE", "canny", 2, 0.5, 0.8)},
         {22, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
-                               512, 512, "DPM++ SDE Karras", "canny", 1.5, 1, 0.8)},
+                               512, 512, "DPM++ SDE", "canny", 1.5, 1, 0.8)},
         {23, ControlNetPayload("RealVisXL_V3.0.safetensors", "National Geographic Wildlife photo of ", 20, 7, 512, 512,
-                               "DPM++ 2M Karras", "canny", 2, 1, 0.8)},
+                               "DPM++ 2M", "canny", 2, 1, 0.8)},
     };
 
     if (presets.find(preset_num) == presets.end())
@@ -333,6 +333,7 @@ json ControlNetPayload::getPayload(const std::string &encoded_image, const std::
                     {"width", width},
                     {"height", height},
                     {"sampler_name", sampler_name},
+                    {"scheduler", "Karras"},
                     {"alwayson_scripts",
                      {{"ControlNet",
                        {{"args",
@@ -380,6 +381,7 @@ std::string ControlNetPayload::getControlNetModel(const std::string &model, cons
     return mapping[model][controlnet_module];
 }
 
+// changes the foundation model to a given model name
 void ControlNetClient::changeModel(const std::string &modelName)
 {
     if (modelName == this->modelName)
@@ -401,23 +403,30 @@ void ControlNetClient::changeModel(const std::string &modelName)
     this->modelName = modelName;
 }
 
-json ControlNetClient::txt2img(const json &payload)
+// sends a http POST request to the txt2img endpoint with the given payload
+bool ControlNetClient::txt2img(const json &payload, json &response)
 {
     http::Request request{url + "/sdapi/v1/txt2img"};
     const std::string body = payload.dump();
-    const auto response = request.send("POST", body, {{"Content-Type", "application/json"}});
-    if (response.status.code == 200)
+    const auto res = request.send("POST", body, {{"Content-Type", "application/json"}});
+    response = json::parse(res.body);
+    if (res.status.code == 200)
     {
-        return json::parse(response.body);
+        return true;
     }
     else
     {
-        return json{{"error", "Failed to get response"}};
+        std::cout << "API Response error! details: " << response << std::endl;
+        std::cout << "API Response error code: " << res.status.code << std::endl;
+        return false;
     }
 }
 
-std::vector<uint8_t> ControlNetClient::inference(int preset_payload_num, const std::vector<uint8_t> &raw_data,
-                                                 int width, int height, int channels, std::string animal, int retry)
+// runs inference with the given preset payload number and raw data
+std::vector<uint8_t> ControlNetClient::inference(int preset_payload_num,
+                                                 const std::vector<uint8_t> &raw_data,
+                                                 int width, int height, int channels,
+                                                 std::string animal, int retry)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
     std::vector<uint8_t> enlarge_data = enlarge_mask(raw_data, width, height);
@@ -425,32 +434,33 @@ std::vector<uint8_t> ControlNetClient::inference(int preset_payload_num, const s
 
     if (animal.empty())
     {
-        animal = ChatGPTClient::send_request(raw_data, width, height, channels);
+        ChatGPTClient chatGPTClient;
+        animal = chatGPTClient.send_request(raw_data, width, height, channels);
     }
 
     auto payload_dict = payload.getPayload(encoded_image, animal);
     changeModel(payload.model);
+    std::vector<uint8_t> result_image;
     for (int i = 0; i < retry; ++i)
     {
         try
         {
-            auto output = txt2img(payload_dict);
-            if (output.contains("error"))
+            json response;
+            if (!txt2img(payload_dict, response))
             {
-                throw std::runtime_error(output["error"]);
+                continue;
             }
-            auto result = base64_decode(std::string(output["images"][0]));
-            std::vector<uint8_t> result_image = decode_png(result, width, height, false);
-            return result_image;
+            auto result = base64_decode(std::string(response["images"][0]));
+            result_image = decode_png(result, width, height, false);
+            break;
         }
         catch (std::exception &e)
         {
             std::cerr << "Failed to run inference at iteration " << i << ": " << e.what() << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(1));
-            if (i == retry - 1)
-                throw;
         }
     }
+    return result_image;
 }
 
 json ChatGPTClient::send_request(const std::vector<uint8_t> &raw_data, const int width, const int height,
@@ -510,7 +520,7 @@ json ChatGPTClient::decode_response(const json &response)
     }
 }
 
-std::vector<uint8_t> decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV)
+std::vector<uint8_t> Client::decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV)
 {
     std::vector<uint8_t> data;
     if (useOpenCV)
@@ -534,7 +544,7 @@ std::vector<uint8_t> decode_png(const std::string &png_data, int &width, int &he
     return data;
 }
 
-std::string encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels)
+std::string Client::encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels)
 {
     int out_len;
     stbi_flip_vertically_on_write(false);
@@ -543,14 +553,14 @@ std::string encode_png(const std::vector<uint8_t> &raw_data, const int width, co
     return std::string("data:image/png;base64,") + base64_encode(std::string(data.begin(), data.end()));
 }
 
-std::vector<uint8_t> enlarge_mask(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration)
+std::vector<uint8_t> ControlNetClient::enlarge_mask(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration)
 {
     std::vector<uint8_t> mask_vec = mask;
     cv::Mat mask_mat = cv::Mat(height, width, CV_8UC1, mask_vec.data());
-    fs::path item_dir = "C:/repos/augmented_hand/resource/recordings/control_sd_dataset/018440";
-    cv::imwrite((item_dir / "tmp.png").string(), mask_mat);
-    printf("mask_mat: %d %d %d\n", mask_mat.rows, mask_mat.cols, mask_mat.channels());
-    printf("mask_mat_type: %d\n", mask_mat.type());
+    // fs::path item_dir = "../../resource/images";
+
+    // printf("mask_mat: %d %d %d\n", mask_mat.rows, mask_mat.cols, mask_mat.channels());
+    // printf("mask_mat_type: %d\n", mask_mat.type());
 
     std::vector<std::vector<cv::Point>> contours;
     std::vector<cv::Vec4i> hierarchy;
@@ -576,9 +586,8 @@ std::vector<uint8_t> enlarge_mask(const std::vector<uint8_t> &mask, int width, i
 
     cv::Mat mask_enlarged;
     cv::resize(mask_mat(rect), mask_enlarged, cv::Size(width, height), cv::INTER_NEAREST);
-
-    std::vector<uint8_t> mask_enlarged_buffer(mask_enlarged.data,
-                                              mask_enlarged.data + mask_enlarged.total() * mask_enlarged.elemSize());
+    // cv::imwrite((item_dir / "tmp.png").string(), mask_enlarged);
+    std::vector<uint8_t> mask_enlarged_buffer(mask_enlarged.begin<uint8_t>(), mask_enlarged.end<uint8_t>());
 
     return mask_enlarged_buffer;
 }

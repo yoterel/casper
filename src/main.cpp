@@ -3883,6 +3883,56 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
     {
         switch (es.bake_mode)
         {
+        case static_cast<int>(BakeMode::CONTROL_NET):
+        {
+            if (es.bakeRequest)
+            {
+                if (!es.sd_running)
+                {
+                    es.sd_running = true;
+                    // render a binary mask of the virtual hand
+                    sd_fbo.bind(true);
+                    if (es.use_mls || es.use_of)
+                        mls_fbo.getTexture()->bind();
+                    else
+                        hands_fbo.getTexture()->bind();
+                    // render
+                    set_texture_shader(textureShader, false, false, false, false, es.masking_threshold, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), false, es.mask_bg_color);
+                    fullScreenQuad.render(false, false, true);
+                    sd_fbo.unbind();
+                    std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
+                    if (sd_thread.joinable())
+                        sd_thread.join();
+                    sd_thread = std::thread([buf_mask]() { // send camera image to stable diffusion
+                        ControlNetClient control_net_client = ControlNetClient();
+                        std::vector<uint8_t> result_buffer = control_net_client.inference(1,
+                                                                                          buf_mask,
+                                                                                          512, 512, 1,
+                                                                                          "deer", 1);
+                        if (result_buffer.size() > 0)
+                        {
+                            es.img2img_data = result_buffer;
+                            es.bake_preproc_succeed = true;
+                        }
+                        es.sd_running = false;
+                    });
+                }
+                es.bakeRequest = false;
+            }
+            if (es.bake_preproc_succeed)
+            {
+                if (es.img2img_data.size() > 0)
+                {
+                    Texture *tmp = new Texture(GL_TEXTURE_2D);
+                    tmp->init(es.sd_outwidth, es.sd_outheight, 3);
+                    tmp->load(es.img2img_data.data(), true, GL_RGB);
+                    handleBakingInternal(shader_map, *tmp, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform, true, false, false, false);
+                    delete tmp;
+                }
+                es.bake_preproc_succeed = false;
+            }
+            break;
+        }
         case static_cast<int>(BakeMode::SD):
         {
             if (es.bakeRequest)
@@ -3935,11 +3985,11 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                         }
                         try
                         {
-                            es.img2img_data = Diffuse::img2img(myprompt.c_str(),
-                                                               es.sd_outwidth, es.sd_outheight,
-                                                               buf, buf_mask, es.diffuse_seed,
-                                                               1024, 1024, 1,
-                                                               512, 512, false, false, es.sd_mask_mode);
+                            es.img2img_data = StableDiffusionClient::img2img(myprompt.c_str(),
+                                                                             es.sd_outwidth, es.sd_outheight,
+                                                                             buf, buf_mask, es.diffuse_seed,
+                                                                             1024, 1024, 1,
+                                                                             512, 512, false, false, es.sd_mask_mode);
                             // if (saveIntermed)
                             // {
                             //     cv::Mat img2img_result = cv::Mat(sd_outheight, sd_outwidth, CV_8UC3, img2img_data.data()).clone();
@@ -6604,10 +6654,11 @@ void openIMGUIFrame()
         if (ImGui::TreeNode("Bake"))
         {
             ImGui::SeparatorText("Bake Mode");
+            ImGui::RadioButton("Control Net", &es.bake_mode, static_cast<int>(BakeMode::CONTROL_NET));
+            ImGui::SameLine();
             ImGui::RadioButton("Stable Diffusion", &es.bake_mode, static_cast<int>(BakeMode::SD));
             ImGui::SameLine();
             ImGui::RadioButton("From File", &es.bake_mode, static_cast<int>(BakeMode::FILE));
-            ImGui::SameLine();
             ImGui::RadioButton("Camera", &es.bake_mode, static_cast<int>(BakeMode::CAMERA));
             ImGui::SameLine();
             ImGui::RadioButton("Pose", &es.bake_mode, static_cast<int>(BakeMode::POSE));

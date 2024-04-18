@@ -11,7 +11,14 @@ using json = nlohmann::json;
 // python API: https://github.com/mix1009/sdwebuiapi/blob/main/webuiapi/webuiapi.py#L175
 // official docs: https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/API
 
-class Diffuse
+class Client
+{
+public:
+    std::vector<uint8_t> decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV = false);
+    std::string encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels = 3);
+};
+
+class StableDiffusionClient
 {
 public:
     static void print_backend_config();
@@ -40,20 +47,25 @@ public:
     static std::vector<uint8_t> encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels = 3);
 
 private:
-    Diffuse(){};
-    // std::string base64_decode(const std::string& input);
-    // bool is_base64(unsigned char c) {return (isalnum(c) || (c == '+') || (c == '/'));};
-    // std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    StableDiffusionClient(){};
 };
 
-class ChatGPTClient
+class ControlNetClient : public Client
 {
 public:
-    static json send_request(const std::vector<uint8_t> &raw_data, const int width, const int height,
-                             const int channels);
+    std::vector<uint8_t> inference(int preset_payload_num,
+                                   const std::vector<uint8_t> &raw_data,
+                                   int width, int height, int channels,
+                                   std::string animal = "", int retry = 1);
 
-    static json decode_response(const json &response);
+private:
+    void changeModel(const std::string &modelName);
+    bool txt2img(const json &payload, json &response);
+    std::vector<uint8_t> enlarge_mask(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration = 0.8);
+    std::string url = "http://127.0.0.1:7860";
+    std::string modelName;
 };
+
 class ControlNetPayload
 {
 public:
@@ -87,22 +99,14 @@ public:
     static ControlNetPayload get_preset_payload(int preset_num);
 };
 
-class ControlNetClient
+class ChatGPTClient : public Client
 {
 public:
-    void changeModel(const std::string &modelName);
-    json txt2img(const json &payload);
+    json send_request(const std::vector<uint8_t> &raw_data,
+                      const int width, const int height,
+                      const int channels);
 
-    std::vector<uint8_t> inference(int preset_payload_num, const std::vector<uint8_t> &raw_data, int width, int height,
-                                   int channels, std::string animal = "", int retry = 3);
-
-private:
-    std::string url = "http://132.67.246.185:7860";
-    std::string modelName;
+    json decode_response(const json &response);
 };
-
-std::vector<uint8_t> decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV = false);
-std::string encode_png(const std::vector<uint8_t> &raw_data, const int width, const int height, const int channels = 3);
-std::vector<uint8_t> enlarge_mask(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration = 0.8);
 
 #endif /* DIFFUSE_H */

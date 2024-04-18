@@ -80,6 +80,7 @@ enum class BakeMode
     FILE = 1,
     CAMERA = 2,
     POSE = 3,
+    CONTROL_NET = 4,
 };
 enum class MaterialMode
 {
