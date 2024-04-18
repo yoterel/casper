@@ -1,13 +1,48 @@
 #include "diffuse.h"
 #include <stdio.h>
+#include <filesystem>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"
 #include "stb_image_write.h"
 
 using namespace std::chrono;
+namespace fs = std::filesystem;
+
+void testStableDiffusion();
+void testControlNet();
 
 int main(int argc, char *argv[])
+{
+    testStableDiffusion();
+    testControlNet();
+    return 0;
+}
+
+void testControlNet()
+{
+    fs::path item_dir = "C:/repos/augmented_hand/resource/recordings/control_sd_dataset/018440";
+    fs::path mask_path = item_dir / "mask.png";
+
+    // Load input image
+    cv::Mat mask = cv::imread(mask_path.string(), cv::IMREAD_UNCHANGED);
+    cv::cvtColor(mask, mask, cv::COLOR_RGBA2GRAY);
+    std::vector<uint8_t> mask_buffer(mask.data, mask.data + mask.total() * mask.elemSize());
+
+    // Run inference
+    ControlNetClient control_net_client = ControlNetClient();
+    int payload_id = 1;
+    std::string animal = "butterfly";
+    std::vector<uint8_t> result_buffer =
+        control_net_client.inference(payload_id, mask_buffer, mask.cols, mask.rows, mask.channels(), animal);
+
+    // Save result
+    cv::Mat result_image = cv::Mat(512, 512, CV_8UC3, result_buffer.data());
+    cv::cvtColor(result_image, result_image, cv::COLOR_RGB2BGR);
+    cv::imwrite((item_dir / "result.png").string(), result_image);
+}
+
+void testStableDiffusion()
 {
     // txt2img
     int requested_width = 512;
@@ -50,5 +85,4 @@ int main(int argc, char *argv[])
     img2img_result = cv::Mat(img2img_height, img2img_width, CV_8UC3, img2img_data.data());
     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
     cv::imwrite("output_img2img.png", img2img_result);
-    return 0;
 }
