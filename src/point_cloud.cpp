@@ -111,6 +111,7 @@ void PointCloud::init(std::vector<float> &verts)
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
+
 void PointCloud::render(float pointSize)
 {
     glPointSize(pointSize);
@@ -119,6 +120,34 @@ void PointCloud::render(float pointSize)
     glDisable(GL_BLEND);
     glBindVertexArray(m_VAO);
     glDrawArrays(GL_POINTS, 0, m_verts);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+    glBindVertexArray(0);
+}
+
+void PointCloud::renderAsLineLoop(float lineWidth)
+{
+    glLineWidth(lineWidth);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glBindVertexArray(m_VAO);
+    glDrawArrays(GL_LINE_LOOP, 0, m_verts);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+    glBindVertexArray(0);
+}
+
+void PointCloud::renderAsLines(float lineWidth)
+{
+    glLineWidth(lineWidth);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glBindVertexArray(m_VAO);
+    glDrawArrays(GL_LINES, 0, m_verts);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);

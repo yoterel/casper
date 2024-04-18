@@ -22,11 +22,6 @@
                         "name": "PATH",
                         "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}",
                     },
-                    // the following is a terrible hack to get python embedding with conda env to work
-                    // use set PYTHONPATH="C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages"
-                    // for this to work in terminal
-                    // "name": "PYTHONPATH",
-                    // "value": "C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages",//"${env:PYTHONPATH}:${command:cmake.getLaunchTargetDirectory}"
                     // set PYTHONHOME=C:/Users/sens/AppData/Local/Programs/Python/Python311
                     {
                         "name": "PYTHONHOME",
@@ -55,11 +50,6 @@
                         "name": "PATH",
                         "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}",
                     },
-                    // the following is a terrible hack to get python embedding with conda env to work
-                    // use set PYTHONPATH="C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages"
-                    // for this to work in terminal
-                    // "name": "PYTHONPATH",
-                    // "value": "C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages",//"${env:PYTHONPATH}:${command:cmake.getLaunchTargetDirectory}"
                     // set PYTHONHOME=C:/Users/sens/AppData/Local/Programs/Python/Python311
                     {
                         "name": "PYTHONHOME",
@@ -89,11 +79,6 @@
                         "name": "PATH",
                         "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}",
                     },
-                    // the following is a terrible hack to get python embedding with conda env to work
-                    // use set PYTHONPATH="C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages"
-                    // for this to work in terminal
-                    // "name": "PYTHONPATH",
-                    // "value": "C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages",//"${env:PYTHONPATH}:${command:cmake.getLaunchTargetDirectory}"
                     // set PYTHONHOME=C:/Users/sens/AppData/Local/Programs/Python/Python311
                     {
                         "name": "PYTHONHOME",
@@ -122,11 +107,6 @@
                         "name": "PATH",
                         "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}",
                     },
-                    // the following is a terrible hack to get python embedding with conda env to work
-                    // use set PYTHONPATH="C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages"
-                    // for this to work in terminal
-                    // "name": "PYTHONPATH",
-                    // "value": "C:/Users/sens/.conda/envs/sandbox/DLLs;C:/Users/sens/.conda/envs/sandbox/Lib;C:/Users/sens/.conda/envs/sandbox/Lib/site-packages",//"${env:PYTHONPATH}:${command:cmake.getLaunchTargetDirectory}"
                     // set PYTHONHOME=C:/Users/sens/AppData/Local/Programs/Python/Python311
                     {
                         "name": "PYTHONHOME",

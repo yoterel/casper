@@ -32,6 +32,7 @@ public:
     static glm::vec2 project_point(glm::vec3 point, glm::mat4 mvp);
     static glm::vec2 project_point(glm::vec3 point, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static std::vector<glm::vec2> project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
+    static glm::vec3 project_point_w_depth(glm::vec3 point, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static std::vector<glm::vec3> project_points_w_depth(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupFrustrumBuffers(unsigned int &VAO, unsigned int &VBO);
