@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
 void testControlNet()
 {
     fs::path item_dir = "../../resource/images";
-    fs::path mask_path = item_dir / "mask_single.png";
+    fs::path mask_path = item_dir / "mask_dual.png";
     // Load input image
     cv::Mat mask = cv::imread(mask_path.string(), cv::IMREAD_UNCHANGED);
     cv::cvtColor(mask, mask, cv::COLOR_RGBA2GRAY);
