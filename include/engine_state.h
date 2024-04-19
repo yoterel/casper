@@ -359,12 +359,12 @@ public:
     // of controls
     bool use_of = false;
     bool show_of = false;
-    int of_mode = static_cast<int>(OFMode::FB_GPU);
+    int of_mode = static_cast<int>(OFMode::FB_CPU);
     uint64_t totalFrameCountOF = 0;
     int of_resize_factor = 2;
     int of_resize_factor_exp = 1;
     cv::Size of_downsize = cv::Size(cam_width / of_resize_factor, cam_height / of_resize_factor);
-    int of_roi = 10;
-    std::vector<cv::Mat> of_debug;
+    int of_roi = 20;
+    std::vector<glm::vec2> of_debug;
 };
 #endif // ENGINE_STATE_H
