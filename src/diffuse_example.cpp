@@ -31,13 +31,14 @@ void testControlNet()
     ControlNetClient control_net_client = ControlNetClient();
     int preset_id = 1;
     std::string animal = "butterfly";
-    std::vector<uint8_t> result_buffer = control_net_client.inference(preset_id,
-                                                                      mask_buffer,
-                                                                      mask.cols, mask.rows, mask.channels(),
-                                                                      animal, 1);
+    std::vector<uint8_t> result_buffer;
+    bool success = control_net_client.inference(mask_buffer, result_buffer,
+                                                preset_id,
+                                                mask.cols, mask.rows, mask.channels(),
+                                                animal, 1);
 
     // Save result
-    if (result_buffer.size() > 0)
+    if (success)
     {
         cv::Mat result_image = cv::Mat(512, 512, CV_8UC3, result_buffer.data());
         cv::cvtColor(result_image, result_image, cv::COLOR_RGB2BGR);

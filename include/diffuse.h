@@ -53,10 +53,11 @@ private:
 class ControlNetClient : public Client
 {
 public:
-    std::vector<uint8_t> inference(int preset_payload_num,
-                                   const std::vector<uint8_t> &raw_data,
-                                   int width, int height, int channels,
-                                   std::string animal = "", int retry = 1);
+    bool inference(const std::vector<uint8_t> &raw_data,
+                   std::vector<uint8_t> &out_data,
+                   int preset_payload_num,
+                   int width, int height, int channels,
+                   std::string animal = "", bool fit_to_view = true);
 
 private:
     void changeModel(const std::string &modelName);

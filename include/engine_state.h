@@ -95,7 +95,6 @@ public:
     std::string extraMeshFile;
     // bake/sd controls
     bool bakeRequest = false;
-    bool deformedBaking = false;
     bool bake_preproc_succeed = false;
     bool sd_running = false;
     int sd_mode = static_cast<int>(SDMode::PROMPT);
@@ -106,22 +105,24 @@ public:
     std::vector<uint8_t> img2img_data;
     int diffuse_seed = -1;
     std::vector<std::string> animals{
-        "a fish",
-        "an elephant",
-        "a giraffe",
-        "a tiger",
-        "a lion",
-        "a cat",
-        "a dog",
-        "a horse",
-        "a cow",
-        "a sheep",
-        "a pig",
-        "a rabbit",
-        "a squirrel",
-        "a monkey",
-        "a gorilla",
-        "a panda"};
+        "butterfly",
+        "deer",
+        "fish",
+        "elephant",
+        "giraffe",
+        "tiger",
+        "lion",
+        "cat",
+        "dog",
+        "horse",
+        "cow",
+        "sheep",
+        "pig",
+        "rabbit",
+        "squirrel",
+        "monkey",
+        "gorilla",
+        "panda"};
     // game controls
     bool showGameHint = false;
     int gameSessionType = static_cast<int>(GameSessionType::A);

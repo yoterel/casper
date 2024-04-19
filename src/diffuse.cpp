@@ -423,14 +423,23 @@ bool ControlNetClient::txt2img(const json &payload, json &response)
 }
 
 // runs inference with the given preset payload number and raw data
-std::vector<uint8_t> ControlNetClient::inference(int preset_payload_num,
-                                                 const std::vector<uint8_t> &raw_data,
-                                                 int width, int height, int channels,
-                                                 std::string animal, int retry)
+bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
+                                 std::vector<uint8_t> &out_data,
+                                 int preset_payload_num,
+                                 int width, int height, int channels,
+                                 std::string animal, bool fit_to_view)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
-    std::vector<uint8_t> enlarge_data = enlarge_mask(raw_data, width, height);
-    auto encoded_image = encode_png(enlarge_data, width, height, channels);
+    std::string encoded_image;
+    if (fit_to_view)
+    {
+        std::vector<uint8_t> enlarge_data = enlarge_mask(raw_data, width, height);
+        encoded_image = encode_png(enlarge_data, width, height, channels);
+    }
+    else
+    {
+        encoded_image = encode_png(raw_data, width, height, channels);
+    }
 
     if (animal.empty())
     {
@@ -441,26 +450,22 @@ std::vector<uint8_t> ControlNetClient::inference(int preset_payload_num,
     auto payload_dict = payload.getPayload(encoded_image, animal);
     changeModel(payload.model);
     std::vector<uint8_t> result_image;
-    for (int i = 0; i < retry; ++i)
+    try
     {
-        try
+        json response;
+        if (!txt2img(payload_dict, response))
         {
-            json response;
-            if (!txt2img(payload_dict, response))
-            {
-                continue;
-            }
-            auto result = base64_decode(std::string(response["images"][0]));
-            result_image = decode_png(result, width, height, false);
-            break;
+            return false;
         }
-        catch (std::exception &e)
-        {
-            std::cerr << "Failed to run inference at iteration " << i << ": " << e.what() << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
+        std::string result = base64_decode(std::string(response["images"][0]));
+        out_data = decode_png(result, width, height, false);
+        return true;
     }
-    return result_image;
+    catch (std::exception &e)
+    {
+        std::cerr << "Failed to run inference: " << e.what() << std::endl;
+        return false;
+    }
 }
 
 json ChatGPTClient::send_request(const std::vector<uint8_t> &raw_data, const int width, const int height,
