@@ -1,4 +1,4 @@
-#include "guess_char_game.h"
+#include "guess_animal_game.h"
 
 GuessAnimalGame::GuessAnimalGame()
 {
