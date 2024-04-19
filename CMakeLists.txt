@@ -93,6 +93,7 @@ add_executable(ahand
     src/MidiControllerAPI.cpp
     src/guess_pose_game.cpp
     src/guess_char_game.cpp
+    src/guess_animal_game.cpp
     src/dear_widgets.cpp
     third-party/imgui/imgui.cpp
     third-party/imgui/imgui_draw.cpp

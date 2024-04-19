@@ -42,6 +42,7 @@
 #include "user_study.h"
 #include "guess_pose_game.h"
 #include "guess_char_game.h"
+#include "guess_animal_game.h"
 #include "grid.h"
 #include "moving_least_squares.h"
 #include "MidiControllerAPI.h"
@@ -126,6 +127,12 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          TextModel &textModel,
                          glm::mat4 &cam_view_transform,
                          glm::mat4 &cam_projection_transform);
+void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                           SkinnedModel &leftHandModel,
+                           SkinnedModel &rightHandModel,
+                           TextModel &textModel,
+                           glm::mat4 &cam_view_transform,
+                           glm::mat4 &cam_projection_transform);
 void handleUserStudy(std::unordered_map<std::string, Shader *> &shader_map,
                      GLFWwindow *window,
                      SkinnedModel &leftHandModel,
@@ -234,6 +241,7 @@ Timer t_camera, t_leap, t_skin, t_swap, t_download, t_app, t_misc, t_debug, t_pp
 std::thread sd_thread, mls_thread;
 GuessPoseGame guessPoseGame = GuessPoseGame();
 GuessCharGame guessCharGame = GuessCharGame();
+GuessAnimalGame guessAnimalGame = GuessAnimalGame();
 UserStudy user_study = UserStudy();
 ControlNetClient controlNetClient = ControlNetClient();
 // record & playback controls
@@ -411,6 +419,7 @@ int main(int argc, char *argv[])
             {"leap_calib", static_cast<int>(OperationMode::LEAP)},
             {"guess_char_game", static_cast<int>(OperationMode::GUESS_CHAR_GAME)},
             {"guess_pose_game", static_cast<int>(OperationMode::GUESS_POSE_GAME)},
+            {"guess_animal_game", static_cast<int>(OperationMode::GUESS_ANIMAL_GAME)},
             {"simulation", static_cast<int>(OperationMode::SIMULATION)}};
         // check if mode is valid
         if (mode_map.find(result["mode"].as<std::string>()) == mode_map.end())
@@ -585,6 +594,15 @@ int main(int argc, char *argv[])
         es.vid_simulated_latency_ms = 35.0f;
         es.jfa_distance_threshold = 100.0f;
         es.use_mls = false;
+        break;
+    }
+    case static_cast<int>(OperationMode::GUESS_ANIMAL_GAME):
+    {
+        es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+        es.texture_mode = static_cast<int>(TextureMode::BAKED);
+        es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+        // es.use_mls = false;
+        // es.use_of = false;
         break;
     }
     case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
@@ -1001,6 +1019,11 @@ int main(int argc, char *argv[])
         case static_cast<int>(OperationMode::GUESS_CHAR_GAME): // a game to guess which character is shown on backhand as quickly as possible
         {
             handleGuessCharGame(shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
+            break;
+        }
+        case static_cast<int>(OperationMode::GUESS_ANIMAL_GAME): // a game to guess which character is shown on backhand as quickly as possible
+        {
+            handleGuessAnimalGame(shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera todo: move to seperate handler
@@ -4836,6 +4859,17 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones2world_left_cur,
     return true;
 }
 
+void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                           SkinnedModel &leftHandModel,
+                           SkinnedModel &rightHandModel,
+                           TextModel &textModel,
+                           glm::mat4 &cam_view_transform,
+                           glm::mat4 &cam_projection_transform)
+{
+    if (!guessAnimalGame.isInitialized())
+        return;
+}
+
 void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          SkinnedModel &leftHandModel,
                          SkinnedModel &rightHandModel,
@@ -5964,6 +5998,18 @@ void openIMGUIFrame()
                                                           es.proj_width, es.proj_height,
                                                           es.cam_width, es.cam_height);
                 }
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Guess Animal Game", &es.operation_mode, static_cast<int>(OperationMode::GUESS_ANIMAL_GAME)))
+            {
+                leap.setImageMode(false);
+                leap.setPollMode(false);
+                // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+                es.texture_mode = static_cast<int>(TextureMode::BAKED);
+                es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+                es.exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(es.exposure);
             }
             ImGui::TreePop();
         }
