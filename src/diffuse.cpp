@@ -451,8 +451,8 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     std::string encoded_image;
     if (fit_to_view)
     {
-        std::vector<uint8_t> enlarge_data = enlarge_mask(raw_data, width, height);
-        encoded_image = encode_png(enlarge_data, width, height, channels);
+        std::vector<uint8_t> enlarged_data = fit_mask_to_view(raw_data, width, height);
+        encoded_image = encode_png(enlarged_data, width, height, channels);
     }
     else
     {
@@ -576,7 +576,7 @@ std::string Client::encode_png(const std::vector<uint8_t> &raw_data, const int w
     return std::string("data:image/png;base64,") + base64_encode(std::string(data.begin(), data.end()));
 }
 
-std::vector<uint8_t> ControlNetClient::enlarge_mask(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration)
+std::vector<uint8_t> ControlNetClient::fit_mask_to_view(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration)
 {
     std::vector<uint8_t> mask_vec = mask;
     cv::Mat mask_mat = cv::Mat(height, width, CV_8UC1, mask_vec.data());

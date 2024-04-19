@@ -64,7 +64,7 @@ public:
 private:
     void changeModel(const std::string &modelName);
     bool txt2img(const json &payload, json &response);
-    std::vector<uint8_t> enlarge_mask(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration = 0.8);
+    std::vector<uint8_t> fit_mask_to_view(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration = 0.8);
     std::string url = "http://127.0.0.1:7860";
     std::string modelName;
 };
