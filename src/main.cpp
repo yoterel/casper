@@ -21,9 +21,12 @@
 #include "timer.h"
 #include "point_cloud.h"
 #include "leapCPP.h"
+#include "stubs.h"
+#ifdef OPENCV_WITH_CUDA
 #include "opencv2/cudawarping.hpp"
 #include "opencv2/cudaimgproc.hpp"
 #include "opencv2/cudaoptflow.hpp"
+#endif
 #include "text.h"
 #include "post_process.h"
 #include "utils.h"
@@ -287,10 +290,16 @@ GLCamera gl_camera;
 cv::Mat camImagePrev;
 cv::Mat flow, rawFlow;
 cv::Mat camImage, camImageOrig, undistort_map1, undistort_map2;
+#ifdef OPENCV_WITH_CUDA
 cv::cuda::GpuMat gcur, gprev;
 cv::cuda::GpuMat gflow;
 cv::Ptr<cv::cuda::FarnebackOpticalFlow> fbof;
 cv::Ptr<cv::cuda::NvidiaOpticalFlow_2_0> nvof;
+#else
+GPUMATStub gcur, gprev, gflow;
+OFStub *fbof = nullptr;
+OFStub *nvof = nullptr;
+#endif
 glm::mat4 w2c_auto, w2c_user;
 glm::mat4 proj_project;
 glm::mat4 cam_project;
@@ -4563,18 +4572,26 @@ void updateOFParams()
     {
         gprev.upload(camImagePrev);
         gflow.upload(flow);
+#ifdef OPENCV_WITH_CUDA
         fbof = cv::cuda::FarnebackOpticalFlow::create(5, 0.5, false, 15, 3, 5, 1.2, cv::OPTFLOW_USE_INITIAL_FLOW);
+#else
+        fbof = nullptr;
+#endif
         break;
     }
     case static_cast<int>(OFMode::NV_GPU):
     {
-        // flow = cv::Mat(es.of_downsize, CV_32FC2);
+// flow = cv::Mat(es.of_downsize, CV_32FC2);
+#ifdef OPENCV_WITH_CUDA
         nvof = cv::cuda::NvidiaOpticalFlow_2_0::create(es.of_downsize,
                                                        cv::cuda::NvidiaOpticalFlow_2_0::NV_OF_PERF_LEVEL_SLOW,
                                                        cv::cuda::NvidiaOpticalFlow_2_0::NV_OF_OUTPUT_VECTOR_GRID_SIZE_1,
                                                        cv::cuda::NvidiaOpticalFlow_2_0::NV_OF_HINT_VECTOR_GRID_SIZE_1,
                                                        true, // set to true !
                                                        false);
+#else
+        nvof = nullptr;
+#endif
         // int gridSize = nvof->getGridSize();
         // std::cout << "gridSize: " << gridSize << std::endl;
         flow = cv::Mat(es.of_downsize, CV_16FC2);
