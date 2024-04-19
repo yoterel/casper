@@ -3,8 +3,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
 set(Python_EXECUTABLE "C:/Users/sens/AppData/Local/Programs/Python/Python311/python.exe")  # replace with a python environment with numpy, mediapipe, and dev tools installed
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
-set(OpenCV_DIR "C:/OpenCV/build/install")  # replace with opencv install path (e.g. "${CMAKE_SOURCE_DIR}/third-party/opencv")
-set(OPENCV_COMPILER "vc16")  # replace with opencv compiler
+set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")  # replace with opencv install path (e.g. "${CMAKE_SOURCE_DIR}/third-party/opencv" or "C:/OpenCV/build/install")
 file(TO_CMAKE_PATH "$ENV{CUDA_PATH}" CUDA_TOOLKIT_ROOT_DIR)  # replaces # set(CUDA_TOOLKIT_ROOT_DIR $ENV{CUDA_PATH}) for normalizing the path
 cmake_policy(SET CMP0074 NEW)  # respect <PACKAGE>_ROOT variables in "find_package"
 # add_compile_definitions(CV_IGNORE_DEBUG_BUILD_GUARD)
@@ -14,7 +13,13 @@ find_package(Python 3.9 COMPONENTS Interpreter Development NumPy REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
 find_package(OpenCV 4.6.0 EXACT REQUIRED)
 find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
-# message(PYTHON_FOUND="${Python_FOUND}")
+if(DEFINED OpenCV_CUDA_VERSION)
+    add_compile_definitions(OPENCV_WITH_CUDA)
+    message("OpenCV was compiled with CUDA")
+endif()
+# message(OpenCV_CUDA_VERSION="${OpenCV_CUDA_VERSION}")
+# message(OpenCV_COMPUTE_CAPABILITIES="${OpenCV_COMPUTE_CAPABILITIES}")
+# message(OpenCV_RUNTIME="${OpenCV_RUNTIME}")
 # message(Python_Interpreter_FOUND="${Python_Interpreter_FOUND}")
 # message(Python_EXECUTABLE="${Python_EXECUTABLE}")
 # message(Python_STDLIB="${Python_STDLIB}")
@@ -370,7 +375,7 @@ target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-
 # target_include_directories(benchmark_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
 # target_link_libraries(benchmark_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
 ######################################### post build copy dlls
-file(GLOB OPENCV_DLLS "${OpenCV_DIR}/x64/${OPENCV_COMPILER}/bin/*.dll")
+file(GLOB OPENCV_DLLS "${OpenCV_DIR}/x64/${OpenCV_RUNTIME}/bin/*.dll")
 # message(OPENCV_DLLS="${OPENCV_DLLS}")
 list(LENGTH OPENCV_DLLS RES_LEN)
 if(NOT RES_LEN EQUAL 0)
