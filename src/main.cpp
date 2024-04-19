@@ -3241,16 +3241,8 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::CAM_FEED):
     {
-        if (es.use_of && es.show_of)
-        {
-            set_texture_shader(textureShader, true, true, false, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
-            OFTexture->bind();
-        }
-        else
-        {
-            set_texture_shader(textureShader, true, true, true, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
-            camTexture.bind();
-        }
+        set_texture_shader(textureShader, true, true, true, es.threshold_flag || es.threshold_flag2, es.masking_threshold);
+        camTexture.bind();
         postprocess_fbo.bind();
         fullScreenQuad.render();
         postprocess_fbo.unbind();
@@ -3329,8 +3321,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         vcolorShader->use();
         for (int i = 0; i < es.of_debug.size(); i++)
         {
-            cv::Mat flow = es.of_debug[i];
-            cv::Scalar avg_flow = cv::mean(flow);
+            glm::vec2 avg_flow = es.of_debug[i];
             glm::vec2 pointq = Helpers::NDCtoScreen(ControlPointsQ_glm[i], es.of_downsize.width, es.of_downsize.height);
             std::vector<glm::vec2> square_endpoints =
                 {
@@ -3345,7 +3336,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
             std::vector<glm::vec2> dv_endpoints =
                 {
                     pointq,
-                    glm::vec2(pointq.x + avg_flow[0], pointq.y + avg_flow[1]),
+                    glm::vec2(pointq.x + 5 * avg_flow[0], pointq.y + 5 * avg_flow[1]),
                 };
             dv_endpoints = Helpers::ScreenToNDC(dv_endpoints, es.of_downsize.width, es.of_downsize.height);
             PointCloud dv(dv_endpoints, es.screen_verts_color_red);
@@ -4618,13 +4609,10 @@ void handleOF(Shader *gridShader)
     if (es.use_of)
     {
         cv::Mat image;
+        cv::flip(camImageOrig, image, 1); // flip horizontally
         if (es.of_resize_factor != 1)
         {
-            cv::resize(camImageOrig, image, es.of_downsize);
-        }
-        else
-        {
-            image = camImageOrig;
+            cv::resize(image, image, es.of_downsize);
         }
         switch (es.of_mode)
         {
@@ -4662,7 +4650,7 @@ void handleOF(Shader *gridShader)
         es.totalFrameCountOF += 1;
         // move control points using the flow
         // std::vector<glm::vec2> cp = Helpers::NDCtoScreen(ControlPointsP_glm, es.of_downsize.width, es.of_downsize.height);
-        std::vector<glm::vec2> cq = Helpers::NDCtoScreen(ControlPointsQ_glm, es.of_downsize.width, es.of_downsize.height);
+        std::vector<glm::vec2> cq = Helpers::NDCtoScreen(ControlPointsQ_glm, es.of_downsize.width, es.of_downsize.height, true);
         if (cq.size() > 0)
         {
             es.of_debug.clear();
@@ -4674,32 +4662,34 @@ void handleOF(Shader *gridShader)
                 cv::Mat roi_flow = flow(cv::Rect(static_cast<int>(std::round(q.x - (es.of_roi / 2))),
                                                  static_cast<int>(std::round(q.y - (es.of_roi / 2))),
                                                  es.of_roi,
-                                                 es.of_roi));
-                bool test = true;
+                                                 es.of_roi))
+                                       .clone();
+                bool test = false;
                 if (test && i == 3)
                 {
-                    float factor = 4.0f;
-                    cv::Rect myrect = cv::Rect(static_cast<int>(std::round(q.x - (es.of_roi * 2))),
-                                               static_cast<int>(std::round(q.y - (es.of_roi * 2))),
+                    float factor = 2.0f;
+                    float factor_half = factor / 2.0f;
+                    cv::Rect myrect = cv::Rect(static_cast<int>(std::round(q.x - (es.of_roi * factor_half))),
+                                               static_cast<int>(std::round(q.y - (es.of_roi * factor_half))),
                                                static_cast<int>(std::round(es.of_roi * factor)),
                                                static_cast<int>(std::round(es.of_roi * factor)));
-                    std::cout << myrect.x << " " << myrect.y << " " << myrect.width << " " << myrect.height << std::endl;
+                    // std::cout << myrect.x << " " << myrect.y << " " << myrect.width << " " << myrect.height << std::endl;
                     cv::Mat roi_image = image(myrect);
                     cv::Mat roi_image_rgb;
                     cv::cvtColor(roi_image, roi_image_rgb, cv::COLOR_GRAY2RGB);
-                    for (int y = 0; y < roi_flow.rows - 1; y += 1)
-                    {
-                        for (int x = 0; x < roi_flow.cols - 1; x += 1)
-                        {
-                            // if (mask.at<uchar>(y, x) == 0)
-                            //     continue;
-                            float realx = x + ((1.0f - (1.0f / factor)) / 2.0f);
-                            float realy = y + ((1.0f - (1.0f / factor)) / 2.0f);
-                            const cv::Point2f flowatxy = roi_flow.at<cv::Point2f>(y, x);
-                            cv::line(roi_image_rgb, cv::Point(realx, realy), cv::Point(realx + flowatxy.x, realy + flowatxy.y), cv::Scalar(0, 255, 0), 1);
-                            // cv::circle(roi_image_rgb, cv::Point(x, y), 1, cv::Scalar(0, 0, 255), -1);
-                        }
-                    }
+                    // for (int y = 0; y < roi_flow.rows - 1; y += 1)
+                    // {
+                    //     for (int x = 0; x < roi_flow.cols - 1; x += 1)
+                    //     {
+                    //         // if (mask.at<uchar>(y, x) == 0)
+                    //         //     continue;
+                    //         float realx = x + ((1.0f - (1.0f / factor)) / 2.0f);
+                    //         float realy = y + ((1.0f - (1.0f / factor)) / 2.0f);
+                    //         const cv::Point2f flowatxy = roi_flow.at<cv::Point2f>(y, x);
+                    //         cv::line(roi_image_rgb, cv::Point(realx, realy), cv::Point(realx + flowatxy.x, realy + flowatxy.y), cv::Scalar(0, 255, 0), 1);
+                    //         // cv::circle(roi_image_rgb, cv::Point(x, y), 1, cv::Scalar(0, 0, 255), -1);
+                    //     }
+                    // }
                     cv::imwrite("roi.png", roi_image_rgb);
                 }
                 // std::vector<cv::Point2f> raw_data(roi_rect.begin<cv::Point2f>(), roi_rect.end<cv::Point2f>());
@@ -4709,15 +4699,16 @@ void handleOF(Shader *gridShader)
                 //     std::cout << raw_data[i].x << " " << raw_data[i].y << std::endl;
                 // }
                 cv::Scalar avg_flow = cv::mean(roi_flow);
-                glm::vec2 dxdy(avg_flow[1], avg_flow[0]);
+                glm::vec2 dxdy(avg_flow[0], avg_flow[1]);
                 // cp[i] = p + dxdy;
                 cq[i] = q + dxdy;
-                es.of_debug.push_back(roi_flow);
+                es.of_debug.push_back(glm::vec2(avg_flow[0], -avg_flow[1]));
             }
             // ControlPointsP_glm = Helpers::ScreenToNDC(cp, es.of_downsize.width, es.of_downsize.height);
-            ControlPointsQ_glm = Helpers::ScreenToNDC(cq, es.of_downsize.width, es.of_downsize.height);
+            ControlPointsQ_glm = Helpers::ScreenToNDC(cq, es.of_downsize.width, es.of_downsize.height, true);
+            ControlPointsP_glm = Helpers::vec3to2(projected_filtered_left);
             // compute new deformation
-            cv::Mat fv = computeGridDeformation(Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left)), Helpers::glm2cv(ControlPointsQ_glm), es.deformation_mode, es.mls_alpha, deformationGrid);
+            cv::Mat fv = computeGridDeformation(Helpers::glm2cv(ControlPointsP_glm), Helpers::glm2cv(ControlPointsQ_glm), es.deformation_mode, es.mls_alpha, deformationGrid);
             // update grid points for render
             deformationGrid.constructDeformedGridSmooth(fv, es.mls_grid_smooth_window);
             deformationGrid.updateGLBuffers();
