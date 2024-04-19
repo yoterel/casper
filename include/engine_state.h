@@ -97,13 +97,16 @@ public:
     bool bakeRequest = false;
     bool bake_preproc_succeed = false;
     bool sd_running = false;
-    int sd_mode = static_cast<int>(SDMode::PROMPT);
+    int sd_mode = static_cast<int>(SDMode::MANUAL_PROMPT);
     int bake_mode = static_cast<int>(BakeMode::SD);
+    int controlnet_preset = 0;
     int sd_mask_mode = 2;
     bool saveIntermed = false;
     int sd_outwidth, sd_outheight;
     std::vector<uint8_t> img2img_data;
     int diffuse_seed = -1;
+    std::string cur_prompt = "";
+    std::string manual_prompt = "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin";
     std::vector<std::string> animals{
         "butterfly",
         "deer",
@@ -123,6 +126,11 @@ public:
         "monkey",
         "gorilla",
         "panda"};
+    std::vector<std::string> listedPrompts{
+        "butterfly",
+        "deer",
+        "fish"};
+    std::string selected_listed_prompt = listedPrompts[0];
     // game controls
     bool showGameHint = false;
     int gameSessionType = static_cast<int>(GameSessionType::A);
@@ -299,7 +307,6 @@ public:
     std::string bakeFileLeft = "../../resource/baked_textures/baked_left.png";
     std::string bakeFileRight = "../../resource/baked_textures/baked_right.png";
     std::string userTextureFile = "../../resource/images/uv.png";
-    std::string sd_prompt = "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin";
     std::vector<std::string> texturePaths{
         "../../resource",
         "../../resource/images",

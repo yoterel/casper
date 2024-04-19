@@ -71,8 +71,10 @@ enum class TextureMode
 };
 enum class SDMode
 {
-    PROMPT = 0,
-    ANIMAL = 1,
+    MANUAL_PROMPT = 0,
+    AUTO_PROMPT = 1,
+    FROM_LIST = 2,
+    RANDOM_ANIMAL = 3,
 };
 enum class BakeMode
 {

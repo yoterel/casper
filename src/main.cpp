@@ -3829,9 +3829,11 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                         // std::vector<uint8_t> result_buffer;
                         bool success = controlNetClient.inference(buf_mask,
                                                                   es.img2img_data,
-                                                                  1,
+                                                                  es.controlnet_preset,
                                                                   512, 512, 1,
-                                                                  "deer", false);
+                                                                  es.diffuse_seed,
+                                                                  es.cur_prompt,
+                                                                  false);
                         if (success)
                         {
                             std::cout << "ControlNet inference successful" << std::endl;
@@ -3891,25 +3893,9 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     if (sd_thread.joinable())
                         sd_thread.join();
                     sd_thread = std::thread([buf, buf_mask, cam_cv]() { // send camera image to stable diffusion
-                        std::string myprompt;
-                        std::vector<std::string> random_animal;
-                        switch (es.sd_mode)
-                        {
-                        case static_cast<int>(SDMode::ANIMAL):
-                            std::sample(es.animals.begin(),
-                                        es.animals.end(),
-                                        std::back_inserter(random_animal),
-                                        1,
-                                        std::mt19937{std::random_device{}()});
-                            myprompt = random_animal[0];
-                            break;
-                        default:
-                            myprompt = es.sd_prompt;
-                            break;
-                        }
                         try
                         {
-                            es.img2img_data = StableDiffusionClient::img2img(myprompt.c_str(),
+                            es.img2img_data = StableDiffusionClient::img2img(es.cur_prompt,
                                                                              es.sd_outwidth, es.sd_outheight,
                                                                              buf, buf_mask, es.diffuse_seed,
                                                                              512, 512, 1,
@@ -6541,7 +6527,41 @@ void openIMGUIFrame()
             ImGui::InputText("Bake texture file (left)", &es.bakeFileLeft);
             if (ImGui::Button("Bake"))
             {
-                if (es.bake_mode == static_cast<int>(BakeMode::FILE))
+                switch (es.sd_mode)
+                {
+                case static_cast<int>(SDMode::MANUAL_PROMPT):
+                {
+                    es.cur_prompt = es.manual_prompt;
+                    break;
+                }
+                case static_cast<int>(SDMode::AUTO_PROMPT):
+                {
+                    es.cur_prompt = "";
+                    break;
+                }
+                case static_cast<int>(SDMode::FROM_LIST):
+                {
+                    es.cur_prompt = es.selected_listed_prompt;
+                    break;
+                }
+                case static_cast<int>(SDMode::RANDOM_ANIMAL):
+                {
+                    std::vector<std::string> random_animal;
+                    std::sample(es.animals.begin(),
+                                es.animals.end(),
+                                std::back_inserter(random_animal),
+                                1,
+                                std::mt19937{std::random_device{}()});
+                    es.cur_prompt = random_animal[0];
+                    break;
+                }
+                default:
+                    es.cur_prompt = es.manual_prompt;
+                    break;
+                }
+                switch (es.bake_mode)
+                {
+                case static_cast<int>(BakeMode::FILE):
                 {
                     fs::path inputBakeFilePath{es.inputBakeFile};
                     if (fs::exists(inputBakeFilePath))
@@ -6551,22 +6571,46 @@ void openIMGUIFrame()
                             es.bakeRequest = true;
                         }
                     }
+                    break;
                 }
-                else
+                default:
                 {
                     es.bakeRequest = true;
+                    break;
+                }
                 }
             }
             ImGui::SameLine();
             ImGui::Checkbox("Save Intermediate Outputs", &es.saveIntermed);
-            ImGui::SeparatorText("Stable Diffusion");
-            ImGui::InputInt("Diffuse Seed", &es.diffuse_seed);
-            ImGui::InputText("Prompt", &es.sd_prompt);
-            ImGui::Text("SD Mode");
+            ImGui::SeparatorText("Stable Diffusion / Control Net");
+            ImGui::SliderInt("ControlNet Present", &es.controlnet_preset, 0, 22);
+            ImGui::Text("Prompts Mode");
             ImGui::SameLine();
-            ImGui::RadioButton("Use prompt", &es.sd_mode, 0);
+            ImGui::RadioButton("Manual Prompt", &es.sd_mode, 0);
             ImGui::SameLine();
-            ImGui::RadioButton("Random Animal", &es.sd_mode, 1);
+            ImGui::RadioButton("Auto Prompt", &es.sd_mode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("From List", &es.sd_mode, 2);
+            ImGui::SameLine();
+            ImGui::RadioButton("Random Animal", &es.sd_mode, 3);
+            ImGui::InputInt("Random Seed", &es.diffuse_seed);
+            ImGui::InputText("Manual Prompt", &es.manual_prompt);
+            if (ImGui::BeginCombo("Listed Prompts", es.selected_listed_prompt.c_str(), 0))
+            {
+                for (auto &it : es.listedPrompts)
+                {
+                    const bool is_selected = (es.selected_listed_prompt == it);
+                    if (ImGui::Selectable(it.c_str(), is_selected))
+                    {
+                        es.selected_listed_prompt = it;
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
             ImGui::Text("SD Mask Mode");
             ImGui::SameLine();
             ImGui::RadioButton("Fill", &es.sd_mask_mode, 0);

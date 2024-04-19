@@ -267,63 +267,74 @@ std::vector<uint8_t> StableDiffusionClient::encode_png(const std::vector<uint8_t
 ControlNetPayload ControlNetPayload::get_preset_payload(int preset_num)
 {
     std::unordered_map<int, ControlNetPayload> presets = {
-        {1, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
+        {0, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                               0.3, 0.8)},
-        {2, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
+        {1, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                               0.3, 0.8)},
-        {3, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
+        {2, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                               0.3, 0.8)},
-        {4, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
+        {3, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.3, 0.8)},
-        {5, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
+        {4, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.3, 0.8)},
-        {6, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 2,
+        {5, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 2,
                               0.3, 0.8)},
-        {7, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 2,
+        {6, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 2,
                               0.3, 0.8)},
-        {8, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
+        {7, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.5, 0.8)},
-        {9, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
+        {8, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                               0.5, 0.8)},
-        {10, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 2,
+        {9, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 20, 7, 512, 512, "DPM++ 2M", "canny", 2,
+                              0.5, 0.8)},
+        {10, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 2,
                                0.5, 0.8)},
-        {11, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 2,
-                               0.5, 0.8)},
-        {12, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
+        {11, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                                1, 0.8)},
-        {13, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
+        {12, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 30, 7, 512, 512, "DPM++ 2M", "canny", 1.8,
                                1, 0.8)},
-        {14, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
+        {13, ControlNetPayload("dreamshaper_8.safetensors", "a cute ", 50, 7, 512, 512, "DPM++ 2M", "canny", 1.5,
                                1, 0.8)},
+        {14, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 5, 3, 512,
+                               512, "DPM++ SDE", "canny", 1.5, 0.3, 0.8)},
         {15, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 5, 3, 512,
-                               512, "DPM++ SDE", "canny", 1.5, 0.3, 0.8)},
-        {16, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 5, 3, 512,
                                512, "DPM++ SDE", "canny", 1.8, 1, 0.8)},
-        {17, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
+        {16, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
                                512, "DPM++ SDE", "canny", 1.5, 0.3, 0.8)},
-        {18, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
+        {17, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
                                512, "DPM++ SDE", "canny", 1.8, 0.3, 0.8)},
-        {19, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
+        {18, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
                                512, 512, "DPM++ SDE", "canny", 2, 0.3, 0.8)},
-        {20, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
+        {19, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 3, 512,
                                512, "DPM++ SDE", "canny", 1.8, 0.5, 0.8)},
-        {21, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
+        {20, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
                                512, 512, "DPM++ SDE", "canny", 2, 0.5, 0.8)},
-        {22, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
+        {21, ControlNetPayload("RealVisXL_V3.0_Turbo.safetensors", "National Geographic Wildlife photo of ", 7, 1.5,
                                512, 512, "DPM++ SDE", "canny", 1.5, 1, 0.8)},
-        {23, ControlNetPayload("RealVisXL_V3.0.safetensors", "National Geographic Wildlife photo of ", 20, 7, 512, 512,
+        {22, ControlNetPayload("RealVisXL_V3.0.safetensors", "National Geographic Wildlife photo of ", 20, 7, 512, 512,
                                "DPM++ 2M", "canny", 2, 1, 0.8)},
     };
 
     if (presets.find(preset_num) == presets.end())
     {
-        throw std::runtime_error("Invalid preset number");
+        std::cout << "Preset not found, using default preset 0" << std::endl;
+        preset_num = 0;
     }
 
     return presets[preset_num];
 }
 
-json ControlNetPayload::getPayload(const std::string &encoded_image, const std::string &animal)
+ControlNetPayload::ControlNetPayload(std::string model, std::string prompt, int steps, float cfg_scale, int width, int height,
+                                     std::string sampler_name, std::string controlnet_module, float controlnet_weight,
+                                     float controlnet_guidance_end, float enlarge_ratio)
+    : model(model), prompt(prompt), steps(steps), cfg_scale(cfg_scale), width(width), height(height),
+      sampler_name(sampler_name), controlnet_module(controlnet_module), controlnet_weight(controlnet_weight),
+      controlnet_guidance_end(controlnet_guidance_end), enlarge_ratio(enlarge_ratio)
+{
+    this->controlnet_model = getControlNetModel(model, controlnet_module);
+}
+
+json ControlNetPayload::getPayload(const std::string &encoded_image, const std::string &animal, int seed)
 {
     json payload = {{"prompt", prompt + animal},
                     {"negative_prompt", "deformed, disfigured, underexposed, overexposed"},
@@ -331,6 +342,8 @@ json ControlNetPayload::getPayload(const std::string &encoded_image, const std::
                     {"steps", steps},
                     {"cfg_scale", cfg_scale},
                     {"width", width},
+                    {"seed", seed},
+                    {"subseed", -1},
                     {"height", height},
                     {"sampler_name", sampler_name},
                     {"scheduler", "Karras"},
@@ -341,6 +354,9 @@ json ControlNetPayload::getPayload(const std::string &encoded_image, const std::
                            {"module", controlnet_module},
                            {"model", controlnet_model},
                            {"weight", controlnet_weight},
+                           {"processor_res", 512},
+                           {"threshold_a", 100},
+                           {"threshold_b", 200},
                            {"image", {{"image", encoded_image.c_str()}}},
                            {"guidance_end", controlnet_guidance_end},
                            {"control_mode", "ControlNet is more important"}}}}}}}}};
@@ -427,7 +443,9 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
                                  std::vector<uint8_t> &out_data,
                                  int preset_payload_num,
                                  int width, int height, int channels,
-                                 std::string animal, bool fit_to_view)
+                                 int seed,
+                                 std::string animal,
+                                 bool fit_to_view)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
     std::string encoded_image;
@@ -447,7 +465,7 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
         animal = chatGPTClient.send_request(raw_data, width, height, channels);
     }
 
-    auto payload_dict = payload.getPayload(encoded_image, animal);
+    auto payload_dict = payload.getPayload(encoded_image, animal, seed);
     changeModel(payload.model);
     std::vector<uint8_t> result_image;
     try

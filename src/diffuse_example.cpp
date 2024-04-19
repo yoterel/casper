@@ -29,13 +29,16 @@ void testControlNet()
     std::vector<uint8_t> mask_buffer(mask.begin<uint8_t>(), mask.end<uint8_t>());
     // Run inference
     ControlNetClient control_net_client = ControlNetClient();
-    int preset_id = 1;
+    int preset_id = 0;
+    bool fit_to_view = false;
     std::string animal = "butterfly";
     std::vector<uint8_t> result_buffer;
     bool success = control_net_client.inference(mask_buffer, result_buffer,
                                                 preset_id,
                                                 mask.cols, mask.rows, mask.channels(),
-                                                animal, 1);
+                                                5, // fix seed so that the result is deterministic
+                                                animal,
+                                                fit_to_view);
 
     // Save result
     if (success)

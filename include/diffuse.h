@@ -57,7 +57,9 @@ public:
                    std::vector<uint8_t> &out_data,
                    int preset_payload_num,
                    int width, int height, int channels,
-                   std::string animal = "", bool fit_to_view = true);
+                   int seed = -1,
+                   std::string animal = "",
+                   bool fit_to_view = true);
 
 private:
     void changeModel(const std::string &modelName);
@@ -70,6 +72,15 @@ private:
 class ControlNetPayload
 {
 public:
+    ControlNetPayload() = default;
+
+    ControlNetPayload(std::string model, std::string prompt, int steps, float cfg_scale, int width, int height,
+                      std::string sampler_name, std::string controlnet_module, float controlnet_weight,
+                      float controlnet_guidance_end, float enlarge_ratio);
+    json getPayload(const std::string &encoded_image, const std::string &animal, int seed);
+    static std::string getControlNetModel(const std::string &model, const std::string &controlnet_module);
+    static ControlNetPayload get_preset_payload(int preset_num);
+
     std::string model;
     std::string prompt;
     int steps;
@@ -82,22 +93,6 @@ public:
     float controlnet_weight;
     float controlnet_guidance_end;
     float enlarge_ratio;
-
-    ControlNetPayload() = default;
-
-    ControlNetPayload(std::string model, std::string prompt, int steps, float cfg_scale, int width, int height,
-                      std::string sampler_name, std::string controlnet_module, float controlnet_weight,
-                      float controlnet_guidance_end, float enlarge_ratio)
-        : model(model), prompt(prompt), steps(steps), cfg_scale(cfg_scale), width(width), height(height),
-          sampler_name(sampler_name), controlnet_module(controlnet_module), controlnet_weight(controlnet_weight),
-          controlnet_guidance_end(controlnet_guidance_end), enlarge_ratio(enlarge_ratio)
-    {
-        this->controlnet_model = getControlNetModel(model, controlnet_module);
-    }
-
-    json getPayload(const std::string &encoded_image, const std::string &animal);
-    static std::string getControlNetModel(const std::string &model, const std::string &controlnet_module);
-    static ControlNetPayload get_preset_payload(int preset_num);
 };
 
 class ChatGPTClient : public Client
