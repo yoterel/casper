@@ -386,7 +386,7 @@ int main(int argc, char *argv[])
 {
     t_app.start();
     /* parse cmd line options */
-    cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
+    cxxopts::Options options("casper", "casper.exe: A graphics engine for performing projection mapping onto human hands");
     options.add_options()                                                                                                        //
         ("mode", "the operation mode [normal, user_study, cam_calib, coax_calib, leap_calib, guess_char_game, guess_pose_game]", //
          cxxopts::value<std::string>()->default_value("normal"))                                                                 //
@@ -482,7 +482,7 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // disable resizing
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
-    GLFWwindow *window = glfwCreateWindow(es.proj_width, es.proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
+    GLFWwindow *window = glfwCreateWindow(es.proj_width, es.proj_height, "casper", NULL, NULL); // monitors[0], NULL for full screen
     int secondary_screen_x, secondary_screen_y;
     glfwGetMonitorPos(monitors[num_of_monitors - 1], &secondary_screen_x, &secondary_screen_y);
     glfwSetWindowPos(window, secondary_screen_x + 300, secondary_screen_y + 100);
@@ -2801,7 +2801,7 @@ bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, 
     // cv::Mat image = cv::imread("../../resource/hand.png", cv::IMREAD_GRAYSCALE);
     // std::cout << "mp received timestamp: " << timestamp << std::endl;
     // cv::Mat image;
-    // cv::Mat image = cv::imread("C:/src/augmented_hands/debug/ss/sg0o.0_raw_cam.png");
+    // cv::Mat image = cv::imread("../../debug/ss/sg0o.0_raw_cam.png");
     // cv::resize(image1, image, cv::Size(512, 512));
     npy_intp dimensions[3] = {image.rows, image.cols, image.channels()};
     // std::cout << "mp imported function" << std::endl;

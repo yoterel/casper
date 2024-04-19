@@ -8,7 +8,7 @@ file(TO_CMAKE_PATH "$ENV{CUDA_PATH}" CUDA_TOOLKIT_ROOT_DIR)  # replaces # set(CU
 cmake_policy(SET CMP0074 NEW)  # respect <PACKAGE>_ROOT variables in "find_package"
 # add_compile_definitions(CV_IGNORE_DEBUG_BUILD_GUARD)
 include(CMakePrintHelpers)
-project(augmented_hands VERSION 0.1 LANGUAGES C CXX)
+project(casper VERSION 0.1 LANGUAGES C CXX)
 find_package(Python 3.9 COMPONENTS Interpreter Development NumPy REQUIRED)
 find_package(pylon 7.3.0 REQUIRED)
 find_package(OpenCV 4.6.0 EXACT REQUIRED)
@@ -66,7 +66,7 @@ target_include_directories(leap PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(leap PRIVATE LeapSDK::LeapC)
 
 ################ main application
-add_executable(ahand 
+add_executable(casper 
     src/main.cpp
     src/display.cpp
     src/camera.cpp
@@ -105,45 +105,45 @@ add_executable(ahand
     third-party/imgui/misc/cpp/imgui_stdlib.cpp
     third-party/glad${GLAD_VER}/src/glad.c
 )
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/include")
 # pylon
-target_link_libraries(ahand PRIVATE pylon::pylon)
+target_link_libraries(casper PRIVATE pylon::pylon)
 # opencv
-target_link_libraries(ahand PRIVATE ${OpenCV_LIBS})
+target_link_libraries(casper PRIVATE ${OpenCV_LIBS})
 # winsock
-target_link_libraries(ahand PRIVATE wsock32 ws2_32)
+target_link_libraries(casper PRIVATE wsock32 ws2_32)
 # dynaflash
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
-target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+target_link_libraries(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 # GLFW
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
-target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/include")
+target_link_libraries(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glfw-3.3.8/lib/glfw3.lib")
 # GLAD
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glad${GLAD_VER}/include")
 # assimp
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
-target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/include")
+target_link_libraries(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/assimp-vc143-mt.lib")
 # glm
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
 # leap
-target_link_libraries(ahand PRIVATE LeapSDK::LeapC)
+target_link_libraries(casper PRIVATE LeapSDK::LeapC)
 # stb
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 # freetype
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
-target_link_libraries(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/include")
+target_link_libraries(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/freetype.lib")
 # zlib
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
-target_link_libraries(ahand PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/include")
+target_link_libraries(casper PRIVATE debug "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib_debug.lib" optimized "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.11/lib/zlib.lib")
 # imgui
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/backends")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/imgui/misc/cpp")
 # libicp
-target_include_directories(ahand PRIVATE "C:/src/boost_1_84_0")
-target_include_directories(ahand PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
+target_include_directories(casper PRIVATE "C:/src/boost_1_84_0")
+target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
 # python
-target_link_libraries(ahand PRIVATE Python::Python Python::NumPy)
+target_link_libraries(casper PRIVATE Python::Python Python::NumPy)
 ####################################### registration example
 # add_executable(registration_example 
 #     src/registration_example.cpp
@@ -380,70 +380,70 @@ file(GLOB OPENCV_DLLS "${OpenCV_DIR}/x64/${OpenCV_RUNTIME}/bin/*.dll")
 # message(OPENCV_DLLS="${OPENCV_DLLS}")
 list(LENGTH OPENCV_DLLS RES_LEN)
 if(NOT RES_LEN EQUAL 0)
-    add_custom_command(TARGET ahand 
+    add_custom_command(TARGET casper 
                         POST_BUILD
                         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         ${OPENCV_DLLS}
-                        $<TARGET_FILE_DIR:ahand>)
+                        $<TARGET_FILE_DIR:casper>)
 endif()
 
 # file(GLOB OPENCV_DLLS "${OpenCV_DIR}/bin/*.dll")
 # # message(OPENCV_DLLS="${OPENCV_DLLS}")
 # list(LENGTH OPENCV_DLLS RES_LEN)
 # if(NOT RES_LEN EQUAL 0)
-#     add_custom_command(TARGET ahand 
+#     add_custom_command(TARGET casper 
 #                         POST_BUILD
 #                         COMMAND ${CMAKE_COMMAND} -E copy_if_different
 #                         ${OPENCV_DLLS}
-#                         $<TARGET_FILE_DIR:ahand>)
+#                         $<TARGET_FILE_DIR:casper>)
 # endif()
 
 file(GLOB DYNAFLASH_DLLS "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/*.dll")
-add_custom_command(TARGET ahand 
+add_custom_command(TARGET casper 
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${DYNAFLASH_DLLS}
-                $<TARGET_FILE_DIR:ahand>)
+                $<TARGET_FILE_DIR:casper>)
 
 get_target_property(LEAPC_IMPORTED_CONFIG LeapSDK::LeapC IMPORTED_CONFIGURATIONS)
 get_target_property(LEAPC_SHARED_LIB_PATH LeapSDK::LeapC IMPORTED_LOCATION_${LEAPC_IMPORTED_CONFIG})
                 
-add_custom_command(TARGET ahand
+add_custom_command(TARGET casper
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${LEAPC_SHARED_LIB_PATH}
-                $<TARGET_FILE_DIR:ahand>)
+                $<TARGET_FILE_DIR:casper>)
 
 file(GLOB ASSIMP_DLLS "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/*.dll") 
-add_custom_command(TARGET ahand
+add_custom_command(TARGET casper
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ASSIMP_DLLS}
-                $<TARGET_FILE_DIR:ahand>)
+                $<TARGET_FILE_DIR:casper>)
 
 file(GLOB FREETYPE_DLLS "${PROJECT_SOURCE_DIR}/third-party/freetype/lib/*.dll") 
-add_custom_command(TARGET ahand
+add_custom_command(TARGET casper
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${FREETYPE_DLLS}
-                $<TARGET_FILE_DIR:ahand>)
+                $<TARGET_FILE_DIR:casper>)
 
 file(GLOB PYTHON_DLL "${Python_RUNTIME_LIBRARY_DIRS}/python*.dll")
-add_custom_command(TARGET ahand
+add_custom_command(TARGET casper
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${PYTHON_DLL}
-                $<TARGET_FILE_DIR:ahand>)
+                $<TARGET_FILE_DIR:casper>)
 
 file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/predict.py")
-add_custom_command(TARGET ahand
+add_custom_command(TARGET casper
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${PYTHON_EMBEDDING}
-                $<TARGET_FILE_DIR:ahand>)
+                $<TARGET_FILE_DIR:casper>)
 # file(GLOB ZLIB_DLLS "${PROJECT_SOURCE_DIR}/third-party/zlib-1.2.3-bin/bin/*.dll") 
-# add_custom_command(TARGET ahand
+# add_custom_command(TARGET casper
 #                     POST_BUILD
 #                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
 #                     ${ZLIB_DLLS}
-#                     $<TARGET_FILE_DIR:ahand>)
+#                     $<TARGET_FILE_DIR:casper>)
