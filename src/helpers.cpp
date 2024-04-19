@@ -213,6 +213,17 @@ std::vector<glm::vec2> Helpers::project_points(std::vector<glm::vec3> points, gl
     return projected_points;
 }
 
+glm::vec3 Helpers::project_point_w_depth(glm::vec3 point, glm::mat4 model, glm::mat4 view, glm::mat4 projection)
+{
+    // project 3d point to NDC space
+    glm::vec4 point4 = glm::vec4(point, 1.0f);
+    point4 = view * model * point4;
+    float point_depth = -point4.z;
+    point4 = projection * point4;
+    point4 /= point4.w;
+    return glm::vec3(point4.x, point4.y, point_depth);
+}
+
 std::vector<glm::vec3> Helpers::project_points_w_depth(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection)
 {
     // project 3d points to NDC space

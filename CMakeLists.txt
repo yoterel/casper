@@ -315,23 +315,23 @@ target_link_libraries(ahand PRIVATE Python::Python Python::NumPy)
 # target_link_libraries(cuda_example PRIVATE "${CUDA_NPP_LIBS_LOC}/nppitc.lib")
 # target_link_libraries(cuda_example PRIVATE "${CUDA_NPP_LIBS_LOC}/npps.lib")
 ######################################### dynaflash example program
-add_executable(dyna_example 
-    src/dyna_example.cpp
-)
-target_link_libraries(dyna_example PRIVATE ${OpenCV_LIBS})
-target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
-target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_link_libraries(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
-######################################### diffuse example program
-# add_executable(diffuse_example 
-#     src/diffuse_example.cpp
-#     src/diffuse.cpp
-#     src/base64.cpp
-#     src/timer.cpp
+# add_executable(dyna_example 
+#     src/dyna_example.cpp
 # )
-# target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-# target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
-# target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# target_link_libraries(dyna_example PRIVATE ${OpenCV_LIBS})
+# target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/include")
+# target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# target_link_libraries(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
+######################################### diffuse example program
+add_executable(diffuse_example 
+    src/diffuse_example.cpp
+    src/diffuse.cpp
+    src/base64.cpp
+    src/timer.cpp
+)
+target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
+target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 ######################################### download benchmark example program
 # add_executable(benchmark_download
 #     src/benchmark_download.cpp

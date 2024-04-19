@@ -10,6 +10,8 @@ public:
     PointCloud(std::vector<glm::vec2> &vertices, std::vector<glm::vec3> &colors);
     ~PointCloud();
     void render(float pointSize = 10.0f);
+    void renderAsLineLoop(float lineWidth = 1.0f);
+    void renderAsLines(float lineWidth = 1.0f);
     PointCloud(const PointCloud &) = delete;
     PointCloud &operator=(const PointCloud &) = delete;
 

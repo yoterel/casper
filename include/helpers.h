@@ -10,9 +10,9 @@ class Helpers
 public:
     static std::vector<glm::vec2> vec3to2(std::vector<glm::vec3> vec);
     static glm::vec2 ScreenToNDC(const glm::vec2 &pixel, int width, int height, bool flip_y = false);
-    static std::vector<glm::vec2> ScreenToNDC(const std::vector<glm::vec2> &pixels, int width, int height, bool flip_y);
+    static std::vector<glm::vec2> ScreenToNDC(const std::vector<glm::vec2> &pixels, int width, int height, bool flip_y = false);
     static glm::vec2 NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool flip_y = false);
-    static std::vector<glm::vec2> NDCtoScreen(const std::vector<glm::vec2> &NDCs, int width, int height, bool flip_y);
+    static std::vector<glm::vec2> NDCtoScreen(const std::vector<glm::vec2> &NDCs, int width, int height, bool flip_y = false);
     static void UV2NDC(std::vector<glm::vec2> &uv);
     static void saveTexture(std::string filepath,
                             unsigned int texture,
@@ -32,6 +32,7 @@ public:
     static glm::vec2 project_point(glm::vec3 point, glm::mat4 mvp);
     static glm::vec2 project_point(glm::vec3 point, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static std::vector<glm::vec2> project_points(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
+    static glm::vec3 project_point_w_depth(glm::vec3 point, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static std::vector<glm::vec3> project_points_w_depth(std::vector<glm::vec3> points, glm::mat4 model, glm::mat4 view, glm::mat4 projection);
     static void setupGizmoBuffers(unsigned int &VAO, unsigned int &VBO);
     static void setupFrustrumBuffers(unsigned int &VAO, unsigned int &VBO);
@@ -70,8 +71,10 @@ enum class TextureMode
 };
 enum class SDMode
 {
-    PROMPT = 0,
-    ANIMAL = 1,
+    MANUAL_PROMPT = 0,
+    AUTO_PROMPT = 1,
+    FROM_LIST = 2,
+    RANDOM_ANIMAL = 3,
 };
 enum class BakeMode
 {
@@ -79,6 +82,7 @@ enum class BakeMode
     FILE = 1,
     CAMERA = 2,
     POSE = 3,
+    CONTROL_NET = 4,
 };
 enum class MaterialMode
 {

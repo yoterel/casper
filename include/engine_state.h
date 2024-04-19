@@ -95,33 +95,42 @@ public:
     std::string extraMeshFile;
     // bake/sd controls
     bool bakeRequest = false;
-    bool deformedBaking = false;
     bool bake_preproc_succeed = false;
     bool sd_running = false;
-    int sd_mode = static_cast<int>(SDMode::PROMPT);
+    int sd_mode = static_cast<int>(SDMode::MANUAL_PROMPT);
     int bake_mode = static_cast<int>(BakeMode::SD);
+    int controlnet_preset = 0;
     int sd_mask_mode = 2;
     bool saveIntermed = false;
     int sd_outwidth, sd_outheight;
     std::vector<uint8_t> img2img_data;
     int diffuse_seed = -1;
+    std::string cur_prompt = "";
+    std::string manual_prompt = "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin";
     std::vector<std::string> animals{
-        "a fish",
-        "an elephant",
-        "a giraffe",
-        "a tiger",
-        "a lion",
-        "a cat",
-        "a dog",
-        "a horse",
-        "a cow",
-        "a sheep",
-        "a pig",
-        "a rabbit",
-        "a squirrel",
-        "a monkey",
-        "a gorilla",
-        "a panda"};
+        "butterfly",
+        "deer",
+        "fish",
+        "elephant",
+        "giraffe",
+        "tiger",
+        "lion",
+        "cat",
+        "dog",
+        "horse",
+        "cow",
+        "sheep",
+        "pig",
+        "rabbit",
+        "squirrel",
+        "monkey",
+        "gorilla",
+        "panda"};
+    std::vector<std::string> listedPrompts{
+        "butterfly",
+        "deer",
+        "fish"};
+    std::string selected_listed_prompt = listedPrompts[0];
     // game controls
     bool showGameHint = false;
     int gameSessionType = static_cast<int>(GameSessionType::A);
@@ -298,7 +307,6 @@ public:
     std::string bakeFileLeft = "../../resource/baked_textures/baked_left.png";
     std::string bakeFileRight = "../../resource/baked_textures/baked_right.png";
     std::string userTextureFile = "../../resource/images/uv.png";
-    std::string sd_prompt = "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin";
     std::vector<std::string> texturePaths{
         "../../resource",
         "../../resource/images",
@@ -351,10 +359,12 @@ public:
     // of controls
     bool use_of = false;
     bool show_of = false;
-    int of_mode = static_cast<int>(OFMode::FB_CPU);
+    int of_mode = static_cast<int>(OFMode::FB_GPU);
     uint64_t totalFrameCountOF = 0;
-    int of_resize_factor = 1;
+    int of_resize_factor = 2;
     int of_resize_factor_exp = 1;
     cv::Size of_downsize = cv::Size(cam_width / of_resize_factor, cam_height / of_resize_factor);
+    int of_roi = 10;
+    std::vector<cv::Mat> of_debug;
 };
 #endif // ENGINE_STATE_H
