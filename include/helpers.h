@@ -69,7 +69,7 @@ enum class TextureMode
     MULTI_PASS_SHADER = 6,
     DYNAMIC = 7,
 };
-enum class SDMode
+enum class PromptMode
 {
     MANUAL_PROMPT = 0,
     AUTO_PROMPT = 1,
@@ -134,7 +134,7 @@ enum class LeapMarkSettings
 };
 enum class OperationMode
 {
-    NORMAL = 0,
+    SANDBOX = 0,
     USER_STUDY = 1,
     CAMERA = 2,
     COAXIAL = 3,
@@ -142,6 +142,7 @@ enum class OperationMode
     GUESS_POSE_GAME = 5,
     GUESS_CHAR_GAME = 6,
     SIMULATION = 7,
+    GUESS_ANIMAL_GAME = 8,
 };
 enum class DeformationMode
 {
