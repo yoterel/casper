@@ -218,7 +218,7 @@ public:
     int mark_bone_index = 17;
     int leap_calibration_mark_state = 0;
     int use_leap_calib_results = static_cast<int>(LeapCalibrationSettings::MANUAL);
-    int operation_mode = static_cast<int>(OperationMode::NORMAL);
+    int operation_mode = static_cast<int>(OperationMode::SANDBOX);
     int n_points_leap_calib = 2000;
     int n_points_cam_calib = 30;
     float lastX = proj_width / 2.0f;

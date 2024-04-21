@@ -412,7 +412,7 @@ int main(int argc, char *argv[])
         es.simulated_projector = result["simproj"].as<bool>();
         es.proj_channel_order = es.simulated_projector ? GL_RGB : GL_BGR;
         std::unordered_map<std::string, int> mode_map{
-            {"normal", static_cast<int>(OperationMode::NORMAL)},
+            {"normal", static_cast<int>(OperationMode::SANDBOX)},
             {"user_study", static_cast<int>(OperationMode::USER_STUDY)},
             {"cam_calib", static_cast<int>(OperationMode::CAMERA)},
             {"coax_calib", static_cast<int>(OperationMode::COAXIAL)},
@@ -425,7 +425,7 @@ int main(int argc, char *argv[])
         if (mode_map.find(result["mode"].as<std::string>()) == mode_map.end())
         {
             std::cout << "Invalid mode: " << result["mode"].as<std::string>() << std::endl;
-            es.operation_mode = static_cast<int>(OperationMode::NORMAL);
+            es.operation_mode = static_cast<int>(OperationMode::SANDBOX);
         }
         else
         {
@@ -601,6 +601,7 @@ int main(int argc, char *argv[])
         es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
         es.texture_mode = static_cast<int>(TextureMode::BAKED);
         es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+        es.bake_mode, static_cast<int>(BakeMode::CONTROL_NET);
         // es.use_mls = false;
         // es.use_of = false;
         break;
@@ -758,7 +759,6 @@ int main(int argc, char *argv[])
     uint64_t targetFrameSize = 0;
     size_t n_skeleton_primitives = 0;
     uint8_t *colorBuffer = new uint8_t[es.projected_image_size];
-    CGrabResultPtr ptrGrabResult;
     camTexture = Texture();
     toBakeTexture = Texture();
     Texture displayTexture = Texture();
@@ -895,7 +895,7 @@ int main(int argc, char *argv[])
         {
             switch (es.operation_mode)
             {
-            case static_cast<int>(OperationMode::NORMAL):
+            case static_cast<int>(OperationMode::SANDBOX):
             {
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 break;
@@ -917,10 +917,11 @@ int main(int argc, char *argv[])
         /* main switch on operation mode of engine */
         switch (es.operation_mode)
         {
-        case static_cast<int>(OperationMode::NORMAL): // fast path
+        case static_cast<int>(OperationMode::SANDBOX): // fast path
         {
             /* deal with camera input */
             t_camera.start();
+            CGrabResultPtr ptrGrabResult;
             if (es.simulated_camera)
             {
                 cv::Mat sim = cv::Mat(es.cam_height, es.cam_width, CV_8UC1, 255);
@@ -1032,10 +1033,11 @@ int main(int argc, char *argv[])
             {
             case static_cast<int>(CalibrationStateMachine::COLLECT):
             {
-                std::vector<cv::Point2f> corner_pts;
+                CGrabResultPtr ptrGrabResult;
                 camera.capture_single_image(ptrGrabResult);
                 camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                 cv::flip(camImageOrig, camImage, 1);
+                std::vector<cv::Point2f> corner_pts;
                 bool success = cv::findChessboardCorners(camImage, cv::Size(es.checkerboard_width, es.checkerboard_height), corner_pts, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
                 if (success)
                 {
@@ -1092,6 +1094,7 @@ int main(int argc, char *argv[])
         case static_cast<int>(OperationMode::COAXIAL): // calibrate projector <-> camera
         {
             t_camera.start();
+            CGrabResultPtr ptrGrabResult;
             handleCameraInput(ptrGrabResult, false, cv::Mat());
             t_camera.stop();
             std::vector<cv::Point2f> origpts, newpts;
@@ -1151,6 +1154,7 @@ int main(int argc, char *argv[])
                         if (es.leap_cur_frame_id != new_frame_id)
                         {
                             // capture cam image asap
+                            CGrabResultPtr ptrGrabResult;
                             camera.capture_single_image(ptrGrabResult);
                             camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                             cv::flip(camImageOrig, camImage, 1);
@@ -1236,6 +1240,7 @@ int main(int argc, char *argv[])
                     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
                     {
                         // capture cam image asap
+                        CGrabResultPtr ptrGrabResult;
                         camera.capture_single_image(ptrGrabResult);
                         camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                         cv::flip(camImageOrig, camImage, 1);
@@ -1433,6 +1438,7 @@ int main(int argc, char *argv[])
                         if (es.leap_cur_frame_id != new_frame_id)
                         {
                             // capture cam image asap
+                            CGrabResultPtr ptrGrabResult;
                             camera.capture_single_image(ptrGrabResult);
                             displayTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, es.cam_buffer_format);
                             glm::vec2 center, center_leap1, center_leap2;
@@ -1494,6 +1500,7 @@ int main(int argc, char *argv[])
                 }
                 case static_cast<int>(LeapMarkSettings::POINT_BY_POINT):
                 {
+                    CGrabResultPtr ptrGrabResult;
                     camera.capture_single_image(ptrGrabResult);
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
@@ -1564,6 +1571,7 @@ int main(int argc, char *argv[])
                 } // LeapMarkSettings::POINT_BY_POINT
                 case static_cast<int>(LeapMarkSettings::WHOLE_HAND):
                 {
+                    CGrabResultPtr ptrGrabResult;
                     camera.capture_single_image(ptrGrabResult);
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
@@ -1594,6 +1602,7 @@ int main(int argc, char *argv[])
                 } // LeapMarkSettings::WHOLE_HAND
                 case static_cast<int>(LeapMarkSettings::ONE_BONE):
                 {
+                    CGrabResultPtr ptrGrabResult;
                     camera.capture_single_image(ptrGrabResult);
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
@@ -1971,7 +1980,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         return;
     switch (es.operation_mode)
     {
-    case static_cast<int>(OperationMode::NORMAL):
+    case static_cast<int>(OperationMode::SANDBOX):
     {
         break;
     }
@@ -2033,7 +2042,7 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         return;
     switch (es.operation_mode)
     {
-    case static_cast<int>(OperationMode::NORMAL):
+    case static_cast<int>(OperationMode::SANDBOX):
     {
         if (es.shift_modifier)
         {
@@ -4868,6 +4877,84 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
 {
     if (!guessAnimalGame.isInitialized())
         return;
+    int state = guessAnimalGame.getState();
+    Shader *gridShader = shaderMap["gridShader"];
+    Shader *textureShader = shaderMap["textureShader"];
+    /* deal with camera input */
+    t_camera.start();
+    CGrabResultPtr ptrGrabResult;
+    if (es.simulated_camera)
+    {
+        cv::Mat sim = cv::Mat(es.cam_height, es.cam_width, CV_8UC1, 255);
+        handleCameraInput(ptrGrabResult, true, sim);
+    }
+    else
+    {
+        handleCameraInput(ptrGrabResult, false, cv::Mat());
+    }
+    t_camera.stop();
+
+    /* deal with leap input */
+    t_leap.start();
+    LEAP_STATUS leap_status = handleLeapInput();
+    if (es.record_session)
+    {
+        if ((t_app.getElapsedTimeInSec() - es.recordStartTime) > es.recordDuration)
+        {
+            es.record_session = false;
+            saveSession(std::format("../../resource/recordings/{}", es.recording_name), es.recordImages);
+            std::cout << "Recording stopped" << std::endl;
+        }
+        else
+        {
+            saveLeapData(leap_status, es.totalFrameCount, es.recordImages);
+        }
+    }
+    if (es.record_single_pose)
+    {
+        saveSession(std::format("../../resource/recordings/{}", es.recording_name), leap_status, es.totalFrameCount, es.recordImages);
+        es.record_single_pose = false;
+    }
+    t_leap.stop();
+    /* skin hand meshes */
+    t_skin.start();
+    handleSkinning(bones_to_world_right, true, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+    handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+    t_skin.stop();
+
+    /* deal with bake request */
+    t_bake.start();
+    if (state == static_cast<int>(GuessAnimalGameState::BAKE))
+    {
+        guessAnimalGame.resetState();
+        es.bakeRequest = true;
+    }
+    handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
+    t_bake.stop();
+
+    /* run MLS on MP prediction to reduce bias */
+    t_mls.start();
+    handleMLS(*gridShader);
+    t_mls.stop();
+
+    /* post process fbo using camera input */
+    t_pp.start();
+    handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+    /* render final output to screen */
+    if (!es.debug_mode)
+    {
+        glViewport(0, 0, es.proj_width, es.proj_height); // set viewport
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        set_texture_shader(textureShader, false, false, false, false, 0.035f, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), es.gamma_correct);
+        c2p_fbo.getTexture()->bind();
+        fullScreenQuad.render();
+    }
+    t_pp.stop();
+
+    /* debug mode */
+    t_debug.start();
+    handleDebugMode(shaderMap, rightHandModel, leftHandModel, textModel);
+    t_debug.stop();
 }
 
 void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
@@ -5334,7 +5421,7 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *textShader = shader_map["textShader"];
     Shader *lineShader = shader_map["lineShader"];
-    if (es.debug_mode && es.operation_mode == static_cast<int>(OperationMode::NORMAL))
+    if (es.debug_mode && es.operation_mode == static_cast<int>(OperationMode::SANDBOX))
     {
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
         glm::mat4 proj_projection_transform = gl_projector.getProjectionMatrix();
@@ -5891,7 +5978,7 @@ void openIMGUIFrame()
             ImGui::Checkbox("PBO", &es.use_pbo);
             ImGui::Checkbox("Double PBO", &es.double_pbo);
             ImGui::SeparatorText("Operation Mode");
-            if (ImGui::RadioButton("Normal", &es.operation_mode, static_cast<int>(OperationMode::NORMAL)))
+            if (ImGui::RadioButton("Normal", &es.operation_mode, static_cast<int>(OperationMode::SANDBOX)))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
@@ -6008,6 +6095,7 @@ void openIMGUIFrame()
                 es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
                 es.texture_mode = static_cast<int>(TextureMode::BAKED);
                 es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+                es.bake_mode, static_cast<int>(BakeMode::CONTROL_NET);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
             }
@@ -6018,7 +6106,7 @@ void openIMGUIFrame()
         {
             switch (es.operation_mode)
             {
-            case static_cast<int>(OperationMode::NORMAL):
+            case static_cast<int>(OperationMode::SANDBOX):
             {
                 if (ImGui::Button("Save Current Extrinsics"))
                 {

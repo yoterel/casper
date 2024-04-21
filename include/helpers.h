@@ -134,7 +134,7 @@ enum class LeapMarkSettings
 };
 enum class OperationMode
 {
-    NORMAL = 0,
+    SANDBOX = 0,
     USER_STUDY = 1,
     CAMERA = 2,
     COAXIAL = 3,

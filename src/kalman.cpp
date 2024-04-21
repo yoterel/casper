@@ -1,5 +1,4 @@
 #include "kalman.h"
-#include "helpersCV.h"
 
 Kalman::Kalman(int stateDim, int measDim, int contrDim) : KF(stateDim, measDim, contrDim)
 {
