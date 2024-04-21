@@ -97,7 +97,7 @@ public:
     bool bakeRequest = false;
     bool bake_preproc_succeed = false;
     bool sd_running = false;
-    int sd_mode = static_cast<int>(SDMode::MANUAL_PROMPT);
+    int prompt_mode = static_cast<int>(PromptMode::MANUAL_PROMPT);
     int bake_mode = static_cast<int>(BakeMode::SD);
     int controlnet_preset = 0;
     int sd_mask_mode = 2;

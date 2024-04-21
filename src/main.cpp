@@ -90,6 +90,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
                   glm::mat4 cam_projection_transform);
+void handlePromptMode();
 void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           Texture &bakeTexture,
                           SkinnedModel &leftHandModel,
@@ -601,7 +602,8 @@ int main(int argc, char *argv[])
         es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
         es.texture_mode = static_cast<int>(TextureMode::BAKED);
         es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-        es.bake_mode, static_cast<int>(BakeMode::CONTROL_NET);
+        es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
+        es.cur_prompt = es.selected_listed_prompt;
         // es.use_mls = false;
         // es.use_of = false;
         break;
@@ -4927,6 +4929,7 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
     if (state == static_cast<int>(GuessAnimalGameState::BAKE))
     {
         guessAnimalGame.resetState();
+        handlePromptMode();
         es.bakeRequest = true;
     }
     handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
@@ -5911,6 +5914,42 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     es.videoFrameCountCont += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
     return true;
 }
+
+void handlePromptMode()
+{
+    switch (es.prompt_mode)
+    {
+    case static_cast<int>(PromptMode::MANUAL_PROMPT):
+    {
+        es.cur_prompt = es.manual_prompt;
+        break;
+    }
+    case static_cast<int>(PromptMode::AUTO_PROMPT):
+    {
+        es.cur_prompt = "";
+        break;
+    }
+    case static_cast<int>(PromptMode::FROM_LIST):
+    {
+        es.cur_prompt = es.selected_listed_prompt;
+        break;
+    }
+    case static_cast<int>(PromptMode::RANDOM_ANIMAL):
+    {
+        std::vector<std::string> random_animal;
+        std::sample(es.animals.begin(),
+                    es.animals.end(),
+                    std::back_inserter(random_animal),
+                    1,
+                    std::mt19937{std::random_device{}()});
+        es.cur_prompt = random_animal[0];
+        break;
+    }
+    default:
+        es.cur_prompt = es.manual_prompt;
+        break;
+    }
+}
 // ---------------------------------------------------------------------------------------------
 // IMGUI frame creator
 // ---------------------------------------------------------------------------------------------
@@ -6095,7 +6134,8 @@ void openIMGUIFrame()
                 es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
                 es.texture_mode = static_cast<int>(TextureMode::BAKED);
                 es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
-                es.bake_mode, static_cast<int>(BakeMode::CONTROL_NET);
+                es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
+                es.cur_prompt = es.selected_listed_prompt;
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
             }
@@ -6669,38 +6709,7 @@ void openIMGUIFrame()
             ImGui::InputText("Bake texture file (left)", &es.bakeFileLeft);
             if (ImGui::Button("Bake"))
             {
-                switch (es.sd_mode)
-                {
-                case static_cast<int>(SDMode::MANUAL_PROMPT):
-                {
-                    es.cur_prompt = es.manual_prompt;
-                    break;
-                }
-                case static_cast<int>(SDMode::AUTO_PROMPT):
-                {
-                    es.cur_prompt = "";
-                    break;
-                }
-                case static_cast<int>(SDMode::FROM_LIST):
-                {
-                    es.cur_prompt = es.selected_listed_prompt;
-                    break;
-                }
-                case static_cast<int>(SDMode::RANDOM_ANIMAL):
-                {
-                    std::vector<std::string> random_animal;
-                    std::sample(es.animals.begin(),
-                                es.animals.end(),
-                                std::back_inserter(random_animal),
-                                1,
-                                std::mt19937{std::random_device{}()});
-                    es.cur_prompt = random_animal[0];
-                    break;
-                }
-                default:
-                    es.cur_prompt = es.manual_prompt;
-                    break;
-                }
+                handlePromptMode();
                 switch (es.bake_mode)
                 {
                 case static_cast<int>(BakeMode::FILE):
@@ -6728,13 +6737,13 @@ void openIMGUIFrame()
             ImGui::SliderInt("ControlNet Present", &es.controlnet_preset, 0, 22);
             ImGui::Text("Prompts Mode");
             ImGui::SameLine();
-            ImGui::RadioButton("Manual Prompt", &es.sd_mode, 0);
+            ImGui::RadioButton("Manual Prompt", &es.prompt_mode, 0);
             ImGui::SameLine();
-            ImGui::RadioButton("Auto Prompt", &es.sd_mode, 1);
+            ImGui::RadioButton("Auto Prompt", &es.prompt_mode, 1);
             ImGui::SameLine();
-            ImGui::RadioButton("From List", &es.sd_mode, 2);
+            ImGui::RadioButton("From List", &es.prompt_mode, 2);
             ImGui::SameLine();
-            ImGui::RadioButton("Random Animal", &es.sd_mode, 3);
+            ImGui::RadioButton("Random Animal", &es.prompt_mode, 3);
             ImGui::InputInt("Random Seed", &es.diffuse_seed);
             ImGui::InputText("Manual Prompt", &es.manual_prompt);
             if (ImGui::BeginCombo("Listed Prompts", es.selected_listed_prompt.c_str(), 0))

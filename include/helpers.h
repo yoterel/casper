@@ -69,7 +69,7 @@ enum class TextureMode
     MULTI_PASS_SHADER = 6,
     DYNAMIC = 7,
 };
-enum class SDMode
+enum class PromptMode
 {
     MANUAL_PROMPT = 0,
     AUTO_PROMPT = 1,
