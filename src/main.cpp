@@ -42,6 +42,7 @@
 #include "user_study.h"
 #include "guess_pose_game.h"
 #include "guess_char_game.h"
+#include "guess_animal_game.h"
 #include "grid.h"
 #include "moving_least_squares.h"
 #include "MidiControllerAPI.h"
@@ -89,6 +90,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
                   glm::mat4 cam_projection_transform);
+void handlePromptMode();
 void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           Texture &bakeTexture,
                           SkinnedModel &leftHandModel,
@@ -126,6 +128,12 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          TextModel &textModel,
                          glm::mat4 &cam_view_transform,
                          glm::mat4 &cam_projection_transform);
+void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                           SkinnedModel &leftHandModel,
+                           SkinnedModel &rightHandModel,
+                           TextModel &textModel,
+                           glm::mat4 &cam_view_transform,
+                           glm::mat4 &cam_projection_transform);
 void handleUserStudy(std::unordered_map<std::string, Shader *> &shader_map,
                      GLFWwindow *window,
                      SkinnedModel &leftHandModel,
@@ -234,6 +242,7 @@ Timer t_camera, t_leap, t_skin, t_swap, t_download, t_app, t_misc, t_debug, t_pp
 std::thread sd_thread, mls_thread;
 GuessPoseGame guessPoseGame = GuessPoseGame();
 GuessCharGame guessCharGame = GuessCharGame();
+GuessAnimalGame guessAnimalGame = GuessAnimalGame();
 UserStudy user_study = UserStudy();
 ControlNetClient controlNetClient = ControlNetClient();
 // record & playback controls
@@ -378,7 +387,7 @@ int main(int argc, char *argv[])
 {
     t_app.start();
     /* parse cmd line options */
-    cxxopts::Options options("ahand", "ahand.exe: A graphics engine for performing projection mapping onto human hands");
+    cxxopts::Options options("casper", "casper.exe: A graphics engine for performing projection mapping onto human hands");
     options.add_options()                                                                                                        //
         ("mode", "the operation mode [normal, user_study, cam_calib, coax_calib, leap_calib, guess_char_game, guess_pose_game]", //
          cxxopts::value<std::string>()->default_value("normal"))                                                                 //
@@ -404,19 +413,20 @@ int main(int argc, char *argv[])
         es.simulated_projector = result["simproj"].as<bool>();
         es.proj_channel_order = es.simulated_projector ? GL_RGB : GL_BGR;
         std::unordered_map<std::string, int> mode_map{
-            {"normal", static_cast<int>(OperationMode::NORMAL)},
+            {"normal", static_cast<int>(OperationMode::SANDBOX)},
             {"user_study", static_cast<int>(OperationMode::USER_STUDY)},
             {"cam_calib", static_cast<int>(OperationMode::CAMERA)},
             {"coax_calib", static_cast<int>(OperationMode::COAXIAL)},
             {"leap_calib", static_cast<int>(OperationMode::LEAP)},
             {"guess_char_game", static_cast<int>(OperationMode::GUESS_CHAR_GAME)},
             {"guess_pose_game", static_cast<int>(OperationMode::GUESS_POSE_GAME)},
+            {"guess_animal_game", static_cast<int>(OperationMode::GUESS_ANIMAL_GAME)},
             {"simulation", static_cast<int>(OperationMode::SIMULATION)}};
         // check if mode is valid
         if (mode_map.find(result["mode"].as<std::string>()) == mode_map.end())
         {
             std::cout << "Invalid mode: " << result["mode"].as<std::string>() << std::endl;
-            es.operation_mode = static_cast<int>(OperationMode::NORMAL);
+            es.operation_mode = static_cast<int>(OperationMode::SANDBOX);
         }
         else
         {
@@ -473,7 +483,7 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // disable resizing
     int num_of_monitors;
     GLFWmonitor **monitors = glfwGetMonitors(&num_of_monitors);
-    GLFWwindow *window = glfwCreateWindow(es.proj_width, es.proj_height, "augmented_hands", NULL, NULL); // monitors[0], NULL for full screen
+    GLFWwindow *window = glfwCreateWindow(es.proj_width, es.proj_height, "casper", NULL, NULL); // monitors[0], NULL for full screen
     int secondary_screen_x, secondary_screen_y;
     glfwGetMonitorPos(monitors[num_of_monitors - 1], &secondary_screen_x, &secondary_screen_y);
     glfwSetWindowPos(window, secondary_screen_x + 300, secondary_screen_y + 100);
@@ -585,6 +595,17 @@ int main(int argc, char *argv[])
         es.vid_simulated_latency_ms = 35.0f;
         es.jfa_distance_threshold = 100.0f;
         es.use_mls = false;
+        break;
+    }
+    case static_cast<int>(OperationMode::GUESS_ANIMAL_GAME):
+    {
+        es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+        es.texture_mode = static_cast<int>(TextureMode::BAKED);
+        es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+        es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
+        es.cur_prompt = es.selected_listed_prompt;
+        // es.use_mls = false;
+        // es.use_of = false;
         break;
     }
     case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
@@ -740,7 +761,6 @@ int main(int argc, char *argv[])
     uint64_t targetFrameSize = 0;
     size_t n_skeleton_primitives = 0;
     uint8_t *colorBuffer = new uint8_t[es.projected_image_size];
-    CGrabResultPtr ptrGrabResult;
     camTexture = Texture();
     toBakeTexture = Texture();
     Texture displayTexture = Texture();
@@ -877,7 +897,7 @@ int main(int argc, char *argv[])
         {
             switch (es.operation_mode)
             {
-            case static_cast<int>(OperationMode::NORMAL):
+            case static_cast<int>(OperationMode::SANDBOX):
             {
                 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 break;
@@ -899,10 +919,11 @@ int main(int argc, char *argv[])
         /* main switch on operation mode of engine */
         switch (es.operation_mode)
         {
-        case static_cast<int>(OperationMode::NORMAL): // fast path
+        case static_cast<int>(OperationMode::SANDBOX): // fast path
         {
             /* deal with camera input */
             t_camera.start();
+            CGrabResultPtr ptrGrabResult;
             if (es.simulated_camera)
             {
                 cv::Mat sim = cv::Mat(es.cam_height, es.cam_width, CV_8UC1, 255);
@@ -1003,16 +1024,22 @@ int main(int argc, char *argv[])
             handleGuessCharGame(shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
             break;
         }
+        case static_cast<int>(OperationMode::GUESS_ANIMAL_GAME): // a game to guess which character is shown on backhand as quickly as possible
+        {
+            handleGuessAnimalGame(shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
+            break;
+        }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera todo: move to seperate handler
         {
             switch (es.calibration_state)
             {
             case static_cast<int>(CalibrationStateMachine::COLLECT):
             {
-                std::vector<cv::Point2f> corner_pts;
+                CGrabResultPtr ptrGrabResult;
                 camera.capture_single_image(ptrGrabResult);
                 camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                 cv::flip(camImageOrig, camImage, 1);
+                std::vector<cv::Point2f> corner_pts;
                 bool success = cv::findChessboardCorners(camImage, cv::Size(es.checkerboard_width, es.checkerboard_height), corner_pts, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
                 if (success)
                 {
@@ -1069,6 +1096,7 @@ int main(int argc, char *argv[])
         case static_cast<int>(OperationMode::COAXIAL): // calibrate projector <-> camera
         {
             t_camera.start();
+            CGrabResultPtr ptrGrabResult;
             handleCameraInput(ptrGrabResult, false, cv::Mat());
             t_camera.stop();
             std::vector<cv::Point2f> origpts, newpts;
@@ -1128,6 +1156,7 @@ int main(int argc, char *argv[])
                         if (es.leap_cur_frame_id != new_frame_id)
                         {
                             // capture cam image asap
+                            CGrabResultPtr ptrGrabResult;
                             camera.capture_single_image(ptrGrabResult);
                             camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                             cv::flip(camImageOrig, camImage, 1);
@@ -1213,6 +1242,7 @@ int main(int argc, char *argv[])
                     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME)
                     {
                         // capture cam image asap
+                        CGrabResultPtr ptrGrabResult;
                         camera.capture_single_image(ptrGrabResult);
                         camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                         cv::flip(camImageOrig, camImage, 1);
@@ -1410,6 +1440,7 @@ int main(int argc, char *argv[])
                         if (es.leap_cur_frame_id != new_frame_id)
                         {
                             // capture cam image asap
+                            CGrabResultPtr ptrGrabResult;
                             camera.capture_single_image(ptrGrabResult);
                             displayTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, es.cam_buffer_format);
                             glm::vec2 center, center_leap1, center_leap2;
@@ -1471,6 +1502,7 @@ int main(int argc, char *argv[])
                 }
                 case static_cast<int>(LeapMarkSettings::POINT_BY_POINT):
                 {
+                    CGrabResultPtr ptrGrabResult;
                     camera.capture_single_image(ptrGrabResult);
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
@@ -1541,6 +1573,7 @@ int main(int argc, char *argv[])
                 } // LeapMarkSettings::POINT_BY_POINT
                 case static_cast<int>(LeapMarkSettings::WHOLE_HAND):
                 {
+                    CGrabResultPtr ptrGrabResult;
                     camera.capture_single_image(ptrGrabResult);
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
@@ -1571,6 +1604,7 @@ int main(int argc, char *argv[])
                 } // LeapMarkSettings::WHOLE_HAND
                 case static_cast<int>(LeapMarkSettings::ONE_BONE):
                 {
+                    CGrabResultPtr ptrGrabResult;
                     camera.capture_single_image(ptrGrabResult);
                     camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
                     cv::flip(camImageOrig, camImage, 1);
@@ -1948,7 +1982,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         return;
     switch (es.operation_mode)
     {
-    case static_cast<int>(OperationMode::NORMAL):
+    case static_cast<int>(OperationMode::SANDBOX):
     {
         break;
     }
@@ -2010,7 +2044,7 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         return;
     switch (es.operation_mode)
     {
-    case static_cast<int>(OperationMode::NORMAL):
+    case static_cast<int>(OperationMode::SANDBOX):
     {
         if (es.shift_modifier)
         {
@@ -2778,7 +2812,7 @@ bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, 
     // cv::Mat image = cv::imread("../../resource/hand.png", cv::IMREAD_GRAYSCALE);
     // std::cout << "mp received timestamp: " << timestamp << std::endl;
     // cv::Mat image;
-    // cv::Mat image = cv::imread("C:/src/augmented_hands/debug/ss/sg0o.0_raw_cam.png");
+    // cv::Mat image = cv::imread("../../debug/ss/sg0o.0_raw_cam.png");
     // cv::resize(image1, image, cv::Size(512, 512));
     npy_intp dimensions[3] = {image.rows, image.cols, image.channels()};
     // std::cout << "mp imported function" << std::endl;
@@ -4836,6 +4870,96 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones2world_left_cur,
     return true;
 }
 
+void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
+                           SkinnedModel &leftHandModel,
+                           SkinnedModel &rightHandModel,
+                           TextModel &textModel,
+                           glm::mat4 &cam_view_transform,
+                           glm::mat4 &cam_projection_transform)
+{
+    if (!guessAnimalGame.isInitialized())
+        return;
+    int state = guessAnimalGame.getState();
+    Shader *gridShader = shaderMap["gridShader"];
+    Shader *textureShader = shaderMap["textureShader"];
+    /* deal with camera input */
+    t_camera.start();
+    CGrabResultPtr ptrGrabResult;
+    if (es.simulated_camera)
+    {
+        cv::Mat sim = cv::Mat(es.cam_height, es.cam_width, CV_8UC1, 255);
+        handleCameraInput(ptrGrabResult, true, sim);
+    }
+    else
+    {
+        handleCameraInput(ptrGrabResult, false, cv::Mat());
+    }
+    t_camera.stop();
+
+    /* deal with leap input */
+    t_leap.start();
+    LEAP_STATUS leap_status = handleLeapInput();
+    if (es.record_session)
+    {
+        if ((t_app.getElapsedTimeInSec() - es.recordStartTime) > es.recordDuration)
+        {
+            es.record_session = false;
+            saveSession(std::format("../../resource/recordings/{}", es.recording_name), es.recordImages);
+            std::cout << "Recording stopped" << std::endl;
+        }
+        else
+        {
+            saveLeapData(leap_status, es.totalFrameCount, es.recordImages);
+        }
+    }
+    if (es.record_single_pose)
+    {
+        saveSession(std::format("../../resource/recordings/{}", es.recording_name), leap_status, es.totalFrameCount, es.recordImages);
+        es.record_single_pose = false;
+    }
+    t_leap.stop();
+    /* skin hand meshes */
+    t_skin.start();
+    handleSkinning(bones_to_world_right, true, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+    handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+    t_skin.stop();
+
+    /* deal with bake request */
+    t_bake.start();
+    if (state == static_cast<int>(GuessAnimalGameState::BAKE))
+    {
+        guessAnimalGame.resetState();
+        handlePromptMode();
+        es.bakeRequest = true;
+    }
+    handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
+    t_bake.stop();
+
+    /* run MLS on MP prediction to reduce bias */
+    t_mls.start();
+    handleMLS(*gridShader);
+    t_mls.stop();
+
+    /* post process fbo using camera input */
+    t_pp.start();
+    handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+    /* render final output to screen */
+    if (!es.debug_mode)
+    {
+        glViewport(0, 0, es.proj_width, es.proj_height); // set viewport
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        set_texture_shader(textureShader, false, false, false, false, 0.035f, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), es.gamma_correct);
+        c2p_fbo.getTexture()->bind();
+        fullScreenQuad.render();
+    }
+    t_pp.stop();
+
+    /* debug mode */
+    t_debug.start();
+    handleDebugMode(shaderMap, rightHandModel, leftHandModel, textModel);
+    t_debug.stop();
+}
+
 void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          SkinnedModel &leftHandModel,
                          SkinnedModel &rightHandModel,
@@ -5300,7 +5424,7 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *textShader = shader_map["textShader"];
     Shader *lineShader = shader_map["lineShader"];
-    if (es.debug_mode && es.operation_mode == static_cast<int>(OperationMode::NORMAL))
+    if (es.debug_mode && es.operation_mode == static_cast<int>(OperationMode::SANDBOX))
     {
         glm::mat4 proj_view_transform = gl_projector.getViewMatrix();
         glm::mat4 proj_projection_transform = gl_projector.getProjectionMatrix();
@@ -5790,6 +5914,42 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     es.videoFrameCountCont += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
     return true;
 }
+
+void handlePromptMode()
+{
+    switch (es.prompt_mode)
+    {
+    case static_cast<int>(PromptMode::MANUAL_PROMPT):
+    {
+        es.cur_prompt = es.manual_prompt;
+        break;
+    }
+    case static_cast<int>(PromptMode::AUTO_PROMPT):
+    {
+        es.cur_prompt = "";
+        break;
+    }
+    case static_cast<int>(PromptMode::FROM_LIST):
+    {
+        es.cur_prompt = es.selected_listed_prompt;
+        break;
+    }
+    case static_cast<int>(PromptMode::RANDOM_ANIMAL):
+    {
+        std::vector<std::string> random_animal;
+        std::sample(es.animals.begin(),
+                    es.animals.end(),
+                    std::back_inserter(random_animal),
+                    1,
+                    std::mt19937{std::random_device{}()});
+        es.cur_prompt = random_animal[0];
+        break;
+    }
+    default:
+        es.cur_prompt = es.manual_prompt;
+        break;
+    }
+}
 // ---------------------------------------------------------------------------------------------
 // IMGUI frame creator
 // ---------------------------------------------------------------------------------------------
@@ -5857,7 +6017,7 @@ void openIMGUIFrame()
             ImGui::Checkbox("PBO", &es.use_pbo);
             ImGui::Checkbox("Double PBO", &es.double_pbo);
             ImGui::SeparatorText("Operation Mode");
-            if (ImGui::RadioButton("Normal", &es.operation_mode, static_cast<int>(OperationMode::NORMAL)))
+            if (ImGui::RadioButton("Normal", &es.operation_mode, static_cast<int>(OperationMode::SANDBOX)))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
@@ -5965,6 +6125,20 @@ void openIMGUIFrame()
                                                           es.cam_width, es.cam_height);
                 }
             }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Guess Animal Game", &es.operation_mode, static_cast<int>(OperationMode::GUESS_ANIMAL_GAME)))
+            {
+                leap.setImageMode(false);
+                leap.setPollMode(false);
+                // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+                es.texture_mode = static_cast<int>(TextureMode::BAKED);
+                es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
+                es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
+                es.cur_prompt = es.selected_listed_prompt;
+                es.exposure = 1850.0f; // max exposure allowing for max fps
+                camera.set_exposure_time(es.exposure);
+            }
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
@@ -5972,7 +6146,7 @@ void openIMGUIFrame()
         {
             switch (es.operation_mode)
             {
-            case static_cast<int>(OperationMode::NORMAL):
+            case static_cast<int>(OperationMode::SANDBOX):
             {
                 if (ImGui::Button("Save Current Extrinsics"))
                 {
@@ -6535,38 +6709,7 @@ void openIMGUIFrame()
             ImGui::InputText("Bake texture file (left)", &es.bakeFileLeft);
             if (ImGui::Button("Bake"))
             {
-                switch (es.sd_mode)
-                {
-                case static_cast<int>(SDMode::MANUAL_PROMPT):
-                {
-                    es.cur_prompt = es.manual_prompt;
-                    break;
-                }
-                case static_cast<int>(SDMode::AUTO_PROMPT):
-                {
-                    es.cur_prompt = "";
-                    break;
-                }
-                case static_cast<int>(SDMode::FROM_LIST):
-                {
-                    es.cur_prompt = es.selected_listed_prompt;
-                    break;
-                }
-                case static_cast<int>(SDMode::RANDOM_ANIMAL):
-                {
-                    std::vector<std::string> random_animal;
-                    std::sample(es.animals.begin(),
-                                es.animals.end(),
-                                std::back_inserter(random_animal),
-                                1,
-                                std::mt19937{std::random_device{}()});
-                    es.cur_prompt = random_animal[0];
-                    break;
-                }
-                default:
-                    es.cur_prompt = es.manual_prompt;
-                    break;
-                }
+                handlePromptMode();
                 switch (es.bake_mode)
                 {
                 case static_cast<int>(BakeMode::FILE):
@@ -6594,13 +6737,13 @@ void openIMGUIFrame()
             ImGui::SliderInt("ControlNet Present", &es.controlnet_preset, 0, 22);
             ImGui::Text("Prompts Mode");
             ImGui::SameLine();
-            ImGui::RadioButton("Manual Prompt", &es.sd_mode, 0);
+            ImGui::RadioButton("Manual Prompt", &es.prompt_mode, 0);
             ImGui::SameLine();
-            ImGui::RadioButton("Auto Prompt", &es.sd_mode, 1);
+            ImGui::RadioButton("Auto Prompt", &es.prompt_mode, 1);
             ImGui::SameLine();
-            ImGui::RadioButton("From List", &es.sd_mode, 2);
+            ImGui::RadioButton("From List", &es.prompt_mode, 2);
             ImGui::SameLine();
-            ImGui::RadioButton("Random Animal", &es.sd_mode, 3);
+            ImGui::RadioButton("Random Animal", &es.prompt_mode, 3);
             ImGui::InputInt("Random Seed", &es.diffuse_seed);
             ImGui::InputText("Manual Prompt", &es.manual_prompt);
             if (ImGui::BeginCombo("Listed Prompts", es.selected_listed_prompt.c_str(), 0))
