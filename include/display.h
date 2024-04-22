@@ -1,6 +1,5 @@
 #ifndef DYNAFLASH_H
 #define DYNAFLASH_H
-#include "stdafx.h"
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

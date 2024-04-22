@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
 void testControlNet()
 {
     fs::path item_dir = "../../resource/images";
-    fs::path mask_path = item_dir / "mask_dual.png";
+    fs::path mask_path = item_dir / "mask_single.png";
     // Load input image
     cv::Mat mask = cv::imread(mask_path.string(), cv::IMREAD_UNCHANGED);
     cv::cvtColor(mask, mask, cv::COLOR_RGBA2GRAY);
@@ -30,20 +30,21 @@ void testControlNet()
     // Run inference
     ControlNetClient control_net_client = ControlNetClient();
     int preset_id = 0;
-    bool fit_to_view = false;
-    std::string animal = "butterfly";
+    bool fit_to_view = true;
+    std::string animal = "deer facing camera";
     std::vector<uint8_t> result_buffer;
     bool success = control_net_client.inference(mask_buffer, result_buffer,
                                                 preset_id,
                                                 mask.cols, mask.rows, mask.channels(),
-                                                5, // fix seed so that the result is deterministic
+                                                47, // fix seed so that the result is deterministic
                                                 animal,
-                                                fit_to_view);
+                                                fit_to_view,
+                                                50);
 
     // Save result
     if (success)
     {
-        cv::Mat result_image = cv::Mat(512, 512, CV_8UC3, result_buffer.data());
+        cv::Mat result_image = cv::Mat(mask.rows, mask.cols, CV_8UC3, result_buffer.data());
         cv::cvtColor(result_image, result_image, cv::COLOR_RGB2BGR);
         cv::imwrite((item_dir / "result.png").string(), result_image);
     }

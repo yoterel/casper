@@ -59,12 +59,20 @@ public:
                    int width, int height, int channels,
                    int seed = -1,
                    std::string animal = "",
-                   bool fit_to_view = true);
+                   bool fit_to_view = true,
+                   int extra_pad_size = 50);
 
 private:
     void changeModel(const std::string &modelName);
     bool txt2img(const json &payload, json &response);
-    std::vector<uint8_t> fit_mask_to_view(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration = 0.8);
+    std::vector<uint8_t> fit_mask_to_view(const std::vector<uint8_t> &mask,
+                                          int sd_width, int sd_height,
+                                          int orig_width, int orig_height,
+                                          cv::Rect &rect, int extra_pad);
+    std::vector<uint8_t> fit_sd_to_view(const std::vector<uint8_t> &sd,
+                                        int sd_width, int sd_height,
+                                        int orig_width, int orig_height,
+                                        cv::Rect &rect, int extra_pad);
     std::string url = "http://127.0.0.1:7860";
     std::string modelName;
 };
