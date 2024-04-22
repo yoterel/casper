@@ -342,9 +342,9 @@ json ControlNetPayload::getPayload(const std::string &encoded_image, const std::
                     {"steps", steps},
                     {"cfg_scale", cfg_scale},
                     {"width", width},
+                    {"height", height},
                     {"seed", seed},
                     {"subseed", -1},
-                    {"height", height},
                     {"sampler_name", sampler_name},
                     {"scheduler", "Karras"},
                     {"alwayson_scripts",
@@ -445,18 +445,28 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
                                  int width, int height, int channels,
                                  int seed,
                                  std::string animal,
-                                 bool fit_to_view)
+                                 bool fit_to_view,
+                                 int extra_pad_size)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
     std::string encoded_image;
-    if (fit_to_view)
+    cv::Rect rect;
+    if (fit_to_view) // pad the mask to square and resize to payload size (512x512)
     {
-        std::vector<uint8_t> enlarged_data = fit_mask_to_view(raw_data, width, height);
-        encoded_image = encode_png(enlarged_data, width, height, channels);
+        std::vector<uint8_t> fitted_mask = fit_mask_to_view(raw_data,
+                                                            payload.width, payload.height,
+                                                            width, height,
+                                                            rect, extra_pad_size);
+        // std::vector<uint8_t> enlarged_data = fit_mask_to_view(raw_data, width, height);
+        encoded_image = encode_png(fitted_mask, payload.width, payload.height, channels);
     }
-    else
+    else // mask will be resized naively to 512x512
     {
-        encoded_image = encode_png(raw_data, width, height, channels);
+        std::vector<uint8_t> raw_vec = raw_data;
+        cv::Mat input = cv::Mat(height, width, CV_8UC1, raw_vec.data());
+        cv::resize(input, input, cv::Size(payload.width, payload.height));
+        std::vector<uint8_t> resized(input.data, input.data + input.total() * input.elemSize());
+        encoded_image = encode_png(resized, payload.width, payload.height, channels);
     }
 
     if (animal.empty())
@@ -476,7 +486,22 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
             return false;
         }
         std::string result = base64_decode(std::string(response["images"][0]));
-        out_data = decode_png(result, width, height, false);
+        std::vector decoded = decode_png(result, payload.width, payload.height, false);
+        if (fit_to_view)
+        {
+            out_data = fit_sd_to_view(decoded,
+                                      payload.width, payload.height,
+                                      width, height,
+                                      rect, extra_pad_size);
+        }
+        else // we need to resize back to our original size
+        {
+            cv::Mat output = cv::Mat(payload.width, payload.height, CV_8UC3, decoded.data());
+            cv::resize(output, output, cv::Size(width, height));
+            std::vector<uint8_t> result(output.data, output.data + output.total() * output.elemSize());
+            // std::vector<uint8_t> result(output.begin<uint8_t>(), output.end<uint8_t>());
+            out_data = result;
+        }
         return true;
     }
     catch (std::exception &e)
@@ -576,41 +601,85 @@ std::string Client::encode_png(const std::vector<uint8_t> &raw_data, const int w
     return std::string("data:image/png;base64,") + base64_encode(std::string(data.begin(), data.end()));
 }
 
-std::vector<uint8_t> ControlNetClient::fit_mask_to_view(const std::vector<uint8_t> &mask, int width, int height, float enlarge_ration)
+std::vector<uint8_t> ControlNetClient::fit_mask_to_view(const std::vector<uint8_t> &mask,
+                                                        int sd_width, int sd_height,
+                                                        int orig_width, int orig_height,
+                                                        cv::Rect &rect, int extra_pad)
 {
-    std::vector<uint8_t> mask_vec = mask;
-    cv::Mat mask_mat = cv::Mat(height, width, CV_8UC1, mask_vec.data());
-    // fs::path item_dir = "../../resource/images";
-
-    // printf("mask_mat: %d %d %d\n", mask_mat.rows, mask_mat.cols, mask_mat.channels());
-    // printf("mask_mat_type: %d\n", mask_mat.type());
-
+    std::vector<uint8_t> mask_vec = mask; // copy the mask
+    cv::Mat mask_mat = cv::Mat(orig_height, orig_width, CV_8UC1, mask_vec.data());
     std::vector<std::vector<cv::Point>> contours;
     std::vector<cv::Vec4i> hierarchy;
     cv::findContours(mask_mat, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+    rect = cv::boundingRect(contours[0]);
 
-    cv::Rect rect = cv::boundingRect(contours[0]);
+    // pad to square before resizing
+    bool padh = rect.height > rect.width; // should we pad horizontally or vertically?
+    int pad = std::max(rect.width, rect.height) - std::min(rect.width, rect.height);
+    int pad_parity = pad % 2;
+    int pad1 = (pad / 2) + extra_pad;
+    int pad2 = (pad / 2) + pad_parity + extra_pad;
 
-    int center_x = rect.x + rect.width / 2;
-    int center_y = rect.y + rect.height / 2;
-    float original_aspect_ratio = float(width) / float(height);
-    float contour_aspect_ratio = float(rect.width) / float(rect.height);
+    cv::Mat padded;
+    cv::copyMakeBorder(mask_mat(rect), padded,
+                       padh ? extra_pad : pad1,
+                       padh ? extra_pad : pad2,
+                       padh ? pad1 : extra_pad,
+                       padh ? pad2 : extra_pad,
+                       cv::BORDER_CONSTANT, cv::Scalar(0));
+    if (padded.rows != padded.cols)
+    {
+        std::cerr << "Padding failed, padded image is not square" << std::endl;
+        exit(1);
+    }
+    cv::Mat resized;
+    cv::resize(padded, resized, cv::Size(sd_width, sd_height), cv::INTER_NEAREST);
+    std::vector<uint8_t> fitted_mask_buffer(resized.begin<uint8_t>(), resized.end<uint8_t>());
+    return fitted_mask_buffer;
+}
 
-    int adjusted_width =
-        (contour_aspect_ratio < original_aspect_ratio) ? int(rect.height * original_aspect_ratio) : rect.width;
-    int adjusted_height =
-        (contour_aspect_ratio > original_aspect_ratio) ? int(rect.width / original_aspect_ratio) : rect.height;
-    int crop_width = float(adjusted_width) / enlarge_ration;
-    int crop_height = float(adjusted_height) / enlarge_ration;
-    rect.x = center_x - crop_width / 2;
-    rect.y = center_y - crop_height / 2;
-    rect.width = crop_width;
-    rect.height = crop_height;
+// fits the sd image to the mask size
+std::vector<uint8_t> ControlNetClient::fit_sd_to_view(const std::vector<uint8_t> &sd_data,
+                                                      int sd_width, int sd_height,
+                                                      int orig_width, int orig_height,
+                                                      cv::Rect &rect,
+                                                      int extra_pad)
+{
+    std::vector<uint8_t> sd_vec = sd_data; // copy the sd image
+    cv::Mat sd_image = cv::Mat(sd_height, sd_width, CV_8UC3, sd_vec.data());
+    // compute padding so we can resize back to original size
+    if (rect.height != rect.width)
+    {
+        cv::Mat dummy_image = cv::Mat::zeros(orig_height, orig_width, CV_8UC3);
+        // we need to pad to square before resizing
+        bool padh = rect.height > rect.width; // should we pad horizontally or vertically?
+        int pad = std::max(rect.width, rect.height) - std::min(rect.width, rect.height);
+        int pad_parity = pad % 2;
+        int pad1 = (pad / 2) + extra_pad;
+        int pad2 = (pad / 2) + pad_parity + extra_pad;
+        cv::Mat padded;
+        cv::copyMakeBorder(dummy_image(rect), padded,
+                           padh ? extra_pad : pad1,
+                           padh ? extra_pad : pad2,
+                           padh ? pad1 : extra_pad,
+                           padh ? pad2 : extra_pad,
+                           cv::BORDER_CONSTANT, cv::Scalar(0));
+        if (padded.rows != padded.cols)
+        {
+            std::cerr << "Padding failed, padded image is not square" << std::endl;
+            exit(1);
+        }
+        cv::Rect myROI(padh ? pad1 : extra_pad, padh ? extra_pad : pad1, rect.width, rect.height);
+        cv::resize(sd_image, sd_image, cv::Size(padded.cols, padded.rows), cv::INTER_NEAREST); // resize the square to original size
+        sd_image = sd_image(myROI);                                                            // "peel" the padding
+    }
+    else
+    {
+        cv::resize(sd_image, sd_image, cv::Size(rect.width, rect.height), cv::INTER_NEAREST); // resize the square to original size
+    }
 
-    cv::Mat mask_enlarged;
-    cv::resize(mask_mat(rect), mask_enlarged, cv::Size(width, height), cv::INTER_NEAREST);
-    // cv::imwrite((item_dir / "tmp.png").string(), mask_enlarged);
-    std::vector<uint8_t> mask_enlarged_buffer(mask_enlarged.begin<uint8_t>(), mask_enlarged.end<uint8_t>());
-
-    return mask_enlarged_buffer;
+    cv::Mat out_image = cv::Mat::zeros(orig_height, orig_width, CV_8UC3);
+    sd_image.copyTo(out_image(rect));
+    // std::vector<uint8_t> result(out_image.begin<uint8_t>(), out_image.end<uint8_t>());
+    return std::vector<uint8_t>(out_image.data, out_image.data + out_image.total() * out_image.elemSize());
 }
