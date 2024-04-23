@@ -978,7 +978,7 @@ int main(int argc, char *argv[])
 
             /* run MLS on MP prediction to reduce bias */
             t_mls.start();
-            handleMLS(gridShader);
+            handleMLS(gridShader, es.mls_blocking);
             t_mls.stop();
 
             /* post process fbo using camera input */
@@ -3388,35 +3388,25 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     if (es.show_landmarks)
     {
-        std::lock_guard<std::mutex> lock(es.mls_mutex);
-        float landmarkSize = 10.0f;
+        float landmarkSize = 8.0f;
         vcolorShader->use();
-        std::vector<glm::vec2> leap_joints_left = Helpers::project_points(joints_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-        std::vector<glm::vec2> leap_joints_right = Helpers::project_points(joints_right, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-        std::vector<glm::vec2> leap_joints_left_filtered, leap_joints_right_filtered;
-        for (int i = 0; i < es.leap_selection_vector.size(); i++)
-        {
-            if (leap_joints_left.size() > 0)
-                leap_joints_left_filtered.push_back(leap_joints_left[es.leap_selection_vector[i]]);
-            if (leap_joints_right.size() > 0)
-                leap_joints_right_filtered.push_back(leap_joints_right[es.leap_selection_vector[i]]);
-        }
         if (es.use_coaxial_calib)
             vcolorShader->setMat4("mvp", c2p_homography);
         else
             vcolorShader->setMat4("mvp", glm::mat4(1.0f));
-        PointCloud cloud_left(leap_joints_left_filtered, es.screen_verts_color_white);
-        PointCloud cloud_right(leap_joints_right_filtered, es.screen_verts_color_white);
+        PointCloud cloud_left(projected_filtered_left, es.screen_verts_color_white);
+        PointCloud cloud_right(projected_filtered_right, es.screen_verts_color_white);
         cloud_left.render(landmarkSize);
         cloud_right.render(landmarkSize);
         if (es.use_mls || es.use_of)
         {
-            PointCloud cloud_src_input_left(ControlPointsP_input_left, es.screen_verts_color_red);
+            std::lock_guard<std::mutex> lock(es.mls_mutex);
+            PointCloud cloud_src_input_left(ControlPointsP_input_left, es.screen_verts_color_red); // leap landmarks used as input for landmark thread
             PointCloud cloud_src_input_right(ControlPointsP_input_right, es.screen_verts_color_red);
             std::vector<glm::vec2> pglm = Helpers::cv2glm(ControlPointsP);
             std::vector<glm::vec2> qglm = Helpers::cv2glm(ControlPointsQ);
-            PointCloud cloud_src(pglm, es.screen_verts_color_cyan);    // leap joints, from when mls was computed
-            PointCloud cloud_dst(qglm, es.screen_verts_color_magenta); // landmarks, from when mls was computed
+            PointCloud cloud_src(pglm, es.screen_verts_color_cyan);    // leap landmarks used for mls
+            PointCloud cloud_dst(qglm, es.screen_verts_color_magenta); // camera landmarks used for mls
             cloud_src_input_left.render(landmarkSize);
             cloud_src_input_right.render(landmarkSize);
             cloud_src.render(landmarkSize);
@@ -4526,22 +4516,19 @@ void constructGrid(bool updateGLBuffers)
 void renderGrid(Shader &gridShader)
 {
     // render current image using the latest deformation grid
-    if (!es.use_of || es.mls_succeeded_this_frame)
-    {
-        mls_fbo.bind();
-        glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
-        if (es.postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
-            uv_fbo.getTexture()->bind();
-        else
-            hands_fbo.getTexture()->bind();
-        gridShader.use();
-        gridShader.setInt("src", 0);
-        gridShader.setFloat("threshold", es.mls_grid_shader_threshold);
-        gridShader.setBool("flipVer", false);
-        deformationGrid.render();
-        mls_fbo.unbind();
-        glEnable(GL_CULL_FACE);
-    }
+    mls_fbo.bind();
+    glDisable(GL_CULL_FACE); // todo: why is this necessary? flip grid triangles...
+    if (es.postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
+        uv_fbo.getTexture()->bind();
+    else
+        hands_fbo.getTexture()->bind();
+    gridShader.use();
+    gridShader.setInt("src", 0);
+    gridShader.setFloat("threshold", es.mls_grid_shader_threshold);
+    gridShader.setBool("flipVer", false);
+    deformationGrid.render();
+    mls_fbo.unbind();
+    glEnable(GL_CULL_FACE);
 }
 
 void handleMLS(Shader &gridShader, bool blocking, bool landmarks, bool simulation)
@@ -4695,6 +4682,8 @@ void handleOF(Shader *gridShader)
         if (cq.size() > 0)
         {
             es.of_debug.clear();
+            float max_magnitude = 0.0f;
+            cv::Scalar max_flow;
             for (int i = 0; i < cq.size(); i++)
             {
                 // glm::vec2 p = cp[i];
@@ -4705,51 +4694,28 @@ void handleOF(Shader *gridShader)
                                   es.of_roi,
                                   es.of_roi);
                 cv::Mat roi_flow = flow(flowrect).clone();
-                bool test = false;
-                if (test && i == 3)
-                {
-                    float factor = 2.0f;
-                    float factor_half = factor / 2.0f;
-                    cv::Rect myrect = cv::Rect(static_cast<int>(std::round(q.x - (es.of_roi * factor_half))),
-                                               static_cast<int>(std::round(q.y - (es.of_roi * factor_half))),
-                                               static_cast<int>(std::round(es.of_roi * factor)),
-                                               static_cast<int>(std::round(es.of_roi * factor)));
-                    // std::cout << myrect.x << " " << myrect.y << " " << myrect.width << " " << myrect.height << std::endl;
-                    cv::Mat roi_image = image(myrect);
-                    cv::Mat roi_image_rgb;
-                    cv::cvtColor(roi_image, roi_image_rgb, cv::COLOR_GRAY2RGB);
-                    // for (int y = 0; y < roi_flow.rows - 1; y += 1)
-                    // {
-                    //     for (int x = 0; x < roi_flow.cols - 1; x += 1)
-                    //     {
-                    //         // if (mask.at<uchar>(y, x) == 0)
-                    //         //     continue;
-                    //         float realx = x + ((1.0f - (1.0f / factor)) / 2.0f);
-                    //         float realy = y + ((1.0f - (1.0f / factor)) / 2.0f);
-                    //         const cv::Point2f flowatxy = roi_flow.at<cv::Point2f>(y, x);
-                    //         cv::line(roi_image_rgb, cv::Point(realx, realy), cv::Point(realx + flowatxy.x, realy + flowatxy.y), cv::Scalar(0, 255, 0), 1);
-                    //         // cv::circle(roi_image_rgb, cv::Point(x, y), 1, cv::Scalar(0, 0, 255), -1);
-                    //     }
-                    // }
-                    cv::imwrite("roi.png", roi_image_rgb);
-                }
-                // std::vector<cv::Point2f> raw_data(roi_rect.begin<cv::Point2f>(), roi_rect.end<cv::Point2f>());
-                // std::cout << "raw: " << std::endl;
-                // for (i = 0; i < raw_data.size(); i++)
-                // {
-                //     std::cout << raw_data[i].x << " " << raw_data[i].y << std::endl;
-                // }
                 cv::Scalar avg_flow = cv::mean(roi_flow);
-                cv::Point2f dxdy(avg_flow[0], avg_flow[1]);
+                if (cv::norm(avg_flow) > max_magnitude)
+                {
+                    max_magnitude = cv::norm(avg_flow);
+                    max_flow = avg_flow;
+                }
+                // cv::Point2f dxdy(avg_flow[0], avg_flow[1]);
                 // cp[i] = p + dxdy;
-                cq[i] = q + dxdy;
-                es.of_debug.push_back(glm::vec2(avg_flow[0], -avg_flow[1]));
+                // cq[i] = q + dxdy;
+                // es.of_debug.push_back(glm::vec2(avg_flow[0], -avg_flow[1]));
+            }
+            for (int i = 0; i < cq.size(); i++)
+            {
+                // glm::vec2 p = cp[i];
+                cq[i] += cv::Point2f(max_flow[0], max_flow[1]);
+                es.of_debug.push_back(glm::vec2(max_flow[0], -max_flow[1]));
             }
             // ControlPointsP_glm = Helpers::ScreenToNDC(cp, es.of_downsize.width, es.of_downsize.height);
             ControlPointsQ = Helpers::ScreenToNDC(cq, es.of_downsize.width, es.of_downsize.height, true);
             ControlPointsP = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left));
-            constructGrid(true);
-            renderGrid(*gridShader);
+            // constructGrid(true);
+            // renderGrid(*gridShader);
         }
     }
 }
@@ -6750,6 +6716,7 @@ void openIMGUIFrame()
                 if (es.use_of)
                 {
                     updateOFParams();
+                    es.mls_extrapolate = false;
                 }
             }
             if (ImGui::RadioButton("Farneback CPU", &es.of_mode, static_cast<int>(OFMode::FB_CPU)))
@@ -6798,7 +6765,13 @@ void openIMGUIFrame()
             }
             ImGui::SameLine();
             ImGui::Checkbox("MLS Blocking", &es.mls_blocking);
-            ImGui::Checkbox("MLS Extrapolate", &es.mls_extrapolate);
+            if (ImGui::Checkbox("MLS Extrapolate", &es.mls_extrapolate))
+            {
+                if (es.mls_extrapolate)
+                {
+                    es.use_of = false;
+                }
+            }
             ImGui::Checkbox("MLS Solve Every Fram", &es.mls_solve_every_frame);
             ImGui::SliderInt("Sim: MLS Every N Frames", &es.mls_every, 1, 20);
             ImGui::SliderInt("Sim: MLS N Latency", &es.mls_n_latency_frames, 0, 20);
