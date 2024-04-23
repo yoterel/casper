@@ -38,6 +38,28 @@ std::vector<glm::vec2> Helpers::ScreenToNDC(const std::vector<glm::vec2> &pixels
     return uv;
 }
 
+cv::Point2f Helpers::ScreenToNDC(const cv::Point2f &pixel, int width, int height, bool flip_y)
+{
+    cv::Point2f uv;
+    uv.x = (2.0f * pixel.x / width) - 1.0f;
+    uv.y = (2.0f * pixel.y / height) - 1.0f;
+    if (flip_y)
+    {
+        uv.y *= -1.0f;
+    }
+    return uv;
+}
+
+std::vector<cv::Point2f> Helpers::ScreenToNDC(const std::vector<cv::Point2f> &pixels, int width, int height, bool flip_y)
+{
+    std::vector<cv::Point2f> uv;
+    for (int i = 0; i < pixels.size(); i++)
+    {
+        uv.push_back(ScreenToNDC(pixels[i], width, height, flip_y));
+    }
+    return uv;
+}
+
 glm::vec2 Helpers::NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool flip_y)
 {
     glm::vec2 pixel;
@@ -50,6 +72,25 @@ glm::vec2 Helpers::NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool
 std::vector<glm::vec2> Helpers::NDCtoScreen(const std::vector<glm::vec2> &NDCs, int width, int height, bool flip_y)
 {
     std::vector<glm::vec2> pixels;
+    for (int i = 0; i < NDCs.size(); i++)
+    {
+        pixels.push_back(NDCtoScreen(NDCs[i], width, height, flip_y));
+    }
+    return pixels;
+}
+
+cv::Point2f Helpers::NDCtoScreen(const cv::Point2f &NDC, int width, int height, bool flip_y)
+{
+    cv::Point2f pixel;
+    float multiplier = flip_y ? -1.0f : 1.0f;
+    pixel.x = ((width - 1.0f) * (NDC.x + 1.0f) * 0.5f);
+    pixel.y = ((height - 1.0f) * (multiplier * NDC.y + 1.0f) * 0.5f);
+    return pixel;
+}
+
+std::vector<cv::Point2f> Helpers::NDCtoScreen(const std::vector<cv::Point2f> &NDCs, int width, int height, bool flip_y)
+{
+    std::vector<cv::Point2f> pixels;
     for (int i = 0; i < NDCs.size(); i++)
     {
         pixels.push_back(NDCtoScreen(NDCs[i], width, height, flip_y));
@@ -702,6 +743,28 @@ bool Helpers::isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transfo
     float dot_product = glm::dot(palm_normal, cam_normal);
     // std::cout << dot_product << std::endl;
     return dot_product > 0;
+}
+
+void Helpers::visualize_flow(cv::Mat flow, cv::Mat bg, std::string dst, float threshold)
+{
+    cv::Mat mask, fullChannel;
+    if (threshold > 0)
+        cv::threshold(bg, mask, static_cast<int>(threshold * 255), 255, cv::THRESH_BINARY);
+    else
+        mask = cv::Mat::ones(bg.size(), CV_8UC1);
+    cv::cvtColor(bg, fullChannel, cv::COLOR_GRAY2RGB);
+    for (int y = 0; y < bg.rows - 1; y += 10)
+    {
+        for (int x = 0; x < bg.cols - 1; x += 10)
+        {
+            if (mask.at<uchar>(y, x) == 0)
+                continue;
+            const cv::Point2f flowatxy = flow.at<cv::Point2f>(y, x) * 5;
+            cv::line(fullChannel, cv::Point(x, y), cv::Point(cvRound(x + flowatxy.x), cvRound(y + flowatxy.y)), cv::Scalar(0, 255, 0), 2);
+            cv::circle(fullChannel, cv::Point(x, y), 1, cv::Scalar(0, 0, 255), -1);
+        }
+    }
+    cv::imwrite(dst, fullChannel);
 }
 // void setup_circle_buffers(unsigned int& VAO, unsigned int& VBO)
 // {

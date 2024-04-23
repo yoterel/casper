@@ -11,8 +11,12 @@ public:
     static std::vector<glm::vec2> vec3to2(std::vector<glm::vec3> vec);
     static glm::vec2 ScreenToNDC(const glm::vec2 &pixel, int width, int height, bool flip_y = false);
     static std::vector<glm::vec2> ScreenToNDC(const std::vector<glm::vec2> &pixels, int width, int height, bool flip_y = false);
+    static cv::Point2f ScreenToNDC(const cv::Point2f &pixel, int width, int height, bool flip_y = false);
+    static std::vector<cv::Point2f> ScreenToNDC(const std::vector<cv::Point2f> &pixels, int width, int height, bool flip_y = false);
     static glm::vec2 NDCtoScreen(const glm::vec2 &NDC, int width, int height, bool flip_y = false);
+    static cv::Point2f NDCtoScreen(const cv::Point2f &NDC, int width, int height, bool flip_y = false);
     static std::vector<glm::vec2> NDCtoScreen(const std::vector<glm::vec2> &NDCs, int width, int height, bool flip_y = false);
+    static std::vector<cv::Point2f> NDCtoScreen(const std::vector<cv::Point2f> &NDCs, int width, int height, bool flip_y = false);
     static void UV2NDC(std::vector<glm::vec2> &uv);
     static void saveTexture(std::string filepath,
                             unsigned int texture,
@@ -47,6 +51,7 @@ public:
     static glm::vec2 average(std::vector<glm::vec2> &v);
     static glm::mat4 interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale = false, bool isRightHand = false);
     static bool isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform);
+    static void visualize_flow(cv::Mat flow, cv::Mat bg, std::string dst, float threshold = -1.0f);
 
 private:
     Helpers();
