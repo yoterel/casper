@@ -3,6 +3,7 @@
 #include <string>
 #include "leapCPP.h"
 #include "helpers.h"
+#include <mutex>
 
 class EngineState // dumb dumb engine state container
 {
@@ -327,15 +328,18 @@ public:
     float mls_alpha = 0.5f; // emperically best: 0.8f for rigid, 0.5f for affine
     std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
-    bool mls_succeed = false;
+    bool mls_landmark_thread_succeed = false;
+    bool mls_solve_every_frame = false;
     bool mls_succeeded_this_frame = false;
+    bool mls_extrapolate = false;
+    std::mutex mls_mutex;
     int mls_succeed_counter = 0;
     int mls_every = 1;
     int mls_n_latency_frames = 0;
     bool mls_blocking = false;
     std::vector<float> mls_succeed_counters;
     bool mls_running = false;
-    bool mls_probe_recent_leap = false;
+    // bool mls_probe_recent_leap = false;
     bool use_mls = true;
     bool postprocess_blur = false;
     int mls_mode = static_cast<int>(MLSMode::CONTROL_POINTS1);
