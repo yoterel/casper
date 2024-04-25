@@ -109,6 +109,7 @@ public:
     std::string cur_prompt = "";
     bool diffuse_fit_to_view = true;
     int diffuse_pad_size = 50;
+    bool diffuse_select_top_animal = false;
     std::string manual_prompt = "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin";
     std::vector<std::string> listedPrompts{
         "butterfly",
@@ -164,7 +165,7 @@ public:
     float vid_playback_speed = 1.0f;
     float projection_mix_ratio = 0.4f;
     float skin_brightness = 0.5f;
-    float videoFrameCountCont = 0.0f;
+    float simulationTime = 0.0f;
     bool recordImages = false;
     std::string recording_name = "test"; // all_10s
     std::string output_recording_name = "video";
@@ -327,9 +328,9 @@ public:
     std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
     bool mls_landmark_thread_succeed = false;
-    bool mls_solve_every_frame = false;
+    bool mls_solve_every_frame = true;
     bool mls_succeeded_this_frame = false;
-    bool mls_extrapolate = false;
+    bool mls_extrapolate = true;
     std::mutex mls_mutex;
     int mls_succeed_counter = 0;
     int mls_every = 1;
@@ -346,9 +347,9 @@ public:
     bool mls_show_grid = false;
     int mls_cp_smooth_window = 0;
     int mls_grid_smooth_window = 0;
-    bool use_mp_kalman = false;
+    bool mls_use_kalman = false;
     float prev_mls_time = 0.0f;
-    bool mls_use_latest_leap = false;
+    bool mls_use_latest_leap = true;
     bool mls_global_forecast = false;
     float mls_grid_shader_threshold = 1.0f;
     glm::vec2 mls_shift = glm::vec2(0.0f, 0.0f);
@@ -364,8 +365,10 @@ public:
     bool show_of = false;
     int of_mode = static_cast<int>(OFMode::FB_CPU);
     uint64_t totalFrameCountOF = 0;
+    cv::Point2f prev_blob = cv::Point2f(0.0f, 0.0f);
     int of_resize_factor = 2;
     int of_resize_factor_exp = 1;
+    float prev_image_mean = 40.0f;
     cv::Size of_downsize = cv::Size(cam_width / of_resize_factor, cam_height / of_resize_factor);
     int of_roi = 20;
     std::vector<glm::vec2> of_debug;

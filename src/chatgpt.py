@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import os  # Included to Python
 from openai import OpenAI
+import numpy as np
 
 
 class ChatGPTClient:
@@ -13,7 +14,7 @@ class ChatGPTClient:
         else:
             raise Exception("API key not found")
 
-    def send_request(self, encoded_image: str) -> str:
+    def send_request(self, encoded_image: str, select_top: bool) -> str:
         response = self.client.chat.completions.create(
             model="gpt-4-vision-preview",
             messages=[
@@ -22,7 +23,7 @@ class ChatGPTClient:
                     "content": [
                         {
                             "type": "text",
-                            "text": "output must follow this format {'animals': ['animal1', 'animal2', 'animal3']}. This is a picture of a hand gesture. Which animal is it most similar to? Return 3 animals by priority in the requested format.",
+                            "text": "output must follow this format {'animals': ['animal1', 'animal2', 'animal3']}. This is a picture of a hand gesture. Which animal is it most similar to? Return 3 animals by priority in the requested format (with no explanations).",
                         },
                         {
                             "type": "image_url",
@@ -36,7 +37,11 @@ class ChatGPTClient:
 
         try:
             print("raw response: ", response.choices[0].message.content)
-            response = self.decode_response(response)["animals"][0]
+            animal_list = self.decode_response(response)["animals"]
+            if select_top:
+                response = animal_list[0]
+            else:
+                response = np.random.choice(animal_list)
         except Exception as e:
             print("Error in decoding response!")
             print(e)
@@ -68,7 +73,7 @@ def encode_image(image_path: Path):
 
 
 if __name__ == "__main__":
-    encoded_image = encode_image(Path("../../resource/images/mask.png"))
+    encoded_image = encode_image(Path("../../resource/images/mask_dual.png"))
     client = ChatGPTClient()
-    response = client.send_request(encoded_image)
+    response = client.send_request(encoded_image, False)
     print(response)
