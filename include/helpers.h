@@ -49,6 +49,7 @@ public:
     static std::vector<glm::mat4> accumulate(const std::vector<std::vector<glm::mat4>> &a, bool normalize = true);
     static float average(std::vector<float> &v);
     static glm::vec2 average(std::vector<glm::vec2> &v);
+    static cv::Point2f average(std::vector<cv::Point2f> &v);
     static glm::mat4 interpolate(const glm::mat4 &_mat1, const glm::mat4 &_mat2, float _time, bool prescale = false, bool isRightHand = false);
     static bool isPalmFacingCamera(glm::mat4 palm_bone, glm::mat4 cam_view_transform);
     static void visualize_flow(cv::Mat flow, cv::Mat bg, std::string dst, float threshold = -1.0f);
@@ -78,8 +79,8 @@ enum class PromptMode
 {
     MANUAL_PROMPT = 0,
     AUTO_PROMPT = 1,
-    FROM_LIST = 2,
-    RANDOM_ANIMAL = 3,
+    SELECTED = 2,
+    RANDOM = 3,
 };
 enum class BakeMode
 {
@@ -175,6 +176,7 @@ enum class OFMode
     FB_CPU = 0,
     FB_GPU = 1,
     NV_GPU = 2,
+    NAIVE_BLOB = 3,
 };
 
 template <typename T>

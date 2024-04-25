@@ -680,9 +680,25 @@ float Helpers::average(std::vector<float> &v)
     auto const count = static_cast<float>(v.size());
     return std::reduce(v.begin(), v.end()) / count;
 }
+
 glm::vec2 Helpers::average(std::vector<glm::vec2> &v)
 {
     glm::vec2 accumulator = glm::vec2(0.0f, 0.0f);
+    if (v.empty())
+    {
+        return accumulator;
+    }
+    auto const count = static_cast<float>(v.size());
+    for (int i = 0; i < v.size(); i++)
+    {
+        accumulator += v[i];
+    }
+    return accumulator / count;
+}
+
+cv::Point2f Helpers::average(std::vector<cv::Point2f> &v)
+{
+    cv::Point2f accumulator = cv::Point2f(0.0f, 0.0f);
     if (v.empty())
     {
         return accumulator;
