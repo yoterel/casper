@@ -449,6 +449,7 @@ int main(int argc, char *argv[])
     }
     /* embedded python init */
     Py_Initialize();
+    controlNetClient.init();
     import_array();
     myModule = PyImport_ImportModule("predict");
     if (!myModule)

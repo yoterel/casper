@@ -517,7 +517,9 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     }
 }
 
-ChatGPTClient::ChatGPTClient(bool pyinit) : m_pyinit(pyinit)
+ChatGPTClient::ChatGPTClient(bool pyinit) : m_pyinit(pyinit) {}
+
+bool ChatGPTClient::init()
 {
     if (m_pyinit)
         Py_Initialize();
@@ -526,7 +528,7 @@ ChatGPTClient::ChatGPTClient(bool pyinit) : m_pyinit(pyinit)
     {
         PyErr_Print();
         std::cerr << "Failed to import chatgpt module" << std::endl;
-        exit(1);
+        return false;
     }
     Py_INCREF(py_chatgpt);
     py_chatgpt_client = PyObject_CallMethod(py_chatgpt, "ChatGPTClient", NULL);
@@ -534,9 +536,10 @@ ChatGPTClient::ChatGPTClient(bool pyinit) : m_pyinit(pyinit)
     {
         PyErr_Print();
         std::cerr << "Failed to create ChatGPTClient object" << std::endl;
-        exit(1);
+        return false;
     }
     Py_INCREF(py_chatgpt_client);
+    return true;
 }
 
 ChatGPTClient::~ChatGPTClient()

@@ -29,6 +29,7 @@ void testControlNet()
     std::vector<uint8_t> mask_buffer(mask.begin<uint8_t>(), mask.end<uint8_t>());
     // Run inference
     ControlNetClient control_net_client = ControlNetClient(true);
+    control_net_client.init();
     int preset_id = 0;
     bool fit_to_view = true;
     std::string animal = "";

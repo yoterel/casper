@@ -65,6 +65,7 @@ class ChatGPTClient : public Client
 {
 public:
     ChatGPTClient(bool pyinit = false);
+    bool init();
     ~ChatGPTClient();
     std::string get_animal(const std::vector<uint8_t> &raw_data,
                            const int width, const int height, const int channels);
@@ -79,6 +80,7 @@ class ControlNetClient : public Client
 {
 public:
     ControlNetClient(bool pyinit = false);
+    bool init() { return chatGPTClient.init(); };
     bool inference(const std::vector<uint8_t> &raw_data,
                    std::vector<uint8_t> &out_data,
                    int preset_payload_num,
