@@ -328,9 +328,9 @@ public:
     std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
     bool mls_landmark_thread_succeed = false;
-    bool mls_solve_every_frame = false;
+    bool mls_solve_every_frame = true;
     bool mls_succeeded_this_frame = false;
-    bool mls_extrapolate = false;
+    bool mls_extrapolate = true;
     std::mutex mls_mutex;
     int mls_succeed_counter = 0;
     int mls_every = 1;
@@ -349,7 +349,7 @@ public:
     int mls_grid_smooth_window = 0;
     bool mls_use_kalman = false;
     float prev_mls_time = 0.0f;
-    bool mls_use_latest_leap = false;
+    bool mls_use_latest_leap = true;
     bool mls_global_forecast = false;
     float mls_grid_shader_threshold = 1.0f;
     glm::vec2 mls_shift = glm::vec2(0.0f, 0.0f);
