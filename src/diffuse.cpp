@@ -2,9 +2,20 @@
 #include "HTTPRequest.h"
 #include "json.hpp"
 #include "base64.h"
+#include "timer.h"
+#ifdef _DEBUG
+#undef _DEBUG
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/ndarrayobject.h>
+#define _DEBUG
+#else
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/ndarrayobject.h>
+#endif
 #include <chrono>
 #include <filesystem>
-#include "timer.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "httplib.h"
@@ -472,7 +483,12 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     if (animal.empty())
     {
         ChatGPTClient chatGPTClient;
-        animal = chatGPTClient.send_request(raw_data, width, height, channels);
+        animal = chatGPTClient.get_animal(raw_data, width, height, channels);
+        if (animal.empty())
+        {
+            std::cerr << "Failed to get animal from ChatGPT" << std::endl;
+            return false;
+        }
     }
 
     auto payload_dict = payload.getPayload(encoded_image, animal, seed);
@@ -511,61 +527,46 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     }
 }
 
-json ChatGPTClient::send_request(const std::vector<uint8_t> &raw_data, const int width, const int height,
-                                 const int channels)
+std::string ChatGPTClient::get_animal(const std::vector<uint8_t> &raw_data, const int width, const int height,
+                                      const int channels)
 {
-    char *key = getenv("OPENAI_API_KEY");
-    std::string api_key;
-    if (key)
+    Py_Initialize();
+    PyObject *py_chatgpt = PyImport_ImportModule("chatgpt");
+    if (!py_chatgpt)
     {
-        api_key = std::string(key);
-    }
-    else
-    {
-        std::cerr << "Error: OPENAI_API_KEY not found in environment variables." << std::endl;
-        exit(1); // Exits if the API key is not set in the environment
-    }
-
-    std::string encoded_image = encode_png(raw_data, width, height, channels);
-    httplib::Client cli("https://api.openai.com");
-    cli.set_default_headers({{"Authorization", "Bearer " + api_key}});
-
-    json body = {
-        {"model", "gpt-4-vision-preview"},
-        {"messages",
-         json::array(
-             {{{"role", "user"},
-               {"content",
-                json::array({{{"type", "text"},
-                              {"text", "output must follow this format {'animals': ['animal1', 'animal2', 'animal3']}. "
-                                       "This is a picture of a hand gesture. Which animal is it most similar to? "
-                                       "Return 3 animals by priority in the requested format."}},
-                             {{"type", "image_url"}, {"image_url", "data:image/jpeg;base64," + encoded_image}}})}}})},
-        {"max_tokens", 300}};
-
-    auto res = cli.Post("/v1/chat/completions", body.dump(), "application/json");
-    if (res && res->status == 200)
-    {
-        return json::parse(res->body);
-    }
-    else
-    {
-        std::cerr << "HTTP request failed with status: " << res->status << std::endl;
-        return json();
-    }
-}
-
-json ChatGPTClient::decode_response(const json &response)
-{
-    try
-    {
-        return json::parse(response["choices"][0]["message"]["content"].get<std::string>());
-    }
-    catch (const json::exception &e)
-    {
-        std::cerr << "JSON parsing error: " << e.what() << std::endl;
+        PyErr_Print();
+        std::cerr << "Failed to import chatgpt module" << std::endl;
         return {};
     }
+    Py_INCREF(py_chatgpt);
+
+    std::string encoded_image = encode_png(raw_data, width, height, channels);
+    PyObject *py_encoded_image = PyUnicode_FromString(encoded_image.c_str());
+    PyObject *py_chatgpt_client = PyObject_CallMethod(py_chatgpt, "ChatGPTClient", NULL);
+    if (!py_chatgpt_client)
+    {
+        PyErr_Print();
+        std::cerr << "Failed to create ChatGPTClient object" << std::endl;
+        return {};
+    }
+    Py_INCREF(py_chatgpt_client);
+
+    PyObject *py_response = PyObject_CallMethod(py_chatgpt_client, "send_request", "O", py_encoded_image);
+    if (!py_response)
+    {
+        PyErr_Print();
+        std::cerr << "Failed to call send_request" << std::endl;
+        return {};
+    }
+
+    std::string response = PyUnicode_AsUTF8(py_response);
+
+    Py_DECREF(py_chatgpt_client);
+    Py_DECREF(py_response);
+    Py_DECREF(py_encoded_image);
+    Py_DECREF(py_chatgpt);
+    Py_Finalize();
+    return response;
 }
 
 std::vector<uint8_t> Client::decode_png(const std::string &png_data, int &width, int &height, bool useOpenCV)

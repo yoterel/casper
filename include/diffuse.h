@@ -106,11 +106,8 @@ public:
 class ChatGPTClient : public Client
 {
 public:
-    json send_request(const std::vector<uint8_t> &raw_data,
-                      const int width, const int height,
-                      const int channels);
-
-    json decode_response(const json &response);
+    std::string get_animal(const std::vector<uint8_t> &raw_data,
+                           const int width, const int height, const int channels);
 };
 
 #endif /* DIFFUSE_H */

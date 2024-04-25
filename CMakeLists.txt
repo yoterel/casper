@@ -340,6 +340,7 @@ add_executable(diffuse_example
 target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
 target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+target_link_libraries(diffuse_example PRIVATE Python::Python Python::NumPy)
 ######################################### download benchmark example program
 # add_executable(benchmark_download
 #     src/benchmark_download.cpp
@@ -438,6 +439,13 @@ add_custom_command(TARGET casper
                 $<TARGET_FILE_DIR:casper>)
 
 file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/predict.py")
+add_custom_command(TARGET casper
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${PYTHON_EMBEDDING}
+                $<TARGET_FILE_DIR:casper>)
+
+file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/chatgpt.py")
 add_custom_command(TARGET casper
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

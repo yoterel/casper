@@ -128,7 +128,7 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "cwd": "C:/src/augmented_hands/build/Release/",
+            "cwd": "C:/src/casper/build/Release/",
             "console": "integratedTerminal",
             "justMyCode": true
         }
