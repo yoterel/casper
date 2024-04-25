@@ -5,8 +5,19 @@
 #include <iostream>
 #include "opencv2/opencv.hpp"
 #include "json.hpp"
-using json = nlohmann::json;
+#ifdef _DEBUG
+#undef _DEBUG
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/ndarrayobject.h>
+#define _DEBUG
+#else
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/ndarrayobject.h>
+#endif
 
+using json = nlohmann::json;
 // API: http://127.0.0.1:7860//docs/
 // python API: https://github.com/mix1009/sdwebuiapi/blob/main/webuiapi/webuiapi.py#L175
 // official docs: https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/API
@@ -50,9 +61,26 @@ private:
     StableDiffusionClient(){};
 };
 
+class ChatGPTClient : public Client
+{
+public:
+    ChatGPTClient(bool pyinit = false);
+    bool init();
+    ~ChatGPTClient();
+    std::string get_animal(const std::vector<uint8_t> &raw_data,
+                           const int width, const int height, const int channels);
+
+private:
+    bool m_pyinit;
+    PyObject *py_chatgpt;
+    PyObject *py_chatgpt_client;
+};
+
 class ControlNetClient : public Client
 {
 public:
+    ControlNetClient(bool pyinit = false);
+    bool init() { return chatGPTClient.init(); };
     bool inference(const std::vector<uint8_t> &raw_data,
                    std::vector<uint8_t> &out_data,
                    int preset_payload_num,
@@ -75,6 +103,7 @@ private:
                                         cv::Rect &rect, int extra_pad);
     std::string url = "http://127.0.0.1:7860";
     std::string modelName;
+    ChatGPTClient chatGPTClient;
 };
 
 class ControlNetPayload
@@ -101,16 +130,6 @@ public:
     float controlnet_weight;
     float controlnet_guidance_end;
     float enlarge_ratio;
-};
-
-class ChatGPTClient : public Client
-{
-public:
-    json send_request(const std::vector<uint8_t> &raw_data,
-                      const int width, const int height,
-                      const int channels);
-
-    json decode_response(const json &response);
 };
 
 #endif /* DIFFUSE_H */

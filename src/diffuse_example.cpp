@@ -22,16 +22,17 @@ int main(int argc, char *argv[])
 void testControlNet()
 {
     fs::path item_dir = "../../resource/images";
-    fs::path mask_path = item_dir / "mask_single.png";
+    fs::path mask_path = item_dir / "mask_single2.png";
     // Load input image
     cv::Mat mask = cv::imread(mask_path.string(), cv::IMREAD_UNCHANGED);
     cv::cvtColor(mask, mask, cv::COLOR_RGBA2GRAY);
     std::vector<uint8_t> mask_buffer(mask.begin<uint8_t>(), mask.end<uint8_t>());
     // Run inference
-    ControlNetClient control_net_client = ControlNetClient();
+    ControlNetClient control_net_client = ControlNetClient(true);
+    control_net_client.init();
     int preset_id = 0;
     bool fit_to_view = true;
-    std::string animal = "deer facing camera";
+    std::string animal = "";
     std::vector<uint8_t> result_buffer;
     bool success = control_net_client.inference(mask_buffer, result_buffer,
                                                 preset_id,
