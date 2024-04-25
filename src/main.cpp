@@ -593,7 +593,7 @@ int main(int argc, char *argv[])
         else
         {
             es.debug_playback = true;
-            es.videoFrameCountCont = 0.0f;
+            es.simulationTime = 0.0f;
             es.texture_mode = static_cast<int>(TextureMode::FROM_FILE);
         }
         break;
@@ -3365,28 +3365,31 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     {
         std::lock_guard<std::mutex> lock(es.mls_mutex);
         vcolorShader->use();
-        for (int i = 0; i < es.of_debug.size(); i++)
+        if (ControlPointsQ.size() == es.of_debug.size())
         {
-            glm::vec2 avg_flow = es.of_debug[i];
-            cv::Point2f pointq = Helpers::NDCtoScreen(ControlPointsQ[i], es.of_downsize.width, es.of_downsize.height);
-            std::vector<glm::vec2> square_endpoints =
-                {
-                    glm::vec2(pointq.x - (es.of_roi / 2), pointq.y - (es.of_roi / 2)),
-                    glm::vec2(pointq.x + (es.of_roi / 2), pointq.y - (es.of_roi / 2)),
-                    glm::vec2(pointq.x + (es.of_roi / 2), pointq.y + (es.of_roi / 2)),
-                    glm::vec2(pointq.x - (es.of_roi / 2), pointq.y + (es.of_roi / 2)),
-                };
-            square_endpoints = Helpers::ScreenToNDC(square_endpoints, es.of_downsize.width, es.of_downsize.height);
-            PointCloud square(square_endpoints, es.screen_verts_color_green);
-            square.renderAsLineLoop();
-            std::vector<glm::vec2> dv_endpoints =
-                {
-                    glm::vec2(pointq.x, pointq.y),
-                    glm::vec2(pointq.x + 5 * avg_flow[0], pointq.y + 5 * avg_flow[1]),
-                };
-            dv_endpoints = Helpers::ScreenToNDC(dv_endpoints, es.of_downsize.width, es.of_downsize.height);
-            PointCloud dv(dv_endpoints, es.screen_verts_color_red);
-            dv.renderAsLines();
+            for (int i = 0; i < es.of_debug.size(); i++)
+            {
+                glm::vec2 avg_flow = es.of_debug[i];
+                cv::Point2f pointq = Helpers::NDCtoScreen(ControlPointsQ[i], es.of_downsize.width, es.of_downsize.height);
+                std::vector<glm::vec2> square_endpoints =
+                    {
+                        glm::vec2(pointq.x - (es.of_roi / 2), pointq.y - (es.of_roi / 2)),
+                        glm::vec2(pointq.x + (es.of_roi / 2), pointq.y - (es.of_roi / 2)),
+                        glm::vec2(pointq.x + (es.of_roi / 2), pointq.y + (es.of_roi / 2)),
+                        glm::vec2(pointq.x - (es.of_roi / 2), pointq.y + (es.of_roi / 2)),
+                    };
+                square_endpoints = Helpers::ScreenToNDC(square_endpoints, es.of_downsize.width, es.of_downsize.height);
+                PointCloud square(square_endpoints, es.screen_verts_color_green);
+                square.renderAsLineLoop();
+                std::vector<glm::vec2> dv_endpoints =
+                    {
+                        glm::vec2(pointq.x, pointq.y),
+                        glm::vec2(pointq.x + 5 * avg_flow[0], pointq.y + 5 * avg_flow[1]),
+                    };
+                dv_endpoints = Helpers::ScreenToNDC(dv_endpoints, es.of_downsize.width, es.of_downsize.height);
+                PointCloud dv(dv_endpoints, es.screen_verts_color_red);
+                dv.renderAsLines();
+            }
         }
     }
     if (es.show_landmarks)
@@ -4257,37 +4260,6 @@ void landmarkDetectionThread(std::vector<glm::vec3> projected_filtered_left,
                 pred_glm_left = std::move(cur_pred_glm_left);
                 pred_glm_right = std::move(cur_pred_glm_right);
             }
-            // possibly use kalman to temporally filter the predicted control points, since landmark detection takes ~17ms to run
-            if (es.use_mp_kalman)
-            {
-                // get the time passed since the last frame
-                float cur_mls_time = t_app.getElapsedTimeInMilliSec();
-                float dt = cur_mls_time - es.prev_mls_time;
-                for (int i = 0; i < pred_glm_left.size(); i++)
-                {
-                    cv::Mat pred = kalman_filters_left[i].predict(dt);
-                    cv::Mat measurement(2, 1, CV_32F);
-                    measurement.at<float>(0) = pred_glm_left[i].x;
-                    measurement.at<float>(1) = pred_glm_left[i].y;
-                    cv::Mat corr = kalman_filters_left[i].correct(measurement);
-                    cv::Mat forecast = kalman_filters_left[i].forecast(es.kalman_lookahead);
-                    kalman_forecast_left.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
-                }
-                pred_glm_left = std::move(kalman_forecast_left);
-                for (int i = 0; i < pred_glm_right.size(); i++)
-                {
-                    cv::Mat pred = kalman_filters_right[i].predict(dt);
-                    cv::Mat measurement(2, 1, CV_32F);
-                    measurement.at<float>(0) = pred_glm_right[i].x;
-                    measurement.at<float>(1) = pred_glm_right[i].y;
-                    cv::Mat corr = kalman_filters_right[i].correct(measurement);
-                    cv::Mat forecast = kalman_filters_right[i].forecast(es.kalman_lookahead);
-                    kalman_forecast_right.push_back(glm::vec2(forecast.at<float>(0), forecast.at<float>(1)));
-                }
-                pred_glm_right = std::move(kalman_forecast_right);
-                es.prev_mls_time = cur_mls_time;
-                // pred_glm = kalman_forecast;
-            }
             std::vector<cv::Point2f> leap_keypoints_left, diff_keypoints_left, mp_keypoints_left,
                 mp_keypoints_right, leap_keypoints_right, diff_keypoints_right;
             glm::vec2 global_shift_left = glm::vec2(0.0f, 0.0f);
@@ -4563,6 +4535,34 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
             }
             std::vector<cv::Point2f> curP = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left));
 
+            // temporally filter landmarks
+            if (es.mls_use_kalman)
+            {
+                std::lock_guard<std::mutex> guard(es.mls_mutex);
+                bool do_correction_step = es.mls_landmark_thread_succeed;
+                // get the time passed since the last frame
+                float cur_mls_time;
+                if (simulation)
+                    cur_mls_time = es.simulationTime;
+                else
+                    cur_mls_time = t_app.getElapsedTimeInMilliSec();
+                float dt = cur_mls_time - es.prev_mls_time;
+                for (int i = 0; i < ControlPointsQ.size(); i++)
+                {
+                    cv::Mat pred = kalman_filters_left[i].predict(dt);
+                    if (do_correction_step)
+                    {
+                        cv::Mat measurement(2, 1, CV_32F);
+                        measurement.at<float>(0) = ControlPointsQ[i].x;
+                        measurement.at<float>(1) = ControlPointsQ[i].y;
+                        cv::Mat corr = kalman_filters_left[i].correct(measurement);
+                    }
+                    cv::Mat forecast = kalman_filters_left[i].forecast(es.kalman_lookahead);
+                    ControlPointsQ[i] = cv::Point2f(forecast.at<float>(0), forecast.at<float>(1));
+                }
+                es.prev_mls_time = cur_mls_time;
+                // pred_glm = kalman_forecast;
+            }
             // move target points using the difference between the leap frame used to render, and the one matching the landmark detection timestamp
             if (es.mls_extrapolate)
             {
@@ -4583,7 +4583,6 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                     }
                 }
             }
-
             // use the leap frame used to render as source points
             if (es.mls_use_latest_leap)
                 ControlPointsP = curP;
@@ -4676,9 +4675,23 @@ void handleOF(Shader *gridShader)
         {
             cv::Mat thr;
             cv::threshold(image, thr, static_cast<int>(es.masking_threshold * 255), 255, cv::THRESH_BINARY);
+            // cv::Scalar tmp = cv::mean(image, thr)[0];
+            // float image_mean = tmp[0];
+            // std::cout << "image mean: " << image_mean << std::endl;
+            // if (image_mean > 1.1 * es.prev_image_mean)
+            // {
+            //     // the image is too bright, reduce the brightness of the image
+            //     cv::multiply(image, cv::Mat::ones(image.size(), image.type()), image, es.prev_image_mean / image_mean);
+            //     cv::threshold(image, thr, static_cast<int>(es.masking_threshold * 255), 255, cv::THRESH_BINARY);
+            //     tmp = cv::mean(image, thr)[0];
+            //     image_mean = tmp[0];
+            //     std::cout << "new image mean: " << image_mean << std::endl;
+            // }
+            // es.prev_image_mean = image_mean;
             cv::Moments m = cv::moments(thr, true);
             cv::Point2f p(m.m10 / m.m00, m.m01 / m.m00);
-            flow = cv::Mat(es.of_downsize, CV_32FC2, cv::Scalar(p.x, p.y));
+            flow = cv::Mat(es.of_downsize, CV_32FC2, cv::Scalar(p.x - es.prev_blob.x, p.y - es.prev_blob.y));
+            es.prev_blob = p;
             break;
         }
         case static_cast<int>(OFMode::FB_CPU):
@@ -4726,9 +4739,16 @@ void handleOF(Shader *gridShader)
             {
                 // glm::vec2 p = cp[i];
                 cv::Point2f q = cq[i];
+                // clamp to image boundaries
+                int x = static_cast<int>(std::round(q.x - (es.of_roi / 2)));
+                x = x < 0 ? 0 : x;
+                x = x > flow.cols - es.of_roi ? flow.cols - es.of_roi : x;
+                int y = static_cast<int>(std::round(q.y - (es.of_roi / 2)));
+                y = y < 0 ? 0 : y;
+                y = y > flow.rows - es.of_roi ? flow.rows - es.of_roi : y;
                 // get average flow in roi. note flow is in (of_downsize) pixel units
-                cv::Rect flowrect(static_cast<int>(std::round(q.x - (es.of_roi / 2))),
-                                  static_cast<int>(std::round(q.y - (es.of_roi / 2))),
+                cv::Rect flowrect(x,
+                                  y,
                                   es.of_roi,
                                   es.of_roi);
                 cv::Mat roi_flow = flow(flowrect).clone();
@@ -4820,7 +4840,7 @@ bool handleInterpolateFrames(std::vector<glm::mat4> &bones2world_left_cur,
                              std::vector<glm::mat4> &bones2world_left_lag,
                              std::vector<glm::mat4> &bones2world_right_lag)
 {
-    float required_time_lag = es.videoFrameCountCont;
+    float required_time_lag = es.simulationTime;
     float required_time_cur = (es.vid_simulated_latency_ms * es.vid_playback_speed) + required_time_lag;
     if (required_time_cur >= session_timestamps.back())
         return false;
@@ -5286,7 +5306,7 @@ void handleSimulation(std::unordered_map<std::string, Shader *> &shaderMap,
                                    cam_view_transform,
                                    cam_projection_transform))
                 {
-                    es.videoFrameCountCont = 0.0f; // continuous video playback
+                    es.simulationTime = 0.0f; // continuous video playback
                 }
             }
         }
@@ -5335,7 +5355,7 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                     }
                 }
                 es.vid_simulated_latency_ms = user_study.randomTrial(es.humanChoice); // get required latency given subject choice
-                es.videoFrameCountCont = 0.0f;                                        // reset video playback
+                es.simulationTime = 0.0f;                                             // reset video playback
                 es.video_reached_end = false;
                 if (user_study.getTrialFinished()) // experiment is finished
                 {
@@ -5371,7 +5391,7 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
                     t_profile0.stop();
                     t_profile0.stop();
                     std::cout << "video playback time: " << t_profile0.getElapsedTimeInMilliSec() << " ms" << std::endl;
-                    es.videoFrameCountCont = 0.0f;
+                    es.simulationTime = 0.0f;
                     es.is_first_in_video_pair = true;
                     es.texture_mode = static_cast<int>(TextureMode::FROM_FILE);
                     t_profile0.start();
@@ -5667,7 +5687,7 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
 
 uint32_t getCurrentSimulationIndex()
 {
-    auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), es.videoFrameCountCont);
+    auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), es.simulationTime);
     return upper_iter - session_timestamps.begin() - 1;
 }
 
@@ -5683,8 +5703,15 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *gridShader = shader_map["gridShader"];
     int32_t cur_timestamp = getCurrentSimulationIndex();
+    int discrete_timestep_diff = cur_timestamp - es.playback_prev_frame;
+    if (discrete_timestep_diff > 1)
+    {
+        // we need to reduce simulation speed...
+        es.pseudo_vid_playback_speed *= 0.9f;
+    }
+    bool new_frame = discrete_timestep_diff != 0;
     // make sure we are not at the end of the video
-    if (cur_timestamp >= session_timestamps.size() || es.videoFrameCountCont >= session_timestamps.back())
+    if (cur_timestamp >= session_timestamps.size() || es.simulationTime >= session_timestamps.back())
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         return false;
@@ -5705,7 +5732,6 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     t_leap.stop();
     // produce fake camera image (left hand only)
     t_camera.start();
-    bool new_frame = cur_timestamp != es.playback_prev_frame;
     camImageOrig = recordedImages[cur_timestamp];
     camTexture.load((uint8_t *)camImageOrig.data, true, es.cam_buffer_format);
     t_camera.stop();
@@ -5779,7 +5805,7 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
         es.project_this_frame = true;
     }
     es.playback_prev_frame = cur_timestamp;
-    es.videoFrameCountCont += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
+    es.simulationTime += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
     t_debug.stop();
     return true;
 }
@@ -5876,7 +5902,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
         textModel.Render(*textShader, texts_to_render[i], 25.0f, texts_to_render.size() * text_spacing - text_spacing * i, 3.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     }
     t_debug.stop();
-    es.videoFrameCountCont += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
+    es.simulationTime += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
     return true;
 }
 
@@ -6760,7 +6786,7 @@ void openIMGUIFrame()
                     es.mls_extrapolate = false;
                 }
             }
-            if (ImGui::RadioButton("Farneback CPU", &es.of_mode, static_cast<int>(OFMode::NAIVE_BLOB)))
+            if (ImGui::RadioButton("Naive", &es.of_mode, static_cast<int>(OFMode::NAIVE_BLOB)))
             {
                 updateOFParams();
             }
@@ -6811,16 +6837,23 @@ void openIMGUIFrame()
                 }
             }
             ImGui::SameLine();
-            ImGui::Checkbox("MLS Blocking", &es.mls_blocking);
-            if (ImGui::Checkbox("MLS Extrapolate", &es.mls_extrapolate))
+            ImGui::Checkbox("Landmark Thread Blocking", &es.mls_blocking);
+            if (ImGui::Checkbox("Extrapolate Q using Leap", &es.mls_extrapolate))
             {
                 if (es.mls_extrapolate)
                 {
                     es.use_of = false;
                 }
             }
-            ImGui::Checkbox("Use Latest Leap", &es.mls_use_latest_leap);
-            ImGui::Checkbox("MLS Solve Every Frame", &es.mls_solve_every_frame);
+            ImGui::Checkbox("Use Latest Leap as P", &es.mls_use_latest_leap);
+            ImGui::Checkbox("Solve Grid Every Frame", &es.mls_solve_every_frame);
+            if (ImGui::Checkbox("Kalman Filter Q", &es.mls_use_kalman))
+            {
+                if (es.mls_use_kalman)
+                {
+                    initKalmanFilters();
+                }
+            }
             ImGui::SliderInt("Sim: MLS Every N Frames", &es.mls_every, 1, 20);
             ImGui::SliderInt("Sim: MLS N Latency", &es.mls_n_latency_frames, 0, 20);
             ImGui::SliderInt("Sim: MLS N Future", &es.mls_future_frame_offset, 0, 20);
@@ -6845,19 +6878,12 @@ void openIMGUIFrame()
             ImGui::SliderInt("MLS Grid Smooth window", &es.mls_grid_smooth_window, 0, 10);
             ImGui::SliderInt("Leap dt [us]", &es.magic_leap_time_delay, -50000, 50000);
             ImGui::SliderInt("Leap dt (mls) [us]", &es.magic_leap_time_delay_mls, -50000, 50000);
-            if (ImGui::Checkbox("Kalman Filter", &es.use_mp_kalman))
-            {
-                if (es.use_mp_kalman)
-                {
-                    initKalmanFilters();
-                }
-            }
 
             ImGui::SliderFloat("Kalman Lookahead [ms]", &es.kalman_lookahead, 0.0f, 200.0f);
-            if (ImGui::IsItemDeactivatedAfterEdit())
-            {
-                initKalmanFilters();
-            }
+            // if (ImGui::IsItemDeactivatedAfterEdit())
+            // {
+            //     initKalmanFilters();
+            // }
             ImGui::SliderFloat("Kalman Pnoise", &es.kalman_process_noise, 0.00001f, 1.0f, "%.6f");
             if (ImGui::IsItemDeactivatedAfterEdit())
             {
@@ -6990,9 +7016,9 @@ void openIMGUIFrame()
             ImGui::SliderFloat("Video Playback Limiter", &es.pseudo_vid_playback_speed, 0.0f, 1.5f); // will just speed things up, without taking into account the simulated latency
             if (ImGui::Button("Step 1 Frame"))
             {
-                auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), es.videoFrameCountCont);
+                auto upper_iter = std::upper_bound(session_timestamps.begin(), session_timestamps.end(), es.simulationTime);
                 int32_t most_recent_index = upper_iter - session_timestamps.begin() - 1;
-                es.videoFrameCountCont = session_timestamps[most_recent_index + 1];
+                es.simulationTime = session_timestamps[most_recent_index + 1];
             }
             ImGui::SliderFloat("Mixer Ratio", &es.projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &es.skin_brightness, 0.0f, 1.0f);
@@ -7005,7 +7031,7 @@ void openIMGUIFrame()
                         if (!loadSession())
                             std::cout << "Failed to load recording: " << es.recording_name << std::endl;
                     }
-                    es.videoFrameCountCont = 0.0f;
+                    es.simulationTime = 0.0f;
                     es.video_reached_end = true;
                     es.is_first_in_video_pair = true;
                     es.use_coaxial_calib = false;
@@ -7031,7 +7057,7 @@ void openIMGUIFrame()
                             std::cout << "Failed to load recording: " << es.recording_name << std::endl;
                     }
                     es.jfa_distance_threshold = 100.0f;
-                    es.videoFrameCountCont = 0.0f;
+                    es.simulationTime = 0.0f;
                     es.video_reached_end = true;
                     es.is_first_in_video_pair = true;
                     es.use_coaxial_calib = false;
@@ -7067,7 +7093,7 @@ void openIMGUIFrame()
                         if (!loadSession())
                             std::cout << "Failed to load recording: " << es.recording_name << std::endl;
                     }
-                    es.videoFrameCountCont = 0.0f;
+                    es.simulationTime = 0.0f;
                     es.video_reached_end = true;
                     es.is_first_in_video_pair = true;
                     es.texture_mode = static_cast<int>(TextureMode::FROM_FILE);

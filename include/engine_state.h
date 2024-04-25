@@ -165,7 +165,7 @@ public:
     float vid_playback_speed = 1.0f;
     float projection_mix_ratio = 0.4f;
     float skin_brightness = 0.5f;
-    float videoFrameCountCont = 0.0f;
+    float simulationTime = 0.0f;
     bool recordImages = false;
     std::string recording_name = "test"; // all_10s
     std::string output_recording_name = "video";
@@ -347,7 +347,7 @@ public:
     bool mls_show_grid = false;
     int mls_cp_smooth_window = 0;
     int mls_grid_smooth_window = 0;
-    bool use_mp_kalman = false;
+    bool mls_use_kalman = false;
     float prev_mls_time = 0.0f;
     bool mls_use_latest_leap = false;
     bool mls_global_forecast = false;
@@ -365,8 +365,10 @@ public:
     bool show_of = false;
     int of_mode = static_cast<int>(OFMode::FB_CPU);
     uint64_t totalFrameCountOF = 0;
+    cv::Point2f prev_blob = cv::Point2f(0.0f, 0.0f);
     int of_resize_factor = 2;
     int of_resize_factor_exp = 1;
+    float prev_image_mean = 40.0f;
     cv::Size of_downsize = cv::Size(cam_width / of_resize_factor, cam_height / of_resize_factor);
     int of_roi = 20;
     std::vector<glm::vec2> of_debug;
