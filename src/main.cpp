@@ -611,7 +611,8 @@ int main(int argc, char *argv[])
         es.texture_mode = static_cast<int>(TextureMode::BAKED);
         es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
         es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
-        es.cur_prompt = es.selected_listed_prompt;
+        es.prompt_mode = static_cast<int>(PromptMode::AUTO_PROMPT);
+        // es.cur_prompt = es.selected_listed_prompt;
         // es.use_mls = false;
         // es.use_of = false;
         break;
@@ -3885,6 +3886,10 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                             // }
                             es.bake_preproc_succeed = true;
                         }
+                        else
+                        {
+                            std::cout << "ControlNet inference failed" << std::endl;
+                        }
                         es.sd_running = false;
                     });
                 }
@@ -6093,7 +6098,7 @@ void openIMGUIFrame()
                 es.texture_mode = static_cast<int>(TextureMode::BAKED);
                 es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
-                es.cur_prompt = es.selected_listed_prompt;
+                es.prompt_mode = static_cast<int>(PromptMode::AUTO_PROMPT);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
             }

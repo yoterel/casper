@@ -28,7 +28,7 @@ void testControlNet()
     cv::cvtColor(mask, mask, cv::COLOR_RGBA2GRAY);
     std::vector<uint8_t> mask_buffer(mask.begin<uint8_t>(), mask.end<uint8_t>());
     // Run inference
-    ControlNetClient control_net_client = ControlNetClient();
+    ControlNetClient control_net_client = ControlNetClient(true);
     int preset_id = 0;
     bool fit_to_view = true;
     std::string animal = "";

@@ -3,17 +3,6 @@
 #include "json.hpp"
 #include "base64.h"
 #include "timer.h"
-#ifdef _DEBUG
-#undef _DEBUG
-#include <Python.h>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/ndarrayobject.h>
-#define _DEBUG
-#else
-#include <Python.h>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/ndarrayobject.h>
-#endif
 #include <chrono>
 #include <filesystem>
 #include "stb_image.h"
@@ -275,6 +264,8 @@ std::vector<uint8_t> StableDiffusionClient::encode_png(const std::vector<uint8_t
     return data;
 }
 
+ControlNetClient::ControlNetClient(bool pyinit) : chatGPTClient(pyinit){};
+
 ControlNetPayload ControlNetPayload::get_preset_payload(int preset_num)
 {
     std::unordered_map<int, ControlNetPayload> presets = {
@@ -482,7 +473,6 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
 
     if (animal.empty())
     {
-        ChatGPTClient chatGPTClient;
         animal = chatGPTClient.get_animal(raw_data, width, height, channels);
         if (animal.empty())
         {
@@ -527,30 +517,42 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     }
 }
 
-std::string ChatGPTClient::get_animal(const std::vector<uint8_t> &raw_data, const int width, const int height,
-                                      const int channels)
+ChatGPTClient::ChatGPTClient(bool pyinit) : m_pyinit(pyinit)
 {
-    Py_Initialize();
-    PyObject *py_chatgpt = PyImport_ImportModule("chatgpt");
+    if (m_pyinit)
+        Py_Initialize();
+    py_chatgpt = PyImport_ImportModule("chatgpt");
     if (!py_chatgpt)
     {
         PyErr_Print();
         std::cerr << "Failed to import chatgpt module" << std::endl;
-        return {};
+        exit(1);
     }
     Py_INCREF(py_chatgpt);
-
-    std::string encoded_image = encode_png(raw_data, width, height, channels);
-    PyObject *py_encoded_image = PyUnicode_FromString(encoded_image.c_str());
-    PyObject *py_chatgpt_client = PyObject_CallMethod(py_chatgpt, "ChatGPTClient", NULL);
+    py_chatgpt_client = PyObject_CallMethod(py_chatgpt, "ChatGPTClient", NULL);
     if (!py_chatgpt_client)
     {
         PyErr_Print();
         std::cerr << "Failed to create ChatGPTClient object" << std::endl;
-        return {};
+        exit(1);
     }
     Py_INCREF(py_chatgpt_client);
+}
 
+ChatGPTClient::~ChatGPTClient()
+{
+    Py_DECREF(py_chatgpt_client);
+    Py_DECREF(py_chatgpt);
+    if (m_pyinit)
+        Py_Finalize();
+}
+
+std::string ChatGPTClient::get_animal(const std::vector<uint8_t> &raw_data, const int width, const int height,
+                                      const int channels)
+{
+
+    std::string encoded_image = encode_png(raw_data, width, height, channels);
+    PyObject *py_encoded_image = PyUnicode_FromString(encoded_image.c_str());
     PyObject *py_response = PyObject_CallMethod(py_chatgpt_client, "send_request", "O", py_encoded_image);
     if (!py_response)
     {
@@ -558,14 +560,9 @@ std::string ChatGPTClient::get_animal(const std::vector<uint8_t> &raw_data, cons
         std::cerr << "Failed to call send_request" << std::endl;
         return {};
     }
-
     std::string response = PyUnicode_AsUTF8(py_response);
-
-    Py_DECREF(py_chatgpt_client);
     Py_DECREF(py_response);
     Py_DECREF(py_encoded_image);
-    Py_DECREF(py_chatgpt);
-    Py_Finalize();
     return response;
 }
 
