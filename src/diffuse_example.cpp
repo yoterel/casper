@@ -40,7 +40,8 @@ void testControlNet()
                                                 47, // fix seed so that the result is deterministic
                                                 animal,
                                                 fit_to_view,
-                                                50);
+                                                50,
+                                                true);
 
     // Save result
     if (success)

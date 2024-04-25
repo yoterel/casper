@@ -68,7 +68,8 @@ public:
     bool init();
     ~ChatGPTClient();
     std::string get_animal(const std::vector<uint8_t> &raw_data,
-                           const int width, const int height, const int channels);
+                           const int width, const int height, const int channels,
+                           bool select_top_animal);
 
 private:
     bool m_pyinit;
@@ -88,7 +89,8 @@ public:
                    int seed = -1,
                    std::string animal = "",
                    bool fit_to_view = true,
-                   int extra_pad_size = 50);
+                   int extra_pad_size = 50,
+                   bool select_top_animal = true);
 
 private:
     void changeModel(const std::string &modelName);

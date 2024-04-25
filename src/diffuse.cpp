@@ -448,7 +448,8 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
                                  int seed,
                                  std::string animal,
                                  bool fit_to_view,
-                                 int extra_pad_size)
+                                 int extra_pad_size,
+                                 bool select_top_animal)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
     std::string encoded_image;
@@ -473,7 +474,7 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
 
     if (animal.empty())
     {
-        animal = chatGPTClient.get_animal(raw_data, width, height, channels);
+        animal = chatGPTClient.get_animal(raw_data, width, height, channels, select_top_animal);
         if (animal.empty())
         {
             std::cerr << "Failed to get animal from ChatGPT" << std::endl;
@@ -551,12 +552,12 @@ ChatGPTClient::~ChatGPTClient()
 }
 
 std::string ChatGPTClient::get_animal(const std::vector<uint8_t> &raw_data, const int width, const int height,
-                                      const int channels)
+                                      const int channels, bool select_top_animal)
 {
 
     std::string encoded_image = encode_png(raw_data, width, height, channels);
     PyObject *py_encoded_image = PyUnicode_FromString(encoded_image.c_str());
-    PyObject *py_response = PyObject_CallMethod(py_chatgpt_client, "send_request", "O", py_encoded_image);
+    PyObject *py_response = PyObject_CallMethod(py_chatgpt_client, "send_request", "O,i", py_encoded_image, static_cast<int>(select_top_animal));
     if (!py_response)
     {
         PyErr_Print();

@@ -3875,7 +3875,8 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                                   es.diffuse_seed,
                                                                   es.cur_prompt,
                                                                   es.diffuse_fit_to_view,
-                                                                  es.diffuse_pad_size);
+                                                                  es.diffuse_pad_size,
+                                                                  es.diffuse_select_top_animal);
                         if (success)
                         {
                             std::cout << "ControlNet inference successful" << std::endl;
@@ -6708,6 +6709,10 @@ void openIMGUIFrame()
             ImGui::RadioButton("List", &es.prompt_mode, static_cast<int>(PromptMode::SELECTED));
             ImGui::SameLine();
             ImGui::RadioButton("Random", &es.prompt_mode, static_cast<int>(PromptMode::RANDOM));
+            ImGui::Checkbox("Fit Mask to Viewport", &es.diffuse_fit_to_view);
+            ImGui::SameLine();
+            ImGui::InputInt("Pad Size", &es.diffuse_pad_size);
+            ImGui::Checkbox("Select Top Animal", &es.diffuse_select_top_animal);
             ImGui::InputInt("Random Seed", &es.diffuse_seed);
             ImGui::InputText("Manual Prompt", &es.manual_prompt);
             if (ImGui::BeginCombo("Listed Prompts", es.selected_listed_prompt.c_str(), 0))
