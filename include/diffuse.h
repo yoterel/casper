@@ -90,7 +90,8 @@ public:
                    std::string animal = "",
                    bool fit_to_view = true,
                    int extra_pad_size = 50,
-                   bool select_top_animal = true);
+                   bool select_top_animal = true,
+                   bool no_preprompt = false);
 
 private:
     void changeModel(const std::string &modelName);

@@ -613,6 +613,7 @@ int main(int argc, char *argv[])
         es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
         es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
         es.prompt_mode = static_cast<int>(PromptMode::AUTO_PROMPT);
+        es.no_preprompt = false;
         // es.cur_prompt = es.selected_listed_prompt;
         // es.use_mls = false;
         // es.use_of = false;
@@ -3879,7 +3880,8 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                                   es.cur_prompt,
                                                                   es.diffuse_fit_to_view,
                                                                   es.diffuse_pad_size,
-                                                                  es.diffuse_select_top_animal);
+                                                                  es.diffuse_select_top_animal,
+                                                                  es.no_preprompt);
                         if (success)
                         {
                             std::cout << "ControlNet inference successful" << std::endl;
@@ -5447,19 +5449,19 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
             // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
             // projectorShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
             // projectorShader.setBool("binary", true);
-            // dinosaur.Render(projectorShader, camTexture.getTexture(), false);
-            // projectorShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
-            // dinosaur.Render(projectorShader, camTexture.getTexture(), true);
-            // textureShader.use();
-            // textureShader.setBool("flipVer", false);
-            // textureShader.setMat4("projection", flycam_projection_transform);
-            // textureShader.setMat4("view", flycam_view_transform);
-            // textureShader.setMat4("model", glm::mat4(1.0f));
-            // textureShader.setBool("binary", false);
-            // textureShader.setInt("src", 0);
-            // glActiveTexture(GL_TEXTURE0);
-            // glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
-            // projNearQuad.render();
+            dinosaur.Render(projectorShader, camTexture.getTexture(), false);
+            projectorShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
+            dinosaur.Render(projectorShader, camTexture.getTexture(), true);
+            textureShader.use();
+            textureShader.setBool("flipVer", false);
+            textureShader.setMat4("projection", flycam_projection_transform);
+            textureShader.setMat4("view", flycam_view_transform);
+            textureShader.setMat4("model", glm::mat4(1.0f));
+            textureShader.setBool("binary", false);
+            textureShader.setInt("src", 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
+            projNearQuad.render();
         }
         // draws global coordinate system gizmo at origin
         {
@@ -6728,17 +6730,30 @@ void openIMGUIFrame()
             ImGui::SliderInt("ControlNet Present", &es.controlnet_preset, 0, 22);
             ImGui::Text("Prompts Mode");
             ImGui::SameLine();
-            ImGui::RadioButton("Manual", &es.prompt_mode, 0);
+            if (ImGui::RadioButton("Manual", &es.prompt_mode, 0))
+            {
+                es.no_preprompt = true;
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("Auto", &es.prompt_mode, static_cast<int>(PromptMode::AUTO_PROMPT));
+            if (ImGui::RadioButton("Auto", &es.prompt_mode, static_cast<int>(PromptMode::AUTO_PROMPT)))
+            {
+                es.no_preprompt = false;
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("List", &es.prompt_mode, static_cast<int>(PromptMode::SELECTED));
+            if (ImGui::RadioButton("List", &es.prompt_mode, static_cast<int>(PromptMode::SELECTED)))
+            {
+                es.no_preprompt = false;
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("Random", &es.prompt_mode, static_cast<int>(PromptMode::RANDOM));
+            if (ImGui::RadioButton("Random", &es.prompt_mode, static_cast<int>(PromptMode::RANDOM)))
+            {
+                es.no_preprompt = false;
+            }
             ImGui::Checkbox("Fit Mask to Viewport", &es.diffuse_fit_to_view);
             ImGui::SameLine();
             ImGui::InputInt("Pad Size", &es.diffuse_pad_size);
             ImGui::Checkbox("Select Top Animal", &es.diffuse_select_top_animal);
+            ImGui::Checkbox("No preprompt", &es.no_preprompt);
             ImGui::InputInt("Random Seed", &es.diffuse_seed);
             ImGui::InputText("Manual Prompt", &es.manual_prompt);
             if (ImGui::BeginCombo("Listed Prompts", es.selected_listed_prompt.c_str(), 0))

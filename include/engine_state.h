@@ -110,7 +110,8 @@ public:
     bool diffuse_fit_to_view = true;
     int diffuse_pad_size = 50;
     bool diffuse_select_top_animal = false;
-    std::string manual_prompt = "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin";
+    bool no_preprompt = true;
+    std::string manual_prompt = "A ghost hand";
     std::vector<std::string> listedPrompts{
         "butterfly",
         "deer",

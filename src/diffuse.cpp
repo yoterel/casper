@@ -449,9 +449,14 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
                                  std::string animal,
                                  bool fit_to_view,
                                  int extra_pad_size,
-                                 bool select_top_animal)
+                                 bool select_top_animal,
+                                 bool no_preprompt)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
+    if (no_preprompt)
+    {
+        payload.prompt = "";
+    }
     std::string encoded_image;
     cv::Rect rect;
     if (fit_to_view) // pad the mask to square and resize to payload size (512x512)
