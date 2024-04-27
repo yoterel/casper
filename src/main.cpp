@@ -791,14 +791,6 @@ int main(int argc, char *argv[])
     {
         projector = new DynaFlashProjector(true, false);
     }
-    if (es.use_projector)
-    {
-        if (!projector->init())
-        {
-            std::cerr << "Failed to initialize projector\n";
-            es.use_projector = false;
-        }
-    }
     // LeapCreateClockRebaser(&clockSynchronizer);
     // load calibration results if they exist
     Camera_Mode camera_mode = es.freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
@@ -5981,21 +5973,25 @@ void openIMGUIFrame()
                         std::cerr << "Failed to initialize projector\n";
                         es.use_projector = false;
                     }
-                    if (!es.simulated_projector)
-                    {
-                        c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
-                        es.use_coaxial_calib = true;
-                    }
                     else
                     {
-                        std::string string_path = std::format("../../debug/{}", es.output_recording_name);
-                        fs::path mypath(string_path);
-                        if (!fs::exists(mypath))
+                        if (!es.simulated_projector)
                         {
-                            fs::create_directory(mypath);
+                            c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
+                            es.use_coaxial_calib = true;
+                            es.gamma_correct = true;
                         }
-                        SaveToDisk *save_to_disk_projector = dynamic_cast<SaveToDisk *>(projector);
-                        save_to_disk_projector->setDestination(string_path);
+                        else
+                        {
+                            std::string string_path = std::format("../../debug/{}", es.output_recording_name);
+                            fs::path mypath(string_path);
+                            if (!fs::exists(mypath))
+                            {
+                                fs::create_directory(mypath);
+                            }
+                            SaveToDisk *save_to_disk_projector = dynamic_cast<SaveToDisk *>(projector);
+                            save_to_disk_projector->setDestination(string_path);
+                        }
                     }
                 }
                 else
@@ -6004,6 +6000,7 @@ void openIMGUIFrame()
                     {
                         projector->kill();
                         es.use_coaxial_calib = false;
+                        es.gamma_correct = false;
                     }
                 }
             }
