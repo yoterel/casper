@@ -91,7 +91,8 @@ public:
                    bool fit_to_view = true,
                    int extra_pad_size = 50,
                    bool select_top_animal = true,
-                   bool no_preprompt = false);
+                   bool no_preprompt = false,
+                   std::string save_path_stem = "");
 
 private:
     void changeModel(const std::string &modelName);

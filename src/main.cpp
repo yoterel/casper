@@ -90,7 +90,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
                   glm::mat4 cam_projection_transform);
-void handlePromptMode();
+void handleBakeConfig();
 void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           Texture &bakeTexture,
                           SkinnedModel &leftHandModel,
@@ -121,6 +121,7 @@ cv::Mat computeGridDeformation(const std::vector<cv::Point2f> &P,
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
+                     SkinnedModel &otherObject,
                      TextModel &text);
 void handleGuessPoseGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          SkinnedModel &leftHandModel,
@@ -266,8 +267,6 @@ std::unordered_map<std::string, std::vector<glm::mat4>> sessions_bones_left;
 std::unordered_map<std::string, std::vector<glm::vec3>> sessions_joints_left;
 std::unordered_map<std::string, std::vector<float>> sessions_timestamps;
 std::vector<float> raw_session_timestamps;
-std::string tmp_name = std::tmpnam(nullptr);
-fs::path tmp_filename(tmp_name);
 std::vector<std::vector<glm::mat4>> savedLeapBonesLeft;
 std::vector<std::vector<glm::vec3>> savedLeapJointsLeft;
 std::vector<std::vector<glm::mat4>> savedLeapBonesRight;
@@ -573,6 +572,10 @@ int main(int argc, char *argv[])
                                 es.proj_width, es.proj_height,
                                 es.cam_width, es.cam_height,
                                 false);
+    SkinnedModel dinosaur("../../resource/reconst.ply",
+                          "",
+                          es.proj_width, es.proj_height,
+                          es.cam_width, es.cam_height);
     switch (es.operation_mode) // set some default values for user study depending on cmd line
     {
     case static_cast<int>(OperationMode::SIMULATION):
@@ -1001,7 +1004,7 @@ int main(int argc, char *argv[])
 
             /* debug mode */
             t_debug.start();
-            handleDebugMode(shaderMap, rightHandModel, leftHandModel, textModel);
+            handleDebugMode(shaderMap, rightHandModel, leftHandModel, dinosaur, textModel);
             t_debug.stop();
             break;
         }
@@ -3881,11 +3884,12 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                                   es.diffuse_fit_to_view,
                                                                   es.diffuse_pad_size,
                                                                   es.diffuse_select_top_animal,
-                                                                  es.no_preprompt);
+                                                                  es.no_preprompt,
+                                                                  es.cur_bake_file_stem);
                         if (success)
                         {
                             std::cout << "ControlNet inference successful" << std::endl;
-                            // if (es.saveIntermed)
+                            // if (es.save_byproducts)
                             // {
                             //     cv::Mat img2img_result = cv::Mat(512, 512, CV_8UC3, es.img2img_data.data()).clone();
                             //     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
@@ -3929,7 +3933,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     camTexture.bind();
                     fullScreenQuad.render();
                     sd_fbo.unbind();
-                    // if (saveIntermed)
+                    // if (save_byproducts)
                     //     sd_fbo.saveColorToFile("../../resource/sd_image.png", false);
                     std::vector<uint8_t> buf = sd_fbo.getBuffer(1);
                     cv::Mat cam_cv = cv::Mat(512, 512, CV_8UC1, buf.data()).clone();
@@ -3939,7 +3943,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     camTexture.bind();
                     fullScreenQuad.render();
                     sd_fbo.unbind();
-                    // if (saveIntermed)
+                    // if (save_byproducts)
                     //     sd_fbo.saveColorToFile("../../resource/sd_mask.png", false);
                     std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
                     if (sd_thread.joinable())
@@ -3952,7 +3956,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                                              buf, buf_mask, es.diffuse_seed,
                                                                              512, 512, 1,
                                                                              512, 512, false, false, es.sd_mask_mode);
-                            // if (es.saveIntermed)
+                            // if (es.save_byproducts)
                             // {
                             //     cv::Mat img2img_result = cv::Mat(512, 512, CV_8UC3, es.img2img_data.data()).clone();
                             //     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
@@ -4095,10 +4099,12 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     bake_fbo_left.unbind();
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    if (es.saveIntermed)
+    if (es.save_byproducts)
     {
-        bake_fbo_right.saveColorToFile(es.bakeFileRight);
-        bake_fbo_left.saveColorToFile(es.bakeFileLeft);
+        std::string bake_right = es.cur_bake_file_stem + "_baked_right.png";
+        std::string bake_left = es.cur_bake_file_stem + "_baked_left.png";
+        bake_fbo_right.saveColorToFile(bake_right);
+        bake_fbo_left.saveColorToFile(bake_left);
     }
 }
 
@@ -4918,7 +4924,7 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
     if (state == static_cast<int>(GuessAnimalGameState::BAKE))
     {
         guessAnimalGame.resetState();
-        handlePromptMode();
+        handleBakeConfig();
         es.bakeRequest = true;
     }
     handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
@@ -4942,11 +4948,6 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
         fullScreenQuad.render();
     }
     t_pp.stop();
-
-    /* debug mode */
-    t_debug.start();
-    handleDebugMode(shaderMap, rightHandModel, leftHandModel, textModel);
-    t_debug.stop();
 }
 
 void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
@@ -5406,6 +5407,7 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
+                     SkinnedModel &otherObject,
                      TextModel &text)
 {
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
@@ -5433,35 +5435,10 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
         }
         // draws some mesh (lit by camera input)
         {
-            /* quad at vcam far plane, shined by vproj (perspective corrected) */
-            // projectorOnlyShader.use();
-            // projectorOnlyShader.setBool("flipVer", false);
-            // projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-            // projectorOnlyShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-            // projectorOnlyShader.setBool("binary", false);
-            // camTexture.bind();
-            // projectorOnlyShader.setInt("src", 0);
-            // projFarQuad.render();
-
-            /* dinosaur */
-            // projectorShader.use();
-            // projectorShader.setBool("flipVer", false);
-            // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-            // projectorShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-            // projectorShader.setBool("binary", true);
-            dinosaur.Render(projectorShader, camTexture.getTexture(), false);
-            projectorShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
-            dinosaur.Render(projectorShader, camTexture.getTexture(), true);
-            textureShader.use();
-            textureShader.setBool("flipVer", false);
-            textureShader.setMat4("projection", flycam_projection_transform);
-            textureShader.setMat4("view", flycam_view_transform);
-            textureShader.setMat4("model", glm::mat4(1.0f));
-            textureShader.setBool("binary", false);
-            textureShader.setInt("src", 0);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
-            projNearQuad.render();
+            vcolorShader->use();
+            vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform);
+            vcolorShader->setBool("allWhite", false);
+            otherObject.Render(*vcolorShader, camTexture.getTexture(), false);
         }
         // draws global coordinate system gizmo at origin
         {
@@ -5908,7 +5885,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     return true;
 }
 
-void handlePromptMode()
+void handleBakeConfig()
 {
     switch (es.prompt_mode)
     {
@@ -5941,6 +5918,40 @@ void handlePromptMode()
     default:
         es.cur_prompt = es.manual_prompt;
         break;
+    }
+    if (es.save_byproducts)
+    {
+        fs::path bakeOutputPath{es.bake_folder};
+        uint32_t count = 0;
+        if (!fs::exists(bakeOutputPath))
+        {
+            fs::create_directories(bakeOutputPath);
+        }
+        else
+        {
+            std::set<std::string> unique_names;
+            for (const auto &entry : fs::directory_iterator(bakeOutputPath))
+            {
+                std::string stem = entry.path().filename().stem().string(); // get stem
+                std::string token = stem.substr(0, stem.find("_"));         // get number part
+                if (unique_names.find(token) == unique_names.end())
+                    unique_names.insert(token);
+            }
+            while (true)
+            {
+                if (unique_names.find(std::format("{:05d}", count)) == unique_names.end())
+                {
+                    break;
+                }
+                count++;
+            }
+        }
+        std::string tmp_name = std::format("{:05d}", count);
+        es.cur_bake_file_stem = fs::path(bakeOutputPath / fs::path(tmp_name)).string();
+    }
+    else
+    {
+        es.cur_bake_file_stem = "";
     }
 }
 // ---------------------------------------------------------------------------------------------
@@ -6698,11 +6709,12 @@ void openIMGUIFrame()
             {
                 ImGui::InputText("Input file", &es.inputBakeFile);
             }
-            ImGui::InputText("Bake texture file (right)", &es.bakeFileRight);
-            ImGui::InputText("Bake texture file (left)", &es.bakeFileLeft);
+            ImGui::InputText("Bake Output Path", &es.bake_folder);
+            // ImGui::InputText("Bake texture file (right)", &es.bakeFileRight);
+            // ImGui::InputText("Bake texture file (left)", &es.bakeFileLeft);
             if (ImGui::Button("Bake"))
             {
-                handlePromptMode();
+                handleBakeConfig();
                 switch (es.bake_mode)
                 {
                 case static_cast<int>(BakeMode::FILE):
@@ -6725,7 +6737,7 @@ void openIMGUIFrame()
                 }
             }
             ImGui::SameLine();
-            ImGui::Checkbox("Save Intermediate Outputs", &es.saveIntermed);
+            ImGui::Checkbox("Save Intermediate Outputs", &es.save_byproducts);
             ImGui::SeparatorText("Stable Diffusion / Control Net");
             ImGui::SliderInt("ControlNet Present", &es.controlnet_preset, 0, 22);
             ImGui::Text("Prompts Mode");

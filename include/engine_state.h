@@ -99,10 +99,10 @@ public:
     bool bake_preproc_succeed = false;
     bool sd_running = false;
     int prompt_mode = static_cast<int>(PromptMode::MANUAL_PROMPT);
-    int bake_mode = static_cast<int>(BakeMode::SD);
+    int bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
     int controlnet_preset = 0;
     int sd_mask_mode = 2;
-    bool saveIntermed = false;
+    bool save_byproducts = false;
     int sd_outwidth, sd_outheight;
     std::vector<uint8_t> img2img_data;
     int diffuse_seed = -1;
@@ -307,6 +307,8 @@ public:
     std::string inputBakeFile = "../../resource/images/butterfly.png";
     std::string bakeFileLeft = "../../resource/baked_textures/baked_left.png";
     std::string bakeFileRight = "../../resource/baked_textures/baked_right.png";
+    std::string bake_folder = "../../debug/bakes";
+    std::string cur_bake_file_stem = "";
     std::string userTextureFile = "../../resource/images/uv.png";
     std::vector<std::string> texturePaths{
         "../../resource",

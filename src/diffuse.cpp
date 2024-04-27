@@ -450,32 +450,37 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
                                  bool fit_to_view,
                                  int extra_pad_size,
                                  bool select_top_animal,
-                                 bool no_preprompt)
+                                 bool no_preprompt,
+                                 std::string save_path_stem)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
     if (no_preprompt)
     {
         payload.prompt = "";
     }
-    std::string encoded_image;
+    std::vector<uint8_t> resized;
     cv::Rect rect;
     if (fit_to_view) // pad the mask to square and resize to payload size (512x512)
     {
-        std::vector<uint8_t> fitted_mask = fit_mask_to_view(raw_data,
-                                                            payload.width, payload.height,
-                                                            width, height,
-                                                            rect, extra_pad_size);
-        // std::vector<uint8_t> enlarged_data = fit_mask_to_view(raw_data, width, height);
-        encoded_image = encode_png(fitted_mask, payload.width, payload.height, channels);
+        resized = fit_mask_to_view(raw_data,
+                                   payload.width, payload.height,
+                                   width, height,
+                                   rect, extra_pad_size);
     }
     else // mask will be resized naively to 512x512
     {
         std::vector<uint8_t> raw_vec = raw_data;
         cv::Mat input = cv::Mat(height, width, CV_8UC1, raw_vec.data());
         cv::resize(input, input, cv::Size(payload.width, payload.height));
-        std::vector<uint8_t> resized(input.data, input.data + input.total() * input.elemSize());
-        encoded_image = encode_png(resized, payload.width, payload.height, channels);
+        resized = std::vector<uint8_t>(input.data, input.data + input.total() * input.elemSize());
     }
+    if (!save_path_stem.empty())
+    {
+        std::string mask_save_path = save_path_stem + "_mask.png";
+        cv::Mat cvmask = cv::Mat(payload.width, payload.height, CV_8UC1, resized.data());
+        cv::imwrite(mask_save_path, cvmask);
+    }
+    std::string encoded_image = encode_png(resized, payload.width, payload.height, channels);
 
     if (animal.empty())
     {
@@ -488,6 +493,20 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     }
 
     auto payload_dict = payload.getPayload(encoded_image, animal, seed);
+    std::cout << "prompt: " << payload_dict["prompt"] << std::endl;
+    if (!save_path_stem.empty())
+    {
+        std::string prompt_save_path = save_path_stem + "_prompt.txt";
+        std::ofstream myfile;
+        myfile.open(prompt_save_path);
+        int pad = fit_to_view ? extra_pad_size : -1;
+        myfile << payload_dict["prompt"] << ", "
+               << "preset: " << preset_payload_num << ", "
+               << "seed: " << seed << ", "
+               << "pad: " << pad
+               << std::endl;
+        myfile.close();
+    }
     changeModel(payload.model);
     std::vector<uint8_t> result_image;
     try
@@ -499,6 +518,13 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
         }
         std::string result = base64_decode(std::string(response["images"][0]));
         std::vector decoded = decode_png(result, payload.width, payload.height, false);
+        if (!save_path_stem.empty())
+        {
+            std::string result_save_path = save_path_stem + "_gen.png";
+            cv::Mat output = cv::Mat(payload.width, payload.height, CV_8UC3, decoded.data()).clone();
+            cv::cvtColor(output, output, cv::COLOR_RGB2BGR);
+            cv::imwrite(result_save_path, output);
+        }
         if (fit_to_view)
         {
             out_data = fit_sd_to_view(decoded,
@@ -618,8 +644,27 @@ std::vector<uint8_t> ControlNetClient::fit_mask_to_view(const std::vector<uint8_
     std::vector<std::vector<cv::Point>> contours;
     std::vector<cv::Vec4i> hierarchy;
     cv::findContours(mask_mat, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
-    rect = cv::boundingRect(contours[0]);
-
+    sort(contours.begin(), contours.end(), [](const std::vector<cv::Point> &c1, const std::vector<cv::Point> &c2)
+         { return c1.size() > c2.size(); });
+    switch (contours.size())
+    {
+    case 0:
+    {
+        std::cerr << "no contours found in mask" << std::endl;
+        exit(1);
+        break;
+    }
+    case 1:
+    {
+        rect = cv::boundingRect(contours[0]);
+        break;
+    }
+    default:
+        cv::Rect rect1 = cv::boundingRect(contours[0]);
+        cv::Rect rect2 = cv::boundingRect(contours[1]);
+        rect = rect1 | rect2;
+        break;
+    }
     // pad to square before resizing
     bool padh = rect.height > rect.width; // should we pad horizontally or vertically?
     int pad = std::max(rect.width, rect.height) - std::min(rect.width, rect.height);
