@@ -351,6 +351,11 @@ public:
     bool mls_running = false;
     // bool mls_probe_recent_leap = false;
     bool use_mls = true;
+    bool auto_pilot = true;
+    int auto_pilot_cnt_above_thr = 0;
+    int auto_pilot_cnt_below_thr = 0;
+    float auto_pilot_thr_extrapolate = 0.003f;
+    int auto_pilot_count_thr = 6;
     bool postprocess_blur = false;
     int mls_mode = static_cast<int>(MLSMode::CONTROL_POINTS1);
     bool show_landmarks = false;

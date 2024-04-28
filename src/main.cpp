@@ -2433,7 +2433,7 @@ bool loadSession()
 LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
-                         std::vector<glm::vec3> &joints_left, // todo: remove joints, they are redundant
+                         std::vector<glm::vec3> &joints_left,
                          std::vector<glm::vec3> &joints_right,
                          std::vector<uint32_t> &leftFingersExtended,
                          std::vector<uint32_t> &rightFingersExtended,
@@ -3173,21 +3173,7 @@ LEAP_STATUS handleLeapInput(int num_frames)
 LEAP_STATUS handleLeapInput()
 {
     LEAP_STATUS leap_status;
-    // if (!leap_poll_mode)
-    // {
-    //     // sync leap clock
-    //     std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-    //     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-    // }
     leap_status = getLeapFrame(leap, es.magic_leap_time_delay, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
-    // for (int i = 0; i < bones_to_world_left.size(); i++)
-    // {
-    //     joints_left.push_back(glm::vec3(bones_to_world_left[i][3]));
-    // }
-    // for (int i = 0; i < bones_to_world_right.size(); i++)
-    // {
-    //     joints_right.push_back(glm::vec3(bones_to_world_right[i][3]));
-    // }
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(es.leap_global_scaler));
@@ -3308,6 +3294,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD):
     {
+        if (es.auto_pilot)
+        {
+            int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
+            if (n_visible_hands == 1)
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+        }
         if (es.use_mls || es.use_of)
             postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
                                    mls_fbo.getTexture()->getTexture(),
@@ -3322,6 +3314,12 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
     {
+        if (es.auto_pilot)
+        {
+            int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
+            if (n_visible_hands == 2)
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+        }
         // todo: assumes both hand use same texture, which is not the case generally
         if (es.use_mls || es.use_of)
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
@@ -3811,16 +3809,16 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
         // todo: if this pp is enabled, hands_fbo above performs redundant work: refactor.
         // todo: currently only works for one hand. make it work for both
-        if ((isRightHand && es.jfauv_right_hand) || (!isRightHand && !es.jfauv_right_hand))
+        // if ((isRightHand && es.jfauv_right_hand) || (!isRightHand && !es.jfauv_right_hand))
+        // {
+        if (es.postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
         {
-            if (es.postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
-            {
-                uv_fbo.bind();
-                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, es.rotx, false, nullptr);
-                uv_fbo.unbind();
-            }
+            uv_fbo.bind();
+            set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, false, true);
+            handModel.Render(*skinnedShader, bones2world, es.rotx, false, nullptr);
+            uv_fbo.unbind();
         }
+        // }
         glDisable(GL_DEPTH_TEST); // todo: why not keep it on ?
     }
 }
@@ -4517,6 +4515,14 @@ void renderGrid(Shader &gridShader)
 
 void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool new_frame, bool simulation)
 {
+    if (es.auto_pilot)
+    {
+        int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
+        if (n_visible_hands == 1)
+            es.use_mls = true;
+        else
+            es.use_mls = false;
+    }
     if (es.use_mls)
     {
         if (new_frame)
@@ -4566,12 +4572,11 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                 // pred_glm = kalman_forecast;
             }
             // move target points using the difference between the leap frame used to render, and the one matching the landmark detection timestamp
-            if (es.mls_extrapolate)
             {
-                cv::Point2f diff;
                 std::lock_guard<std::mutex> guard(es.mls_mutex);
                 if ((curP.size() == ControlPointsP.size()) && (ControlPointsP.size() == ControlPointsQ.size()))
                 {
+                    cv::Point2f diff;
                     for (int i = 0; i < curP.size(); i++)
                     {
                         // ControlPointsQ[i] += curP[i] - ControlPointsP[i];
@@ -4579,9 +4584,29 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                         diff += curP[i] - ControlPointsP[i];
                     }
                     diff = diff / static_cast<float>(curP.size());
-                    for (int i = 0; i < curP.size(); i++)
+                    if (es.auto_pilot)
                     {
-                        ControlPointsQ[i] += diff;
+                        if (cv::norm(diff) > es.auto_pilot_thr_extrapolate)
+                        {
+                            es.auto_pilot_cnt_below_thr = 0;
+                            es.auto_pilot_cnt_above_thr += 1;
+                        }
+                        else
+                        {
+                            es.auto_pilot_cnt_above_thr = 0;
+                            es.auto_pilot_cnt_below_thr += 1;
+                        }
+                        if (es.auto_pilot_cnt_above_thr > es.auto_pilot_count_thr)
+                            es.mls_extrapolate = true;
+                        else if (es.auto_pilot_cnt_below_thr > es.auto_pilot_count_thr)
+                            es.mls_extrapolate = false;
+                    }
+                    if (es.mls_extrapolate)
+                    {
+                        for (int i = 0; i < curP.size(); i++)
+                        {
+                            ControlPointsQ[i] += diff;
+                        }
                     }
                 }
             }
@@ -6785,56 +6810,6 @@ void openIMGUIFrame()
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Optical Flow"))
-        {
-            ImGui::SeparatorText("Optical Flow");
-            if (ImGui::Checkbox("Use OF", &es.use_of))
-            {
-                if (es.use_of)
-                {
-                    updateOFParams();
-                    es.mls_extrapolate = false;
-                }
-            }
-            if (ImGui::RadioButton("Naive", &es.of_mode, static_cast<int>(OFMode::NAIVE_BLOB)))
-            {
-                updateOFParams();
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Farneback CPU", &es.of_mode, static_cast<int>(OFMode::FB_CPU)))
-            {
-                updateOFParams();
-            }
-#ifdef OPENCV_WITH_CUDA
-            if (ImGui::RadioButton("Farneback GPU", &es.of_mode, static_cast<int>(OFMode::FB_GPU)))
-            {
-                updateOFParams();
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Nvidia GPU", &es.of_mode, static_cast<int>(OFMode::NV_GPU)))
-            {
-                updateOFParams();
-            }
-#endif
-            if (ImGui::SliderInt("Resize Factor", &es.of_resize_factor_exp, 0, 3))
-            {
-                es.of_resize_factor = std::pow(2, es.of_resize_factor_exp);
-                es.of_downsize = cv::Size(es.cam_width / es.of_resize_factor, es.cam_height / es.of_resize_factor);
-                updateOFParams();
-            }
-            ImGui::Checkbox("Show OF", &es.show_of);
-            ImGui::SliderInt("ROI size", &es.of_roi, 10, 100);
-            // ImGui::SameLine();
-            // ImGui::RadioButton("Farneback + Lucas-Kanade", &es.optical_flow_mode, static_cast<int>(OpticalFlowMode::FARNEBACK_LUCAS_KANADE));
-            // ImGui::SeparatorText("Farneback");
-            // ImGui::SliderInt("WinSize", &es.farneback_winSize, 1, 10);
-            // ImGui::SliderInt("Iterations", &es.farneback_iterations, 1, 10);
-            // ImGui::SliderFloat("PolySigma", &es.farneback_polySigma, 0.1f, 10.0f);
-            // ImGui::SeparatorText("Lucas-Kanade");
-            // ImGui::SliderInt("LK WinSize", &es.lk_winSize, 1, 10);
-            // ImGui::SliderInt("LK Iterations", &es.lk_iterations, 1, 10);
-            ImGui::TreePop();
-        }
         if (ImGui::TreeNode("MLS"))
         {
             ImGui::SeparatorText("MLS");
@@ -6847,7 +6822,11 @@ void openIMGUIFrame()
                 }
             }
             ImGui::SameLine();
+            ImGui::Checkbox("Auto Pilot", &es.auto_pilot);
+            ImGui::SameLine();
             ImGui::Checkbox("Landmark Thread Blocking", &es.mls_blocking);
+            ImGui::SliderFloat("Auto Pilot Thr", &es.auto_pilot_thr_extrapolate, 0.0f, 0.01f);
+            ImGui::SliderInt("Auto Pilot Cnt Thr", &es.auto_pilot_count_thr, 0, 20);
             if (ImGui::Checkbox("Extrapolate Q using Leap", &es.mls_extrapolate))
             {
                 if (es.mls_extrapolate)
@@ -7186,6 +7165,47 @@ void openIMGUIFrame()
                                                          glm::vec2(es.game_max.x, es.game_max.y)};
                 es.game_verts = new_game_verts;
             }
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Optical Flow"))
+        {
+            ImGui::SeparatorText("Optical Flow");
+            if (ImGui::Checkbox("Use OF", &es.use_of))
+            {
+                if (es.use_of)
+                {
+                    updateOFParams();
+                    es.mls_extrapolate = false;
+                }
+            }
+            if (ImGui::RadioButton("Naive", &es.of_mode, static_cast<int>(OFMode::NAIVE_BLOB)))
+            {
+                updateOFParams();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Farneback CPU", &es.of_mode, static_cast<int>(OFMode::FB_CPU)))
+            {
+                updateOFParams();
+            }
+#ifdef OPENCV_WITH_CUDA
+            if (ImGui::RadioButton("Farneback GPU", &es.of_mode, static_cast<int>(OFMode::FB_GPU)))
+            {
+                updateOFParams();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Nvidia GPU", &es.of_mode, static_cast<int>(OFMode::NV_GPU)))
+            {
+                updateOFParams();
+            }
+#endif
+            if (ImGui::SliderInt("Resize Factor", &es.of_resize_factor_exp, 0, 3))
+            {
+                es.of_resize_factor = std::pow(2, es.of_resize_factor_exp);
+                es.of_downsize = cv::Size(es.cam_width / es.of_resize_factor, es.cam_height / es.of_resize_factor);
+                updateOFParams();
+            }
+            ImGui::Checkbox("Show OF", &es.show_of);
+            ImGui::SliderInt("ROI size", &es.of_roi, 10, 100);
             ImGui::TreePop();
         }
     }
