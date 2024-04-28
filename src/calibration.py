@@ -1,9 +1,9 @@
 import numpy as np
 import gsoup
 from pathlib import Path
-import basler
 import dynaflash
 import leap
+import basler
 import cv2
 import time
 from PIL import Image, ImageDraw
@@ -546,7 +546,7 @@ def calibrate_leap_projector(root_path, force_calib=False):
 
 
 if __name__ == "__main__":
-    root_path = Path("C:/src/augmented_hands")
+    root_path = Path("C:/src/casper")
     pix2pix(root_path, True)
     # acq_cam(root_path)
     # calibrate_cam(root_path)

@@ -5,6 +5,8 @@ set(Python_EXECUTABLE "C:/Users/sens/AppData/Local/Programs/Python/Python311/pyt
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")  # replace with opencv install path (e.g. "${CMAKE_SOURCE_DIR}/third-party/opencv" or "C:/OpenCV/build/install")
 file(TO_CMAKE_PATH "$ENV{CUDA_PATH}" CUDA_TOOLKIT_ROOT_DIR)  # replaces # set(CUDA_TOOLKIT_ROOT_DIR $ENV{CUDA_PATH}) for normalizing the path
+file(TO_CMAKE_PATH "$ENV{PYLON_DEV_DIR}" PYLON_DEV_DIR)  # replaces # set(PYLON_DEV_DIR $ENV{PYLON_DEV_DIR}) for normalizing the path
+set(PYLON_RT_DIR "${PYLON_DEV_DIR}/../Runtime/x64")
 cmake_policy(SET CMP0074 NEW)  # respect <PACKAGE>_ROOT variables in "find_package"
 # add_compile_definitions(CV_IGNORE_DEBUG_BUILD_GUARD)
 include(CMakePrintHelpers)
@@ -331,16 +333,16 @@ target_link_libraries(casper PRIVATE Python::Python Python::NumPy)
 # target_include_directories(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
 # target_link_libraries(dyna_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/DynaFlash200.lib")
 ######################################### diffuse example program
-add_executable(diffuse_example 
-    src/diffuse_example.cpp
-    src/diffuse.cpp
-    src/base64.cpp
-    src/timer.cpp
-)
-target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
-target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
-target_link_libraries(diffuse_example PRIVATE Python::Python Python::NumPy)
+# add_executable(diffuse_example 
+#     src/diffuse_example.cpp
+#     src/diffuse.cpp
+#     src/base64.cpp
+#     src/timer.cpp
+# )
+# target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# target_link_libraries(diffuse_example PRIVATE wsock32 ws2_32 ${OpenCV_LIBS})
+# target_include_directories(diffuse_example PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
+# target_link_libraries(diffuse_example PRIVATE Python::Python Python::NumPy)
 ######################################### download benchmark example program
 # add_executable(benchmark_download
 #     src/benchmark_download.cpp
@@ -390,17 +392,6 @@ if(NOT RES_LEN EQUAL 0)
                         $<TARGET_FILE_DIR:casper>)
 endif()
 
-# file(GLOB OPENCV_DLLS "${OpenCV_DIR}/bin/*.dll")
-# # message(OPENCV_DLLS="${OPENCV_DLLS}")
-# list(LENGTH OPENCV_DLLS RES_LEN)
-# if(NOT RES_LEN EQUAL 0)
-#     add_custom_command(TARGET casper 
-#                         POST_BUILD
-#                         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-#                         ${OPENCV_DLLS}
-#                         $<TARGET_FILE_DIR:casper>)
-# endif()
-
 file(GLOB DYNAFLASH_DLLS "${PROJECT_SOURCE_DIR}/third-party/dynaflash/lib/*.dll")
 add_custom_command(TARGET casper 
                 POST_BUILD
@@ -438,6 +429,13 @@ add_custom_command(TARGET casper
                 ${PYTHON_DLL}
                 $<TARGET_FILE_DIR:casper>)
 
+file(GLOB BASLER_DLLS "${PYLON_RT_DIR}/*.dll")
+add_custom_command(TARGET casper
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${BASLER_DLLS}
+                $<TARGET_FILE_DIR:casper>)
+
 file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/predict.py")
 add_custom_command(TARGET casper
                 POST_BUILD
@@ -446,6 +444,13 @@ add_custom_command(TARGET casper
                 $<TARGET_FILE_DIR:casper>)
 
 file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/chatgpt.py")
+add_custom_command(TARGET casper
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${PYTHON_EMBEDDING}
+                $<TARGET_FILE_DIR:casper>)
+
+file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/calibration.py")
 add_custom_command(TARGET casper
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

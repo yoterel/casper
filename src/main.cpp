@@ -611,7 +611,7 @@ int main(int argc, char *argv[])
     }
     case static_cast<int>(OperationMode::GUESS_ANIMAL_GAME):
     {
-        es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+        es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
         es.texture_mode = static_cast<int>(TextureMode::BAKED);
         es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
         es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
@@ -2816,6 +2816,7 @@ bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, 
     cv::Mat image;
     cv::flip(origImage, image, 1);
     cv::cvtColor(image, image, cv::COLOR_GRAY2RGB);
+    std::lock_guard<std::mutex> lock(es.py_mutex);
     // cv::Mat image = cv::imread("../../resource/hand.png", cv::IMREAD_GRAYSCALE);
     // std::cout << "mp received timestamp: " << timestamp << std::endl;
     // cv::Mat image;
@@ -3877,7 +3878,8 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                                   es.diffuse_pad_size,
                                                                   es.diffuse_select_top_animal,
                                                                   es.no_preprompt,
-                                                                  es.cur_bake_file_stem);
+                                                                  es.cur_bake_file_stem,
+                                                                  &es.py_mutex);
                         if (success)
                         {
                             std::cout << "ControlNet inference successful" << std::endl;
@@ -4886,24 +4888,7 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
     /* deal with leap input */
     t_leap.start();
     LEAP_STATUS leap_status = handleLeapInput();
-    if (es.record_session)
-    {
-        if ((t_app.getElapsedTimeInSec() - es.recordStartTime) > es.recordDuration)
-        {
-            es.record_session = false;
-            saveSession(std::format("../../resource/recordings/{}", es.recording_name), es.recordImages);
-            std::cout << "Recording stopped" << std::endl;
-        }
-        else
-        {
-            saveLeapData(leap_status, es.totalFrameCount, es.recordImages);
-        }
-    }
-    if (es.record_single_pose)
-    {
-        saveSession(std::format("../../resource/recordings/{}", es.recording_name), leap_status, es.totalFrameCount, es.recordImages);
-        es.record_single_pose = false;
-    }
+    projectAndFilterJoints(joints_left, joints_right, projected_filtered_left, projected_filtered_right);
     t_leap.stop();
     /* skin hand meshes */
     t_skin.start();
@@ -6132,11 +6117,12 @@ void openIMGUIFrame()
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
-                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
                 es.texture_mode = static_cast<int>(TextureMode::BAKED);
                 es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
                 es.prompt_mode = static_cast<int>(PromptMode::AUTO_PROMPT);
+                es.no_preprompt = false;
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
             }

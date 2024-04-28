@@ -340,7 +340,8 @@ public:
     bool mls_solve_every_frame = true;
     bool mls_succeeded_this_frame = false;
     bool mls_extrapolate = true;
-    std::mutex mls_mutex;
+    std::mutex mls_mutex; // used to protect controlpoints (P and Q) as a multithreaded resource
+    std::mutex py_mutex;  // apparantely python cannot be accessed by multiple threads
     int mls_succeed_counter = 0;
     int mls_every = 1;
     int mls_n_latency_frames = 0;

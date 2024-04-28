@@ -451,7 +451,8 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
                                  int extra_pad_size,
                                  bool select_top_animal,
                                  bool no_preprompt,
-                                 std::string save_path_stem)
+                                 std::string save_path_stem,
+                                 std::mutex *py_mutex)
 {
     ControlNetPayload payload = ControlNetPayload::get_preset_payload(preset_payload_num);
     if (no_preprompt)
@@ -462,10 +463,14 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     cv::Rect rect;
     if (fit_to_view) // pad the mask to square and resize to payload size (512x512)
     {
-        resized = fit_mask_to_view(raw_data,
-                                   payload.width, payload.height,
-                                   width, height,
-                                   rect, extra_pad_size);
+        bool success = fit_mask_to_view(raw_data,
+                                        resized,
+                                        payload.width,
+                                        payload.height,
+                                        width, height,
+                                        rect, extra_pad_size);
+        if (!success)
+            return false;
     }
     else // mask will be resized naively to 512x512
     {
@@ -484,7 +489,15 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
 
     if (animal.empty())
     {
-        animal = chatGPTClient.get_animal(raw_data, width, height, channels, select_top_animal);
+        if (py_mutex != nullptr)
+        {
+            std::lock_guard<std::mutex> lock(*py_mutex);
+            animal = chatGPTClient.get_animal(raw_data, width, height, channels, select_top_animal);
+        }
+        else
+        {
+            animal = chatGPTClient.get_animal(raw_data, width, height, channels, select_top_animal);
+        }
         if (animal.empty())
         {
             std::cerr << "Failed to get animal from ChatGPT" << std::endl;
@@ -634,10 +647,11 @@ std::string Client::encode_png(const std::vector<uint8_t> &raw_data, const int w
     return std::string("data:image/png;base64,") + base64_encode(std::string(data.begin(), data.end()));
 }
 
-std::vector<uint8_t> ControlNetClient::fit_mask_to_view(const std::vector<uint8_t> &mask,
-                                                        int sd_width, int sd_height,
-                                                        int orig_width, int orig_height,
-                                                        cv::Rect &rect, int extra_pad)
+bool ControlNetClient::fit_mask_to_view(const std::vector<uint8_t> &mask,
+                                        std::vector<uint8_t> &fitted_mask,
+                                        int sd_width, int sd_height,
+                                        int orig_width, int orig_height,
+                                        cv::Rect &rect, int extra_pad)
 {
     std::vector<uint8_t> mask_vec = mask; // copy the mask
     cv::Mat mask_mat = cv::Mat(orig_height, orig_width, CV_8UC1, mask_vec.data());
@@ -651,7 +665,7 @@ std::vector<uint8_t> ControlNetClient::fit_mask_to_view(const std::vector<uint8_
     case 0:
     {
         std::cerr << "no contours found in mask" << std::endl;
-        exit(1);
+        return false;
         break;
     }
     case 1:
@@ -682,12 +696,13 @@ std::vector<uint8_t> ControlNetClient::fit_mask_to_view(const std::vector<uint8_
     if (padded.rows != padded.cols)
     {
         std::cerr << "Padding failed, padded image is not square" << std::endl;
-        exit(1);
+        return false;
     }
     cv::Mat resized;
     cv::resize(padded, resized, cv::Size(sd_width, sd_height), cv::INTER_NEAREST);
     std::vector<uint8_t> fitted_mask_buffer(resized.begin<uint8_t>(), resized.end<uint8_t>());
-    return fitted_mask_buffer;
+    fitted_mask = fitted_mask_buffer;
+    return true;
 }
 
 // fits the sd image to the mask size

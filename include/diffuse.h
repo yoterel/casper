@@ -92,15 +92,17 @@ public:
                    int extra_pad_size = 50,
                    bool select_top_animal = true,
                    bool no_preprompt = false,
-                   std::string save_path_stem = "");
+                   std::string save_path_stem = "",
+                   std::mutex *py_mutex = nullptr);
 
 private:
     void changeModel(const std::string &modelName);
     bool txt2img(const json &payload, json &response);
-    std::vector<uint8_t> fit_mask_to_view(const std::vector<uint8_t> &mask,
-                                          int sd_width, int sd_height,
-                                          int orig_width, int orig_height,
-                                          cv::Rect &rect, int extra_pad);
+    bool fit_mask_to_view(const std::vector<uint8_t> &mask,
+                          std::vector<uint8_t> &fitted_mask,
+                          int sd_width, int sd_height,
+                          int orig_width, int orig_height,
+                          cv::Rect &rect, int extra_pad);
     std::vector<uint8_t> fit_sd_to_view(const std::vector<uint8_t> &sd,
                                         int sd_width, int sd_height,
                                         int orig_width, int orig_height,
