@@ -39,6 +39,7 @@ public:
     bool mask_missing_color_is_camera = false;
     bool threshold_flag = false;
     bool threshold_flag2 = false;
+    float render_alpha = 1.0f;
     int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
     int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
     int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
