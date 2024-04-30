@@ -4461,10 +4461,8 @@ void landmarkDetection(bool blocking)
                 mls_thread.join();
             es.mls_running = true;
             mls_thread = std::thread(landmarkDetectionThread,
-                                     projected_filtered_left,
-                                     rendered_depths_left, isLeftHandVis,
-                                     projected_filtered_right,
-                                     rendered_depths_right, isRightHandVis);
+                                     projected_filtered_left, rendered_depths_left, isLeftHandVis,
+                                     projected_filtered_right, rendered_depths_right, isRightHandVis);
         } // if (joints.size() > 0)
     }     // if (!mls_running && !mls_landmark_thread_succeed)
     if (blocking)
@@ -4478,7 +4476,7 @@ void constructGrid(bool updateGLBuffers)
 {
     std::lock_guard<std::mutex> guard(es.mls_mutex);
     /* <can be done by landmark detection thread or main thread> */
-    if ((ControlPointsP.size() > 0) && (ControlPointsQ.size() > 0))
+    if ((ControlPointsP.size() > 0) && (ControlPointsP.size() == ControlPointsQ.size()))
     {
         // compute deformation
         cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, es.deformation_mode, es.mls_alpha, deformationGrid);
@@ -4541,8 +4539,10 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                 handleGetSkeletonByTimestamp(future_timestamp, bones2world_left, joints_left, bones2world_right, joints_right);
                 projectAndFilterJoints(joints_left, joints_right, projected_filtered_left, projected_filtered_right);
             }
-            std::vector<cv::Point2f> curP = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left));
-
+            std::vector<cv::Point2f> curP_left = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left));
+            std::vector<cv::Point2f> curP_right = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_right));
+            std::vector<cv::Point2f> curP(curP_left.begin(), curP_left.end());
+            curP.insert(curP.end(), curP_right.begin(), curP_right.end());
             // temporally filter landmarks
             if (es.mls_use_kalman)
             {
@@ -4577,30 +4577,40 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                 if ((curP.size() == ControlPointsP.size()) && (ControlPointsP.size() == ControlPointsQ.size()))
                 {
                     cv::Point2f diff;
-                    for (int i = 0; i < curP.size(); i++)
+                    int n_landmarks = 6; // curP.size()
+                    for (int i = 0; i < n_landmarks; i++)
                     {
                         // ControlPointsQ[i] += curP[i] - ControlPointsP[i];
                         // ControlPointsQ[i] += avg;
                         diff += curP[i] - ControlPointsP[i];
                     }
-                    diff = diff / static_cast<float>(curP.size());
-                    if (es.auto_pilot)
-                    {
-                        if (cv::norm(diff) > es.auto_pilot_thr_extrapolate)
-                        {
-                            es.auto_pilot_cnt_below_thr = 0;
-                            es.auto_pilot_cnt_above_thr += 1;
-                        }
-                        else
-                        {
-                            es.auto_pilot_cnt_above_thr = 0;
-                            es.auto_pilot_cnt_below_thr += 1;
-                        }
-                        if (es.auto_pilot_cnt_above_thr > es.auto_pilot_count_thr)
-                            es.mls_extrapolate = true;
-                        else if (es.auto_pilot_cnt_below_thr > es.auto_pilot_count_thr)
-                            es.mls_extrapolate = false;
-                    }
+                    diff = diff / static_cast<float>(n_landmarks);
+                    // if (es.auto_pilot)
+                    // {
+                    // if (cv::norm(diff) > es.auto_pilot_thr_extrapolate)
+                    // {
+                    //     es.auto_pilot_cnt_below_thr = 0;
+                    //     es.auto_pilot_cnt_above_thr += 1;
+                    // }
+                    // else
+                    // {
+                    //     es.auto_pilot_cnt_above_thr = 0;
+                    //     es.auto_pilot_cnt_below_thr += 1;
+                    // }
+                    // if (es.auto_pilot_cnt_above_thr > es.auto_pilot_count_thr)
+                    //     es.mls_extrapolate = true;
+                    // else if (es.auto_pilot_cnt_below_thr > es.auto_pilot_count_thr)
+                    //     es.mls_extrapolate = false;
+                    // es.auto_pilot_delta = std::min(static_cast<float>(cv::norm(diff)) / es.auto_pilot_thr_extrapolate, 1.0f);
+                    // es.auto_pilot_alpha = sqrt(es.auto_pilot_delta);
+                    // float alpha = std::min(static_cast<float>(cv::norm(diff)) / es.auto_pilot_thr_extrapolate, 1.0f);
+                    // for (int i = 0; i < curP.size(); i++)
+                    // {
+                    // ControlPointsQ[i] += es.auto_pilot_alpha * diff;
+                    // }
+                    // }
+                    // else
+                    // {
                     if (es.mls_extrapolate)
                     {
                         for (int i = 0; i < curP.size(); i++)
@@ -4608,6 +4618,7 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                             ControlPointsQ[i] += diff;
                         }
                     }
+                    // }
                 }
             }
             // use the leap frame used to render as source points
@@ -6825,7 +6836,9 @@ void openIMGUIFrame()
             ImGui::Checkbox("Auto Pilot", &es.auto_pilot);
             ImGui::SameLine();
             ImGui::Checkbox("Landmark Thread Blocking", &es.mls_blocking);
-            ImGui::SliderFloat("Auto Pilot Thr", &es.auto_pilot_thr_extrapolate, 0.0f, 0.01f);
+            ImGui::SliderFloat("Auto Pilot Thr", &es.auto_pilot_thr_extrapolate, 0.0f, 0.1f);
+            // ImGui::ProgressBar(es.auto_pilot_delta, ImVec2(-1.0f, 0.0f), "delta");
+            // ImGui::ProgressBar(es.auto_pilot_alpha, ImVec2(-1.0f, 0.0f), "alpha");
             ImGui::SliderInt("Auto Pilot Cnt Thr", &es.auto_pilot_count_thr, 0, 20);
             if (ImGui::Checkbox("Extrapolate Q using Leap", &es.mls_extrapolate))
             {

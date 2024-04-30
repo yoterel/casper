@@ -334,7 +334,7 @@ public:
     const int grid_y_point_count = 21;
     const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
     const float grid_y_spacing = 2.0f / static_cast<float>(grid_y_point_count - 1);
-    float mls_alpha = 0.5f; // emperically best: 0.8f for rigid, 0.5f for affine
+    float mls_alpha = 0.5f; // emperically best: 0.8f for rigid, 0.5f for sim/affine
     std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
     bool mls_landmark_thread_succeed = false;
@@ -356,6 +356,8 @@ public:
     int auto_pilot_cnt_above_thr = 0;
     int auto_pilot_cnt_below_thr = 0;
     float auto_pilot_thr_extrapolate = 0.003f;
+    // float auto_pilot_delta = 0.0f;
+    // float auto_pilot_alpha = 0.0f;
     int auto_pilot_count_thr = 6;
     bool postprocess_blur = false;
     int mls_mode = static_cast<int>(MLSMode::CONTROL_POINTS1);
@@ -375,7 +377,7 @@ public:
     float mls_depth_threshold = 30.0f;
     bool mls_depth_test = false;
     float kalman_lookahead = 17.0f;
-    int deformation_mode = static_cast<int>(DeformationMode::RIGID);
+    int deformation_mode = static_cast<int>(DeformationMode::SIMILARITY);
     // of controls
     bool use_of = false;
     bool show_of = false;

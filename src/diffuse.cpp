@@ -339,7 +339,7 @@ ControlNetPayload::ControlNetPayload(std::string model, std::string prompt, int 
 json ControlNetPayload::getPayload(const std::string &encoded_image, const std::string &animal, int seed)
 {
     json payload = {{"prompt", prompt + animal},
-                    {"negative_prompt", "deformed, disfigured, underexposed, overexposed"},
+                    {"negative_prompt", "deformed, disfigured, underexposed, overexposed, blurred"},
                     {"batch_size", 1},
                     {"steps", steps},
                     {"cfg_scale", cfg_scale},
