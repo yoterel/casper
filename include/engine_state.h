@@ -368,7 +368,7 @@ public:
     bool mls_use_kalman = false;
     float prev_mls_time = 0.0f;
     bool mls_use_latest_leap = true;
-    bool mls_global_forecast = false;
+    // bool mls_global_forecast = false;
     float mls_grid_shader_threshold = 1.0f;
     glm::vec2 mls_shift = glm::vec2(0.0f, 0.0f);
     glm::vec2 prev_com = glm::vec2(0.0f, 0.0f);
