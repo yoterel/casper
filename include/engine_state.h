@@ -4,6 +4,8 @@
 #include "leapCPP.h"
 #include "helpers.h"
 #include <mutex>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 class EngineState // dumb dumb engine state container
 {
@@ -167,6 +169,7 @@ public:
     float initial_simulated_latency_ms = 20.0f;
     // record & playback controls
     bool debug_playback = false;
+    bool save_sim_data = false;
     int32_t playback_prev_frame = -1;
     // bool playback_with_images = false;
     float pseudo_vid_playback_speed = 1.1f;
@@ -243,6 +246,12 @@ public:
     bool showReprojections = false;
     bool showTestPoints = false;
     bool calibrationSuccess = false;
+    fs::path default_coaxial_calib_path{"../../resource/calibrations/coaxial_calibration/coax_user.npy"};
+    fs::path default_user_calib_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
+    fs::path default_auto_calib_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
+    fs::path default_points2d_calib_path{"../../resource/calibrations/leap_calibration/2dpoints.npy"};
+    fs::path default_points3d_calib_path{"../../resource/calibrations/leap_calibration/3dpoints.npy"};
+    fs::path default_cam_calib_path{"../../resource/calibrations/cam_calibration/cam_calibration.npz"};
     std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                            {-1.0f, -1.0f},
                                            {1.0f, -1.0f},
@@ -368,6 +377,9 @@ public:
     bool mls_use_kalman = false;
     float prev_mls_time = 0.0f;
     bool mls_use_latest_leap = true;
+    bool save_sim_data_P = false;
+    std::vector<std::vector<glm::vec2>> cur_sim_data;
+    std::vector<float> cur_sim_time;
     // bool mls_global_forecast = false;
     float mls_grid_shader_threshold = 1.0f;
     glm::vec2 mls_shift = glm::vec2(0.0f, 0.0f);

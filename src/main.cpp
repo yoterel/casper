@@ -214,6 +214,10 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
                    TextModel &textModel,
                    glm::mat4 &cam_view_transform,
                    glm::mat4 &cam_projection_transform);
+void newSimData(const std::vector<glm::vec2> &Q,
+                const std::vector<glm::vec2> &P,
+                float time);
+void saveSimData();
 void initGLBuffers(unsigned int *pbo);
 bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 glm::mat4 &w2c_auto,
@@ -222,8 +226,13 @@ bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 std::vector<glm::vec3> &points_3d,
                                 cv::Mat &undistort_map1, cv::Mat &undistort_map2,
                                 cv::Mat &camera_intrinsics_cv,
-                                cv::Mat &camera_distortion_cv);
-bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
+                                cv::Mat &camera_distortion_cv,
+                                const fs::path &user_path,
+                                const fs::path &auto_path,
+                                const fs::path &p2d_path,
+                                const fs::path &p3d_path,
+                                const fs::path &cam_path);
+bool loadCoaxialCalibrationResults(const fs::path &path, std::vector<glm::vec2> &cur_screen_verts);
 void set_texture_shader(Shader *textureShader,
                         bool flipVer,
                         bool flipHor,
@@ -534,8 +543,6 @@ int main(int argc, char *argv[])
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
-    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
     /* Setup Platform/Renderer backends */
     ImGui_ImplGlfw_InitForOpenGL(window, true); // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
     ImGui_ImplOpenGL3_Init();
@@ -544,7 +551,7 @@ int main(int argc, char *argv[])
     Helpers::setupGizmoBuffers(gizmoVAO, gizmoVBO);
     Helpers::setupFrustrumBuffers(frustrumVAO, frustrumVBO);
     Helpers::setupCubeBuffers(cubeVAO, cubeVBO, cubeEBO);
-    unsigned int pbo[2] = {0};
+    unsigned int pbo[2] = {0}; // used for downloading images from GPU
     initGLBuffers(pbo);
     hands_fbo.init();
     game_fbo.init(GL_BGRA, GL_RGBA, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -578,6 +585,40 @@ int main(int argc, char *argv[])
                           "",
                           es.proj_width, es.proj_height,
                           es.cam_width, es.cam_height);
+    // load default calibration results if they exist
+    Camera_Mode camera_mode = es.freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
+    std::cout << "Loading calibration results..." << std::endl;
+    if (loadLeapCalibrationResults(proj_project, cam_project,
+                                   w2c_auto, w2c_user,
+                                   points_2d, points_3d,
+                                   undistort_map1, undistort_map2,
+                                   camera_intrinsics_cv, camera_distortion_cv,
+                                   es.default_user_calib_path,
+                                   es.default_auto_calib_path,
+                                   es.default_points2d_calib_path,
+                                   es.default_points3d_calib_path,
+                                   es.default_cam_calib_path))
+    {
+        create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+    }
+    else
+    {
+        std::cout << "Failed to load calibration results. Using hard-coded values for camera and projector settings" << std::endl;
+        gl_projector = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                glm::vec3(0.0f, 0.0f, 0.0f),
+                                glm::vec3(0.0f, 1.0f, 0.0f),
+                                camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
+        gl_camera = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
+                             glm::vec3(0.0f, 0.0f, 0.0f),
+                             glm::vec3(0.0f, -1.0f, 0.0f),
+                             camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
+        gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                glm::vec3(0.0f, 0.0f, 0.0f),
+                                glm::vec3(0.0f, 1.0f, 0.0f),
+                                camera_mode, es.proj_width, es.proj_height, 1500.0f, 50.0f);
+    }
+    loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
+    c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
     switch (es.operation_mode) // set some default values for user study depending on cmd line
     {
     case static_cast<int>(OperationMode::SIMULATION):
@@ -590,7 +631,7 @@ int main(int argc, char *argv[])
         es.deformation_mode = static_cast<int>(DeformationMode::SIMILARITY);
         es.simulated_projector = true;
         es.simulated_camera = true;
-        es.pseudo_vid_playback_speed = 0.02f;
+        es.pseudo_vid_playback_speed = 0.1f;
         if (!loadSession())
         {
             std::cout << "Failed to load recording: " << es.recording_name << std::endl;
@@ -793,36 +834,6 @@ int main(int argc, char *argv[])
     {
         projector = new DynaFlashProjector(true, false);
     }
-    // LeapCreateClockRebaser(&clockSynchronizer);
-    // load calibration results if they exist
-    Camera_Mode camera_mode = es.freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    std::cout << "Loading calibration results..." << std::endl;
-    if (loadLeapCalibrationResults(proj_project, cam_project,
-                                   w2c_auto, w2c_user,
-                                   points_2d, points_3d,
-                                   undistort_map1, undistort_map2,
-                                   camera_intrinsics_cv, camera_distortion_cv))
-    {
-        create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
-    }
-    else
-    {
-        std::cout << "Failed. Using hard-coded values for camera and projector settings" << std::endl;
-        gl_projector = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
-                                glm::vec3(0.0f, 0.0f, 0.0f),
-                                glm::vec3(0.0f, 1.0f, 0.0f),
-                                camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
-        gl_camera = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
-                             glm::vec3(0.0f, 0.0f, 0.0f),
-                             glm::vec3(0.0f, -1.0f, 0.0f),
-                             camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
-        gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
-                                glm::vec3(0.0f, 0.0f, 0.0f),
-                                glm::vec3(0.0f, 1.0f, 0.0f),
-                                camera_mode, es.proj_width, es.proj_height, 1500.0f, 50.0f);
-    }
-    loadCoaxialCalibrationResults(es.cur_screen_verts);
-    c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
     /* thread loops */
     // camera.init(camera_queue, close_signal, cam_height, cam_width, exposure);
     /* real producer */
@@ -2130,9 +2141,8 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     }
 }
 
-bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts)
+bool loadCoaxialCalibrationResults(const fs::path &coax_path, std::vector<glm::vec2> &cur_screen_verts)
 {
-    const fs::path coax_path("../../resource/calibrations/coaxial_calibration/coax_user.npy");
     cnpy::NpyArray coax_npy;
     if (fs::exists(coax_path))
     {
@@ -2157,7 +2167,12 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
                                 cv::Mat &undistort_map1,
                                 cv::Mat &undistort_map2,
                                 cv::Mat &camera_intrinsics_cv,
-                                cv::Mat &camera_distortion_cv)
+                                cv::Mat &camera_distortion_cv,
+                                const fs::path &user_path,
+                                const fs::path &auto_path,
+                                const fs::path &p2d_path,
+                                const fs::path &p3d_path,
+                                const fs::path &cam_path)
 {
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
@@ -2167,29 +2182,23 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     cnpy::npz_t cam_npz;
     try
     {
-        const fs::path user_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
-        const fs::path auto_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
-        const fs::path points2d_path{"../../resource/calibrations/leap_calibration/2dpoints.npy"};
-        const fs::path points3d_path{"../../resource/calibrations/leap_calibration/3dpoints.npy"};
-        const fs::path cam_calib_path{"../../resource/calibrations/cam_calibration/cam_calibration.npz"};
-        // const fs::path projcam_calib_path{"../../resource/calibrations/camproj_calibration/calibration.npz"};
         if (!fs::exists(user_path))
             return false;
         if (!fs::exists(auto_path))
             return false;
-        if (!fs::exists(points2d_path))
+        if (!fs::exists(p2d_path))
             return false;
-        if (!fs::exists(points3d_path))
+        if (!fs::exists(p3d_path))
             return false;
-        if (!fs::exists(cam_calib_path))
+        if (!fs::exists(cam_path))
             return false;
         // if (!fs::exists(projcam_calib_path))
         //     return false;
         w2c_user_npy = cnpy::npy_load(user_path.string());
         w2c_auto_npy = cnpy::npy_load(auto_path.string());
-        points2d_npy = cnpy::npy_load(points2d_path.string());
-        points3d_npy = cnpy::npy_load(points3d_path.string());
-        cam_npz = cnpy::npz_load(cam_calib_path.string());
+        points2d_npy = cnpy::npy_load(p2d_path.string());
+        points3d_npy = cnpy::npy_load(p3d_path.string());
+        cam_npz = cnpy::npz_load(cam_path.string());
         // projcam_npz = cnpy::npz_load(projcam_calib_path.string());
     }
     catch (std::runtime_error &e)
@@ -2343,6 +2352,32 @@ bool loadSession()
     fs::path joints_left_path = recording_path / fs::path(std::string("joints_left.npy"));
     fs::path joints_right_path = recording_path / fs::path(std::string("joints_right.npy"));
     fs::path timestamps_path = recording_path / fs::path(std::string("timestamps.npy"));
+    fs::path coax_path = recording_path / fs::path(std::string("coax_user.npy"));
+    fs::path user_calib_path = recording_path / fs::path(std::string("w2c_user.npy"));
+    fs::path auto_calib_path = recording_path / fs::path(std::string("w2c.npy"));
+    fs::path p2d_calib_path = recording_path / fs::path(std::string("2dpoints.npy"));
+    fs::path p3d_calib_path = recording_path / fs::path(std::string("3dpoints.npy"));
+    if (fs::exists(coax_path))
+    {
+        loadCoaxialCalibrationResults(coax_path, es.cur_screen_verts);
+    }
+    if (fs::exists(user_calib_path) &&
+        fs::exists(auto_calib_path) &&
+        fs::exists(p2d_calib_path) &&
+        fs::exists(p3d_calib_path))
+    {
+        loadLeapCalibrationResults(proj_project, cam_project,
+                                   w2c_auto, w2c_user,
+                                   points_2d, points_3d,
+                                   undistort_map1, undistort_map2,
+                                   camera_intrinsics_cv, camera_distortion_cv,
+                                   user_calib_path,
+                                   auto_calib_path,
+                                   p2d_calib_path,
+                                   p3d_calib_path,
+                                   es.default_cam_calib_path);
+        create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+    }
     cnpy::NpyArray bones_left_npy, bones_right_npy, joints_left_npy, joints_right_npy, timestamps_npy;
     std::vector<glm::mat4> raw_session_bones_left, raw_session_bones_right;
     std::vector<glm::vec3> raw_session_joints_left, raw_session_joints_right;
@@ -4525,7 +4560,8 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                 bool condition2 = (landmark_mask_left.size() > 0 && curP_left.size() == 0) || (landmark_mask_left.size() == 0 && curP_left.size() > 0);
                 bool condition3 = (landmark_mask_right.size() > 0 && curP_right.size() == 0) || (landmark_mask_right.size() == 0 && curP_right.size() > 0);
                 bool condition4 = (landmark_mask_left.size() > 0) && (landmark_mask_right.size() > 0); // this doesn't work for two hands for now
-                if (!condition1 && !condition2 && !condition3 && !condition4)
+                bool condition5 = ControlPointsP.size() != landmark_mask_left.size() + landmark_mask_right.size();
+                if (!condition1 && !condition2 && !condition3 && !condition4 && !condition5)
                 {
                     cv::Point2f diff;
                     int n_landmarks = landmark_mask_left.size() + landmark_mask_right.size();
@@ -5263,6 +5299,13 @@ void handleSimulation(std::unordered_map<std::string, Shader *> &shaderMap,
                                    cam_projection_transform))
                 {
                     es.simulationTime = 0.0f; // continuous video playback
+                    if (es.save_sim_data)
+                    {
+                        saveSimData();
+                        es.save_sim_data = false;
+                        es.cur_sim_time.clear();
+                        es.cur_sim_data.clear();
+                    }
                 }
             }
         }
@@ -5705,6 +5748,13 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     handleGetSkeletonByTimestamp(cur_timestamp + es.mls_future_frame_offset, bones2world_left, joints_left, bones2world_right, joints_right);
     projectAndFilterJoints(joints_left, joints_right, projected_filtered_left, projected_filtered_right);
     handlePostProcess(leftHandModel, rightHandModel, camTexture, shader_map);
+    if (es.save_sim_data && new_frame)
+    {
+        std::lock_guard<std::mutex> lock(es.mls_mutex);
+        std::vector<glm::vec2> qglm = Helpers::cv2glm(ControlPointsQ);
+        std::vector<glm::vec2> pglm = Helpers::cv2glm(ControlPointsP);
+        newSimData(qglm, pglm, es.simulationTime);
+    }
     /* render final output to screen */
     glViewport(0, 0, es.proj_width, es.proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -5740,6 +5790,28 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     es.simulationTime += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
     t_debug.stop();
     return true;
+}
+
+void newSimData(const std::vector<glm::vec2> &Q,
+                const std::vector<glm::vec2> &P,
+                float time)
+{
+    if (es.save_sim_data_P)
+        es.cur_sim_data.push_back(P);
+    else
+        es.cur_sim_data.push_back(Q);
+    es.cur_sim_time.push_back(time);
+}
+
+void saveSimData()
+{
+    fs::path data_save_path = fs::path("../../debug/sim_data/simdata.npy");
+    fs::path time_save_path = fs::path("../../debug/sim_data/simtime.npy");
+    for (int i = 0; i < es.cur_sim_data.size(); i++)
+    {
+        cnpy::npy_save(data_save_path.string(), &es.cur_sim_data[i][0].x, {1, es.cur_sim_data[i].size(), 2}, "a");
+    }
+    cnpy::npy_save(time_save_path.string(), es.cur_sim_time.data(), {es.cur_sim_time.size()}, "w");
 }
 
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
@@ -5979,13 +6051,14 @@ void openIMGUIFrame()
             ImGui::Checkbox("PBO", &es.use_pbo);
             ImGui::Checkbox("Double PBO", &es.double_pbo);
             ImGui::SeparatorText("Operation Mode");
-            if (ImGui::RadioButton("Normal", &es.operation_mode, static_cast<int>(OperationMode::SANDBOX)))
+            if (ImGui::RadioButton("Sandbox", &es.operation_mode, static_cast<int>(OperationMode::SANDBOX)))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
                 es.simulated_camera = false;
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 if (es.simulated_projector)
                 {
                     es.simulated_projector = false;
@@ -6023,13 +6096,13 @@ void openIMGUIFrame()
                 es.use_mls = false;
                 es.debug_mode = false;
             }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Camera", &es.operation_mode, static_cast<int>(OperationMode::CAMERA)))
+            if (ImGui::RadioButton("Camera Calibration", &es.operation_mode, static_cast<int>(OperationMode::CAMERA)))
             {
                 leap.setImageMode(false);
                 es.exposure = 10000.0f;
                 camera.set_exposure_time(es.exposure);
             }
+            ImGui::SameLine();
             if (ImGui::RadioButton("Coaxial Calibration", &es.operation_mode, static_cast<int>(OperationMode::COAXIAL)))
             {
                 es.debug_mode = false;
@@ -6065,6 +6138,7 @@ void openIMGUIFrame()
                 guessPoseGame.reset(false);
                 leap.setImageMode(false);
                 leap.setPollMode(false);
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 es.material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
@@ -6075,6 +6149,7 @@ void openIMGUIFrame()
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
@@ -6092,6 +6167,7 @@ void openIMGUIFrame()
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
                 es.texture_mode = static_cast<int>(TextureMode::BAKED);
@@ -6964,6 +7040,20 @@ void openIMGUIFrame()
             }
             ImGui::SliderFloat("Mixer Ratio", &es.projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &es.skin_brightness, 0.0f, 1.0f);
+            if (ImGui::Checkbox("Save Sim Data", &es.save_sim_data))
+            {
+                if (es.save_sim_data)
+                {
+                    es.cur_sim_data.clear();
+                    es.cur_sim_time.clear();
+                }
+                else
+                {
+                    saveSimData();
+                }
+            }
+            ImGui::SameLine();
+            ImGui::Checkbox("Save P", &es.save_sim_data_P);
             if (ImGui::Checkbox("Debug Playback", &es.debug_playback))
             {
                 if (es.debug_playback)
