@@ -90,7 +90,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                   SkinnedModel &rightHandModel,
                   glm::mat4 cam_view_transform,
                   glm::mat4 cam_projection_transform);
-void handlePromptMode();
+void handleBakeConfig();
 void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
                           Texture &bakeTexture,
                           SkinnedModel &leftHandModel,
@@ -121,6 +121,7 @@ cv::Mat computeGridDeformation(const std::vector<cv::Point2f> &P,
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
+                     SkinnedModel &otherObject,
                      TextModel &text);
 void handleGuessPoseGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          SkinnedModel &leftHandModel,
@@ -213,6 +214,10 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
                    TextModel &textModel,
                    glm::mat4 &cam_view_transform,
                    glm::mat4 &cam_projection_transform);
+void newSimData(const std::vector<glm::vec2> &Q,
+                const std::vector<glm::vec2> &P,
+                float time);
+void saveSimData();
 void initGLBuffers(unsigned int *pbo);
 bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 glm::mat4 &w2c_auto,
@@ -221,8 +226,13 @@ bool loadLeapCalibrationResults(glm::mat4 &cam_project, glm::mat4 &proj_project,
                                 std::vector<glm::vec3> &points_3d,
                                 cv::Mat &undistort_map1, cv::Mat &undistort_map2,
                                 cv::Mat &camera_intrinsics_cv,
-                                cv::Mat &camera_distortion_cv);
-bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts);
+                                cv::Mat &camera_distortion_cv,
+                                const fs::path &user_path,
+                                const fs::path &auto_path,
+                                const fs::path &p2d_path,
+                                const fs::path &p3d_path,
+                                const fs::path &cam_path);
+bool loadCoaxialCalibrationResults(const fs::path &path, std::vector<glm::vec2> &cur_screen_verts);
 void set_texture_shader(Shader *textureShader,
                         bool flipVer,
                         bool flipHor,
@@ -266,8 +276,6 @@ std::unordered_map<std::string, std::vector<glm::mat4>> sessions_bones_left;
 std::unordered_map<std::string, std::vector<glm::vec3>> sessions_joints_left;
 std::unordered_map<std::string, std::vector<float>> sessions_timestamps;
 std::vector<float> raw_session_timestamps;
-std::string tmp_name = std::tmpnam(nullptr);
-fs::path tmp_filename(tmp_name);
 std::vector<std::vector<glm::mat4>> savedLeapBonesLeft;
 std::vector<std::vector<glm::vec3>> savedLeapJointsLeft;
 std::vector<std::vector<glm::mat4>> savedLeapBonesRight;
@@ -375,6 +383,8 @@ PyObject *single_detector;
 Grid deformationGrid(es.grid_x_point_count, es.grid_y_point_count, es.grid_x_spacing, es.grid_y_spacing);
 std::vector<cv::Point2f> ControlPointsP;
 std::vector<cv::Point2f> ControlPointsQ;
+std::vector<int> landmark_mask_left;
+std::vector<int> landmark_mask_right;
 std::vector<cv::Point2f> prev_leap_keypoints;
 // std::vector<glm::vec2> ControlPointsP_glm;
 std::vector<glm::vec3> ControlPointsP_input_left, ControlPointsP_input_right;
@@ -533,8 +543,6 @@ int main(int argc, char *argv[])
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
-    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
     /* Setup Platform/Renderer backends */
     ImGui_ImplGlfw_InitForOpenGL(window, true); // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
     ImGui_ImplOpenGL3_Init();
@@ -543,7 +551,7 @@ int main(int argc, char *argv[])
     Helpers::setupGizmoBuffers(gizmoVAO, gizmoVBO);
     Helpers::setupFrustrumBuffers(frustrumVAO, frustrumVBO);
     Helpers::setupCubeBuffers(cubeVAO, cubeVBO, cubeEBO);
-    unsigned int pbo[2] = {0};
+    unsigned int pbo[2] = {0}; // used for downloading images from GPU
     initGLBuffers(pbo);
     hands_fbo.init();
     game_fbo.init(GL_BGRA, GL_RGBA, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -573,6 +581,44 @@ int main(int argc, char *argv[])
                                 es.proj_width, es.proj_height,
                                 es.cam_width, es.cam_height,
                                 false);
+    SkinnedModel dinosaur("../../resource/reconst.ply",
+                          "",
+                          es.proj_width, es.proj_height,
+                          es.cam_width, es.cam_height);
+    // load default calibration results if they exist
+    Camera_Mode camera_mode = es.freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
+    std::cout << "Loading calibration results..." << std::endl;
+    if (loadLeapCalibrationResults(proj_project, cam_project,
+                                   w2c_auto, w2c_user,
+                                   points_2d, points_3d,
+                                   undistort_map1, undistort_map2,
+                                   camera_intrinsics_cv, camera_distortion_cv,
+                                   es.default_user_calib_path,
+                                   es.default_auto_calib_path,
+                                   es.default_points2d_calib_path,
+                                   es.default_points3d_calib_path,
+                                   es.default_cam_calib_path))
+    {
+        create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+    }
+    else
+    {
+        std::cout << "Failed to load calibration results. Using hard-coded values for camera and projector settings" << std::endl;
+        gl_projector = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                glm::vec3(0.0f, 0.0f, 0.0f),
+                                glm::vec3(0.0f, 1.0f, 0.0f),
+                                camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
+        gl_camera = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
+                             glm::vec3(0.0f, 0.0f, 0.0f),
+                             glm::vec3(0.0f, -1.0f, 0.0f),
+                             camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
+        gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
+                                glm::vec3(0.0f, 0.0f, 0.0f),
+                                glm::vec3(0.0f, 1.0f, 0.0f),
+                                camera_mode, es.proj_width, es.proj_height, 1500.0f, 50.0f);
+    }
+    loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
+    c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
     switch (es.operation_mode) // set some default values for user study depending on cmd line
     {
     case static_cast<int>(OperationMode::SIMULATION):
@@ -585,7 +631,7 @@ int main(int argc, char *argv[])
         es.deformation_mode = static_cast<int>(DeformationMode::SIMILARITY);
         es.simulated_projector = true;
         es.simulated_camera = true;
-        es.pseudo_vid_playback_speed = 0.02f;
+        es.pseudo_vid_playback_speed = 0.1f;
         if (!loadSession())
         {
             std::cout << "Failed to load recording: " << es.recording_name << std::endl;
@@ -608,11 +654,12 @@ int main(int argc, char *argv[])
     }
     case static_cast<int>(OperationMode::GUESS_ANIMAL_GAME):
     {
-        es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+        es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
         es.texture_mode = static_cast<int>(TextureMode::BAKED);
         es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
         es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
         es.prompt_mode = static_cast<int>(PromptMode::AUTO_PROMPT);
+        es.no_preprompt = false;
         // es.cur_prompt = es.selected_listed_prompt;
         // es.use_mls = false;
         // es.use_of = false;
@@ -658,8 +705,8 @@ int main(int argc, char *argv[])
     }
     projectiveTexture = texturePack["uv"];
     dynamicTexture = texturePack["uv"];
-    normalMap = texturePack["wood_floor_deck_nor_gl_1k"];
-    armMap = texturePack["wood_floor_deck_arm_1k"];
+    normalMap = texturePack["wood_floor_deck_nor_gl_1k"]; // slab_tiles_nor_gl_1k, wood_floor_deck_nor_gl_1k
+    armMap = texturePack["wood_floor_deck_arm_1k"];       // slab_tiles_arm_1k, wood_floor_deck_arm_1k
     // dispMap = texturePack["wood_floor_deck_disp_1k"];
     const fs::path bakeFileLeftPath{es.bakeFileLeft};
     const fs::path bakeFileRightPath{es.bakeFileRight};
@@ -787,44 +834,6 @@ int main(int argc, char *argv[])
     {
         projector = new DynaFlashProjector(true, false);
     }
-    if (es.use_projector)
-    {
-        if (!projector->init())
-        {
-            std::cerr << "Failed to initialize projector\n";
-            es.use_projector = false;
-        }
-    }
-    // LeapCreateClockRebaser(&clockSynchronizer);
-    // load calibration results if they exist
-    Camera_Mode camera_mode = es.freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
-    std::cout << "Loading calibration results..." << std::endl;
-    if (loadLeapCalibrationResults(proj_project, cam_project,
-                                   w2c_auto, w2c_user,
-                                   points_2d, points_3d,
-                                   undistort_map1, undistort_map2,
-                                   camera_intrinsics_cv, camera_distortion_cv))
-    {
-        create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
-    }
-    else
-    {
-        std::cout << "Failed. Using hard-coded values for camera and projector settings" << std::endl;
-        gl_projector = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
-                                glm::vec3(0.0f, 0.0f, 0.0f),
-                                glm::vec3(0.0f, 1.0f, 0.0f),
-                                camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
-        gl_camera = GLCamera(glm::vec3(-4.76f, 18.2f, 38.6f),
-                             glm::vec3(0.0f, 0.0f, 0.0f),
-                             glm::vec3(0.0f, -1.0f, 0.0f),
-                             camera_mode, es.proj_width, es.proj_height, 500.0f, 2.0f);
-        gl_flycamera = GLCamera(glm::vec3(-4.72f, 16.8f, 38.9f),
-                                glm::vec3(0.0f, 0.0f, 0.0f),
-                                glm::vec3(0.0f, 1.0f, 0.0f),
-                                camera_mode, es.proj_width, es.proj_height, 1500.0f, 50.0f);
-    }
-    loadCoaxialCalibrationResults(es.cur_screen_verts);
-    c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
     /* thread loops */
     // camera.init(camera_queue, close_signal, cam_height, cam_width, exposure);
     /* real producer */
@@ -1000,7 +1009,7 @@ int main(int argc, char *argv[])
 
             /* debug mode */
             t_debug.start();
-            handleDebugMode(shaderMap, rightHandModel, leftHandModel, textModel);
+            handleDebugMode(shaderMap, rightHandModel, leftHandModel, dinosaur, textModel);
             t_debug.stop();
             break;
         }
@@ -2132,9 +2141,8 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     }
 }
 
-bool loadCoaxialCalibrationResults(std::vector<glm::vec2> &cur_screen_verts)
+bool loadCoaxialCalibrationResults(const fs::path &coax_path, std::vector<glm::vec2> &cur_screen_verts)
 {
-    const fs::path coax_path("../../resource/calibrations/coaxial_calibration/coax_user.npy");
     cnpy::NpyArray coax_npy;
     if (fs::exists(coax_path))
     {
@@ -2159,7 +2167,12 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
                                 cv::Mat &undistort_map1,
                                 cv::Mat &undistort_map2,
                                 cv::Mat &camera_intrinsics_cv,
-                                cv::Mat &camera_distortion_cv)
+                                cv::Mat &camera_distortion_cv,
+                                const fs::path &user_path,
+                                const fs::path &auto_path,
+                                const fs::path &p2d_path,
+                                const fs::path &p3d_path,
+                                const fs::path &cam_path)
 {
     glm::mat4 flipYZ = glm::mat4(1.0f);
     flipYZ[1][1] = -1.0f;
@@ -2169,29 +2182,23 @@ bool loadLeapCalibrationResults(glm::mat4 &proj_project,
     cnpy::npz_t cam_npz;
     try
     {
-        const fs::path user_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
-        const fs::path auto_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
-        const fs::path points2d_path{"../../resource/calibrations/leap_calibration/2dpoints.npy"};
-        const fs::path points3d_path{"../../resource/calibrations/leap_calibration/3dpoints.npy"};
-        const fs::path cam_calib_path{"../../resource/calibrations/cam_calibration/cam_calibration.npz"};
-        // const fs::path projcam_calib_path{"../../resource/calibrations/camproj_calibration/calibration.npz"};
         if (!fs::exists(user_path))
             return false;
         if (!fs::exists(auto_path))
             return false;
-        if (!fs::exists(points2d_path))
+        if (!fs::exists(p2d_path))
             return false;
-        if (!fs::exists(points3d_path))
+        if (!fs::exists(p3d_path))
             return false;
-        if (!fs::exists(cam_calib_path))
+        if (!fs::exists(cam_path))
             return false;
         // if (!fs::exists(projcam_calib_path))
         //     return false;
         w2c_user_npy = cnpy::npy_load(user_path.string());
         w2c_auto_npy = cnpy::npy_load(auto_path.string());
-        points2d_npy = cnpy::npy_load(points2d_path.string());
-        points3d_npy = cnpy::npy_load(points3d_path.string());
-        cam_npz = cnpy::npz_load(cam_calib_path.string());
+        points2d_npy = cnpy::npy_load(p2d_path.string());
+        points3d_npy = cnpy::npy_load(p3d_path.string());
+        cam_npz = cnpy::npz_load(cam_path.string());
         // projcam_npz = cnpy::npz_load(projcam_calib_path.string());
     }
     catch (std::runtime_error &e)
@@ -2345,6 +2352,32 @@ bool loadSession()
     fs::path joints_left_path = recording_path / fs::path(std::string("joints_left.npy"));
     fs::path joints_right_path = recording_path / fs::path(std::string("joints_right.npy"));
     fs::path timestamps_path = recording_path / fs::path(std::string("timestamps.npy"));
+    fs::path coax_path = recording_path / fs::path(std::string("coax_user.npy"));
+    fs::path user_calib_path = recording_path / fs::path(std::string("w2c_user.npy"));
+    fs::path auto_calib_path = recording_path / fs::path(std::string("w2c.npy"));
+    fs::path p2d_calib_path = recording_path / fs::path(std::string("2dpoints.npy"));
+    fs::path p3d_calib_path = recording_path / fs::path(std::string("3dpoints.npy"));
+    if (fs::exists(coax_path))
+    {
+        loadCoaxialCalibrationResults(coax_path, es.cur_screen_verts);
+    }
+    if (fs::exists(user_calib_path) &&
+        fs::exists(auto_calib_path) &&
+        fs::exists(p2d_calib_path) &&
+        fs::exists(p3d_calib_path))
+    {
+        loadLeapCalibrationResults(proj_project, cam_project,
+                                   w2c_auto, w2c_user,
+                                   points_2d, points_3d,
+                                   undistort_map1, undistort_map2,
+                                   camera_intrinsics_cv, camera_distortion_cv,
+                                   user_calib_path,
+                                   auto_calib_path,
+                                   p2d_calib_path,
+                                   p3d_calib_path,
+                                   es.default_cam_calib_path);
+        create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
+    }
     cnpy::NpyArray bones_left_npy, bones_right_npy, joints_left_npy, joints_right_npy, timestamps_npy;
     std::vector<glm::mat4> raw_session_bones_left, raw_session_bones_right;
     std::vector<glm::vec3> raw_session_joints_left, raw_session_joints_right;
@@ -2437,7 +2470,7 @@ bool loadSession()
 LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          std::vector<glm::mat4> &bones_to_world_left,
                          std::vector<glm::mat4> &bones_to_world_right,
-                         std::vector<glm::vec3> &joints_left, // todo: remove joints, they are redundant
+                         std::vector<glm::vec3> &joints_left,
                          std::vector<glm::vec3> &joints_right,
                          std::vector<uint32_t> &leftFingersExtended,
                          std::vector<uint32_t> &rightFingersExtended,
@@ -2820,6 +2853,7 @@ bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, 
     cv::Mat image;
     cv::flip(origImage, image, 1);
     cv::cvtColor(image, image, cv::COLOR_GRAY2RGB);
+    std::lock_guard<std::mutex> lock(es.py_mutex);
     // cv::Mat image = cv::imread("../../resource/hand.png", cv::IMREAD_GRAYSCALE);
     // std::cout << "mp received timestamp: " << timestamp << std::endl;
     // cv::Mat image;
@@ -3176,21 +3210,7 @@ LEAP_STATUS handleLeapInput(int num_frames)
 LEAP_STATUS handleLeapInput()
 {
     LEAP_STATUS leap_status;
-    // if (!leap_poll_mode)
-    // {
-    //     // sync leap clock
-    //     std::modf(t_app.getElapsedTimeInMicroSec(), &whole);
-    //     LeapRebaseClock(clockSynchronizer, static_cast<int64_t>(whole), &targetFrameTime);
-    // }
     leap_status = getLeapFrame(leap, es.magic_leap_time_delay, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
-    // for (int i = 0; i < bones_to_world_left.size(); i++)
-    // {
-    //     joints_left.push_back(glm::vec3(bones_to_world_left[i][3]));
-    // }
-    // for (int i = 0; i < bones_to_world_right.size(); i++)
-    // {
-    //     joints_right.push_back(glm::vec3(bones_to_world_right[i][3]));
-    // }
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
         glm::mat4 global_scale_transform = glm::scale(glm::mat4(1.0f), glm::vec3(es.leap_global_scaler));
@@ -3311,6 +3331,15 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD):
     {
+        if (es.auto_pilot)
+        {
+            int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
+            if (n_visible_hands == 1)
+            {
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+                break;
+            }
+        }
         if (es.use_mls || es.use_of)
             postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
                                    mls_fbo.getTexture()->getTexture(),
@@ -3325,15 +3354,29 @@ void handlePostProcess(SkinnedModel &leftHandModel,
     }
     case static_cast<int>(PostProcessMode::JUMP_FLOOD_UV):
     {
+        if (es.auto_pilot)
+        {
+            int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
+            if (n_visible_hands == 2)
+            {
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+                break;
+            }
+        }
         // todo: assumes both hand use same texture, which is not the case generally
+        Texture *handTexture;
+        if (projected_filtered_left.size() > 0)
+            handTexture = leftHandTexture;
+        else
+            handTexture = rightHandTexture;
         if (es.use_mls || es.use_of)
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
-                                      leftHandTexture->getTexture(),
+                                      handTexture->getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, es.masking_threshold, es.jfa_distance_threshold, es.jfa_seam_threshold, es.mask_bg_color);
         else
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, uv_fbo.getTexture()->getTexture(),
-                                      leftHandTexture->getTexture(),
+                                      handTexture->getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, es.masking_threshold, es.jfa_distance_threshold, es.jfa_seam_threshold, es.mask_bg_color);
         break;
@@ -3549,7 +3592,10 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             }
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
             {
-                dynamicTexture = texturePack[es.curSelectedTexture];
+                if (isRightHand)
+                    dynamicTexture = texturePack[es.curSelectedTextureRight];
+                else
+                    dynamicTexture = texturePack[es.curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones2world, es.rotx, false, dynamicTexture);
                 break;
@@ -3814,16 +3860,16 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
         /* render the uvs into a seperate texture for JUMP_FLOOD_UV post process */
         // todo: if this pp is enabled, hands_fbo above performs redundant work: refactor.
         // todo: currently only works for one hand. make it work for both
-        if ((isRightHand && es.jfauv_right_hand) || (!isRightHand && !es.jfauv_right_hand))
+        // if ((isRightHand && es.jfauv_right_hand) || (!isRightHand && !es.jfauv_right_hand))
+        // {
+        if (es.postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
         {
-            if (es.postprocess_mode == static_cast<int>(PostProcessMode::JUMP_FLOOD_UV))
-            {
-                uv_fbo.bind();
-                set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, false, true);
-                handModel.Render(*skinnedShader, bones2world, es.rotx, false, nullptr);
-                uv_fbo.unbind();
-            }
+            uv_fbo.bind();
+            set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale, false, false, false, true);
+            handModel.Render(*skinnedShader, bones2world, es.rotx, false, nullptr);
+            uv_fbo.unbind();
         }
+        // }
         glDisable(GL_DEPTH_TEST); // todo: why not keep it on ?
     }
 }
@@ -3879,11 +3925,14 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                                   es.cur_prompt,
                                                                   es.diffuse_fit_to_view,
                                                                   es.diffuse_pad_size,
-                                                                  es.diffuse_select_top_animal);
+                                                                  es.diffuse_select_top_animal,
+                                                                  es.no_preprompt,
+                                                                  es.cur_bake_file_stem,
+                                                                  &es.py_mutex);
                         if (success)
                         {
                             std::cout << "ControlNet inference successful" << std::endl;
-                            // if (es.saveIntermed)
+                            // if (es.save_byproducts)
                             // {
                             //     cv::Mat img2img_result = cv::Mat(512, 512, CV_8UC3, es.img2img_data.data()).clone();
                             //     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
@@ -3927,7 +3976,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     camTexture.bind();
                     fullScreenQuad.render();
                     sd_fbo.unbind();
-                    // if (saveIntermed)
+                    // if (save_byproducts)
                     //     sd_fbo.saveColorToFile("../../resource/sd_image.png", false);
                     std::vector<uint8_t> buf = sd_fbo.getBuffer(1);
                     cv::Mat cam_cv = cv::Mat(512, 512, CV_8UC1, buf.data()).clone();
@@ -3937,7 +3986,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                     camTexture.bind();
                     fullScreenQuad.render();
                     sd_fbo.unbind();
-                    // if (saveIntermed)
+                    // if (save_byproducts)
                     //     sd_fbo.saveColorToFile("../../resource/sd_mask.png", false);
                     std::vector<uint8_t> buf_mask = sd_fbo.getBuffer(1);
                     if (sd_thread.joinable())
@@ -3950,7 +3999,7 @@ void handleBaking(std::unordered_map<std::string, Shader *> &shader_map,
                                                                              buf, buf_mask, es.diffuse_seed,
                                                                              512, 512, 1,
                                                                              512, 512, false, false, es.sd_mask_mode);
-                            // if (es.saveIntermed)
+                            // if (es.save_byproducts)
                             // {
                             //     cv::Mat img2img_result = cv::Mat(512, 512, CV_8UC3, es.img2img_data.data()).clone();
                             //     cv::cvtColor(img2img_result, img2img_result, cv::COLOR_RGB2BGR);
@@ -4093,10 +4142,12 @@ void handleBakingInternal(std::unordered_map<std::string, Shader *> &shader_map,
     bake_fbo_left.unbind();
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    if (es.saveIntermed)
+    if (es.save_byproducts)
     {
-        bake_fbo_right.saveColorToFile(es.bakeFileRight);
-        bake_fbo_left.saveColorToFile(es.bakeFileLeft);
+        std::string bake_right = es.cur_bake_file_stem + "_baked_right.png";
+        std::string bake_left = es.cur_bake_file_stem + "_baked_left.png";
+        bake_fbo_right.saveColorToFile(bake_right);
+        bake_fbo_left.saveColorToFile(bake_left);
     }
 }
 
@@ -4264,94 +4315,6 @@ void landmarkDetectionThread(std::vector<glm::vec3> projected_filtered_left,
                 mp_keypoints_right, leap_keypoints_right, diff_keypoints_right;
             glm::vec2 global_shift_left = glm::vec2(0.0f, 0.0f);
             glm::vec2 global_shift_right = glm::vec2(0.0f, 0.0f);
-            // possibly, use current leap info to move mp/leap landmarks
-            // if (es.mls_use_latest_leap)
-            // {
-            //     std::vector<glm::mat4> cur_left_bones, cur_right_bones;
-            //     std::vector<glm::vec3> cur_vertices_left, cur_vertices_right;
-            //     std::vector<uint32_t> cur_left_fingers_extended, cur_right_fingers_extended;
-            //     bool success;
-            //     if (simulation)
-            //     {
-            //         success = handleGetMostRecentSkeleton(cur_left_bones, cur_vertices_left, cur_right_bones, cur_vertices_right);
-            //     }
-            //     else
-            //     {
-            //         LEAP_STATUS status = getLeapFrame(leap, es.magic_leap_time_delay_mls, cur_left_bones, cur_right_bones, cur_vertices_left, cur_vertices_right, cur_left_fingers_extended, cur_right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
-            //         success = status == LEAP_STATUS::LEAP_NEWFRAME;
-            //     }
-            //     if (success)
-            //     {
-            //         if ((cur_vertices_left.size() > 0) && (useLeftHand))
-            //         {
-            //             std::vector<glm::vec2> projected_new, projected_new_all;
-            //             projected_new_all = Helpers::project_points(cur_vertices_left, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-            //             // use only selected control points
-            //             for (int i = 0; i < es.leap_selection_vector.size(); i++)
-            //             {
-            //                 projected_new.push_back(projected_new_all[es.leap_selection_vector[i]]);
-            //             }
-            //             for (int i = 0; i < projected_new.size(); i++)
-            //             {
-            //                 projected_diff_left[i] += projected_new[i] - projected_left[i];
-            //             }
-            //             if (es.mls_global_forecast)
-            //             {
-            //                 global_shift_left = Helpers::average(projected_diff_left);
-            //                 for (glm::vec2 &x : projected_left)
-            //                 {
-            //                     x += global_shift_left;
-            //                 }
-            //                 leap_keypoints_left = Helpers::glm2cv(projected_left);
-            //             }
-            //             else
-            //                 leap_keypoints_left = Helpers::glm2cv(projected_new);
-            //         }
-            //         else
-            //         {
-            //             leap_keypoints_left = Helpers::glm2cv(projected_left);
-            //         }
-            //         if ((cur_vertices_right.size() > 0) && (useRightHand))
-            //         {
-            //             std::vector<glm::vec2> projected_new, projected_new_all;
-            //             projected_new_all = Helpers::project_points(cur_vertices_right, glm::mat4(1.0f), gl_camera.getViewMatrix(), gl_camera.getProjectionMatrix());
-            //             // use only selected control points
-            //             for (int i = 0; i < es.leap_selection_vector.size(); i++)
-            //             {
-            //                 projected_new.push_back(projected_new_all[es.leap_selection_vector[i]]);
-            //             }
-            //             for (int i = 0; i < projected_new.size(); i++)
-            //             {
-            //                 projected_diff_right[i] += projected_new[i] - projected_right[i];
-            //             }
-            //             if (es.mls_global_forecast)
-            //             {
-            //                 global_shift_right = Helpers::average(projected_diff_right);
-            //                 for (glm::vec2 &x : projected_right)
-            //                 {
-            //                     x += global_shift_right;
-            //                 }
-            //                 leap_keypoints_right = Helpers::glm2cv(projected_right);
-            //             }
-            //             else
-            //                 leap_keypoints_right = Helpers::glm2cv(projected_new);
-            //         }
-            //         else
-            //         {
-            //             leap_keypoints_right = Helpers::glm2cv(projected_right);
-            //         }
-            //     }
-            //     else
-            //     {
-            //         leap_keypoints_left = Helpers::glm2cv(projected_left);
-            //         leap_keypoints_right = Helpers::glm2cv(projected_right);
-            //     }
-            // }
-            // else
-            // {
-            //     leap_keypoints_left = Helpers::glm2cv(projected_left);
-            //     leap_keypoints_right = Helpers::glm2cv(projected_right);
-            // }
             leap_keypoints_left = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left));
             leap_keypoints_right = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_right));
 
@@ -4359,66 +4322,80 @@ void landmarkDetectionThread(std::vector<glm::vec3> projected_filtered_left,
             diff_keypoints_right = Helpers::glm2cv(projected_diff_right);
             mp_keypoints_left = Helpers::glm2cv(pred_glm_left);
             mp_keypoints_right = Helpers::glm2cv(pred_glm_right);
-            std::vector<bool> visible_landmarks_left(leap_keypoints_left.size(), true);
-            std::vector<bool> visible_landmarks_right(leap_keypoints_right.size(), true);
+            std::lock_guard<std::mutex> guard(es.mls_mutex);
+            // std::vector<bool> visible_landmarks_left(leap_keypoints_left.size(), true);
+            // std::vector<bool> visible_landmarks_right(leap_keypoints_right.size(), true);
+            landmark_mask_left.clear();
+            landmark_mask_right.clear();
             // if mls_depth_test was on, we need to filter out control points that are occluded
-            for (int i = 0; i < rendered_depths_left.size(); i++)
+            if (rendered_depths_left.size() == 0)
             {
-                // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
-                float rendered_depth = rendered_depths_left[i];
-                float projected_depth = projected_filtered_left[i].z;
-                float cam_near = 1.0f;
-                float cam_far = 1500.0f;
-                rendered_depth = (2.0 * rendered_depth) - 1.0;                                                                // to NDC
-                rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near))); // to linear
-                if ((std::abs(rendered_depth - projected_depth) > es.mls_depth_threshold) && (i != 0))                        // always include wrist
+                for (int i = 0; i < leap_keypoints_left.size(); i++)
                 {
-                    visible_landmarks_left[i] = false;
+                    landmark_mask_left.push_back(i);
                 }
             }
-            for (int i = 0; i < rendered_depths_right.size(); i++)
+            else
             {
-                // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
-                float rendered_depth = rendered_depths_right[i];
-                float projected_depth = projected_filtered_right[i].z;
-                float cam_near = 1.0f;
-                float cam_far = 1500.0f;
-                rendered_depth = (2.0 * rendered_depth) - 1.0; // logarithmic NDC
-                rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near)));
-                projected_depth = (2.0 * projected_depth) - 1.0; // logarithmic NDC
-                projected_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (projected_depth * (cam_far - cam_near)));
-                if ((std::abs(rendered_depth - projected_depth) <= es.mls_depth_threshold) && (i != 1)) // always include wrist
+                for (int i = 0; i < rendered_depths_left.size(); i++)
                 {
-                    visible_landmarks_right[i] = false;
+                    // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
+                    float rendered_depth = rendered_depths_left[i];
+                    float projected_depth = projected_filtered_left[i].z;
+                    float cam_near = 1.0f;
+                    float cam_far = 1500.0f;
+                    rendered_depth = (2.0 * rendered_depth) - 1.0;                                                                // to NDC
+                    rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near))); // to linear
+                    if ((std::abs(rendered_depth - projected_depth) < es.mls_depth_threshold) || (i == 0))                        // always include wrist
+                    {
+                        landmark_mask_left.push_back(i);
+                    }
+                }
+            }
+            if (rendered_depths_right.size() == 0)
+            {
+                for (int i = 0; i < leap_keypoints_right.size(); i++)
+                {
+                    landmark_mask_right.push_back(i);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < rendered_depths_right.size(); i++)
+                {
+                    // see: https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
+                    float rendered_depth = rendered_depths_right[i];
+                    float projected_depth = projected_filtered_right[i].z;
+                    float cam_near = 1.0f;
+                    float cam_far = 1500.0f;
+                    rendered_depth = (2.0 * rendered_depth) - 1.0;                                                                // to NDC
+                    rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near))); // to linear
+                    if ((std::abs(rendered_depth - projected_depth) < es.mls_depth_threshold) || (i == 0))                        // always include wrist
+                    {
+                        landmark_mask_right.push_back(i);
+                    }
                 }
             }
             // final control points computation
-            std::lock_guard<std::mutex> guard(es.mls_mutex);
             ControlPointsP.clear();
             ControlPointsQ.clear();
             if (useLeftHand)
-                for (int i = 0; i < visible_landmarks_left.size(); i++)
+                for (int i = 0; i < landmark_mask_left.size(); i++)
                 {
-                    if (visible_landmarks_left[i])
-                    {
-                        ControlPointsP.push_back(leap_keypoints_left[i]);
-                        if (es.mls_global_forecast)
-                            ControlPointsQ.push_back(mp_keypoints_left[i] + cv::Point2f(global_shift_left.x, global_shift_left.y));
-                        else
-                            ControlPointsQ.push_back(mp_keypoints_left[i] + diff_keypoints_left[i]);
-                    }
+                    ControlPointsP.push_back(leap_keypoints_left[landmark_mask_left[i]]);
+                    // if (es.mls_global_forecast)
+                    //     ControlPointsQ.push_back(mp_keypoints_left[landmark_mask_left[i]] + cv::Point2f(global_shift_left.x, global_shift_left.y));
+                    // else
+                    ControlPointsQ.push_back(mp_keypoints_left[landmark_mask_left[i]] + diff_keypoints_left[landmark_mask_left[i]]);
                 }
             if (useRightHand)
-                for (int i = 0; i < visible_landmarks_right.size(); i++)
+                for (int i = 0; i < landmark_mask_right.size(); i++)
                 {
-                    if (visible_landmarks_right[i])
-                    {
-                        ControlPointsP.push_back(leap_keypoints_right[i]);
-                        if (es.mls_global_forecast)
-                            ControlPointsQ.push_back(mp_keypoints_right[i] + cv::Point2f(global_shift_right.x, global_shift_right.y));
-                        else
-                            ControlPointsQ.push_back(mp_keypoints_right[i] + diff_keypoints_right[i]);
-                    }
+                    ControlPointsP.push_back(leap_keypoints_right[landmark_mask_right[i]]);
+                    // if (es.mls_global_forecast)
+                    //     ControlPointsQ.push_back(mp_keypoints_right[i] + cv::Point2f(global_shift_right.x, global_shift_right.y));
+                    // else
+                    ControlPointsQ.push_back(mp_keypoints_right[landmark_mask_right[i]] + diff_keypoints_right[landmark_mask_right[i]]);
                 }
             es.mls_landmark_thread_succeed = true;
         }
@@ -4461,10 +4438,8 @@ void landmarkDetection(bool blocking)
                 mls_thread.join();
             es.mls_running = true;
             mls_thread = std::thread(landmarkDetectionThread,
-                                     projected_filtered_left,
-                                     rendered_depths_left, isLeftHandVis,
-                                     projected_filtered_right,
-                                     rendered_depths_right, isRightHandVis);
+                                     projected_filtered_left, rendered_depths_left, isLeftHandVis,
+                                     projected_filtered_right, rendered_depths_right, isRightHandVis);
         } // if (joints.size() > 0)
     }     // if (!mls_running && !mls_landmark_thread_succeed)
     if (blocking)
@@ -4478,7 +4453,7 @@ void constructGrid(bool updateGLBuffers)
 {
     std::lock_guard<std::mutex> guard(es.mls_mutex);
     /* <can be done by landmark detection thread or main thread> */
-    if ((ControlPointsP.size() > 0) && (ControlPointsQ.size() > 0))
+    if ((ControlPointsP.size() > 0) && (ControlPointsP.size() == ControlPointsQ.size()))
     {
         // compute deformation
         cv::Mat fv = computeGridDeformation(ControlPointsP, ControlPointsQ, es.deformation_mode, es.mls_alpha, deformationGrid);
@@ -4515,6 +4490,14 @@ void renderGrid(Shader &gridShader)
 
 void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool new_frame, bool simulation)
 {
+    if (es.auto_pilot)
+    {
+        int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
+        if (n_visible_hands == 1)
+            es.use_mls = true;
+        else
+            es.use_mls = false;
+    }
     if (es.use_mls)
     {
         if (new_frame)
@@ -4533,8 +4516,10 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                 handleGetSkeletonByTimestamp(future_timestamp, bones2world_left, joints_left, bones2world_right, joints_right);
                 projectAndFilterJoints(joints_left, joints_right, projected_filtered_left, projected_filtered_right);
             }
-            std::vector<cv::Point2f> curP = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left));
-
+            std::vector<cv::Point2f> curP_left = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_left));
+            std::vector<cv::Point2f> curP_right = Helpers::glm2cv(Helpers::vec3to2(projected_filtered_right));
+            std::vector<cv::Point2f> curP(curP_left.begin(), curP_left.end());
+            curP.insert(curP.end(), curP_right.begin(), curP_right.end());
             // temporally filter landmarks
             if (es.mls_use_kalman)
             {
@@ -4547,18 +4532,34 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
                 else
                     cur_mls_time = t_app.getElapsedTimeInMilliSec();
                 float dt = cur_mls_time - es.prev_mls_time;
-                for (int i = 0; i < ControlPointsQ.size(); i++)
+                for (int i = 0; i < landmark_mask_left.size(); i++)
                 {
-                    cv::Mat pred = kalman_filters_left[i].predict(dt);
+                    int orig_index = landmark_mask_left[i];
+                    cv::Mat pred = kalman_filters_left[orig_index].predict(dt);
                     if (do_correction_step)
                     {
                         cv::Mat measurement(2, 1, CV_32F);
                         measurement.at<float>(0) = ControlPointsQ[i].x;
                         measurement.at<float>(1) = ControlPointsQ[i].y;
-                        cv::Mat corr = kalman_filters_left[i].correct(measurement);
+                        cv::Mat corr = kalman_filters_left[orig_index].correct(measurement);
                     }
-                    cv::Mat forecast = kalman_filters_left[i].forecast(es.kalman_lookahead);
+                    cv::Mat forecast = kalman_filters_left[orig_index].forecast(es.kalman_lookahead);
                     ControlPointsQ[i] = cv::Point2f(forecast.at<float>(0), forecast.at<float>(1));
+                }
+                for (int i = 0; i < landmark_mask_right.size(); i++)
+                {
+                    int orig_index = landmark_mask_right[i];
+                    int shift_index = landmark_mask_left.size();
+                    cv::Mat pred = kalman_filters_right[orig_index].predict(dt);
+                    if (do_correction_step)
+                    {
+                        cv::Mat measurement(2, 1, CV_32F);
+                        measurement.at<float>(0) = ControlPointsQ[i + shift_index].x;
+                        measurement.at<float>(1) = ControlPointsQ[i + shift_index].y;
+                        cv::Mat corr = kalman_filters_right[orig_index].correct(measurement);
+                    }
+                    cv::Mat forecast = kalman_filters_right[orig_index].forecast(es.kalman_lookahead);
+                    ControlPointsQ[i + shift_index] = cv::Point2f(forecast.at<float>(0), forecast.at<float>(1));
                 }
                 es.prev_mls_time = cur_mls_time;
                 // pred_glm = kalman_forecast;
@@ -4566,18 +4567,31 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
             // move target points using the difference between the leap frame used to render, and the one matching the landmark detection timestamp
             if (es.mls_extrapolate)
             {
-                cv::Point2f diff;
                 std::lock_guard<std::mutex> guard(es.mls_mutex);
-                if ((curP.size() == ControlPointsP.size()) && (ControlPointsP.size() == ControlPointsQ.size()))
+                bool condition1 = ControlPointsP.size() != ControlPointsQ.size();
+                bool condition2 = (landmark_mask_left.size() > 0 && curP_left.size() == 0) || (landmark_mask_left.size() == 0 && curP_left.size() > 0);
+                bool condition3 = (landmark_mask_right.size() > 0 && curP_right.size() == 0) || (landmark_mask_right.size() == 0 && curP_right.size() > 0);
+                bool condition4 = (landmark_mask_left.size() > 0) && (landmark_mask_right.size() > 0); // this doesn't work for two hands for now
+                bool condition5 = ControlPointsP.size() != landmark_mask_left.size() + landmark_mask_right.size();
+                if (!condition1 && !condition2 && !condition3 && !condition4 && !condition5)
                 {
-                    for (int i = 0; i < curP.size(); i++)
+                    cv::Point2f diff;
+                    int n_landmarks = landmark_mask_left.size() + landmark_mask_right.size();
+                    for (int i = 0; i < landmark_mask_left.size(); i++)
                     {
                         // ControlPointsQ[i] += curP[i] - ControlPointsP[i];
                         // ControlPointsQ[i] += avg;
-                        diff += curP[i] - ControlPointsP[i];
+                        diff += curP[landmark_mask_left[i]] - ControlPointsP[i];
                     }
-                    diff = diff / static_cast<float>(curP.size());
-                    for (int i = 0; i < curP.size(); i++)
+                    int shift_index = landmark_mask_left.size();
+                    for (int i = 0; i < landmark_mask_right.size(); i++)
+                    {
+                        // ControlPointsQ[i] += curP[i] - ControlPointsP[i];
+                        // ControlPointsQ[i] += avg;
+                        diff += curP[landmark_mask_right[i] + shift_index] - ControlPointsP[i];
+                    }
+                    diff = diff / static_cast<float>(n_landmarks);
+                    for (int i = 0; i < n_landmarks; i++)
                     {
                         ControlPointsQ[i] += diff;
                     }
@@ -4585,7 +4599,22 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
             }
             // use the leap frame used to render as source points
             if (es.mls_use_latest_leap)
-                ControlPointsP = curP;
+            {
+                std::lock_guard<std::mutex> guard(es.mls_mutex);
+                std::vector<cv::Point2f> curP_filtered;
+                if (curP.size() == landmark_mask_left.size() + landmark_mask_right.size())
+                {
+                    for (int i = 0; i < landmark_mask_left.size(); i++)
+                    {
+                        curP_filtered.push_back(curP[landmark_mask_left[i]]);
+                    }
+                    for (int i = 0; i < landmark_mask_right.size(); i++)
+                    {
+                        curP_filtered.push_back(curP[landmark_mask_right[i] + landmark_mask_left.size()]);
+                    }
+                    ControlPointsP = curP_filtered;
+                }
+            }
 
             // solve mls
             if (es.mls_solve_every_frame)
@@ -4886,24 +4915,7 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
     /* deal with leap input */
     t_leap.start();
     LEAP_STATUS leap_status = handleLeapInput();
-    if (es.record_session)
-    {
-        if ((t_app.getElapsedTimeInSec() - es.recordStartTime) > es.recordDuration)
-        {
-            es.record_session = false;
-            saveSession(std::format("../../resource/recordings/{}", es.recording_name), es.recordImages);
-            std::cout << "Recording stopped" << std::endl;
-        }
-        else
-        {
-            saveLeapData(leap_status, es.totalFrameCount, es.recordImages);
-        }
-    }
-    if (es.record_single_pose)
-    {
-        saveSession(std::format("../../resource/recordings/{}", es.recording_name), leap_status, es.totalFrameCount, es.recordImages);
-        es.record_single_pose = false;
-    }
+    projectAndFilterJoints(joints_left, joints_right, projected_filtered_left, projected_filtered_right);
     t_leap.stop();
     /* skin hand meshes */
     t_skin.start();
@@ -4916,7 +4928,7 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
     if (state == static_cast<int>(GuessAnimalGameState::BAKE))
     {
         guessAnimalGame.resetState();
-        handlePromptMode();
+        handleBakeConfig();
         es.bakeRequest = true;
     }
     handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
@@ -4940,11 +4952,6 @@ void handleGuessAnimalGame(std::unordered_map<std::string, Shader *> &shaderMap,
         fullScreenQuad.render();
     }
     t_pp.stop();
-
-    /* debug mode */
-    t_debug.start();
-    handleDebugMode(shaderMap, rightHandModel, leftHandModel, textModel);
-    t_debug.stop();
 }
 
 void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
@@ -5307,6 +5314,13 @@ void handleSimulation(std::unordered_map<std::string, Shader *> &shaderMap,
                                    cam_projection_transform))
                 {
                     es.simulationTime = 0.0f; // continuous video playback
+                    if (es.save_sim_data)
+                    {
+                        saveSimData();
+                        es.save_sim_data = false;
+                        es.cur_sim_time.clear();
+                        es.cur_sim_data.clear();
+                    }
                 }
             }
         }
@@ -5404,6 +5418,7 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
+                     SkinnedModel &otherObject,
                      TextModel &text)
 {
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
@@ -5431,35 +5446,10 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
         }
         // draws some mesh (lit by camera input)
         {
-            /* quad at vcam far plane, shined by vproj (perspective corrected) */
-            // projectorOnlyShader.use();
-            // projectorOnlyShader.setBool("flipVer", false);
-            // projectorOnlyShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-            // projectorOnlyShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-            // projectorOnlyShader.setBool("binary", false);
-            // camTexture.bind();
-            // projectorOnlyShader.setInt("src", 0);
-            // projFarQuad.render();
-
-            /* dinosaur */
-            // projectorShader.use();
-            // projectorShader.setBool("flipVer", false);
-            // projectorShader.setMat4("camTransform", flycam_projection_transform * flycam_view_transform);
-            // projectorShader.setMat4("projTransform", cam_projection_transform * cam_view_transform);
-            // projectorShader.setBool("binary", true);
-            // dinosaur.Render(projectorShader, camTexture.getTexture(), false);
-            // projectorShader.setMat4("camTransform", proj_projection_transform * proj_view_transform);
-            // dinosaur.Render(projectorShader, camTexture.getTexture(), true);
-            // textureShader.use();
-            // textureShader.setBool("flipVer", false);
-            // textureShader.setMat4("projection", flycam_projection_transform);
-            // textureShader.setMat4("view", flycam_view_transform);
-            // textureShader.setMat4("model", glm::mat4(1.0f));
-            // textureShader.setBool("binary", false);
-            // textureShader.setInt("src", 0);
-            // glActiveTexture(GL_TEXTURE0);
-            // glBindTexture(GL_TEXTURE_2D, dinosaur.m_fbo.getTexture());
-            // projNearQuad.render();
+            vcolorShader->use();
+            vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform);
+            vcolorShader->setBool("allWhite", false);
+            otherObject.Render(*vcolorShader, camTexture.getTexture(), false);
         }
         // draws global coordinate system gizmo at origin
         {
@@ -5773,6 +5763,13 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     handleGetSkeletonByTimestamp(cur_timestamp + es.mls_future_frame_offset, bones2world_left, joints_left, bones2world_right, joints_right);
     projectAndFilterJoints(joints_left, joints_right, projected_filtered_left, projected_filtered_right);
     handlePostProcess(leftHandModel, rightHandModel, camTexture, shader_map);
+    if (es.save_sim_data && new_frame)
+    {
+        std::lock_guard<std::mutex> lock(es.mls_mutex);
+        std::vector<glm::vec2> qglm = Helpers::cv2glm(ControlPointsQ);
+        std::vector<glm::vec2> pglm = Helpers::cv2glm(ControlPointsP);
+        newSimData(qglm, pglm, es.simulationTime);
+    }
     /* render final output to screen */
     glViewport(0, 0, es.proj_width, es.proj_height); // set viewport
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -5808,6 +5805,28 @@ bool playVideoReal(std::unordered_map<std::string, Shader *> &shader_map,
     es.simulationTime += es.deltaTime * 1000.0f * es.vid_playback_speed * es.pseudo_vid_playback_speed;
     t_debug.stop();
     return true;
+}
+
+void newSimData(const std::vector<glm::vec2> &Q,
+                const std::vector<glm::vec2> &P,
+                float time)
+{
+    if (es.save_sim_data_P)
+        es.cur_sim_data.push_back(P);
+    else
+        es.cur_sim_data.push_back(Q);
+    es.cur_sim_time.push_back(time);
+}
+
+void saveSimData()
+{
+    fs::path data_save_path = fs::path("../../debug/sim_data/simdata.npy");
+    fs::path time_save_path = fs::path("../../debug/sim_data/simtime.npy");
+    for (int i = 0; i < es.cur_sim_data.size(); i++)
+    {
+        cnpy::npy_save(data_save_path.string(), &es.cur_sim_data[i][0].x, {1, es.cur_sim_data[i].size(), 2}, "a");
+    }
+    cnpy::npy_save(time_save_path.string(), es.cur_sim_time.data(), {es.cur_sim_time.size()}, "w");
 }
 
 bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
@@ -5906,7 +5925,7 @@ bool playVideo(std::unordered_map<std::string, Shader *> &shader_map,
     return true;
 }
 
-void handlePromptMode()
+void handleBakeConfig()
 {
     switch (es.prompt_mode)
     {
@@ -5940,6 +5959,40 @@ void handlePromptMode()
         es.cur_prompt = es.manual_prompt;
         break;
     }
+    if (es.save_byproducts)
+    {
+        fs::path bakeOutputPath{es.bake_folder};
+        uint32_t count = 0;
+        if (!fs::exists(bakeOutputPath))
+        {
+            fs::create_directories(bakeOutputPath);
+        }
+        else
+        {
+            std::set<std::string> unique_names;
+            for (const auto &entry : fs::directory_iterator(bakeOutputPath))
+            {
+                std::string stem = entry.path().filename().stem().string(); // get stem
+                std::string token = stem.substr(0, stem.find("_"));         // get number part
+                if (unique_names.find(token) == unique_names.end())
+                    unique_names.insert(token);
+            }
+            while (true)
+            {
+                if (unique_names.find(std::format("{:05d}", count)) == unique_names.end())
+                {
+                    break;
+                }
+                count++;
+            }
+        }
+        std::string tmp_name = std::format("{:05d}", count);
+        es.cur_bake_file_stem = fs::path(bakeOutputPath / fs::path(tmp_name)).string();
+    }
+    else
+    {
+        es.cur_bake_file_stem = "";
+    }
 }
 // ---------------------------------------------------------------------------------------------
 // IMGUI frame creator
@@ -5968,21 +6021,25 @@ void openIMGUIFrame()
                         std::cerr << "Failed to initialize projector\n";
                         es.use_projector = false;
                     }
-                    if (!es.simulated_projector)
-                    {
-                        c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
-                        es.use_coaxial_calib = true;
-                    }
                     else
                     {
-                        std::string string_path = std::format("../../debug/{}", es.output_recording_name);
-                        fs::path mypath(string_path);
-                        if (!fs::exists(mypath))
+                        if (!es.simulated_projector)
                         {
-                            fs::create_directory(mypath);
+                            c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
+                            es.use_coaxial_calib = true;
+                            es.gamma_correct = true;
                         }
-                        SaveToDisk *save_to_disk_projector = dynamic_cast<SaveToDisk *>(projector);
-                        save_to_disk_projector->setDestination(string_path);
+                        else
+                        {
+                            std::string string_path = std::format("../../debug/{}", es.output_recording_name);
+                            fs::path mypath(string_path);
+                            if (!fs::exists(mypath))
+                            {
+                                fs::create_directory(mypath);
+                            }
+                            SaveToDisk *save_to_disk_projector = dynamic_cast<SaveToDisk *>(projector);
+                            save_to_disk_projector->setDestination(string_path);
+                        }
                     }
                 }
                 else
@@ -5991,6 +6048,7 @@ void openIMGUIFrame()
                     {
                         projector->kill();
                         es.use_coaxial_calib = false;
+                        es.gamma_correct = false;
                     }
                 }
             }
@@ -6008,13 +6066,14 @@ void openIMGUIFrame()
             ImGui::Checkbox("PBO", &es.use_pbo);
             ImGui::Checkbox("Double PBO", &es.double_pbo);
             ImGui::SeparatorText("Operation Mode");
-            if (ImGui::RadioButton("Normal", &es.operation_mode, static_cast<int>(OperationMode::SANDBOX)))
+            if (ImGui::RadioButton("Sandbox", &es.operation_mode, static_cast<int>(OperationMode::SANDBOX)))
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
                 es.simulated_camera = false;
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 if (es.simulated_projector)
                 {
                     es.simulated_projector = false;
@@ -6052,13 +6111,13 @@ void openIMGUIFrame()
                 es.use_mls = false;
                 es.debug_mode = false;
             }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Camera", &es.operation_mode, static_cast<int>(OperationMode::CAMERA)))
+            if (ImGui::RadioButton("Camera Calibration", &es.operation_mode, static_cast<int>(OperationMode::CAMERA)))
             {
                 leap.setImageMode(false);
                 es.exposure = 10000.0f;
                 camera.set_exposure_time(es.exposure);
             }
+            ImGui::SameLine();
             if (ImGui::RadioButton("Coaxial Calibration", &es.operation_mode, static_cast<int>(OperationMode::COAXIAL)))
             {
                 es.debug_mode = false;
@@ -6094,6 +6153,7 @@ void openIMGUIFrame()
                 guessPoseGame.reset(false);
                 leap.setImageMode(false);
                 leap.setPollMode(false);
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 es.material_mode = static_cast<int>(MaterialMode::PER_BONE_SCALAR);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
@@ -6104,6 +6164,7 @@ void openIMGUIFrame()
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
                 es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 es.exposure = 1850.0f; // max exposure allowing for max fps
@@ -6121,12 +6182,14 @@ void openIMGUIFrame()
             {
                 leap.setImageMode(false);
                 leap.setPollMode(false);
+                loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
                 // mls_grid_shader_threshold = 0.8f; // allows for alpha blending mls results in game mode...
-                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+                es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
                 es.texture_mode = static_cast<int>(TextureMode::BAKED);
                 es.material_mode = static_cast<int>(MaterialMode::DIFFUSE);
                 es.bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
                 es.prompt_mode = static_cast<int>(PromptMode::AUTO_PROMPT);
+                es.no_preprompt = false;
                 es.exposure = 1850.0f; // max exposure allowing for max fps
                 camera.set_exposure_time(es.exposure);
             }
@@ -6593,7 +6656,7 @@ void openIMGUIFrame()
             // ImGui::Checkbox("Displacement Mapping", &use_disp_mapping);
             ImGui::SameLine();
             ImGui::Checkbox("AO/Roughness/Metallic Mapping", &es.use_arm_mapping);
-            if (ImGui::BeginCombo("Mesh Texture", es.curSelectedTexture.c_str(), 0))
+            if (ImGui::BeginCombo("Mesh Texture Left", es.curSelectedTexture.c_str(), 0))
             {
                 std::vector<std::string> keys;
                 for (auto &it : texturePack)
@@ -6607,6 +6670,28 @@ void openIMGUIFrame()
                     if (ImGui::Selectable(it.c_str(), is_selected))
                     {
                         es.curSelectedTexture = it;
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::BeginCombo("Mesh Texture Right", es.curSelectedTextureRight.c_str(), 0))
+            {
+                std::vector<std::string> keys;
+                for (auto &it : texturePack)
+                {
+                    keys.push_back(it.first);
+                }
+                std::sort(keys.begin(), keys.end());
+                for (auto &it : keys)
+                {
+                    const bool is_selected = (es.curSelectedTextureRight == it);
+                    if (ImGui::Selectable(it.c_str(), is_selected))
+                    {
+                        es.curSelectedTextureRight = it;
                     }
                     if (is_selected)
                     {
@@ -6696,11 +6781,12 @@ void openIMGUIFrame()
             {
                 ImGui::InputText("Input file", &es.inputBakeFile);
             }
-            ImGui::InputText("Bake texture file (right)", &es.bakeFileRight);
-            ImGui::InputText("Bake texture file (left)", &es.bakeFileLeft);
+            ImGui::InputText("Bake Output Path", &es.bake_folder);
+            // ImGui::InputText("Bake texture file (right)", &es.bakeFileRight);
+            // ImGui::InputText("Bake texture file (left)", &es.bakeFileLeft);
             if (ImGui::Button("Bake"))
             {
-                handlePromptMode();
+                handleBakeConfig();
                 switch (es.bake_mode)
                 {
                 case static_cast<int>(BakeMode::FILE):
@@ -6723,22 +6809,35 @@ void openIMGUIFrame()
                 }
             }
             ImGui::SameLine();
-            ImGui::Checkbox("Save Intermediate Outputs", &es.saveIntermed);
+            ImGui::Checkbox("Save Intermediate Outputs", &es.save_byproducts);
             ImGui::SeparatorText("Stable Diffusion / Control Net");
             ImGui::SliderInt("ControlNet Present", &es.controlnet_preset, 0, 22);
             ImGui::Text("Prompts Mode");
             ImGui::SameLine();
-            ImGui::RadioButton("Manual", &es.prompt_mode, 0);
+            if (ImGui::RadioButton("Manual", &es.prompt_mode, 0))
+            {
+                es.no_preprompt = true;
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("Auto", &es.prompt_mode, static_cast<int>(PromptMode::AUTO_PROMPT));
+            if (ImGui::RadioButton("Auto", &es.prompt_mode, static_cast<int>(PromptMode::AUTO_PROMPT)))
+            {
+                es.no_preprompt = false;
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("List", &es.prompt_mode, static_cast<int>(PromptMode::SELECTED));
+            if (ImGui::RadioButton("List", &es.prompt_mode, static_cast<int>(PromptMode::SELECTED)))
+            {
+                es.no_preprompt = false;
+            }
             ImGui::SameLine();
-            ImGui::RadioButton("Random", &es.prompt_mode, static_cast<int>(PromptMode::RANDOM));
+            if (ImGui::RadioButton("Random", &es.prompt_mode, static_cast<int>(PromptMode::RANDOM)))
+            {
+                es.no_preprompt = false;
+            }
             ImGui::Checkbox("Fit Mask to Viewport", &es.diffuse_fit_to_view);
             ImGui::SameLine();
             ImGui::InputInt("Pad Size", &es.diffuse_pad_size);
             ImGui::Checkbox("Select Top Animal", &es.diffuse_select_top_animal);
+            ImGui::Checkbox("No preprompt", &es.no_preprompt);
             ImGui::InputInt("Random Seed", &es.diffuse_seed);
             ImGui::InputText("Manual Prompt", &es.manual_prompt);
             if (ImGui::BeginCombo("Listed Prompts", es.selected_listed_prompt.c_str(), 0))
@@ -6775,56 +6874,6 @@ void openIMGUIFrame()
             ImGui::TreePop();
         }
         /////////////////////////////////////////////////////////////////////////////
-        if (ImGui::TreeNode("Optical Flow"))
-        {
-            ImGui::SeparatorText("Optical Flow");
-            if (ImGui::Checkbox("Use OF", &es.use_of))
-            {
-                if (es.use_of)
-                {
-                    updateOFParams();
-                    es.mls_extrapolate = false;
-                }
-            }
-            if (ImGui::RadioButton("Naive", &es.of_mode, static_cast<int>(OFMode::NAIVE_BLOB)))
-            {
-                updateOFParams();
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Farneback CPU", &es.of_mode, static_cast<int>(OFMode::FB_CPU)))
-            {
-                updateOFParams();
-            }
-#ifdef OPENCV_WITH_CUDA
-            if (ImGui::RadioButton("Farneback GPU", &es.of_mode, static_cast<int>(OFMode::FB_GPU)))
-            {
-                updateOFParams();
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Nvidia GPU", &es.of_mode, static_cast<int>(OFMode::NV_GPU)))
-            {
-                updateOFParams();
-            }
-#endif
-            if (ImGui::SliderInt("Resize Factor", &es.of_resize_factor_exp, 0, 3))
-            {
-                es.of_resize_factor = std::pow(2, es.of_resize_factor_exp);
-                es.of_downsize = cv::Size(es.cam_width / es.of_resize_factor, es.cam_height / es.of_resize_factor);
-                updateOFParams();
-            }
-            ImGui::Checkbox("Show OF", &es.show_of);
-            ImGui::SliderInt("ROI size", &es.of_roi, 10, 100);
-            // ImGui::SameLine();
-            // ImGui::RadioButton("Farneback + Lucas-Kanade", &es.optical_flow_mode, static_cast<int>(OpticalFlowMode::FARNEBACK_LUCAS_KANADE));
-            // ImGui::SeparatorText("Farneback");
-            // ImGui::SliderInt("WinSize", &es.farneback_winSize, 1, 10);
-            // ImGui::SliderInt("Iterations", &es.farneback_iterations, 1, 10);
-            // ImGui::SliderFloat("PolySigma", &es.farneback_polySigma, 0.1f, 10.0f);
-            // ImGui::SeparatorText("Lucas-Kanade");
-            // ImGui::SliderInt("LK WinSize", &es.lk_winSize, 1, 10);
-            // ImGui::SliderInt("LK Iterations", &es.lk_iterations, 1, 10);
-            ImGui::TreePop();
-        }
         if (ImGui::TreeNode("MLS"))
         {
             ImGui::SeparatorText("MLS");
@@ -6837,7 +6886,13 @@ void openIMGUIFrame()
                 }
             }
             ImGui::SameLine();
+            ImGui::Checkbox("Auto Pilot", &es.auto_pilot);
+            ImGui::SameLine();
             ImGui::Checkbox("Landmark Thread Blocking", &es.mls_blocking);
+            ImGui::SliderFloat("Auto Pilot Thr", &es.auto_pilot_thr_extrapolate, 0.0f, 0.1f);
+            // ImGui::ProgressBar(es.auto_pilot_delta, ImVec2(-1.0f, 0.0f), "delta");
+            // ImGui::ProgressBar(es.auto_pilot_alpha, ImVec2(-1.0f, 0.0f), "alpha");
+            ImGui::SliderInt("Auto Pilot Cnt Thr", &es.auto_pilot_count_thr, 0, 20);
             if (ImGui::Checkbox("Extrapolate Q using Leap", &es.mls_extrapolate))
             {
                 if (es.mls_extrapolate)
@@ -6870,8 +6925,8 @@ void openIMGUIFrame()
             ImGui::Checkbox("Show MLS grid", &es.mls_show_grid);
             ImGui::SameLine();
             ImGui::Checkbox("Show Landmarks", &es.show_landmarks);
-            ImGui::Checkbox("Global Forecast", &es.mls_global_forecast);
-            ImGui::SameLine();
+            // ImGui::Checkbox("Global Forecast", &es.mls_global_forecast);
+            // ImGui::SameLine();
             // ImGui::Checkbox("Probe Recent Leap Frame", &es.mls_probe_recent_leap);
             ImGui::SliderInt("MLS CP Smooth window", &es.mls_cp_smooth_window, 0, 10);
             ImGui::SliderFloat("MLS grid shader thresh.", &es.mls_grid_shader_threshold, 0.0f, 1.0f);
@@ -7022,6 +7077,20 @@ void openIMGUIFrame()
             }
             ImGui::SliderFloat("Mixer Ratio", &es.projection_mix_ratio, 0.0f, 1.0f);
             ImGui::SliderFloat("Skin Brightness", &es.skin_brightness, 0.0f, 1.0f);
+            if (ImGui::Checkbox("Save Sim Data", &es.save_sim_data))
+            {
+                if (es.save_sim_data)
+                {
+                    es.cur_sim_data.clear();
+                    es.cur_sim_time.clear();
+                }
+                else
+                {
+                    saveSimData();
+                }
+            }
+            ImGui::SameLine();
+            ImGui::Checkbox("Save P", &es.save_sim_data_P);
             if (ImGui::Checkbox("Debug Playback", &es.debug_playback))
             {
                 if (es.debug_playback)
@@ -7176,6 +7245,47 @@ void openIMGUIFrame()
                                                          glm::vec2(es.game_max.x, es.game_max.y)};
                 es.game_verts = new_game_verts;
             }
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Optical Flow"))
+        {
+            ImGui::SeparatorText("Optical Flow");
+            if (ImGui::Checkbox("Use OF", &es.use_of))
+            {
+                if (es.use_of)
+                {
+                    updateOFParams();
+                    es.mls_extrapolate = false;
+                }
+            }
+            if (ImGui::RadioButton("Naive", &es.of_mode, static_cast<int>(OFMode::NAIVE_BLOB)))
+            {
+                updateOFParams();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Farneback CPU", &es.of_mode, static_cast<int>(OFMode::FB_CPU)))
+            {
+                updateOFParams();
+            }
+#ifdef OPENCV_WITH_CUDA
+            if (ImGui::RadioButton("Farneback GPU", &es.of_mode, static_cast<int>(OFMode::FB_GPU)))
+            {
+                updateOFParams();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Nvidia GPU", &es.of_mode, static_cast<int>(OFMode::NV_GPU)))
+            {
+                updateOFParams();
+            }
+#endif
+            if (ImGui::SliderInt("Resize Factor", &es.of_resize_factor_exp, 0, 3))
+            {
+                es.of_resize_factor = std::pow(2, es.of_resize_factor_exp);
+                es.of_downsize = cv::Size(es.cam_width / es.of_resize_factor, es.cam_height / es.of_resize_factor);
+                updateOFParams();
+            }
+            ImGui::Checkbox("Show OF", &es.show_of);
+            ImGui::SliderInt("ROI size", &es.of_roi, 10, 100);
             ImGui::TreePop();
         }
     }

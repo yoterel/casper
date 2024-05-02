@@ -4,6 +4,8 @@
 #include "leapCPP.h"
 #include "helpers.h"
 #include <mutex>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 class EngineState // dumb dumb engine state container
 {
@@ -39,6 +41,7 @@ public:
     bool mask_missing_color_is_camera = false;
     bool threshold_flag = false;
     bool threshold_flag2 = false;
+    float render_alpha = 1.0f;
     int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
     int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
     int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
@@ -99,10 +102,10 @@ public:
     bool bake_preproc_succeed = false;
     bool sd_running = false;
     int prompt_mode = static_cast<int>(PromptMode::MANUAL_PROMPT);
-    int bake_mode = static_cast<int>(BakeMode::SD);
+    int bake_mode = static_cast<int>(BakeMode::CONTROL_NET);
     int controlnet_preset = 0;
     int sd_mask_mode = 2;
-    bool saveIntermed = false;
+    bool save_byproducts = false;
     int sd_outwidth, sd_outheight;
     std::vector<uint8_t> img2img_data;
     int diffuse_seed = -1;
@@ -110,24 +113,31 @@ public:
     bool diffuse_fit_to_view = true;
     int diffuse_pad_size = 50;
     bool diffuse_select_top_animal = false;
-    std::string manual_prompt = "A natural skinned human hand with a colorful dragon tattoo, photorealistic skin";
+    bool no_preprompt = true;
+    std::string manual_prompt = "A ghost hand";
     std::vector<std::string> listedPrompts{
         "butterfly",
         "deer",
-        "fish",
+        "orca",
+        "wolf",
+        "koi fish",
+        "eagle",
+        "snake",
         "elephant",
         "giraffe",
+        "flamingo",
+        "swan",
         "tiger",
         "lion",
+        "octopus",
         "cat",
         "dog",
         "horse",
         "cow",
-        "sheep",
         "pig",
         "rabbit",
-        "squirrel",
-        "monkey",
+        "crab",
+        "spider",
         "gorilla",
         "panda"};
     std::string selected_listed_prompt = listedPrompts[0];
@@ -159,6 +169,7 @@ public:
     float initial_simulated_latency_ms = 20.0f;
     // record & playback controls
     bool debug_playback = false;
+    bool save_sim_data = false;
     int32_t playback_prev_frame = -1;
     // bool playback_with_images = false;
     float pseudo_vid_playback_speed = 1.1f;
@@ -235,6 +246,12 @@ public:
     bool showReprojections = false;
     bool showTestPoints = false;
     bool calibrationSuccess = false;
+    fs::path default_coaxial_calib_path{"../../resource/calibrations/coaxial_calibration/coax_user.npy"};
+    fs::path default_user_calib_path{"../../resource/calibrations/leap_calibration/w2c_user.npy"};
+    fs::path default_auto_calib_path{"../../resource/calibrations/leap_calibration/w2c.npy"};
+    fs::path default_points2d_calib_path{"../../resource/calibrations/leap_calibration/2dpoints.npy"};
+    fs::path default_points3d_calib_path{"../../resource/calibrations/leap_calibration/3dpoints.npy"};
+    fs::path default_cam_calib_path{"../../resource/calibrations/cam_calibration/cam_calibration.npz"};
     std::vector<glm::vec2> screen_verts = {{-1.0f, 1.0f},
                                            {-1.0f, -1.0f},
                                            {1.0f, -1.0f},
@@ -306,14 +323,18 @@ public:
     std::string inputBakeFile = "../../resource/images/butterfly.png";
     std::string bakeFileLeft = "../../resource/baked_textures/baked_left.png";
     std::string bakeFileRight = "../../resource/baked_textures/baked_right.png";
+    std::string bake_folder = "../../debug/bakes";
+    std::string cur_bake_file_stem = "";
     std::string userTextureFile = "../../resource/images/uv.png";
     std::vector<std::string> texturePaths{
         "../../resource",
         "../../resource/images",
         "../../resource/baked_textures",
         "../../resource/pbr/wood",
+        "../../resource/pbr/slab_tiles",
     };
     std::string curSelectedTexture = "uv";
+    std::string curSelectedTextureRight = "uv";
     std::string curSelectedPTexture = "uv";
     std::string userStudySelectedTexture = "uv";
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -324,14 +345,15 @@ public:
     const int grid_y_point_count = 21;
     const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
     const float grid_y_spacing = 2.0f / static_cast<float>(grid_y_point_count - 1);
-    float mls_alpha = 0.5f; // emperically best: 0.8f for rigid, 0.5f for affine
+    float mls_alpha = 0.5f; // emperically best: 0.8f for rigid, 0.5f for sim/affine
     std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
     bool mls_landmark_thread_succeed = false;
     bool mls_solve_every_frame = true;
     bool mls_succeeded_this_frame = false;
     bool mls_extrapolate = true;
-    std::mutex mls_mutex;
+    std::mutex mls_mutex; // used to protect controlpoints (P and Q) as a multithreaded resource
+    std::mutex py_mutex;  // apparantely python cannot be accessed by multiple threads
     int mls_succeed_counter = 0;
     int mls_every = 1;
     int mls_n_latency_frames = 0;
@@ -341,6 +363,13 @@ public:
     bool mls_running = false;
     // bool mls_probe_recent_leap = false;
     bool use_mls = true;
+    bool auto_pilot = true;
+    int auto_pilot_cnt_above_thr = 0;
+    int auto_pilot_cnt_below_thr = 0;
+    float auto_pilot_thr_extrapolate = 0.003f;
+    // float auto_pilot_delta = 0.0f;
+    // float auto_pilot_alpha = 0.0f;
+    int auto_pilot_count_thr = 6;
     bool postprocess_blur = false;
     int mls_mode = static_cast<int>(MLSMode::CONTROL_POINTS1);
     bool show_landmarks = false;
@@ -350,7 +379,10 @@ public:
     bool mls_use_kalman = false;
     float prev_mls_time = 0.0f;
     bool mls_use_latest_leap = true;
-    bool mls_global_forecast = false;
+    bool save_sim_data_P = false;
+    std::vector<std::vector<glm::vec2>> cur_sim_data;
+    std::vector<float> cur_sim_time;
+    // bool mls_global_forecast = false;
     float mls_grid_shader_threshold = 1.0f;
     glm::vec2 mls_shift = glm::vec2(0.0f, 0.0f);
     glm::vec2 prev_com = glm::vec2(0.0f, 0.0f);
@@ -359,7 +391,7 @@ public:
     float mls_depth_threshold = 30.0f;
     bool mls_depth_test = false;
     float kalman_lookahead = 17.0f;
-    int deformation_mode = static_cast<int>(DeformationMode::RIGID);
+    int deformation_mode = static_cast<int>(DeformationMode::SIMILARITY);
     // of controls
     bool use_of = false;
     bool show_of = false;

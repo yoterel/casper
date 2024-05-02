@@ -184,7 +184,7 @@ void SkinnedModel::InitSingleMesh(unsigned int MeshIndex, const aiMesh *paiMesh)
         const aiVector3D &pPos = paiMesh->mVertices[i];
         m_Positions.push_back(glm::vec3(pPos.x, pPos.y, pPos.z));
 
-        if (paiMesh->mNormals)
+        if (paiMesh->mNormals && paiMesh->mTangents)
         {
             const aiVector3D &pNormal = paiMesh->mNormals[i];
             m_Normals.push_back(glm::vec3(pNormal.x, pNormal.y, pNormal.z));

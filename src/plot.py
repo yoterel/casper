@@ -2,7 +2,9 @@ import gsoup
 from pathlib import Path
 import numpy as np
 from scipy.spatial import ConvexHull
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, splprep, splev
+from scipy.optimize import fmin
+from scipy.spatial.distance import euclidean
 from scipy import ndimage
 import cv2
 from PIL import Image, ImageDraw
@@ -505,6 +507,201 @@ def guesschar_plot(src_path, dst_path):
     plt.savefig(str(dst_path / "guess_char_q1.pdf"))
 
 
+def func_latency(latency, u, tck, data):
+    gt = splev(u + latency, tck)
+    dist = np.mean(np.linalg.norm(np.array(gt).T[100:490] - data[100:490], axis=1))
+    return dist
+
+
+def sim_plot(root_path, dst_path):
+    for dir in root_path.glob("*"):
+        data_gt = np.load(Path(dir, "simdata_gt.npy"))
+        data_baseline = np.load(Path(dir, "simdata_baseline.npy"))
+        data_naive = np.load(Path(dir, "simdata_naive.npy"))
+        data_ours = np.load(Path(dir, "simdata_ours.npy"))
+        data_kalman = np.load(Path(dir, "simdata_kalman.npy"))
+        t_gt = np.load(Path(dir, "simtime_gt.npy"))
+        t_bl = np.load(Path(dir, "simtime_baseline.npy"))
+        t_naive = np.load(Path(dir, "simtime_naive.npy"))
+        t_ours = np.load(Path(dir, "simtime_ours.npy"))
+        t_kalman = np.load(Path(dir, "simtime_kalman.npy"))
+        # find a parametric B-spline curve for gt data
+        naive_distances = []
+        ours_distances = []
+        baseline_distances = []
+        kalman_distances = []
+        for i in range(data_gt.shape[1]):
+            landmark_id = i
+            x = data_gt[:, landmark_id, 0]
+            y = data_gt[:, landmark_id, 1]
+            tck, u_out = splprep([x, y], u=t_gt, s=0)
+            # given the data timestamps, find what should be the gt data
+            gt = splev(t_gt, tck)
+            baseline_gt = splev(t_bl, tck)
+            naive_gt = splev(t_naive, tck)
+            ours_gt = splev(t_ours, tck)
+            kalman_gt = splev(t_kalman, tck)
+            # min_lat_naive = fmin(
+            #     func_latency,
+            #     -0.1,
+            #     args=(
+            #         t_naive,
+            #         tck,
+            #         data_naive[:, landmark_id],
+            #     ),
+            #     disp=0,
+            # )
+            # min_lat_bl = fmin(
+            #     func_latency,
+            #     -0.1,
+            #     args=(
+            #         t_bl,
+            #         tck,
+            #         data_baseline[:, landmark_id],
+            #     ),
+            #     disp=0,
+            # )
+            # min_lat_ours = fmin(
+            #     func_latency,
+            #     -0.1,
+            #     args=(
+            #         t_ours,
+            #         tck,
+            #         data_ours[:, landmark_id],
+            #     ),
+            #     disp=0,
+            # )
+            # min_lat_kalman = fmin(
+            #     func_latency,
+            #     -0.1,
+            #     args=(
+            #         t_kalman,
+            #         tck,
+            #         data_kalman[:, landmark_id],
+            #     ),
+            #     disp=0,
+            # )
+            # print("naive latency: {}".format(min_lat_naive))
+            # print("baseline latency: {}".format(min_lat_bl))
+            # print("ours latency: {}".format(min_lat_ours))
+            # print("kalman latency: {}".format(min_lat_kalman))
+            # t_ours_optimal = splev(t_ours + min_lat_ours, tck)
+            # t_naive_optimal = splev(t_naive + min_lat_naive, tck)
+            # t_kalman_optimal = splev(t_kalman + min_lat_kalman, tck)
+            # t_bl_optimal = splev(t_bl + min_lat_bl, tck)
+            # stdev_ours = np.std(
+            #     np.linalg.norm(
+            #         np.array(t_ours_optimal).T[100:490]
+            #         - data_ours[100:490, landmark_id],
+            #         axis=1,
+            #     )
+            # )
+            # print("ours jitter: {}".format(stdev_ours))
+            # stdev_naive = np.std(
+            #     np.linalg.norm(
+            #         np.array(t_naive_optimal).T[100:490]
+            #         - data_naive[100:490, landmark_id],
+            #         axis=1,
+            #     )
+            # )
+            # print("naive jitter: {}".format(stdev_naive))
+            # stdev_bl = np.std(
+            #     np.linalg.norm(
+            #         np.array(t_bl_optimal).T[100:490]
+            #         - data_baseline[100:490, landmark_id],
+            #         axis=1,
+            #     )
+            # )
+            # print("baseline jitter: {}".format(stdev_bl))
+            # stdev_kalman = np.std(
+            #     np.linalg.norm(
+            #         np.array(t_kalman_optimal).T[100:490]
+            #         - data_kalman[100:490, landmark_id],
+            #         axis=1,
+            #     )
+            # )
+            # print("kalman jitter: {}".format(stdev_kalman))
+
+            naive_dist = np.linalg.norm(
+                np.array(naive_gt).T - data_naive[:, landmark_id], axis=1
+            )
+            ours_dist = np.linalg.norm(
+                np.array(ours_gt).T - data_ours[:, landmark_id], axis=1
+            )
+            baseline_dist = np.linalg.norm(
+                np.array(baseline_gt).T - data_baseline[:, landmark_id], axis=1
+            )
+            kalman_dist = np.linalg.norm(
+                np.array(kalman_gt).T - data_kalman[:, landmark_id], axis=1
+            )
+            naive_distances.append(naive_dist)
+            ours_distances.append(ours_dist)
+            baseline_distances.append(baseline_dist)
+            kalman_distances.append(kalman_dist)
+            # plt.plot(t_ours, data_ours[:, landmark_id, 0], label="Ours")
+            # plt.plot(t_kalman, data_kalman[:, landmark_id, 0], label="Kalman")
+            # plt.plot(t_naive, data_naive[:, landmark_id, 0], label="Naive")
+            # plt.plot(t_bl, data_baseline[:, landmark_id, 0], label="Basline")
+            # plt.plot(t_ours, np.array(ours_gt).T[:, 0], label="GT")
+            # plt.legend()
+
+        naive_distances = np.array(naive_distances).mean(axis=0)
+        ours_distances = np.array(ours_distances).mean(axis=0)
+        baseline_distances = np.array(baseline_distances).mean(axis=0)
+        kalman_distances = np.array(kalman_distances).mean(axis=0)
+        # delayed_gt = splev(t_delayed, tck)
+
+        # lets do a time plot of the distance from the signal as a func of time
+        plt.plot(
+            t_naive,
+            naive_distances,
+            # s=1,
+            label="Naive",
+            color="orange",
+            alpha=0.8,
+            linewidth=0.5,
+        )
+        plt.plot(
+            t_bl,
+            baseline_distances,
+            # s=1,
+            label="Baseline",
+            color="green",
+            alpha=0.8,
+            linewidth=0.5,
+        )
+        plt.plot(
+            t_kalman,
+            kalman_distances,
+            # s=1,
+            label="Kalman Filter",
+            color="red",
+            alpha=0.8,
+            linewidth=0.5,
+        )
+        plt.plot(
+            t_ours,
+            ours_distances,
+            # s=1,
+            label="Ours",
+            color="blue",
+            alpha=0.8,
+            linewidth=0.5,
+        )
+        plt.xlabel("Time [s]")
+        plt.ylabel("Distance to Ideal")
+        plt.legend()
+        # first we compute the "jitter" of the data, i.e. for each datapoint, its minimum distance to the gt curve
+
+        # second we compute the latency of the data
+
+        # plt.scatter(new_points[0], new_points[1], s=1)
+        # plt.scatter(x, y, s=1)
+        plt.savefig(Path(dst_path, "{}_simdata_orig.pdf".format(dir.stem)))
+        plt.cla()
+        plt.clf()
+
+
 if __name__ == "__main__":
     # src_path = Path(
     #     "C:/Users/sens/Desktop/ahand/images/jnd_results/ours"
@@ -515,7 +712,11 @@ if __name__ == "__main__":
     # jnd_process_images(src_path, mask_path, dst_path)
 
     # jnd_plot(Path("C:/Users/sens/Desktop/ahand/images/jnd_processed"))
-    guesschar_plot(
-        Path("C:/Users/sens/Desktop/ahand/guess_char_results.csv"),
-        Path("C:/Users/sens/Desktop/ahand/images/"),
+    # guesschar_plot(
+    #     Path("C:/Users/sens/Desktop/ahand/guess_char_results.csv"),
+    #     Path("C:/Users/sens/Desktop/ahand/images/"),
+    # )
+    sim_plot(
+        Path("C:/src/casper/debug/sim_data"),
+        Path("C:/Users/sens/Desktop/casper_materials/images"),
     )
