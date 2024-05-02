@@ -705,8 +705,8 @@ int main(int argc, char *argv[])
     }
     projectiveTexture = texturePack["uv"];
     dynamicTexture = texturePack["uv"];
-    normalMap = texturePack["wood_floor_deck_nor_gl_1k"];
-    armMap = texturePack["wood_floor_deck_arm_1k"];
+    normalMap = texturePack["wood_floor_deck_nor_gl_1k"]; // slab_tiles_nor_gl_1k, wood_floor_deck_nor_gl_1k
+    armMap = texturePack["wood_floor_deck_arm_1k"];       // slab_tiles_arm_1k, wood_floor_deck_arm_1k
     // dispMap = texturePack["wood_floor_deck_disp_1k"];
     const fs::path bakeFileLeftPath{es.bakeFileLeft};
     const fs::path bakeFileRightPath{es.bakeFileRight};
@@ -3335,7 +3335,10 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         {
             int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
             if (n_visible_hands == 1)
+            {
                 es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+                break;
+            }
         }
         if (es.use_mls || es.use_of)
             postProcess.jump_flood(*jfaInitShader, *jfaShader, *NNShader,
@@ -3355,17 +3358,25 @@ void handlePostProcess(SkinnedModel &leftHandModel,
         {
             int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
             if (n_visible_hands == 2)
+            {
                 es.postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD);
+                break;
+            }
         }
         // todo: assumes both hand use same texture, which is not the case generally
+        Texture *handTexture;
+        if (projected_filtered_left.size() > 0)
+            handTexture = leftHandTexture;
+        else
+            handTexture = rightHandTexture;
         if (es.use_mls || es.use_of)
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, mls_fbo.getTexture()->getTexture(),
-                                      leftHandTexture->getTexture(),
+                                      handTexture->getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, es.masking_threshold, es.jfa_distance_threshold, es.jfa_seam_threshold, es.mask_bg_color);
         else
             postProcess.jump_flood_uv(*jfaInitShader, *jfaShader, *uv_NNShader, uv_fbo.getTexture()->getTexture(),
-                                      leftHandTexture->getTexture(),
+                                      handTexture->getTexture(),
                                       camTexture.getTexture(),
                                       &postprocess_fbo, es.masking_threshold, es.jfa_distance_threshold, es.jfa_seam_threshold, es.mask_bg_color);
         break;
@@ -3581,7 +3592,10 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             }
             case static_cast<int>(TextureMode::FROM_FILE): // a projective texture from the virtual cameras viewpoint
             {
-                dynamicTexture = texturePack[es.curSelectedTexture];
+                if (isRightHand)
+                    dynamicTexture = texturePack[es.curSelectedTextureRight];
+                else
+                    dynamicTexture = texturePack[es.curSelectedTexture];
                 set_skinned_shader(skinnedShader, cam_projection_transform * cam_view_transform * global_scale);
                 handModel.Render(*skinnedShader, bones2world, es.rotx, false, dynamicTexture);
                 break;
@@ -4332,7 +4346,7 @@ void landmarkDetectionThread(std::vector<glm::vec3> projected_filtered_left,
                     float cam_far = 1500.0f;
                     rendered_depth = (2.0 * rendered_depth) - 1.0;                                                                // to NDC
                     rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near))); // to linear
-                    if ((std::abs(rendered_depth - projected_depth) > es.mls_depth_threshold) && (i != 0))                        // always include wrist
+                    if ((std::abs(rendered_depth - projected_depth) < es.mls_depth_threshold) || (i == 0))                        // always include wrist
                     {
                         landmark_mask_left.push_back(i);
                     }
@@ -4354,11 +4368,9 @@ void landmarkDetectionThread(std::vector<glm::vec3> projected_filtered_left,
                     float projected_depth = projected_filtered_right[i].z;
                     float cam_near = 1.0f;
                     float cam_far = 1500.0f;
-                    rendered_depth = (2.0 * rendered_depth) - 1.0; // logarithmic NDC
-                    rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near)));
-                    projected_depth = (2.0 * projected_depth) - 1.0; // logarithmic NDC
-                    projected_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (projected_depth * (cam_far - cam_near)));
-                    if ((std::abs(rendered_depth - projected_depth) <= es.mls_depth_threshold) && (i != 0)) // always include wrist
+                    rendered_depth = (2.0 * rendered_depth) - 1.0;                                                                // to NDC
+                    rendered_depth = (2.0 * cam_near * cam_far) / (cam_far + cam_near - (rendered_depth * (cam_far - cam_near))); // to linear
+                    if ((std::abs(rendered_depth - projected_depth) < es.mls_depth_threshold) || (i == 0))                        // always include wrist
                     {
                         landmark_mask_right.push_back(i);
                     }
@@ -4590,15 +4602,18 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
             {
                 std::lock_guard<std::mutex> guard(es.mls_mutex);
                 std::vector<cv::Point2f> curP_filtered;
-                for (int i = 0; i < landmark_mask_left.size(); i++)
+                if (curP.size() == landmark_mask_left.size() + landmark_mask_right.size())
                 {
-                    curP_filtered.push_back(curP[landmark_mask_left[i]]);
+                    for (int i = 0; i < landmark_mask_left.size(); i++)
+                    {
+                        curP_filtered.push_back(curP[landmark_mask_left[i]]);
+                    }
+                    for (int i = 0; i < landmark_mask_right.size(); i++)
+                    {
+                        curP_filtered.push_back(curP[landmark_mask_right[i] + landmark_mask_left.size()]);
+                    }
+                    ControlPointsP = curP_filtered;
                 }
-                for (int i = 0; i < landmark_mask_right.size(); i++)
-                {
-                    curP_filtered.push_back(curP[landmark_mask_right[i] + landmark_mask_left.size()]);
-                }
-                ControlPointsP = curP_filtered;
             }
 
             // solve mls
@@ -6641,7 +6656,7 @@ void openIMGUIFrame()
             // ImGui::Checkbox("Displacement Mapping", &use_disp_mapping);
             ImGui::SameLine();
             ImGui::Checkbox("AO/Roughness/Metallic Mapping", &es.use_arm_mapping);
-            if (ImGui::BeginCombo("Mesh Texture", es.curSelectedTexture.c_str(), 0))
+            if (ImGui::BeginCombo("Mesh Texture Left", es.curSelectedTexture.c_str(), 0))
             {
                 std::vector<std::string> keys;
                 for (auto &it : texturePack)
@@ -6655,6 +6670,28 @@ void openIMGUIFrame()
                     if (ImGui::Selectable(it.c_str(), is_selected))
                     {
                         es.curSelectedTexture = it;
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::BeginCombo("Mesh Texture Right", es.curSelectedTextureRight.c_str(), 0))
+            {
+                std::vector<std::string> keys;
+                for (auto &it : texturePack)
+                {
+                    keys.push_back(it.first);
+                }
+                std::sort(keys.begin(), keys.end());
+                for (auto &it : keys)
+                {
+                    const bool is_selected = (es.curSelectedTextureRight == it);
+                    if (ImGui::Selectable(it.c_str(), is_selected))
+                    {
+                        es.curSelectedTextureRight = it;
                     }
                     if (is_selected)
                     {

@@ -331,8 +331,10 @@ public:
         "../../resource/images",
         "../../resource/baked_textures",
         "../../resource/pbr/wood",
+        "../../resource/pbr/slab_tiles",
     };
     std::string curSelectedTexture = "uv";
+    std::string curSelectedTextureRight = "uv";
     std::string curSelectedPTexture = "uv";
     std::string userStudySelectedTexture = "uv";
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
