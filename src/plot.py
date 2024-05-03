@@ -513,6 +513,14 @@ def func_latency(latency, u, tck, data):
     return dist
 
 
+def ndc_to_pixel(data):
+    screen_width = 1024
+    screen_height = 768
+    data[..., 0] = (data[..., 0] + 1) * 0.5 * (screen_width - 1)
+    data[..., 1] = (data[..., 1] + 1) * 0.5 * (screen_height - 1)
+    return data
+
+
 def sim_plot(root_path, dst_path):
     for dir in root_path.glob("*"):
         data_gt = np.load(Path(dir, "simdata_gt.npy"))
@@ -520,6 +528,13 @@ def sim_plot(root_path, dst_path):
         data_naive = np.load(Path(dir, "simdata_naive.npy"))
         data_ours = np.load(Path(dir, "simdata_ours.npy"))
         data_kalman = np.load(Path(dir, "simdata_kalman.npy"))
+
+        data_gt = ndc_to_pixel(data_gt)
+        data_baseline = ndc_to_pixel(data_baseline)
+        data_naive = ndc_to_pixel(data_naive)
+        data_ours = ndc_to_pixel(data_ours)
+        data_kalman = ndc_to_pixel(data_kalman)
+
         t_gt = np.load(Path(dir, "simtime_gt.npy"))
         t_bl = np.load(Path(dir, "simtime_baseline.npy"))
         t_naive = np.load(Path(dir, "simtime_naive.npy"))
@@ -653,20 +668,20 @@ def sim_plot(root_path, dst_path):
 
         # lets do a time plot of the distance from the signal as a func of time
         plt.plot(
-            t_naive,
-            naive_distances,
-            # s=1,
-            label="Naive",
-            color="orange",
-            alpha=0.8,
-            linewidth=0.5,
-        )
-        plt.plot(
             t_bl,
             baseline_distances,
             # s=1,
             label="Baseline",
             color="green",
+            alpha=0.8,
+            linewidth=0.5,
+        )
+        plt.plot(
+            t_naive,
+            naive_distances,
+            # s=1,
+            label="Naive",
+            color="orange",
             alpha=0.8,
             linewidth=0.5,
         )
@@ -688,8 +703,8 @@ def sim_plot(root_path, dst_path):
             alpha=0.8,
             linewidth=0.5,
         )
-        plt.xlabel("Time [s]")
-        plt.ylabel("Distance to Ideal")
+        plt.xlabel("Time [ms]")
+        plt.ylabel("Distance to Ideal [pixel]")
         plt.legend()
         # first we compute the "jitter" of the data, i.e. for each datapoint, its minimum distance to the gt curve
 
@@ -697,7 +712,8 @@ def sim_plot(root_path, dst_path):
 
         # plt.scatter(new_points[0], new_points[1], s=1)
         # plt.scatter(x, y, s=1)
-        plt.savefig(Path(dst_path, "{}_simdata_orig.pdf".format(dir.stem)))
+        plt.tight_layout()
+        plt.savefig(Path(dst_path, "{}_simdata.pdf".format(dir.stem)))
         plt.cla()
         plt.clf()
 
