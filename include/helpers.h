@@ -184,6 +184,8 @@ enum class DynamicShaderMode
     SEA = 0,
     FIREWORKS = 1,
     CLOUDS = 2,
+    FRACTAL = 3,
+    NEON = 4,
 };
 
 template <typename T>

@@ -407,16 +407,16 @@ int main(int argc, char *argv[])
     t_app.start();
     /* parse cmd line options */
     cxxopts::Options options("casper", "casper.exe: A graphics engine for performing projection mapping onto human hands");
-    options.add_options()                                                                                                        //
-        ("mode", "the operation mode [normal, user_study, cam_calib, coax_calib, leap_calib, guess_char_game, guess_pose_game]", //
-         cxxopts::value<std::string>()->default_value("normal"))                                                                 //
-        ("mesh", "A .fbx mesh file to use for skinning",                                                                         //
-         cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                             //
-        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                 //
-        ("simproj", "A simulated projector is used", cxxopts::value<bool>()->default_value("false"))                             //
-        ("emesh", "A .fbx mesh file to use for hot swapping (used in some apps)",                                                //
-         cxxopts::value<std::string>()->default_value("../../resource/GuessCharGame_palm.fbx"))                                  //
-        ("h,help", "Prints usage")                                                                                               //
+    options.add_options()                                                                                                         //
+        ("mode", "the operation mode [sandbox, user_study, cam_calib, coax_calib, leap_calib, guess_char_game, guess_pose_game]", //
+         cxxopts::value<std::string>()->default_value("sandbox"))                                                                 //
+        ("mesh", "A .fbx mesh file to use for skinning",                                                                          //
+         cxxopts::value<std::string>()->default_value("../../resource/Default.fbx"))                                              //
+        ("simcam", "A simulated camera is used", cxxopts::value<bool>()->default_value("false"))                                  //
+        ("simproj", "A simulated projector is used", cxxopts::value<bool>()->default_value("false"))                              //
+        ("emesh", "A .fbx mesh file to use for hot swapping (used in some apps)",                                                 //
+         cxxopts::value<std::string>()->default_value("../../resource/GuessCharGame_palm.fbx"))                                   //
+        ("h,help", "Prints usage")                                                                                                //
         ;
     try
     {
@@ -6688,6 +6688,20 @@ void openIMGUIFrame()
             {
                 delete es.shaderMap["dynamicShader"];
                 Shader *dynamicShader = new Shader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
+                es.shaderMap["dynamicShader"] = dynamicShader;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Fractal", &es.dynamic_shader_mode, static_cast<int>(DynamicShaderMode::FRACTAL)))
+            {
+                delete es.shaderMap["dynamicShader"];
+                Shader *dynamicShader = new Shader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_MsXGR2.fs");
+                es.shaderMap["dynamicShader"] = dynamicShader;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Neon", &es.dynamic_shader_mode, static_cast<int>(DynamicShaderMode::NEON)))
+            {
+                delete es.shaderMap["dynamicShader"];
+                Shader *dynamicShader = new Shader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XfXGz4.fs");
                 es.shaderMap["dynamicShader"] = dynamicShader;
             }
             ImGui::SeparatorText("GGX Effects");
