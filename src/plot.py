@@ -665,7 +665,18 @@ def sim_plot(root_path, dst_path):
         baseline_distances = np.array(baseline_distances).mean(axis=0)
         kalman_distances = np.array(kalman_distances).mean(axis=0)
         # delayed_gt = splev(t_delayed, tck)
+        SMALL_SIZE = 8
+        MEDIUM_SIZE = 10
+        BIGGER_SIZE = 12
+        HUGE_SIZE = 16
 
+        plt.rc("font", size=BIGGER_SIZE)  # controls default text sizes
+        plt.rc("axes", titlesize=BIGGER_SIZE)  # fontsize of the axes title
+        plt.rc("axes", labelsize=BIGGER_SIZE)  # fontsize of the x and y labels
+        plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+        plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+        plt.rc("legend", fontsize=BIGGER_SIZE)  # legend fontsize
+        plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
         # lets do a time plot of the distance from the signal as a func of time
         plt.plot(
             t_bl,
@@ -705,7 +716,9 @@ def sim_plot(root_path, dst_path):
         )
         plt.xlabel("Time [ms]")
         plt.ylabel("Distance to Ideal [pixel]")
-        plt.legend()
+        leg = plt.legend()
+        for legobj in leg.legend_handles:
+            legobj.set_linewidth(2.0)
         # first we compute the "jitter" of the data, i.e. for each datapoint, its minimum distance to the gt curve
 
         # second we compute the latency of the data
