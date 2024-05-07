@@ -50,6 +50,9 @@ public:
     glm::vec3 light_at = glm::vec3(-45.0f, -131.0f, -61.0f);
     glm::vec3 light_to = glm::vec3(0.0f, 0.0f, 0.0f);
     glm::vec3 light_up = glm::vec3(0.0f, 0.0f, 1.0f);
+    std::unordered_map<std::string, Shader *> shaderMap;
+    bool hotswap = false;
+    int dynamic_shader_mode = static_cast<int>(DynamicShaderMode::SEA);
     // cv::Mat white_image = cv::Mat(cam_height, cam_width, CV_8UC1, cv::Scalar(255));
     float light_theta = 2.0f;
     float light_phi = 4.3f;

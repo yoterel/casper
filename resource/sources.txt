@@ -12,12 +12,12 @@
 	cnpy
 	sd-ui
 supporting soft
-	blender
+	Blender
 	Meshy
 tutorials
 	ogldev
 	learnopengl.com
-	https://www.songho.ca/opengl/index.html (FBO, ping pong PBO, cube VAO, 
+	https://www.songho.ca/opengl/index.html (FBO, ping pong PBO, cube VAO)
 standalone repos
 	https://github.com/jonghewk/ImageDeformation_MovingLeastSquare/tree/master
 	https://github.com/cameron314/readerwriterqueue/tree/master
@@ -28,3 +28,6 @@ images
 	butterfly: https://www.rawpixel.com/image/411926/free-illustration-image-butterfly-vintage-butterfly
 	brick: https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/castle_brick_02_red/castle_brick_02_red_diff_2k.png
 	hand: https://www.clker.com/clipart-blank-hand.html
+
+shaders
+	see code

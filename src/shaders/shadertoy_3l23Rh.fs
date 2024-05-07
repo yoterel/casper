@@ -1,3 +1,4 @@
+// "cloud" effect, see https://www.shadertoy.com/view/3l23Rh
 #version 330 core
 in vec2 texCoord;
 uniform vec2 iMouse;

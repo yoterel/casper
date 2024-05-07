@@ -179,6 +179,13 @@ enum class OFMode
     NAIVE_BLOB = 3,
 };
 
+enum class DynamicShaderMode
+{
+    SEA = 0,
+    FIREWORKS = 1,
+    CLOUDS = 2,
+};
+
 template <typename T>
 std::vector<float> linear_spacing(T start, T end, int num)
 {

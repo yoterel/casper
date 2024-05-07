@@ -1,4 +1,4 @@
-// see https://www.shadertoy.com/view/Ws3SRS
+// "fireworks" effect, see https://www.shadertoy.com/view/Ws3SRS
  #version 330 core
  in vec2 texCoord;
 uniform vec2 iMouse;

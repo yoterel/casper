@@ -121,7 +121,7 @@ cv::Mat computeGridDeformation(const std::vector<cv::Point2f> &P,
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
-                     SkinnedModel &otherObject,
+                     //  SkinnedModel &otherObject,
                      TextModel &text);
 void handleGuessPoseGame(std::unordered_map<std::string, Shader *> &shaderMap,
                          SkinnedModel &leftHandModel,
@@ -333,6 +333,7 @@ glm::mat4 c2p_homography;
 // GL controls
 std::unordered_map<std::string, Texture *> texturePack;
 SkinnedModel *extraLeftHandModel = nullptr;
+SkinnedModel *extraRightHandModel = nullptr;
 Texture *dynamicTexture = nullptr;
 Texture *projectiveTexture = nullptr;
 Texture *normalMap = nullptr;
@@ -431,7 +432,7 @@ int main(int argc, char *argv[])
         es.simulated_projector = result["simproj"].as<bool>();
         es.proj_channel_order = es.simulated_projector ? GL_RGB : GL_BGR;
         std::unordered_map<std::string, int> mode_map{
-            {"normal", static_cast<int>(OperationMode::SANDBOX)},
+            {"sandbox", static_cast<int>(OperationMode::SANDBOX)},
             {"user_study", static_cast<int>(OperationMode::USER_STUDY)},
             {"cam_calib", static_cast<int>(OperationMode::CAMERA)},
             {"coax_calib", static_cast<int>(OperationMode::COAXIAL)},
@@ -581,10 +582,10 @@ int main(int argc, char *argv[])
                                 es.proj_width, es.proj_height,
                                 es.cam_width, es.cam_height,
                                 false);
-    SkinnedModel dinosaur("../../resource/reconst.ply",
-                          "",
-                          es.proj_width, es.proj_height,
-                          es.cam_width, es.cam_height);
+    // SkinnedModel dinosaur("../../resource/reconst.ply",
+    //                       "",
+    //                       es.proj_width, es.proj_height,
+    //                       es.cam_width, es.cam_height);
     // load default calibration results if they exist
     Camera_Mode camera_mode = es.freecam_mode ? Camera_Mode::FREE_CAMERA : Camera_Mode::FIXED_CAMERA;
     std::cout << "Loading calibration results..." << std::endl;
@@ -619,6 +620,14 @@ int main(int argc, char *argv[])
     }
     loadCoaxialCalibrationResults(es.default_coaxial_calib_path, es.cur_screen_verts);
     c2p_homography = PostProcess::findHomography(es.cur_screen_verts);
+    extraLeftHandModel = new SkinnedModel(es.extraMeshFile,
+                                          es.userTextureFile,
+                                          es.proj_width, es.proj_height,
+                                          es.cam_width, es.cam_height);
+    extraRightHandModel = new SkinnedModel(es.extraMeshFile,
+                                           es.userTextureFile,
+                                           es.proj_width, es.proj_height,
+                                           es.cam_width, es.cam_height, false);
     switch (es.operation_mode) // set some default values for user study depending on cmd line
     {
     case static_cast<int>(OperationMode::SIMULATION):
@@ -667,10 +676,6 @@ int main(int argc, char *argv[])
     }
     case static_cast<int>(OperationMode::GUESS_CHAR_GAME):
     {
-        extraLeftHandModel = new SkinnedModel(es.extraMeshFile,
-                                              es.userTextureFile,
-                                              es.proj_width, es.proj_height,
-                                              es.cam_width, es.cam_height);
         break;
     }
     default:
@@ -755,38 +760,37 @@ int main(int argc, char *argv[])
     Shader vcolorShader("../../src/shaders/color_by_vertex.vs", "../../src/shaders/color_by_vertex.fs");
     Shader uvDilateShader("../../src/shaders/uv_dilate.vs", "../../src/shaders/uv_dilate.fs");
     Shader textShader("../../src/shaders/text.vs", "../../src/shaders/text.fs");
-    Shader shaderToySea("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
+    // Shader shaderToySea("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
     // Shader shaderToyCloud("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
     // Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_BufferA.fs");
     // Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XsdGDX_Image.fs");
     Shader shaderToyGameBufferA("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_BufferA.fs");
     Shader shaderToyGameBufferB("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_BufferB.fs");
     Shader shaderToyGameImage("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_XldGDN_Image.fs");
+    Shader *dynamicShader = new Shader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
     SkinningShader skinnedShader("../../src/shaders/skin.vs", "../../src/shaders/skin.fs");
-    std::unordered_map<std::string, Shader *> shaderMap = {
-        {"NNShader", &NNShader},
-        {"uv_NNShader", &uv_NNShader},
-        {"maskShader", &maskShader},
-        {"jfaInitShader", &jfaInitShader},
-        {"jfaShader", &jfaShader},
-        {"debugShader", &debugShader},
-        {"projectorShader", &projectorShader},
-        {"blurShader", &blurShader},
-        {"textureShader", &textureShader},
-        {"overlayShader", &overlayShader},
-        {"thresholdAlphaShader", &thresholdAlphaShader},
-        {"gridShader", &gridShader},
-        {"gridColorShader", &gridColorShader},
-        {"lineShader", &lineShader},
-        {"vcolorShader", &vcolorShader},
-        {"uvDilateShader", &uvDilateShader},
-        {"textShader", &textShader},
-        {"skinnedShader", &skinnedShader},
-        {"shaderToySea", &shaderToySea},
-        // {"shaderToyCloud", &shaderToyCloud},
-        {"shaderToyGameBufferA", &shaderToyGameBufferA},
-        {"shaderToyGameBufferB", &shaderToyGameBufferB},
-        {"shaderToyGameImage", &shaderToyGameImage}};
+    es.shaderMap["NNShader"] = &NNShader;
+    es.shaderMap["uv_NNShader"] = &uv_NNShader;
+    es.shaderMap["maskShader"] = &maskShader;
+    es.shaderMap["jfaInitShader"] = &jfaInitShader;
+    es.shaderMap["jfaShader"] = &jfaShader;
+    es.shaderMap["debugShader"] = &debugShader;
+    es.shaderMap["projectorShader"] = &projectorShader;
+    es.shaderMap["blurShader"] = &blurShader;
+    es.shaderMap["textureShader"] = &textureShader;
+    es.shaderMap["overlayShader"] = &overlayShader;
+    es.shaderMap["thresholdAlphaShader"] = &thresholdAlphaShader;
+    es.shaderMap["gridShader"] = &gridShader;
+    es.shaderMap["gridColorShader"] = &gridColorShader;
+    es.shaderMap["lineShader"] = &lineShader;
+    es.shaderMap["vcolorShader"] = &vcolorShader;
+    es.shaderMap["uvDilateShader"] = &uvDilateShader;
+    es.shaderMap["textShader"] = &textShader;
+    es.shaderMap["skinnedShader"] = &skinnedShader;
+    es.shaderMap["shaderToyGameBufferA"] = &shaderToyGameBufferA;
+    es.shaderMap["shaderToyGameBufferB"] = &shaderToyGameBufferB;
+    es.shaderMap["shaderToyGameImage"] = &shaderToyGameImage;
+    es.shaderMap["dynamicShader"] = dynamicShader;
     // settings for text shader
     textShader.use();
     glm::mat4 orth_projection_transform = glm::ortho(0.0f, static_cast<float>(es.proj_width), 0.0f, static_cast<float>(es.proj_height));
@@ -979,13 +983,29 @@ int main(int argc, char *argv[])
             t_leap.stop();
             /* skin hand meshes */
             t_skin.start();
-            handleSkinning(bones_to_world_right, true, true, shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
-            handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+            if (es.hotswap)
+            {
+                bool frontViewRight = false;
+                bool frontViewLeft = false;
+                if (bones_to_world_right.size() > 0)
+                    frontViewRight = Helpers::isPalmFacingCamera(bones_to_world_right[0], cam_view_transform);
+                if (bones_to_world_left.size() > 0)
+                    frontViewLeft = Helpers::isPalmFacingCamera(bones_to_world_left[0], cam_view_transform);
+                SkinnedModel *rightModel = frontViewRight ? extraRightHandModel : &rightHandModel;
+                SkinnedModel *leftModel = frontViewLeft ? extraLeftHandModel : &leftHandModel;
+                handleSkinning(bones_to_world_right, true, true, es.shaderMap, *rightModel, cam_view_transform, cam_projection_transform);
+                handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, es.shaderMap, *leftModel, cam_view_transform, cam_projection_transform);
+            }
+            else
+            {
+                handleSkinning(bones_to_world_right, true, true, es.shaderMap, rightHandModel, cam_view_transform, cam_projection_transform);
+                handleSkinning(bones_to_world_left, false, bones_to_world_right.size() == 0, es.shaderMap, leftHandModel, cam_view_transform, cam_projection_transform);
+            }
             t_skin.stop();
 
             /* deal with bake request */
             t_bake.start();
-            handleBaking(shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
+            handleBaking(es.shaderMap, leftHandModel, rightHandModel, cam_view_transform, cam_projection_transform);
             t_bake.stop();
 
             /* run MLS on MP prediction to reduce bias */
@@ -995,7 +1015,7 @@ int main(int argc, char *argv[])
 
             /* post process fbo using camera input */
             t_pp.start();
-            handlePostProcess(leftHandModel, rightHandModel, camTexture, shaderMap);
+            handlePostProcess(leftHandModel, rightHandModel, camTexture, es.shaderMap);
             /* render final output to screen */
             if (!es.debug_mode)
             {
@@ -1009,13 +1029,13 @@ int main(int argc, char *argv[])
 
             /* debug mode */
             t_debug.start();
-            handleDebugMode(shaderMap, rightHandModel, leftHandModel, dinosaur, textModel);
+            handleDebugMode(es.shaderMap, rightHandModel, leftHandModel, textModel);
             t_debug.stop();
             break;
         }
         case static_cast<int>(OperationMode::USER_STUDY): // in this mode we can also playback recorded sessions
         {
-            handleUserStudy(shaderMap,
+            handleUserStudy(es.shaderMap,
                             window,
                             leftHandModel,
                             rightHandModel,
@@ -1026,7 +1046,7 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(OperationMode::SIMULATION): // discrete simulation on prerecorded data
         {
-            handleSimulation(shaderMap,
+            handleSimulation(es.shaderMap,
                              leftHandModel,
                              rightHandModel,
                              textModel,
@@ -1036,17 +1056,17 @@ int main(int argc, char *argv[])
         }
         case static_cast<int>(OperationMode::GUESS_POSE_GAME): // a game to guess the hand pose using visual color cues
         {
-            handleGuessPoseGame(shaderMap, leftHandModel, rightHandModel, topRightQuad, cam_view_transform, cam_projection_transform);
+            handleGuessPoseGame(es.shaderMap, leftHandModel, rightHandModel, topRightQuad, cam_view_transform, cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::GUESS_CHAR_GAME): // a game to guess which character is shown on backhand as quickly as possible
         {
-            handleGuessCharGame(shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
+            handleGuessCharGame(es.shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::GUESS_ANIMAL_GAME): // a game to guess which character is shown on backhand as quickly as possible
         {
-            handleGuessAnimalGame(shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
+            handleGuessAnimalGame(es.shaderMap, leftHandModel, rightHandModel, textModel, cam_view_transform, cam_projection_transform);
             break;
         }
         case static_cast<int>(OperationMode::CAMERA): // calibrate camera todo: move to seperate handler
@@ -3611,7 +3631,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
             {
                 hands_fbo.unbind();
                 game_fbo.bind();
-                Shader *shaderToy = shader_map["shaderToySea"]; // shaderToySea, shaderToyCloud
+                Shader *shaderToy = shader_map["dynamicShader"];
                 shaderToy->use();
                 shaderToy->setFloat("iTime", t_app.getElapsedTimeInSec());
                 shaderToy->setVec2("iResolution", glm::vec2(es.proj_width, es.proj_height));
@@ -5418,7 +5438,7 @@ void handleUserStudy(std::unordered_map<std::string, Shader *> &shaderMap,
 void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
                      SkinnedModel &rightHandModel,
                      SkinnedModel &leftHandModel,
-                     SkinnedModel &otherObject,
+                     //  SkinnedModel &otherObject,
                      TextModel &text)
 {
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
@@ -5446,10 +5466,10 @@ void handleDebugMode(std::unordered_map<std::string, Shader *> &shader_map,
         }
         // draws some mesh (lit by camera input)
         {
-            vcolorShader->use();
-            vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform);
-            vcolorShader->setBool("allWhite", false);
-            otherObject.Render(*vcolorShader, camTexture.getTexture(), false);
+            // vcolorShader->use();
+            // vcolorShader->setMat4("mvp", flycam_projection_transform * flycam_view_transform);
+            // vcolorShader->setBool("allWhite", false);
+            // otherObject.Render(*vcolorShader, camTexture.getTexture(), false);
         }
         // draws global coordinate system gizmo at origin
         {
@@ -6055,6 +6075,7 @@ void openIMGUIFrame()
             ImGui::SameLine();
             ImGui::Checkbox("Gamma Correction", &es.gamma_correct);
             ImGui::SameLine();
+            ImGui::Checkbox("Hot Swap", &es.hotswap);
             ImGui::Checkbox("Command Line Stats", &es.cmd_line_stats);
             ImGui::Checkbox("Debug Mode", &es.debug_mode);
             ImGui::SameLine();
@@ -6062,7 +6083,6 @@ void openIMGUIFrame()
             {
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
             }
-            ImGui::SameLine();
             ImGui::Checkbox("PBO", &es.use_pbo);
             ImGui::Checkbox("Double PBO", &es.double_pbo);
             ImGui::SeparatorText("Operation Mode");
@@ -6648,6 +6668,27 @@ void openIMGUIFrame()
             {
                 es.gameFrameCount = 0;
                 es.prevGameFrameCount = 0;
+            }
+            ImGui::SeparatorText("Dynamic Shader Effect");
+            if (ImGui::RadioButton("Sea", &es.dynamic_shader_mode, static_cast<int>(DynamicShaderMode::SEA)))
+            {
+                delete es.shaderMap["dynamicShader"];
+                Shader *dynamicShader = new Shader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ms2SD1.fs");
+                es.shaderMap["dynamicShader"] = dynamicShader;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Fireworks", &es.dynamic_shader_mode, static_cast<int>(DynamicShaderMode::FIREWORKS)))
+            {
+                delete es.shaderMap["dynamicShader"];
+                Shader *dynamicShader = new Shader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_Ws3SRS.fs");
+                es.shaderMap["dynamicShader"] = dynamicShader;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Clouds", &es.dynamic_shader_mode, static_cast<int>(DynamicShaderMode::CLOUDS)))
+            {
+                delete es.shaderMap["dynamicShader"];
+                Shader *dynamicShader = new Shader("../../src/shaders/shadertoy.vs", "../../src/shaders/shadertoy_3l23Rh.fs");
+                es.shaderMap["dynamicShader"] = dynamicShader;
             }
             ImGui::SeparatorText("GGX Effects");
             ImGui::Checkbox("Diffuse Mapping", &es.use_diffuse_mapping);
