@@ -6076,7 +6076,8 @@ void openIMGUIFrame()
             ImGui::Checkbox("Gamma Correction", &es.gamma_correct);
             ImGui::SameLine();
             ImGui::Checkbox("Hot Swap", &es.hotswap);
-            ImGui::Checkbox("Command Line Stats", &es.cmd_line_stats);
+            ImGui::Checkbox("CMD Stats", &es.cmd_line_stats);
+            ImGui::SameLine();
             ImGui::Checkbox("Debug Mode", &es.debug_mode);
             ImGui::SameLine();
             if (ImGui::Checkbox("Freecam Mode", &es.freecam_mode))
@@ -6084,6 +6085,7 @@ void openIMGUIFrame()
                 create_virtual_cameras(gl_flycamera, gl_projector, gl_camera);
             }
             ImGui::Checkbox("PBO", &es.use_pbo);
+            ImGui::SameLine();
             ImGui::Checkbox("Double PBO", &es.double_pbo);
             ImGui::SeparatorText("Operation Mode");
             if (ImGui::RadioButton("Sandbox", &es.operation_mode, static_cast<int>(OperationMode::SANDBOX)))
