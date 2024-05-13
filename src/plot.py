@@ -545,6 +545,7 @@ def sim_plot(root_path, dst_path):
         ours_distances = []
         baseline_distances = []
         kalman_distances = []
+        location = []
         for i in range(data_gt.shape[1]):
             landmark_id = i
             x = data_gt[:, landmark_id, 0]
@@ -556,86 +557,6 @@ def sim_plot(root_path, dst_path):
             naive_gt = splev(t_naive, tck)
             ours_gt = splev(t_ours, tck)
             kalman_gt = splev(t_kalman, tck)
-            # min_lat_naive = fmin(
-            #     func_latency,
-            #     -0.1,
-            #     args=(
-            #         t_naive,
-            #         tck,
-            #         data_naive[:, landmark_id],
-            #     ),
-            #     disp=0,
-            # )
-            # min_lat_bl = fmin(
-            #     func_latency,
-            #     -0.1,
-            #     args=(
-            #         t_bl,
-            #         tck,
-            #         data_baseline[:, landmark_id],
-            #     ),
-            #     disp=0,
-            # )
-            # min_lat_ours = fmin(
-            #     func_latency,
-            #     -0.1,
-            #     args=(
-            #         t_ours,
-            #         tck,
-            #         data_ours[:, landmark_id],
-            #     ),
-            #     disp=0,
-            # )
-            # min_lat_kalman = fmin(
-            #     func_latency,
-            #     -0.1,
-            #     args=(
-            #         t_kalman,
-            #         tck,
-            #         data_kalman[:, landmark_id],
-            #     ),
-            #     disp=0,
-            # )
-            # print("naive latency: {}".format(min_lat_naive))
-            # print("baseline latency: {}".format(min_lat_bl))
-            # print("ours latency: {}".format(min_lat_ours))
-            # print("kalman latency: {}".format(min_lat_kalman))
-            # t_ours_optimal = splev(t_ours + min_lat_ours, tck)
-            # t_naive_optimal = splev(t_naive + min_lat_naive, tck)
-            # t_kalman_optimal = splev(t_kalman + min_lat_kalman, tck)
-            # t_bl_optimal = splev(t_bl + min_lat_bl, tck)
-            # stdev_ours = np.std(
-            #     np.linalg.norm(
-            #         np.array(t_ours_optimal).T[100:490]
-            #         - data_ours[100:490, landmark_id],
-            #         axis=1,
-            #     )
-            # )
-            # print("ours jitter: {}".format(stdev_ours))
-            # stdev_naive = np.std(
-            #     np.linalg.norm(
-            #         np.array(t_naive_optimal).T[100:490]
-            #         - data_naive[100:490, landmark_id],
-            #         axis=1,
-            #     )
-            # )
-            # print("naive jitter: {}".format(stdev_naive))
-            # stdev_bl = np.std(
-            #     np.linalg.norm(
-            #         np.array(t_bl_optimal).T[100:490]
-            #         - data_baseline[100:490, landmark_id],
-            #         axis=1,
-            #     )
-            # )
-            # print("baseline jitter: {}".format(stdev_bl))
-            # stdev_kalman = np.std(
-            #     np.linalg.norm(
-            #         np.array(t_kalman_optimal).T[100:490]
-            #         - data_kalman[100:490, landmark_id],
-            #         axis=1,
-            #     )
-            # )
-            # print("kalman jitter: {}".format(stdev_kalman))
 
             naive_dist = np.linalg.norm(
                 np.array(naive_gt).T - data_naive[:, landmark_id], axis=1
@@ -653,13 +574,18 @@ def sim_plot(root_path, dst_path):
             ours_distances.append(ours_dist)
             baseline_distances.append(baseline_dist)
             kalman_distances.append(kalman_dist)
+            location.append(np.array(gt).T)
             # plt.plot(t_ours, data_ours[:, landmark_id, 0], label="Ours")
             # plt.plot(t_kalman, data_kalman[:, landmark_id, 0], label="Kalman")
             # plt.plot(t_naive, data_naive[:, landmark_id, 0], label="Naive")
             # plt.plot(t_bl, data_baseline[:, landmark_id, 0], label="Basline")
             # plt.plot(t_ours, np.array(ours_gt).T[:, 0], label="GT")
             # plt.legend()
-
+        location = np.array(location).mean(axis=0)
+        velocity = (
+            np.diff(location, axis=0, prepend=0.0) / np.diff(t_gt, prepend=0.0)[:, None]
+        )
+        vx = velocity[:, 0]
         naive_distances = np.array(naive_distances).mean(axis=0)
         ours_distances = np.array(ours_distances).mean(axis=0)
         baseline_distances = np.array(baseline_distances).mean(axis=0)
@@ -678,55 +604,64 @@ def sim_plot(root_path, dst_path):
         plt.rc("legend", fontsize=BIGGER_SIZE)  # legend fontsize
         plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
         # lets do a time plot of the distance from the signal as a func of time
-        plt.plot(
-            t_bl,
-            baseline_distances,
+        timeline_limiter = 3000  # plot only the first x seconds
+        fig = plt.figure()
+        gs = fig.add_gridspec(2, hspace=0, height_ratios=[4, 1])
+        axs = gs.subplots(sharex=True)
+        axs[0].plot(
+            t_bl[t_bl < timeline_limiter],
+            baseline_distances[t_bl < timeline_limiter],
             # s=1,
             label="Baseline",
             color="green",
             alpha=0.8,
             linewidth=0.5,
         )
-        plt.plot(
-            t_naive,
-            naive_distances,
+        axs[0].plot(
+            t_naive[t_naive < timeline_limiter],
+            naive_distances[t_naive < timeline_limiter],
             # s=1,
             label="Naive",
             color="orange",
             alpha=0.8,
             linewidth=0.5,
         )
-        plt.plot(
-            t_kalman,
-            kalman_distances,
+        axs[0].plot(
+            t_kalman[t_kalman < timeline_limiter],
+            kalman_distances[t_kalman < timeline_limiter],
             # s=1,
             label="Kalman Filter",
             color="red",
             alpha=0.8,
             linewidth=0.5,
         )
-        plt.plot(
-            t_ours,
-            ours_distances,
+        axs[0].plot(
+            t_ours[t_ours < timeline_limiter],
+            ours_distances[t_ours < timeline_limiter],
             # s=1,
             label="Ours",
             color="blue",
             alpha=0.8,
             linewidth=0.5,
         )
-        plt.xlabel("Time [ms]")
-        plt.ylabel("Distance to Ideal [pixel]")
-        leg = plt.legend()
+        leg = axs[0].legend()
         for legobj in leg.legend_handles:
             legobj.set_linewidth(2.0)
-        # first we compute the "jitter" of the data, i.e. for each datapoint, its minimum distance to the gt curve
-
-        # second we compute the latency of the data
-
-        # plt.scatter(new_points[0], new_points[1], s=1)
-        # plt.scatter(x, y, s=1)
+        # mean_val_baseline = baseline_distances[t_bl < timeline_limiter].mean()
+        axs[1].plot(
+            t_gt[t_gt < timeline_limiter],
+            np.abs(vx[t_gt < timeline_limiter]),
+            color="black",
+            linewidth=0.5,
+        )
+        for ax in axs:
+            ax.label_outer()
+        axs[0].set_ylabel("Avg. Distance\n to Ideal [pixel]")
+        axs[1].set_ylabel("Avg. Horizontal\n Velocity [pixel/s]")
+        plt.xlabel("Time [ms]")
+        # plt.ylabel("Distance to Ideal [pixel]")
         plt.tight_layout()
-        plt.savefig(Path(dst_path, "{}_simdata.pdf".format(dir.stem)))
+        plt.savefig(Path(dst_path, "{}_simdata.svg".format(dir.stem)))
         plt.cla()
         plt.clf()
 

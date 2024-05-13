@@ -14,6 +14,7 @@
 #include "cxxopts.h"
 #include "camera.h"
 #include "gl_camera.h"
+#include <nvtx3/nvtx3.hpp>
 #include "shader.h"
 #include "engine_state.h"
 #include "skinned_shader.h"
@@ -404,6 +405,7 @@ std::vector<glm::vec2> projected_left_prev, projected_right_prev;
 /* main */
 int main(int argc, char *argv[])
 {
+    nvtxNameOsThread(GetCurrentThreadId(), "Casper: Main Thread");
     t_app.start();
     /* parse cmd line options */
     cxxopts::Options options("casper", "casper.exe: A graphics engine for performing projection mapping onto human hands");
@@ -849,6 +851,7 @@ int main(int argc, char *argv[])
     /* main loop */
     while (!glfwWindowShouldClose(window))
     {
+        // nvtx3::mark("Entered Render Loop Marker");
         /* update / sync clocks */
         t_misc.start();
         currentAppTime = t_app.getElapsedTimeInSec(); // glfwGetTime();
@@ -932,6 +935,7 @@ int main(int argc, char *argv[])
             }
             }
         }
+        // nvtx3::mark("Clearing Buffers Marker");
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         t_misc.stop();
 
@@ -956,10 +960,12 @@ int main(int argc, char *argv[])
             {
                 handleCameraInput(ptrGrabResult, false, cv::Mat());
             }
+            // nvtx3::mark("exited handleCamerInput");
             t_camera.stop();
 
             /* deal with leap input */
             t_leap.start();
+            // nvtx3::mark("entering handleLeapInput");
             LEAP_STATUS leap_status = handleLeapInput();
             if (es.record_session)
             {
@@ -1019,6 +1025,7 @@ int main(int argc, char *argv[])
             /* render final output to screen */
             if (!es.debug_mode)
             {
+                // nvtx3::scoped_range range("Final render to screen");
                 glViewport(0, 0, es.proj_width, es.proj_height); // set viewport
                 glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
                 set_texture_shader(&textureShader, false, false, false, false, 0.035f, 0, glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), es.gamma_correct);
@@ -1682,9 +1689,10 @@ int main(int argc, char *argv[])
         default:
             break;
         } // switch(operation_mode)
-
+        // nvtx3::mark("Downloading Marker");
         if (es.use_projector && es.project_this_frame)
         {
+            // nvtx3::scoped_range range("Downloading");
             // send result to projector queue
             glReadBuffer(GL_BACK);
             if (es.use_pbo || es.double_pbo) // todo: investigate better way to download asynchornously
@@ -1752,6 +1760,7 @@ int main(int argc, char *argv[])
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
+        // nvtx3::scoped_range range("Swapping Buffers");
         glfwSwapBuffers(window);
         es.totalFrameCount++;
         t_swap.stop();
@@ -2498,6 +2507,7 @@ LEAP_STATUS getLeapFrame(LeapCPP &leap, const int64_t &targetFrameTime,
                          int64_t &curFrameID,
                          int64_t &curFrameTimeStamp)
 {
+    // nvtx3::scoped_range range("getLeapFrame");
     //  some defs
     // t_profile1.start();
     glm::mat4 rotx = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -2945,6 +2955,7 @@ bool mp_predict(cv::Mat origImage, int timestamp, std::vector<glm::vec2> &left, 
 
 void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat simulatedImage)
 {
+    // nvtx3::scoped_range range("handleCameraInput");
     // prevFrame = curFrame.clone();
     // if (simulated_camera)
     // {
@@ -2956,6 +2967,7 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
     // std::cout << "before: " << camera_queue.size_approx() << std::endl;
     if (!simulatedCam)
     {
+        // nvtx3::mark("entering capture_single_image");
         bool sucess = camera.capture_single_image(ptrGrabResult);
         if (!sucess)
         {
@@ -2971,8 +2983,12 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
         }
         else
         {
+            // nvtx3::mark("Uploading camera frame: Start");
             camTexture.load((uint8_t *)ptrGrabResult->GetBuffer(), true, es.cam_buffer_format);
+            // nvtx3::mark("Uploading camera frame: Done");
+            // nvtx3::mark("Camera Frame -> OpenCV: Start");
             camImageOrig = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
+            // nvtx3::mark("Camera Frame -> OpenCV: Done");
         }
     }
     else
@@ -2985,6 +3001,7 @@ void handleCameraInput(CGrabResultPtr ptrGrabResult, bool simulatedCam, cv::Mat 
     // std::cout << "after: " << camera_queue.size_approx() << std::endl;
     // curCamImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint8_t *)ptrGrabResult->GetBuffer()).clone();
     // curCamBuf = std::vector<uint8_t>((uint8_t *)ptrGrabResult->GetBuffer(), (uint8_t *)ptrGrabResult->GetBuffer() + ptrGrabResult->GetImageSize());
+    // nvtx3::mark("exiting handleCameraInput");
 }
 
 bool loadGamePoses(std::string loadPath, std::vector<std::vector<glm::mat4>> &poses)
@@ -3229,7 +3246,9 @@ LEAP_STATUS handleLeapInput(int num_frames)
 
 LEAP_STATUS handleLeapInput()
 {
+    // nvtx3::scoped_range range("handleLeapInput");
     LEAP_STATUS leap_status;
+    // nvtx3::mark("entering getLeapFrame");
     leap_status = getLeapFrame(leap, es.magic_leap_time_delay, bones_to_world_left, bones_to_world_right, joints_left, joints_right, left_fingers_extended, right_fingers_extended, es.leap_poll_mode, es.curFrameID, es.curFrameTimeStamp);
     if (leap_status == LEAP_STATUS::LEAP_NEWFRAME) // deal with user setting a global scale transform
     {
@@ -3253,6 +3272,7 @@ void handlePostProcess(SkinnedModel &leftHandModel,
                        Texture &camTexture,
                        std::unordered_map<std::string, Shader *> &shader_map)
 {
+    // nvtx3::scoped_range range("handlePostProcess");
     Shader *textureShader = shader_map["textureShader"];
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *maskShader = shader_map["maskShader"];
@@ -3521,6 +3541,7 @@ void handleSkinning(const std::vector<glm::mat4> &bones2world,
                     glm::mat4 cam_view_transform,
                     glm::mat4 cam_projection_transform)
 {
+    // nvtx3::scoped_range range("handleSkinning");
     SkinningShader *skinnedShader = dynamic_cast<SkinningShader *>(shader_map["skinnedShader"]);
     Shader *vcolorShader = shader_map["vcolorShader"];
     Shader *textureShader = shader_map["textureShader"];
@@ -4227,6 +4248,7 @@ void projectAndFilterJoints(const std::vector<glm::vec3> &raw_joints_left,
                             std::vector<glm::vec3> &out_joints_left,
                             std::vector<glm::vec3> &out_joints_right)
 {
+    // nvtx3::scoped_range range("projectAndFilterJoints");
     out_joints_left.clear();
     out_joints_right.clear();
     if (raw_joints_left.size() > 0)
@@ -4260,6 +4282,8 @@ void landmarkDetectionThread(std::vector<glm::vec3> projected_filtered_left,
                              std::vector<float> rendered_depths_right,
                              bool isRightHandVis)
 {
+    nvtxNameOsThread(GetCurrentThreadId(), "Casper: Landmark Detection Thread");
+    // nvtx3::scoped_range range("MP Landmark Detection");
     t_mls_thread.start();
     try
     {
@@ -4432,6 +4456,7 @@ void landmarkDetection(bool blocking)
 {
     if (!es.mls_running && !es.mls_landmark_thread_succeed) // no mls thread is running and no mls thread results are waiting to be processed, so begin to launch a new mls thread
     {
+        // nvtx3::scoped_range range("Launch New MLS Thread");
         if (projected_filtered_left.size() > 0 || projected_filtered_right.size() > 0)
         {
             // the joints are extrapolations to compensate for full system latency.
@@ -4457,6 +4482,7 @@ void landmarkDetection(bool blocking)
             if (mls_thread.joinable())       // make sure the previous mls thread is done
                 mls_thread.join();
             es.mls_running = true;
+            // nvtx3::mark("Launch MLS Thread Marker");
             mls_thread = std::thread(landmarkDetectionThread,
                                      projected_filtered_left, rendered_depths_left, isLeftHandVis,
                                      projected_filtered_right, rendered_depths_right, isRightHandVis);
@@ -4510,6 +4536,7 @@ void renderGrid(Shader &gridShader)
 
 void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool new_frame, bool simulation)
 {
+    // nvtx3::scoped_range range("handleMLS");
     if (es.auto_pilot)
     {
         int n_visible_hands = (projected_filtered_left.size() > 0) + (projected_filtered_right.size() > 0);
@@ -4643,6 +4670,7 @@ void handleMLS(Shader &gridShader, bool blocking, bool detect_landmarks, bool ne
             }
             if (es.mls_landmark_thread_succeed)
             {
+                // nvtx3::mark("Main Thread Received Grid Update !");
                 es.mls_landmark_thread_succeed = false;
                 es.mls_succeeded_this_frame = true;
                 if (!es.mls_solve_every_frame)
@@ -7163,6 +7191,10 @@ void openIMGUIFrame()
                     es.use_coaxial_calib = false;
                     t_profile0.start();
                     es.texture_mode = static_cast<int>(TextureMode::FROM_FILE);
+                }
+                else
+                {
+                    es.project_this_frame = false;
                 }
             }
 

@@ -148,6 +148,9 @@ target_include_directories(casper PRIVATE "C:/src/boost_1_84_0")
 target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/libicp")
 # python
 target_link_libraries(casper PRIVATE Python::Python Python::NumPy)
+# NVTX
+add_subdirectory("${PROJECT_SOURCE_DIR}/third-party/NVTX-3.1.0-c-cpp")
+target_link_libraries(casper PRIVATE nvtx3-cpp)
 ####################################### registration example
 # add_executable(registration_example 
 #     src/registration_example.cpp

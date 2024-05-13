@@ -349,8 +349,11 @@ public:
     const float grid_x_spacing = 2.0f / static_cast<float>(grid_x_point_count - 1);
     const float grid_y_spacing = 2.0f / static_cast<float>(grid_y_point_count - 1);
     float mls_alpha = 0.5f; // emperically best: 0.8f for rigid, 0.5f for sim/affine
-    std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
+    // see: https://developers.google.com/mediapipe/solutions/vision/hand_landmarker
+    // we skip the Proximal InterPhalangeal joints ("PIP")
     std::vector<int> mp_selection_vector{0, 2, 5, 9, 13, 17, 4, 8, 12, 16, 20, 3, 7, 11, 15, 19};
+    // and the leap equivalent
+    std::vector<int> leap_selection_vector{1, 5, 11, 19, 27, 35, 9, 17, 25, 33, 41, 7, 15, 23, 31, 39};
     bool mls_landmark_thread_succeed = false;
     bool mls_solve_every_frame = true;
     bool mls_succeeded_this_frame = false;
