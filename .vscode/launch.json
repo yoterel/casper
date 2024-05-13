@@ -115,6 +115,7 @@
         },
         {
             "name": "guess char game",
+            // casper.exe --mesh "../../resource/GuessCharGame.fbx" --mode guess_char_game
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",

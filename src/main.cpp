@@ -4487,7 +4487,7 @@ void landmarkDetection(bool blocking)
                                      projected_filtered_left, rendered_depths_left, isLeftHandVis,
                                      projected_filtered_right, rendered_depths_right, isRightHandVis);
         } // if (joints.size() > 0)
-    }     // if (!mls_running && !mls_landmark_thread_succeed)
+    } // if (!mls_running && !mls_landmark_thread_succeed)
     if (blocking)
     {
         if (mls_thread.joinable())
@@ -5184,6 +5184,7 @@ void handleGuessCharGame(std::unordered_map<std::string, Shader *> &shaderMap,
     /* deal with leap input */
     t_leap.start();
     LEAP_STATUS leap_status = handleLeapInput();
+    projectAndFilterJoints(joints_left, joints_right, projected_filtered_left, projected_filtered_right);
     t_leap.stop();
 
     /* skin hand meshes */
