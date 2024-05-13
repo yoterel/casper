@@ -1,9 +1,9 @@
-Casper DPM
+# Casper DPM
 
 This is the official implementation of Casper DPM: Cascaded Perceptual Dynamic Projection Mapping onto Hands
 
-# Installation
-## Requirements
+## Installation
+### Requirements
 - OS: Windows 10 or above
 - Visual Studio 19 or above
 - CMAKE 3.20 or above
@@ -14,7 +14,7 @@ This is the official implementation of Casper DPM: Cascaded Perceptual Dynamic P
 Optional:
 - [Pylon SDK](https://www.baslerweb.com/en/software/pylon/sdk/) - for basler camera control
 - [Gemini Ultra Leap](https://www.ultraleap.com/tracking/gemini-hand-tracking-platform/) - for leap motion controller API
-## How to install
+### How to install
 1) Clone the repo (let's assume you cloned into "C:\src\casper"):
 
   `git clone https://github.com/yoterel/casper.git`
@@ -38,7 +38,7 @@ Optional:
 
   `cmake --build C:/src/casper/build --config Release --target ALL_BUILD -j 10 --`
 
-# Usage
+## Usage
 
 - to run casper in sandbox mode (this will allow you to perform any task that was described in the paper):
 
