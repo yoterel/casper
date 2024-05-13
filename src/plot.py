@@ -656,8 +656,8 @@ def sim_plot(root_path, dst_path):
         )
         for ax in axs:
             ax.label_outer()
-        axs[0].set_ylabel("Avg. Distance\n to Ideal [pixel]")
-        axs[1].set_ylabel("Avg. Horizontal\n Velocity [pixel/s]")
+        axs[0].set_ylabel("Distance to GT [pixel]")
+        axs[1].set_ylabel("H. Velocity \n [pixel/s]")
         plt.xlabel("Time [ms]")
         # plt.ylabel("Distance to Ideal [pixel]")
         plt.tight_layout()
