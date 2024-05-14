@@ -40,6 +40,12 @@ Optional:
 
 ## Usage
 
+Please set the following environment variable before running any of the following commands:
+
+- `PYTHONHOME` should be a path to the python interpreter with numpy and mediapipe installed e.g.:
+
+`set PYTHONHOME=C:/Users/sens/AppData/Local/Programs/Python/Python311`
+
 - to run casper in sandbox mode (this will allow you to perform any task that was described in the paper):
 
   `casper.exe`
