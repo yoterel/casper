@@ -14,6 +14,7 @@ This is the official implementation of Casper DPM: Cascaded Perceptual Dynamic P
 Optional:
 - [Pylon SDK](https://www.baslerweb.com/en/software/pylon/sdk/) - for basler camera control
 - [Gemini Ultra Leap](https://www.ultraleap.com/tracking/gemini-hand-tracking-platform/) - for leap motion controller API
+- `pip install openai` - if you want casper interactive Projegraphy to work with GPT4.
 ### How to install
 1) Clone the repo (let's assume you cloned into "C:\src\casper"):
 
@@ -40,11 +41,13 @@ Optional:
 
 ## Usage
 
-Please set the following environment variable before running any of the following commands:
+Please set the following environment variables before running any of the following commands:
 
 - `PYTHONHOME` should be a path to the python interpreter with numpy and mediapipe installed e.g.:
 
 `set PYTHONHOME=C:/Users/sens/AppData/Local/Programs/Python/Python311`
+
+- `OPENAI_API_KEY` should be set to your openai api key, if you want casper to interact with GPT4 to probe for animals on the fly.
 
 - to run casper in sandbox mode (this will allow you to perform any task that was described in the paper):
 

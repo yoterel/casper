@@ -164,14 +164,14 @@ def jnd_plot(dst_path):
     n_subjects = len(baseline)
     ind = np.arange(n_subjects)
     width = 0.3
-    plt.bar(ind, baseline, width, label="baseline", color="blue", alpha=0.8)
-    plt.bar(ind + width, ours, width, label="ours", color="orange", alpha=0.8)
+    plt.bar(ind, baseline, width, label="PBR Off", color="blue", alpha=0.6)
+    plt.bar(ind + width, ours, width, label="PBR On", color="orange", alpha=0.6)
     plt.xticks(ind + width / 2, tuple(str(i) for i in range(1, n_subjects + 1)))
     # set means as horizontal lines
     plt.axhline(baseline.mean(), color="blue", linewidth=2, linestyle="--")
     plt.axhline(ours.mean(), color="orange", linewidth=2, linestyle="--")
     # Add arrows annotating the means:
-    for dat, xoff in zip([baseline, ours], [15, 15]):
+    for dat, xoff in zip([baseline, ours], [20, 20]):
         mean_value = dat.mean()
         # plt.annotate(
         #     f"Mean: {mean_value:.2f}",
@@ -185,7 +185,7 @@ def jnd_plot(dst_path):
         align = "left" if xoff > 0 else "right"
         plt.annotate(
             "Mean: {:0.2f} ms".format(mean_value),
-            xy=(1, mean_value),
+            xy=(0.65, mean_value),
             xytext=(15, xoff),
             xycoords=("axes fraction", "data"),
             textcoords="offset points",
@@ -196,7 +196,7 @@ def jnd_plot(dst_path):
                 fc="black",
                 shrinkA=0,
                 shrinkB=0,
-                connectionstyle="angle,angleA=90,angleB=0,rad=10",
+                connectionstyle="angle,angleA=0,angleB=90,rad=10",
             ),
         )
     # set x and y titles
@@ -204,7 +204,7 @@ def jnd_plot(dst_path):
     plt.xlabel("Subject ID")
     plt.ylabel("JND [ms]")
     plt.tight_layout()
-    plt.savefig(str(dst_path / "jnd.pdf"))
+    plt.savefig(str(dst_path / "jnd.svg"))
     plt.cla()
     plt.clf()
 
@@ -622,7 +622,7 @@ def sim_plot(root_path, dst_path):
             naive_distances[t_naive < timeline_limiter],
             # s=1,
             label="Naive",
-            color="orange",
+            color="red",
             alpha=0.8,
             linewidth=0.5,
         )
@@ -631,7 +631,7 @@ def sim_plot(root_path, dst_path):
             kalman_distances[t_kalman < timeline_limiter],
             # s=1,
             label="Kalman Filter",
-            color="red",
+            color="blue",
             alpha=0.8,
             linewidth=0.5,
         )
@@ -640,7 +640,7 @@ def sim_plot(root_path, dst_path):
             ours_distances[t_ours < timeline_limiter],
             # s=1,
             label="Ours",
-            color="blue",
+            color="orange",
             alpha=0.8,
             linewidth=0.5,
         )
@@ -675,12 +675,12 @@ if __name__ == "__main__":
     # dst_path = Path("C:/Users/sens/Desktop/ahand/images/jnd_processed")
     # jnd_process_images(src_path, mask_path, dst_path)
 
-    # jnd_plot(Path("C:/Users/sens/Desktop/ahand/images/jnd_processed"))
+    jnd_plot(Path("C:/Users/sens/Desktop/casper_materials/images/jnd_processed"))
     # guesschar_plot(
     #     Path("C:/Users/sens/Desktop/ahand/guess_char_results.csv"),
     #     Path("C:/Users/sens/Desktop/ahand/images/"),
     # )
-    sim_plot(
-        Path("C:/src/casper/debug/sim_data"),
-        Path("C:/Users/sens/Desktop/casper_materials/images"),
-    )
+    # sim_plot(
+    #     Path("C:/src/casper/debug/sim_data"),
+    #     Path("C:/Users/sens/Desktop/casper_materials/images"),
+    # )

@@ -86,6 +86,7 @@
         },
         {
             "name": "user study",
+            // casper.exe --mesh "../../resource/UserStudy.fbx" --simcam --mode user_study
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",

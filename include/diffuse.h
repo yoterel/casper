@@ -72,6 +72,7 @@ public:
                            bool select_top_animal);
 
 private:
+    bool m_initialized;
     bool m_pyinit;
     PyObject *py_chatgpt;
     PyObject *py_chatgpt_client;

@@ -42,8 +42,8 @@ public:
     bool threshold_flag = false;
     bool threshold_flag2 = false;
     float render_alpha = 1.0f;
-    int postprocess_mode = static_cast<int>(PostProcessMode::OVERLAY);
-    int texture_mode = static_cast<int>(TextureMode::ORIGINAL);
+    int postprocess_mode = static_cast<int>(PostProcessMode::JUMP_FLOOD_UV);
+    int texture_mode = static_cast<int>(TextureMode::FROM_FILE);
     int material_mode = static_cast<int>(MaterialMode::DIFFUSE);
     int light_mode = static_cast<int>(LightMode::DIRECTIONAL);
     glm::vec3 light_color = glm::vec3(255.0f / 255.0f, 255.0f / 255.0f, 255.0f / 255.0f);

@@ -562,7 +562,7 @@ bool ControlNetClient::inference(const std::vector<uint8_t> &raw_data,
     }
 }
 
-ChatGPTClient::ChatGPTClient(bool pyinit) : m_pyinit(pyinit) {}
+ChatGPTClient::ChatGPTClient(bool pyinit) : m_initialized(false), m_pyinit(pyinit) {}
 
 bool ChatGPTClient::init()
 {
@@ -584,6 +584,7 @@ bool ChatGPTClient::init()
         return false;
     }
     Py_INCREF(py_chatgpt_client);
+    m_initialized = true;
     return true;
 }
 
@@ -598,19 +599,22 @@ ChatGPTClient::~ChatGPTClient()
 std::string ChatGPTClient::get_animal(const std::vector<uint8_t> &raw_data, const int width, const int height,
                                       const int channels, bool select_top_animal)
 {
-
-    std::string encoded_image = encode_png(raw_data, width, height, channels);
-    PyObject *py_encoded_image = PyUnicode_FromString(encoded_image.c_str());
-    PyObject *py_response = PyObject_CallMethod(py_chatgpt_client, "send_request", "O,i", py_encoded_image, static_cast<int>(select_top_animal));
-    if (!py_response)
+    std::string response = "";
+    if (m_initialized)
     {
-        PyErr_Print();
-        std::cerr << "Failed to call send_request" << std::endl;
-        return {};
+        std::string encoded_image = encode_png(raw_data, width, height, channels);
+        PyObject *py_encoded_image = PyUnicode_FromString(encoded_image.c_str());
+        PyObject *py_response = PyObject_CallMethod(py_chatgpt_client, "send_request", "O,i", py_encoded_image, static_cast<int>(select_top_animal));
+        if (!py_response)
+        {
+            PyErr_Print();
+            std::cerr << "Failed to call send_request" << std::endl;
+            return {};
+        }
+        response = PyUnicode_AsUTF8(py_response);
+        Py_DECREF(py_response);
+        Py_DECREF(py_encoded_image);
     }
-    std::string response = PyUnicode_AsUTF8(py_response);
-    Py_DECREF(py_response);
-    Py_DECREF(py_encoded_image);
     return response;
 }
 
