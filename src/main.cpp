@@ -1720,7 +1720,7 @@ int main(int argc, char *argv[])
                 else
                 {
                     t_download.start();
-                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[0]); // todo: replace with totalFrameCount
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[0]);
                     glReadPixels(0, 0, es.proj_width, es.proj_height, es.proj_channel_order, GL_UNSIGNED_BYTE, 0);
                     GLubyte *src = (GLubyte *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
                     if (src)
