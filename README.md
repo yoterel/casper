@@ -1,3 +1,5 @@
+[Project Page](https://yoterel.github.io/nepmap-project-page/) | [Paper](https://arxiv.org/pdf/2306.06595.pdf) | [Supplementary](https://yoterel.github.io/nepmap-project-page/static/pdfs/nepmap-supp.pdf)
+
 # Casper DPM
 
 This is the official implementation of Casper DPM: Cascaded Perceptual Dynamic Projection Mapping onto Hands
