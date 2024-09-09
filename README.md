@@ -1,4 +1,4 @@
-[Project Page](https://yoterel.github.io/nepmap-project-page/) | [Paper](https://arxiv.org/abs/2409.04397) | [Supplementary](https://yoterel.github.io/casper-project-page/static/pdfs/casper_supp.pdf)
+[Project Page](https://yoterel.github.io/casper-project-page/) | [Paper](https://arxiv.org/abs/2409.04397) | [Supplementary](https://yoterel.github.io/casper-project-page/static/pdfs/casper_supp.pdf)
 
 # Casper DPM
 
