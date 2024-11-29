@@ -2,8 +2,10 @@
 #define BASLER_CAMERA_H
 
 #include <iostream>
+#ifdef USE_PYLON
 #include <pylon/PylonIncludes.h>
 #include <pylon/BaslerUniversalInstantCamera.h>
+#endif
 // #include <pylon/PylonGUI.h>
 #include "timer.h"
 #include "readerwritercircularbuffer.h"
@@ -13,6 +15,7 @@
 #include <nanobind/nanobind.h>
 namespace nb = nanobind;
 #endif
+#ifdef USE_PYLON
 // Namespace for using pylon objects.
 using namespace Pylon;
 using namespace Basler_UniversalCameraParams;
@@ -20,7 +23,7 @@ using namespace Basler_UniversalCameraParams;
 class BaslerCamera
 {
 public:
-    BaslerCamera(){};
+    BaslerCamera() {};
     ~BaslerCamera()
     {
         kill();
@@ -59,5 +62,39 @@ NB_MODULE(basler, m)
         .def("kill", &BaslerCamera::kill, "kills the camera");
 }
 #endif
+#else
+class CGrabResultPtr
+{
+public:
+    CGrabResultPtr() {};
+    CGrabResultPtr *operator->()
+    {
+        return this;
+    }
+    int GetHeight() { return 0; };
+    int GetWidth() { return 0; };
+    uint8_t *GetBuffer() { return nullptr; };
+    ~CGrabResultPtr() {};
+};
+class BaslerCamera
+{
+public:
+    BaslerCamera() {};
+    ~BaslerCamera() {};
+    void init(moodycamel::BlockingReaderWriterCircularBuffer<CGrabResultPtr> &camera_queue, bool &close_signal,
+              uint32_t height, uint32_t width,
+              float exposureTime = 1850.0f, bool hardwareTrigger = false) {};
+    void init_poll(uint32_t height, uint32_t width, float exposureTime = 1850.0f) {};
+    void acquire() {};
+    void kill() {};
+    void balance_white() {};
+    double get_exposure_time() { return 0.0; };
+    void set_exposure_time(double exposure_time) {};
+    void init_single(float exposure_time = 1850.0) {};
+    double getAvgEnqueueTimeAndReset() { return 0.0; };
+    bool capture_single_image(CGrabResultPtr &ptrGrabResult) { return false; };
+    CGrabResultPtr capture_single_image_slow() { return CGrabResultPtr(); };
+};
+#endif // USE_PYLON
 
 #endif // BASLER_CAMERA_H

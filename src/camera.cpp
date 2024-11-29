@@ -1,7 +1,7 @@
 #include "camera.h"
 
 // Contains a Configuration Event Handler that prints a message for each event method call.
-
+#ifdef USE_PYLON
 class CConfigurationEventPrinter : public CConfigurationEventHandler
 {
 public:
@@ -608,4 +608,5 @@ nb::ndarray<nb::numpy, const uint8_t> BaslerCamera::capture_single()
         return nb::ndarray<nb::numpy, const uint8_t>();
     }
 }
+#endif
 #endif

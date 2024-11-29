@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 20)
 set(GLAD_VER 4.3)
-set(Python_EXECUTABLE "C:/Users/sens/AppData/Local/Programs/Python/Python311/python.exe")  # replace with a python environment with numpy, mediapipe, and dev tools installed
+
+# set(USE_PYLON true)  # uncomment if using basler camera
+set(USE_LEAP true)  # uncomment if using leap motion
+
+set(Python_EXECUTABLE "C:/Users/yotam/AppData/Local/Programs/Python/Python311/python.exe")  # replace with a system python environment with numpy, mediapipe, and dev tools installed
 set(ULTRALEAP_PATH_ROOT "$ENV{ProgramFiles}/Ultraleap")
-set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/third-party/opencv")  # replace with opencv install path (e.g. "${CMAKE_SOURCE_DIR}/third-party/opencv" or "C:/OpenCV/build/install")
+set(OpenCV_DIR "C:/src/OpenCV/build")  # replace with opencv install path (e.g. "${CMAKE_SOURCE_DIR}/third-party/opencv", "C:/OpenCV/build")
 file(TO_CMAKE_PATH "$ENV{CUDA_PATH}" CUDA_TOOLKIT_ROOT_DIR)  # replaces # set(CUDA_TOOLKIT_ROOT_DIR $ENV{CUDA_PATH}) for normalizing the path
 file(TO_CMAKE_PATH "$ENV{PYLON_DEV_DIR}" PYLON_DEV_DIR)  # replaces # set(PYLON_DEV_DIR $ENV{PYLON_DEV_DIR}) for normalizing the path
 set(PYLON_RT_DIR "${PYLON_DEV_DIR}/../Runtime/x64")
@@ -12,9 +16,13 @@ cmake_policy(SET CMP0074 NEW)  # respect <PACKAGE>_ROOT variables in "find_packa
 include(CMakePrintHelpers)
 project(casper VERSION 0.1 LANGUAGES C CXX)
 find_package(Python 3.9 COMPONENTS Interpreter Development NumPy REQUIRED)
+if (DEFINED USE_PYLON)
 find_package(pylon 7.3.0 REQUIRED)
+endif()
 find_package(OpenCV 4.6.0 EXACT REQUIRED)
-find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
+if (DEFINED USE_LEAP)
+    find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_PATH_ROOT}")
+endif()
 if(DEFINED OpenCV_CUDA_VERSION)
     add_compile_definitions(OPENCV_WITH_CUDA)
     message("OpenCV was compiled with CUDA")
@@ -52,23 +60,25 @@ target_link_libraries(dynaflash PRIVATE "${PROJECT_SOURCE_DIR}/third-party/dynaf
 target_link_libraries(dynaflash PRIVATE ${OpenCV_LIBS})
 
 ################ basler camera python bindings
-nanobind_add_module(basler 
-    src/camera.cpp
-    src/timer.cpp
-)
-target_compile_definitions(basler PRIVATE PYTHON_BINDINGS_BUILD)
-target_include_directories(basler PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_link_libraries(basler PRIVATE pylon::pylon)
-target_link_libraries(basler PRIVATE ${OpenCV_LIBS})
-
+if (DEFINED USE_PYLON)
+    nanobind_add_module(basler 
+        src/camera.cpp
+        src/timer.cpp
+    )
+    target_compile_definitions(basler PRIVATE PYTHON_BINDINGS_BUILD)
+    target_include_directories(basler PRIVATE "${PROJECT_SOURCE_DIR}/include")
+    target_link_libraries(basler PRIVATE pylon::pylon)
+    target_link_libraries(basler PRIVATE ${OpenCV_LIBS})
+endif()
 ################ leap motion python bindings
-nanobind_add_module(leap 
-    src/leapCPP.cpp
-)
-target_compile_definitions(leap PRIVATE PYTHON_BINDINGS_BUILD)
-target_include_directories(leap PRIVATE "${PROJECT_SOURCE_DIR}/include")
-target_link_libraries(leap PRIVATE LeapSDK::LeapC)
-
+if (DEFINED USE_LEAP)
+    nanobind_add_module(leap 
+        src/leapCPP.cpp
+    )
+    target_compile_definitions(leap PRIVATE PYTHON_BINDINGS_BUILD)
+    target_include_directories(leap PRIVATE "${PROJECT_SOURCE_DIR}/include")
+    target_link_libraries(leap PRIVATE LeapSDK::LeapC)
+endif()
 ################ main application
 add_executable(casper 
     src/main.cpp
@@ -111,7 +121,9 @@ add_executable(casper
 )
 target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/include")
 # pylon
-target_link_libraries(casper PRIVATE pylon::pylon)
+if (DEFINED USE_PYLON)
+    target_link_libraries(casper PRIVATE pylon::pylon)
+endif()
 # opencv
 target_link_libraries(casper PRIVATE ${OpenCV_LIBS})
 # winsock
@@ -130,7 +142,9 @@ target_link_libraries(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/assimp/l
 # glm
 target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/glm")
 # leap
-target_link_libraries(casper PRIVATE LeapSDK::LeapC)
+if (DEFINED USE_LEAP)
+    target_link_libraries(casper PRIVATE LeapSDK::LeapC)
+endif()
 # stb
 target_include_directories(casper PRIVATE "${PROJECT_SOURCE_DIR}/third-party/stb")
 # freetype
@@ -401,16 +415,15 @@ add_custom_command(TARGET casper
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${DYNAFLASH_DLLS}
                 $<TARGET_FILE_DIR:casper>)
-
-get_target_property(LEAPC_IMPORTED_CONFIG LeapSDK::LeapC IMPORTED_CONFIGURATIONS)
-get_target_property(LEAPC_SHARED_LIB_PATH LeapSDK::LeapC IMPORTED_LOCATION_${LEAPC_IMPORTED_CONFIG})
-                
-add_custom_command(TARGET casper
-                POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${LEAPC_SHARED_LIB_PATH}
-                $<TARGET_FILE_DIR:casper>)
-
+if (DEFINED USE_LEAP)
+    get_target_property(LEAPC_IMPORTED_CONFIG LeapSDK::LeapC IMPORTED_CONFIGURATIONS)
+    get_target_property(LEAPC_SHARED_LIB_PATH LeapSDK::LeapC IMPORTED_LOCATION_${LEAPC_IMPORTED_CONFIG})         
+    add_custom_command(TARGET casper
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${LEAPC_SHARED_LIB_PATH}
+                    $<TARGET_FILE_DIR:casper>)
+endif()
 file(GLOB ASSIMP_DLLS "${PROJECT_SOURCE_DIR}/third-party/assimp/lib/*.dll") 
 add_custom_command(TARGET casper
                 POST_BUILD
@@ -432,12 +445,14 @@ add_custom_command(TARGET casper
                 ${PYTHON_DLL}
                 $<TARGET_FILE_DIR:casper>)
 
-file(GLOB BASLER_DLLS "${PYLON_RT_DIR}/*.dll")
-add_custom_command(TARGET casper
-                POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${BASLER_DLLS}
-                $<TARGET_FILE_DIR:casper>)
+if (DEFINED USE_PYLON)
+    file(GLOB BASLER_DLLS "${PYLON_RT_DIR}/*.dll")
+    add_custom_command(TARGET casper
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${BASLER_DLLS}
+                    $<TARGET_FILE_DIR:casper>)
+endif()
 
 file(GLOB PYTHON_EMBEDDING "${PROJECT_SOURCE_DIR}/src/predict.py")
 add_custom_command(TARGET casper

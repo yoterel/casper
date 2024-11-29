@@ -1,8 +1,14 @@
 import json
 from pathlib import Path
 import os  # Included to Python
-from openai import OpenAI
-import numpy as np
+try:
+    from openai import OpenAI
+except ImportError:
+    print("Coudln't import OpenAI")
+try:
+    import numpy as np
+except ImportError:
+    print("Coudln't import numpy")
 
 
 class ChatGPTClient:
@@ -12,7 +18,8 @@ class ChatGPTClient:
             print("Found API key: {}".format(apikey))
             self.client = OpenAI(api_key=apikey)
         else:
-            raise Exception("API key not found")
+            print("Couldn't find OpenAI API key.")
+            # raise Exception("API key not found")
 
     def send_request(self, encoded_image: str, select_top: bool) -> str:
         response = self.client.chat.completions.create(

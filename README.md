@@ -10,12 +10,12 @@ This is the official implementation of Casper DPM: Cascaded Perceptual Dynamic P
 - Visual Studio 19 or above
 - CMAKE 3.20 or above
 - [OpenCV](https://opencv.org/releases/) 4.6 or above
-- A python interpreter 3.9 or above (with dev tools, which is usually included in windows versions), with numpy and mediapipe installed:
-  `pip install numpy mediapipe`
-  
+- A python interpreter 3.9 or above (with dev tools, which is usually included in windows versions), with numpy, mediapipe and nanobind installed:
+  `pip install numpy mediapipe nanobind`
+- [Gemini Ultra Leap](https://www.ultraleap.com/tracking/gemini-hand-tracking-platform/) - for leap motion controller API (this is in principle optional, but requires some work to seperate dependencies)
+
 Optional:
 - [Pylon SDK](https://www.baslerweb.com/en/software/pylon/sdk/) - for basler camera control
-- [Gemini Ultra Leap](https://www.ultraleap.com/tracking/gemini-hand-tracking-platform/) - for leap motion controller API
 - `pip install openai` - if you want casper interactive Projegraphy to work with GPT4.
 ### How to install
 1) Clone the repo (let's assume you cloned into "C:\src\casper"):
